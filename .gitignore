@@ -1,0 +1,30 @@
+# Build outputs
+build/
+build_dbg/
+
+# Third-party (managed as git submodules)
+# third_party/
+
+# Generated files (can regenerate from fbs/)
+generated/
+
+# mediasoup-worker binary (download separately)
+mediasoup-worker
+
+# IDE
+.vscode/
+.idea/
+compile_commands.json
+
+# OS
+.DS_Store
+*.swp
+
+# Node.js (testing only)
+node_modules/
+package.json
+package-lock.json
+
+# Logs
+log/
+*.log
