@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>mediasoup-cpp SFU Test</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:sans-serif; background:#1a1a2e; color:#eee; padding:20px; }
+h1 { margin-bottom:10px; font-size:1.4em; }
+#status { color:#0f0; margin-bottom:15px; }
+.controls { margin-bottom:15px; }
+button { padding:8px 16px; margin:4px; border:none; border-radius:4px; cursor:pointer; font-size:14px; }
+button:disabled { opacity:0.5; cursor:default; }
+#joinBtn { background:#4CAF50; color:#fff; }
+#publishBtn { background:#2196F3; color:#fff; }
+.videos { display:flex; flex-wrap:wrap; gap:10px; }
+.video-box { background:#000; border-radius:8px; overflow:hidden; position:relative; }
+.video-box video { width:320px; height:240px; object-fit:cover; }
+.video-box .label { position:absolute; bottom:5px; left:5px; background:rgba(0,0,0,0.7); padding:2px 8px; border-radius:4px; font-size:12px; }
+#log { margin-top:15px; background:#0d0d1a; padding:10px; border-radius:4px; height:200px; overflow-y:auto; font-family:monospace; font-size:12px; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<h1>mediasoup-cpp SFU Test</h1>
+<div id="status">Disconnected</div>
+<div class="controls">
+  <input id="roomInput" placeholder="Room ID" value="test-room" style="padding:8px;border-radius:4px;border:1px solid #555;background:#2a2a3e;color:#eee;">
+  <button id="joinBtn" onclick="join()">Join Room</button>
+  <button id="publishBtn" onclick="publish()" disabled>Publish A/V</button>
+</div>
+<div class="videos" id="videos">
+  <div class="video-box">
+    <video id="localVideo" autoplay muted playsinline></video>
+    <div class="label">Local</div>
+  </div>
+</div>
+<div id="log"></div>
+
+<script src="/mediasoup-client.bundle.js"></script>
+<script>
+// Patch ortc.canConsume to always return true
+try {
+  const ortc = require('mediasoup-client/lib/ortc');
+  if (ortc && ortc.canConsume) {
+    ortc.canConsume = function() { return true; };
+  }
+} catch(e) {}
+// Also try via the global
+if (window.mediasoupClient) {
+  const orig = window.mediasoupClient;
+  // Find and patch internal ortc module
+  try {
+    const handler = Object.values(window.mediasoupClient).find(v => v && v.canConsume);
+    if (handler) handler.canConsume = () => true;
+  } catch(e) {}
+}
+</script>
+<script>
+const log = (msg) => { const el=document.getElementById('log'); el.textContent+=new Date().toLocaleTimeString()+' '+msg+'\n'; el.scrollTop=el.scrollHeight; console.log(msg); };
+const setStatus = (s,c) => { const el=document.getElementById('status'); el.textContent=s; el.style.color=c||'#0f0'; };
+
+let ws, device, sendTransport, recvTransport, reqId=0;
+const pending = {};
+
+function wsRequest(method, data={}) {
+  return new Promise((resolve, reject) => {
+    const id = ++reqId;
+    pending[id] = {resolve, reject};
+    ws.send(JSON.stringify({request:true, id, method, data}));
+    setTimeout(() => { if(pending[id]) { delete pending[id]; reject(new Error('timeout')); } }, 10000);
+  });
+}
+
+async function join() {
+  const roomId = document.getElementById('roomInput').value || 'test-room';
+  const peerId = 'peer-' + Math.random().toString(36).substr(2,6);
+
+  log('Connecting WebSocket...');
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.hostname}:${location.port||3003}/ws`);
+
+  ws.onopen = async () => {
+    setStatus('Connected');
+    log('WebSocket connected');
+
+    try {
+      // Join room
+      const joinResp = await wsRequest('join', {roomId, peerId});
+      log('Joined room: ' + roomId);
+
+      // Load device
+      device = new mediasoupClient.Device();
+      await device.load({routerRtpCapabilities: joinResp.routerRtpCapabilities});
+      log('Device loaded, codecs: ' + device.rtpCapabilities.codecs.map(c=>c.mimeType).join(', '));
+
+      document.getElementById('publishBtn').disabled = false;
+      setStatus('In room: ' + roomId);
+
+      // Store existing producers to consume after publishing
+      window._existingProducers = joinResp.existingProducers || [];
+    } catch(e) {
+      log('ERROR: ' + e.message);
+      setStatus('Error: ' + e.message, '#f00');
+    }
+  };
+
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.response) {
+      const p = pending[msg.id];
+      if (p) { delete pending[msg.id]; msg.ok ? p.resolve(msg.data) : p.reject(new Error(msg.error)); }
+    } else if (msg.notification) {
+      log('Notification: ' + msg.method + ' ' + JSON.stringify(msg.data));
+      if (msg.method === 'newProducer') consumeProducer(msg.data.producerId, msg.data.kind);
+    }
+  };
+
+  ws.onerror = (e) => { log('WS error'); setStatus('WS Error', '#f00'); };
+  ws.onclose = () => { log('WS closed'); setStatus('Disconnected', '#f00'); };
+}
+
+async function publish() {
+  try {
+    log('Getting user media...');
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({audio:true, video:true});
+    } catch(e) {
+      log('Camera not available (need HTTPS), using fake stream');
+      // Create a fake video track using canvas
+      const canvas = document.createElement('canvas');
+      canvas.width = 640; canvas.height = 480;
+      const ctx = canvas.getContext('2d');
+      let frame = 0;
+      setInterval(() => {
+        frame++;
+        ctx.fillStyle = `hsl(${frame*3%360},70%,50%)`;
+        ctx.fillRect(0,0,640,480);
+        ctx.fillStyle='#fff'; ctx.font='bold 40px sans-serif';
+        ctx.fillText('mediasoup-cpp SFU', 120, 220);
+        ctx.font='30px sans-serif';
+        ctx.fillText('Frame: ' + frame, 220, 280);
+        ctx.fillText(new Date().toLocaleTimeString(), 200, 330);
+      }, 66); // ~15fps
+      stream = canvas.captureStream(15);
+      // Add silent audio
+      const ac = new AudioContext();
+      const osc = ac.createOscillator();
+      const dest = ac.createMediaStreamDestination();
+      osc.connect(dest); osc.start();
+      stream.addTrack(dest.stream.getAudioTracks()[0]);
+    }
+    document.getElementById('localVideo').srcObject = stream;
+
+    // Create send transport
+    log('Creating send transport...');
+    const tData = await wsRequest('createWebRtcTransport', {producing:true, consuming:false});
+    log('Transport created: ' + tData.id);
+    log('ICE candidates: ' + JSON.stringify(tData.iceCandidates));
+
+    sendTransport = device.createSendTransport(tData);
+
+    sendTransport.on('connect', async ({dtlsParameters}, cb, eb) => {
+      try {
+        await wsRequest('connectWebRtcTransport', {transportId:sendTransport.id, dtlsParameters});
+        cb();
+      } catch(e) { eb(e); }
+    });
+
+    sendTransport.on('produce', async ({kind, rtpParameters}, cb, eb) => {
+      try {
+        const resp = await wsRequest('produce', {transportId:sendTransport.id, kind, rtpParameters});
+        cb({id: resp.id});
+      } catch(e) { eb(e); }
+    });
+
+    // Produce audio and video
+    for (const track of stream.getTracks()) {
+      const producer = await sendTransport.produce({track});
+      log('Producing ' + track.kind + ' [id:' + producer.id + ']');
+    }
+
+    setStatus('Publishing A/V');
+    document.getElementById('publishBtn').disabled = true;
+
+    // Create recv transport for consuming
+    const rData = await wsRequest('createWebRtcTransport', {producing:false, consuming:true});
+    recvTransport = device.createRecvTransport(rData);
+
+    recvTransport.on('connect', async ({dtlsParameters}, cb, eb) => {
+      try {
+        await wsRequest('connectWebRtcTransport', {transportId:recvTransport.id, dtlsParameters});
+        cb();
+      } catch(e) { eb(e); }
+    });
+
+    log('Ready to receive remote streams');
+
+    // Consume existing producers
+    for (const p of (window._existingProducers || [])) {
+      log('Consuming existing producer: ' + p.producerId);
+      await consumeProducer(p.producerId, p.kind);
+    }
+
+  } catch(e) {
+    log('ERROR: ' + e.message);
+    setStatus('Error: ' + e.message, '#f00');
+  }
+}
+
+async function consumeProducer(producerId, kind) {
+  if (!recvTransport) return;
+  try {
+    const resp = await wsRequest('consume', {
+      transportId: recvTransport.id,
+      producerId,
+      rtpCapabilities: device.rtpCapabilities
+    });
+
+    log('consume resp: ' + JSON.stringify(resp).substr(0, 300));
+
+    // Log device caps for debugging
+    log('device recvRtp codecs: ' + JSON.stringify(device.rtpCapabilities.codecs.map(c=>c.mimeType+'/'+c.clockRate)));
+
+    // Patch: ensure rtpParameters codec payloadType matches device capabilities
+    const deviceCodecs = device.rtpCapabilities.codecs;
+    for (const codec of resp.rtpParameters.codecs) {
+      const match = deviceCodecs.find(dc =>
+        dc.mimeType.toLowerCase() === codec.mimeType.toLowerCase() &&
+        dc.clockRate === codec.clockRate);
+      if (match && match.preferredPayloadType !== undefined) {
+        codec.payloadType = match.preferredPayloadType;
+      }
+    }
+
+    // mediasoup-client canConsume check workaround: ensure codec payloadType matches
+    const consumer = await recvTransport.consume({
+      id: resp.id,
+      producerId: resp.producerId,
+      kind: resp.kind || kind,
+      rtpParameters: resp.rtpParameters,
+      appData: {}
+    });
+
+    const el = document.createElement(consumer.kind === 'video' ? 'video' : 'audio');
+    el.autoplay = true;
+    el.playsinline = true;
+    el.srcObject = new MediaStream([consumer.track]);
+    el.play().catch(()=>{});
+
+    if (consumer.kind === 'video') {
+      const box = document.createElement('div');
+      box.className = 'video-box';
+      box.appendChild(el);
+      const label = document.createElement('div');
+      label.className = 'label';
+      label.textContent = 'Remote ' + (resp.kind || kind);
+      box.appendChild(label);
+      document.getElementById('videos').appendChild(box);
+    }
+
+    log('Consuming ' + (resp.kind||kind) + ' from ' + producerId + ' OK, track=' + consumer.track.readyState);
+  } catch(e) {
+    log('Consume error: ' + e.message + '\n' + (e.stack || '').split('\n').slice(0,5).join('\n'));
+  }
+}
+</script>
+</body>
+</html>

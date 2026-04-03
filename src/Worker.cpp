@@ -1,0 +1,197 @@
+#include "Worker.h"
+#include "Router.h"
+#include "Utils.h"
+#include "worker_generated.h"
+#include <unistd.h>
+#include <sys/wait.h>
+#include <signal.h>
+#include <cstring>
+#include <nlohmann/json.hpp>
+
+namespace mediasoup {
+
+static const char* MEDIASOUP_VERSION = "3.14.0";
+
+Worker::Worker(const WorkerSettings& settings)
+	: logger_(Logger::Get("Worker"))
+{
+	spawn(settings);
+}
+
+Worker::~Worker() {
+	close();
+}
+
+void Worker::spawn(const WorkerSettings& settings) {
+	std::string workerBin = settings.workerBin;
+	if (workerBin.empty()) {
+		// Try common locations
+		workerBin = "./mediasoup-worker";
+	}
+
+	// Create two pipe pairs for channel communication
+	int producerPipe[2]; // parent writes, child reads (child fd 3)
+	int consumerPipe[2]; // child writes, parent reads (child fd 4)
+
+	if (::pipe(producerPipe) != 0 || ::pipe(consumerPipe) != 0) {
+		throw std::runtime_error("pipe() failed: " + std::string(strerror(errno)));
+	}
+
+	pid_ = ::fork();
+	if (pid_ < 0) {
+		throw std::runtime_error("fork() failed");
+	}
+
+	if (pid_ == 0) {
+		// Child process
+		// Close parent's ends first
+		::close(producerPipe[1]);
+		::close(consumerPipe[0]);
+
+		// Map pipes to fd 3 and 4
+		// fd 3: child reads commands from parent
+		// fd 4: child writes responses to parent
+		if (producerPipe[0] != 3) {
+			::dup2(producerPipe[0], 3);
+			::close(producerPipe[0]);
+		}
+		if (consumerPipe[1] != 4) {
+			::dup2(consumerPipe[1], 4);
+			::close(consumerPipe[1]);
+		}
+
+		// Build args
+		std::vector<std::string> args;
+		args.push_back(workerBin);
+		if (!settings.logLevel.empty())
+			args.push_back("--logLevel=" + settings.logLevel);
+		for (auto& tag : settings.logTags)
+			args.push_back("--logTag=" + tag);
+		args.push_back("--rtcMinPort=" + std::to_string(settings.rtcMinPort));
+		args.push_back("--rtcMaxPort=" + std::to_string(settings.rtcMaxPort));
+		if (!settings.dtlsCertificateFile.empty())
+			args.push_back("--dtlsCertificateFile=" + settings.dtlsCertificateFile);
+		if (!settings.dtlsPrivateKeyFile.empty())
+			args.push_back("--dtlsPrivateKeyFile=" + settings.dtlsPrivateKeyFile);
+
+		// Convert to char*[]
+		std::vector<char*> argv;
+		for (auto& a : args) argv.push_back(const_cast<char*>(a.c_str()));
+		argv.push_back(nullptr);
+
+		// Set env
+		setenv("MEDIASOUP_VERSION", MEDIASOUP_VERSION, 1);
+
+		::execvp(workerBin.c_str(), argv.data());
+		// If exec fails
+		_exit(1);
+	}
+
+	// Parent process
+	::close(producerPipe[0]); // close child's read end
+	::close(consumerPipe[1]); // close child's write end
+
+	int parentWriteFd = producerPipe[1]; // parent writes to child's fd 3
+	int parentReadFd = consumerPipe[0];  // parent reads from child's fd 4
+
+	channel_ = std::make_unique<Channel>(parentWriteFd, parentReadFd, pid_);
+
+	MS_DEBUG(logger_, "worker spawned [pid:{}]", pid_);
+
+	// Listen for WORKER_RUNNING notification
+	channel_->emitter().once(std::to_string(pid_), [this](const std::vector<std::any>& args) {
+		if (!args.empty()) {
+			auto event = std::any_cast<FBS::Notification::Event>(args[0]);
+			if (event == FBS::Notification::Event::WORKER_RUNNING) {
+				MS_DEBUG(logger_, "worker running [pid:{}]", pid_);
+				emitter_.emit("@success");
+			}
+		}
+	});
+
+	// Wait thread for child exit
+	waitThread_ = std::thread([this]() {
+		int status;
+		::waitpid(pid_, &status, 0);
+		if (!closed_) {
+			workerDied("worker process exited with status " + std::to_string(status));
+		}
+	});
+	waitThread_.detach();
+}
+
+void Worker::close() {
+	if (closed_) return;
+	closed_ = true;
+
+	MS_DEBUG(logger_, "close() [pid:{}]", pid_);
+
+	// Close all routers
+	for (auto& router : routers_) {
+		router->workerClosed();
+	}
+	routers_.clear();
+
+	// Send close request to worker (in 3.14.x, WORKER_CLOSE is a Request, not Notification)
+	if (channel_) {
+		try {
+			channel_->request(FBS::Request::Method::WORKER_CLOSE);
+		} catch (...) {}
+		channel_->close();
+	}
+
+	// Kill the process
+	if (pid_ > 0) {
+		::kill(pid_, SIGTERM);
+	}
+
+	emitter_.emit("close");
+}
+
+void Worker::workerDied(const std::string& reason) {
+	if (closed_) return;
+	closed_ = true;
+
+	MS_ERROR(logger_, "worker died [pid:{}]: {}", pid_, reason);
+
+	if (channel_) channel_->close();
+
+	for (auto& router : routers_) {
+		router->workerClosed();
+	}
+	routers_.clear();
+
+	emitter_.emit("died", {std::any(reason)});
+}
+
+std::shared_ptr<Router> Worker::createRouter(
+	const std::vector<nlohmann::json>& mediaCodecs)
+{
+	if (closed_) throw std::runtime_error("Worker closed");
+
+	std::string routerId = utils::generateUUIDv4();
+
+	auto& builder = channel_->bufferBuilder();
+	auto routerIdOff = builder.CreateString(routerId);
+	auto reqOff = FBS::Worker::CreateCreateRouterRequest(builder, routerIdOff);
+
+	auto future = channel_->request(
+		FBS::Request::Method::WORKER_CREATE_ROUTER,
+		FBS::Request::Body::Worker_CreateRouterRequest,
+		reqOff.Union(),
+		"");
+
+	future.get(); // wait for response
+
+	auto router = std::make_shared<Router>(routerId, channel_.get(), mediaCodecs);
+	routers_.insert(router);
+
+	router->emitter().on("@close", [this, weak = std::weak_ptr<Router>(router)](auto&) {
+		if (auto r = weak.lock()) routers_.erase(r);
+	});
+
+	MS_DEBUG(logger_, "Router created [id:{}]", routerId);
+	return router;
+}
+
+} // namespace mediasoup
