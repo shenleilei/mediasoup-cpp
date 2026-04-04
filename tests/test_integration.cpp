@@ -338,3 +338,122 @@ TEST_F(IntegrationTest, LateJoinerAutoSubscribe) {
 		EXPECT_EQ(consumers[0]["kind"], "audio");
 	}
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Multi-node tests: two SFU instances sharing Redis
+// ═══════════════════════════════════════════════════════════════
+
+static const int SFU_PORT_A = 18765;
+static const int SFU_PORT_B = 18766;
+
+class MultiNodeTest : public ::testing::Test {
+protected:
+	pid_t pidA_ = -1, pidB_ = -1;
+	std::string testRoom_;
+
+	static pid_t startSfu(int port) {
+		std::string cmd = "./build/mediasoup-sfu"
+			" --port=" + std::to_string(port) +
+			" --workers=1"
+			" --workerBin=./mediasoup-worker"
+			" --announcedIp=127.0.0.1"
+			" --listenIp=127.0.0.1"
+			" > /dev/null 2>&1 & echo $!";
+		FILE* fp = popen(cmd.c_str(), "r");
+		if (!fp) return -1;
+		char buf[64]{};
+		fgets(buf, sizeof(buf), fp);
+		pclose(fp);
+		return atoi(buf);
+	}
+
+	static bool waitForPort(int port, int timeoutMs = 5000) {
+		for (int i = 0; i < timeoutMs / 100; ++i) {
+			usleep(100000);
+			int fd = socket(AF_INET, SOCK_STREAM, 0);
+			sockaddr_in addr{};
+			addr.sin_family = AF_INET;
+			addr.sin_port = htons(port);
+			inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+			if (::connect(fd, (sockaddr*)&addr, sizeof(addr)) == 0) {
+				::close(fd);
+				usleep(200000);
+				return true;
+			}
+			::close(fd);
+		}
+		return false;
+	}
+
+	static void killAndWaitPort(pid_t pid, int port) {
+		if (pid <= 0) return;
+		kill(pid, SIGKILL);
+		for (int i = 0; i < 20; ++i) {
+			usleep(50000);
+			int fd = socket(AF_INET, SOCK_STREAM, 0);
+			sockaddr_in addr{};
+			addr.sin_family = AF_INET;
+			addr.sin_port = htons(port);
+			addr.sin_addr.s_addr = htonl(INADDR_ANY);
+			int opt = 1;
+			setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+			bool free = (bind(fd, (sockaddr*)&addr, sizeof(addr)) == 0);
+			::close(fd);
+			if (free) return;
+		}
+	}
+
+	void SetUp() override {
+		testRoom_ = "route_" + std::to_string(getpid()) + "_" +
+			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+
+		pidA_ = startSfu(SFU_PORT_A);
+		pidB_ = startSfu(SFU_PORT_B);
+		ASSERT_GT(pidA_, 0);
+		ASSERT_GT(pidB_, 0);
+		ASSERT_TRUE(waitForPort(SFU_PORT_A)) << "SFU-A did not start";
+		ASSERT_TRUE(waitForPort(SFU_PORT_B)) << "SFU-B did not start";
+	}
+
+	void TearDown() override {
+		killAndWaitPort(pidA_, SFU_PORT_A);
+		killAndWaitPort(pidB_, SFU_PORT_B);
+	}
+};
+
+// ─── Test 9: Signaling redirect across nodes ───
+TEST_F(MultiNodeTest, RedirectToCorrectNode) {
+	// Alice joins roomX on SFU-A → claims the room in Redis
+	TestWsClient alice;
+	ASSERT_TRUE(alice.connect(HOST, SFU_PORT_A));
+	auto aliceJoin = alice.request("join", {
+		{"roomId", testRoom_}, {"peerId", "alice"}, {"displayName", "alice"}
+	});
+	ASSERT_TRUE(aliceJoin.value("ok", false)) << "alice join failed: " << aliceJoin.dump();
+
+	// Bob tries to join the SAME room on SFU-B → should get redirect
+	TestWsClient bob;
+	ASSERT_TRUE(bob.connect(HOST, SFU_PORT_B));
+	auto bobJoin = bob.request("join", {
+		{"roomId", testRoom_}, {"peerId", "bob"}, {"displayName", "bob"}
+	});
+	ASSERT_FALSE(bobJoin.value("ok", true)) << "bob should not join on SFU-B";
+	ASSERT_TRUE(bobJoin.contains("redirect")) << "expected redirect, got: " << bobJoin.dump();
+	std::string redirectAddr = bobJoin["redirect"].get<std::string>();
+	EXPECT_NE(redirectAddr.find(std::to_string(SFU_PORT_A)), std::string::npos)
+		<< "redirect should point to SFU-A, got: " << redirectAddr;
+
+	// Bob follows redirect: connect to SFU-A and join
+	bob.close();
+	TestWsClient bob2;
+	ASSERT_TRUE(bob2.connect(HOST, SFU_PORT_A));
+	auto bob2Join = bob2.request("join", {
+		{"roomId", testRoom_}, {"peerId", "bob"}, {"displayName", "bob"}
+	});
+	ASSERT_TRUE(bob2Join.value("ok", false)) << "bob join on SFU-A failed: " << bob2Join.dump();
+
+	// Alice should receive peerJoined notification
+	auto notif = alice.waitNotification("peerJoined", 3000);
+	ASSERT_FALSE(notif.empty()) << "Alice did not receive peerJoined after redirect";
+	EXPECT_EQ(notif["data"]["peerId"], "bob");
+}
