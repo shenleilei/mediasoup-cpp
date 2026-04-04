@@ -74,6 +74,7 @@ if(BUILD_TESTS)
     enable_testing()
 
     file(GLOB TEST_SOURCES tests/test_*.cpp)
+    list(FILTER TEST_SOURCES EXCLUDE REGEX "test_integration\\.cpp$")
     add_executable(mediasoup_tests ${TEST_SOURCES})
     target_include_directories(mediasoup_tests PRIVATE
         ${CMAKE_SOURCE_DIR}/src
@@ -83,4 +84,14 @@ if(BUILD_TESTS)
     )
     target_link_libraries(mediasoup_tests PRIVATE gtest gtest_main mediasoup_lib)
     add_test(NAME mediasoup_tests COMMAND mediasoup_tests)
+
+    # Integration (black-box) tests - requires built mediasoup-sfu + mediasoup-worker
+    add_executable(mediasoup_integration_tests tests/test_integration.cpp)
+    target_include_directories(mediasoup_integration_tests PRIVATE
+        ${CMAKE_SOURCE_DIR}/tests
+        ${JSON_INCLUDE}
+    )
+    target_link_libraries(mediasoup_integration_tests PRIVATE gtest gtest_main pthread)
+    add_test(NAME mediasoup_integration_tests COMMAND mediasoup_integration_tests
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 endif()
