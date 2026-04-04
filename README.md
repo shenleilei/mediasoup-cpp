@@ -318,6 +318,31 @@ cmake --build build_dbg -j$(nproc)
 
 `-B build_dbg` 指定构建输出目录为 `build_dbg`，和 Release 的 `build/` 互不干扰，可同时保留两个版本。
 
+### 运行单元测试
+
+项目使用 GoogleTest 框架，测试代码在 `tests/` 目录下。`BUILD_TESTS` 选项默认开启，正常构建即包含测试。
+
+```bash
+cd mediasoup-cpp
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc) --target mediasoup_tests
+./build/mediasoup_tests
+```
+
+也可以用 `ctest`：
+```bash
+cd build && ctest --output-on-failure
+```
+
+当前测试覆盖：
+| Test Suite | 用例数 | 说明 |
+|------------|--------|------|
+| `OrtcTest` | 14 | ORTC codec 匹配、H264 profile、Router RTP 能力生成 |
+| `RoomTest` | 6 | Peer 增删、空闲检测、参与者列表 |
+| `PeerTest` | 3 | JSON 序列化、Transport 查询、关闭幂等性 |
+| `RtpTypesTest` | 8 | RTP 数据结构 JSON 序列化/反序列化 |
+| `SupportedCapabilitiesTest` | 4 | 支持的 codec 列表校验 |
+
 `-fsanitize=address` 的作用：
 - **编译时**：GCC/Clang 在每次内存访问前后插入检查代码（检查越界、use-after-free 等）
 - **链接时**：自动链接 `libasan.so`（ASAN 运行时库），替换 malloc/free，提供错误报告和堆栈回溯

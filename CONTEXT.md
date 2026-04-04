@@ -29,6 +29,12 @@
 - 修复：前端 join 后立即创建 recvTransport 并消费已有 producer，不再依赖 publish 触发
 - 服务端 `createTransport()` 创建 recvTransport 时补一轮 auto-subscribe，返回 `consumers` 数组
 
+## 已完成：公网 IP 自动探测
+- `announcedIp` 为空时，启动时自动通过 ifconfig.me / api.ipify.org / icanhazip.com 探测公网 IP
+- 探测成功后自动设置 `announcedIp`，写入 ICE candidate，浏览器可直接连接
+- 用户手动配置 `--announcedIp` 时跳过探测
+- 探测失败打 warn 日志提醒
+
 ## 任务完成状态
 - P0: ✅ Peer 抽象 + 服务端自动订阅
 - P0: ✅ 信令与业务解耦
@@ -38,6 +44,13 @@
 - P2: ✅ Worker 负载均衡（getLeastLoadedWorker 按 routerCount 选最少的 worker）
 - P2: 待做 Dynacast
 - P2: 待做 信令协议标准化
+
+## 单元测试
+- 框架: GoogleTest，`BUILD_TESTS` 默认 ON
+- 构建: `cmake --build build --target mediasoup_tests`
+- 运行: `./build/mediasoup_tests` 或 `cd build && ctest --output-on-failure`
+- 测试文件在 `tests/` 目录: test_ortc / test_rtp_types / test_room / test_supported_capabilities
+- 共 35 个用例，覆盖 ORTC 协商、RTP 类型序列化、Room/Peer 管理、codec 能力校验
 
 ## 关键文件
 - `src/main.cpp` - 入口，参数解析，组装各组件
