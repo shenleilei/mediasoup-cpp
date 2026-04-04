@@ -66,3 +66,21 @@ target_include_directories(mediasoup-sfu PRIVATE
 )
 
 target_link_libraries(mediasoup-sfu PRIVATE mediasoup_lib z hiredis)
+
+# ── Tests ──
+option(BUILD_TESTS "Build unit tests" ON)
+if(BUILD_TESTS)
+    add_subdirectory(third_party/googletest EXCLUDE_FROM_ALL)
+    enable_testing()
+
+    file(GLOB TEST_SOURCES tests/test_*.cpp)
+    add_executable(mediasoup_tests ${TEST_SOURCES})
+    target_include_directories(mediasoup_tests PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${FLATBUFFERS_INCLUDE}
+        ${JSON_INCLUDE}
+        ${GENERATED_INCLUDE}
+    )
+    target_link_libraries(mediasoup_tests PRIVATE gtest gtest_main mediasoup_lib)
+    add_test(NAME mediasoup_tests COMMAND mediasoup_tests)
+endif()
