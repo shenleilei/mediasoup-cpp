@@ -41,6 +41,7 @@ int main(int argc, char* argv[]) {
 	int redisPort = 6379;
 	std::string nodeId;
 	std::string nodeAddress;
+	std::string recordDir;
 
 	// Load config file (--config=path or default config.json)
 	std::string configPath = "config.json";
@@ -62,6 +63,7 @@ int main(int argc, char* argv[]) {
 				if (cfg.contains("redisPort"))      redisPort = cfg["redisPort"].get<int>();
 				if (cfg.contains("nodeId"))         nodeId = cfg["nodeId"].get<std::string>();
 				if (cfg.contains("nodeAddress"))    nodeAddress = cfg["nodeAddress"].get<std::string>();
+				if (cfg.contains("recordDir"))      recordDir = cfg["recordDir"].get<std::string>();
 				spdlog::info("Loaded config from {}", configPath);
 			} catch (const std::exception& e) {
 				spdlog::warn("Failed to parse {}: {}", configPath, e.what());
@@ -81,6 +83,7 @@ int main(int argc, char* argv[]) {
 		else if (arg.find("--redisPort=") == 0) redisPort = std::stoi(arg.substr(12));
 		else if (arg.find("--nodeId=") == 0)    nodeId = arg.substr(9);
 		else if (arg.find("--nodeAddress=") == 0) nodeAddress = arg.substr(14);
+		else if (arg.find("--recordDir=") == 0) recordDir = arg.substr(12);
 	}
 
 	// Auto-detect public IP if announcedIp not set
@@ -180,7 +183,7 @@ int main(int argc, char* argv[]) {
 
 	// Assemble
 	RoomManager roomManager(workerManager, mediaCodecs, listenInfos);
-	RoomService roomService(roomManager, registry.get());
+	RoomService roomService(roomManager, registry.get(), recordDir);
 	SignalingServer server(signalingPort, roomService);
 
 	spdlog::info("mediasoup-cpp SFU ready - {} workers, signaling on port {}, nodeId={}",

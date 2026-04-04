@@ -13,7 +13,14 @@ namespace mediasoup {
 
 class Transport;
 class WebRtcTransport;
+class PlainTransport;
 class Producer;
+
+struct PlainTransportOptions {
+	std::vector<json> listenInfos;
+	bool rtcpMux = true;
+	bool comedia = true;
+};
 
 struct WebRtcTransportOptions {
 	std::vector<json> listenInfos;
@@ -38,6 +45,7 @@ public:
 	EventEmitter& emitter() { return emitter_; }
 
 	std::shared_ptr<WebRtcTransport> createWebRtcTransport(const WebRtcTransportOptions& options);
+	std::shared_ptr<PlainTransport> createPlainTransport(const PlainTransportOptions& options);
 
 	std::shared_ptr<Producer> getProducerById(const std::string& id) const;
 	void addProducer(std::shared_ptr<Producer> producer);

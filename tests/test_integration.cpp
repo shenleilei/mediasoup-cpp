@@ -3,6 +3,8 @@
 #include "TestWsClient.h"
 #include <signal.h>
 #include <sys/wait.h>
+#include <sstream>
+#include <cmath>
 
 static const int SFU_PORT = 18765;  // use high port to avoid conflicts
 static const std::string HOST = "127.0.0.1";
@@ -456,4 +458,262 @@ TEST_F(MultiNodeTest, RedirectToCorrectNode) {
 	auto notif = alice.waitNotification("peerJoined", 3000);
 	ASSERT_FALSE(notif.empty()) << "Alice did not receive peerJoined after redirect";
 	EXPECT_EQ(notif["data"]["peerId"], "bob");
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Recording tests: verify PeerRecorder produces valid WebM with aligned A/V
+// ═══════════════════════════════════════════════════════════════
+
+#include <sys/stat.h>
+#include "Recorder.h"
+
+// Helper: build a minimal RTP packet
+static std::vector<uint8_t> makeRtpPacket(uint8_t pt, uint16_t seq, uint32_t ts, uint32_t ssrc,
+	const uint8_t* payload, int payloadLen)
+{
+	std::vector<uint8_t> pkt(12 + payloadLen);
+	pkt[0] = 0x80; // V=2
+	pkt[1] = pt;
+	pkt[2] = (seq >> 8) & 0xFF; pkt[3] = seq & 0xFF;
+	pkt[4] = (ts >> 24); pkt[5] = (ts >> 16); pkt[6] = (ts >> 8); pkt[7] = ts;
+	pkt[8] = (ssrc >> 24); pkt[9] = (ssrc >> 16); pkt[10] = (ssrc >> 8); pkt[11] = ssrc;
+	memcpy(pkt.data() + 12, payload, payloadLen);
+	return pkt;
+}
+
+static void sendUdp(int port, const std::vector<uint8_t>& data) {
+	int fd = socket(AF_INET, SOCK_DGRAM, 0);
+	sockaddr_in addr{};
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(port);
+	inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+	sendto(fd, data.data(), data.size(), 0, (sockaddr*)&addr, sizeof(addr));
+	::close(fd);
+}
+
+class RecordingTest : public ::testing::Test {
+protected:
+	std::string recordDir_;
+
+	void SetUp() override {
+		recordDir_ = "/tmp/mediasoup_rec_test_" + std::to_string(getpid());
+		system(("rm -rf " + recordDir_).c_str());
+		mkdir(recordDir_.c_str(), 0755);
+	}
+
+	void TearDown() override {
+		system(("rm -rf " + recordDir_).c_str());
+	}
+};
+
+// ─── Test: Recording file created with valid WebM header ───
+TEST_F(RecordingTest, RecordingFileCreated) {
+	std::string path = recordDir_ + "/test.webm";
+	// Use same PT as SFU would assign: audio=100, video=101
+	mediasoup::PeerRecorder rec("alice", path, 100, 101, 48000, 90000);
+	int port = rec.createSocket();
+	ASSERT_GT(port, 0);
+	ASSERT_TRUE(rec.start());
+
+	// Send some fake RTP packets (audio + video)
+	uint8_t fakePayload[160] = {};
+	for (int i = 0; i < 50; i++) {
+		// Audio: PT=100, 960 samples per frame (20ms at 48kHz)
+		auto audioPkt = makeRtpPacket(100, i, i * 960, 0xAAAA, fakePayload, 80);
+		sendUdp(port, audioPkt);
+		// Video: PT=101, 3000 ticks per frame (33ms at 90kHz ≈ 30fps)
+		auto videoPkt = makeRtpPacket(101, i, i * 3000, 0xBBBB, fakePayload, 160);
+		sendUdp(port, videoPkt);
+		usleep(20000); // 20ms
+	}
+
+	rec.stop();
+
+	// Verify file exists and has content
+	struct stat st;
+	ASSERT_EQ(stat(path.c_str(), &st), 0) << "Recording file not found";
+	EXPECT_GT(st.st_size, 200) << "Recording file too small";
+
+	// ffprobe to verify streams
+	char buf[4096];
+	std::string probeCmd = "ffprobe -v error -show_entries stream=codec_type,codec_name -of csv=p=0 " + path + " 2>&1";
+	FILE* fp = popen(probeCmd.c_str(), "r");
+	std::string probeOut;
+	while (fgets(buf, sizeof(buf), fp)) probeOut += buf;
+	pclose(fp);
+
+	EXPECT_NE(probeOut.find("audio"), std::string::npos) << "No audio stream. ffprobe: " << probeOut;
+	EXPECT_NE(probeOut.find("video"), std::string::npos) << "No video stream. ffprobe: " << probeOut;
+}
+
+// ─── Test: Audio/Video timestamps are aligned ───
+TEST_F(RecordingTest, AudioVideoAlignment) {
+	std::string path = recordDir_ + "/align_test.webm";
+	mediasoup::PeerRecorder rec("bob", path, 100, 101, 48000, 90000);
+	int port = rec.createSocket();
+	ASSERT_GT(port, 0);
+	ASSERT_TRUE(rec.start());
+
+	uint8_t fakePayload[160] = {};
+
+	// Simulate 2 seconds of audio+video starting at the same time
+	// Audio: 20ms frames, 960 samples/frame at 48kHz
+	// Video: 33ms frames, 3000 ticks/frame at 90kHz (~30fps)
+	uint32_t audioTs = 1000000; // arbitrary start
+	uint32_t videoTs = 2000000; // different start (will be normalized by base subtraction)
+	for (int i = 0; i < 100; i++) {
+		auto aPkt = makeRtpPacket(100, i, audioTs + i * 960, 0xAAAA, fakePayload, 80);
+		sendUdp(port, aPkt);
+		if (i % 2 == 0) { // video at ~30fps (every other 20ms = 40ms ≈ 25fps)
+			auto vPkt = makeRtpPacket(101, i/2, videoTs + (i/2) * 3600, 0xBBBB, fakePayload, 160);
+			sendUdp(port, vPkt);
+		}
+		usleep(20000);
+	}
+
+	rec.stop();
+
+	// Use ffprobe to get start_time of each stream
+	char buf[4096];
+	std::string probeCmd = "ffprobe -v error -show_entries stream=codec_type,start_time -of csv=p=0 " + path + " 2>&1";
+	FILE* fp = popen(probeCmd.c_str(), "r");
+	std::string probeOut;
+	while (fgets(buf, sizeof(buf), fp)) probeOut += buf;
+	pclose(fp);
+
+	double audioStart = -1, videoStart = -1;
+	std::istringstream iss(probeOut);
+	std::string line;
+	while (std::getline(iss, line)) {
+		auto pos = line.rfind(',');
+		if (pos == std::string::npos) continue;
+		double t = std::atof(line.substr(pos + 1).c_str());
+		if (line.find("audio") != std::string::npos) audioStart = t;
+		else if (line.find("video") != std::string::npos) videoStart = t;
+	}
+
+	ASSERT_GE(audioStart, 0) << "No audio start_time. ffprobe: " << probeOut;
+	ASSERT_GE(videoStart, 0) << "No video start_time. ffprobe: " << probeOut;
+
+	// Both should start near 0 (base timestamp subtracted)
+	// Drift should be < 0.5 seconds
+	double drift = std::abs(audioStart - videoStart);
+	EXPECT_LT(drift, 0.5)
+		<< "Audio/video misaligned: audio=" << audioStart
+		<< " video=" << videoStart << " drift=" << drift << "s";
+}
+
+// ─── Test: SFU auto-recording creates file on produce ───
+class SfuRecordingTest : public ::testing::Test {
+protected:
+	pid_t sfuPid_ = -1;
+	std::string testRoom_;
+	std::string recordDir_;
+
+	void SetUp() override {
+		testRoom_ = "rec_" + std::to_string(getpid()) + "_" +
+			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+		recordDir_ = "/tmp/mediasoup_rec_sfu_" + std::to_string(getpid());
+		system(("rm -rf " + recordDir_).c_str());
+		mkdir(recordDir_.c_str(), 0755);
+
+		std::string cmd = "./build/mediasoup-sfu"
+			" --port=" + std::to_string(SFU_PORT) +
+			" --workers=1 --workerBin=./mediasoup-worker"
+			" --announcedIp=127.0.0.1 --listenIp=127.0.0.1"
+			" --recordDir=" + recordDir_ +
+			" > /dev/null 2>&1 & echo $!";
+		FILE* fp = popen(cmd.c_str(), "r");
+		ASSERT_NE(fp, nullptr);
+		char buf[64]{};
+		fgets(buf, sizeof(buf), fp);
+		pclose(fp);
+		sfuPid_ = atoi(buf);
+		ASSERT_GT(sfuPid_, 0);
+
+		for (int i = 0; i < 50; ++i) {
+			usleep(100000);
+			int fd = socket(AF_INET, SOCK_STREAM, 0);
+			sockaddr_in addr{};
+			addr.sin_family = AF_INET;
+			addr.sin_port = htons(SFU_PORT);
+			inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+			if (::connect(fd, (sockaddr*)&addr, sizeof(addr)) == 0) {
+				::close(fd); usleep(200000); return;
+			}
+			::close(fd);
+		}
+		FAIL() << "SFU did not start";
+	}
+
+	void TearDown() override {
+		if (sfuPid_ > 0) {
+			kill(sfuPid_, SIGKILL);
+			for (int i = 0; i < 20; ++i) {
+				usleep(50000);
+				int fd = socket(AF_INET, SOCK_STREAM, 0);
+				sockaddr_in addr{};
+				addr.sin_family = AF_INET;
+				addr.sin_port = htons(SFU_PORT);
+				addr.sin_addr.s_addr = htonl(INADDR_ANY);
+				int opt = 1;
+				setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+				bool free = (bind(fd, (sockaddr*)&addr, sizeof(addr)) == 0);
+				::close(fd);
+				if (free) break;
+			}
+		}
+		system(("rm -rf " + recordDir_).c_str());
+	}
+};
+
+TEST_F(SfuRecordingTest, AutoRecordOnProduce) {
+	TestWsClient ws;
+	ASSERT_TRUE(ws.connect(HOST, SFU_PORT));
+
+	json rtpCaps = {{"codecs", {{
+		{"mimeType", "audio/opus"}, {"kind", "audio"},
+		{"clockRate", 48000}, {"channels", 2}, {"preferredPayloadType", 100}
+	}, {
+		{"mimeType", "video/VP8"}, {"kind", "video"},
+		{"clockRate", 90000}, {"preferredPayloadType", 101}
+	}}}, {"headerExtensions", json::array()}};
+
+	auto joinResp = ws.request("join", {
+		{"roomId", testRoom_}, {"peerId", "streamer"},
+		{"displayName", "streamer"}, {"rtpCapabilities", rtpCaps}
+	});
+	ASSERT_TRUE(joinResp.value("ok", false));
+
+	auto sendResp = ws.request("createWebRtcTransport", {{"producing", true}, {"consuming", false}});
+	ASSERT_TRUE(sendResp.value("ok", false));
+	std::string tid = sendResp["data"]["id"];
+
+	auto audioResp = ws.request("produce", {
+		{"transportId", tid}, {"kind", "audio"},
+		{"rtpParameters", {{"codecs", {{{"mimeType", "audio/opus"}, {"clockRate", 48000}, {"channels", 2}, {"payloadType", 100}}}},
+		{"encodings", {{{"ssrc", 11111111}}}}, {"mid", "0"}}}
+	});
+	ASSERT_TRUE(audioResp.value("ok", false));
+
+	auto videoResp = ws.request("produce", {
+		{"transportId", tid}, {"kind", "video"},
+		{"rtpParameters", {{"codecs", {{{"mimeType", "video/VP8"}, {"clockRate", 90000}, {"payloadType", 101}}}},
+		{"encodings", {{{"ssrc", 22222222}}}}, {"mid", "1"}}}
+	});
+	ASSERT_TRUE(videoResp.value("ok", false));
+
+	usleep(500000); // let recorder initialize
+	ws.close();
+	usleep(500000);
+
+	// Verify recording file was created
+	std::string findCmd = "find " + recordDir_ + " -name '*.webm' 2>/dev/null";
+	FILE* fp = popen(findCmd.c_str(), "r");
+	char buf[512]{};
+	std::string files;
+	while (fgets(buf, sizeof(buf), fp)) files += buf;
+	pclose(fp);
+
+	EXPECT_FALSE(files.empty()) << "No .webm recording file created by SFU auto-record";
 }
