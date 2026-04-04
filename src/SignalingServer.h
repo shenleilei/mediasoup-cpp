@@ -1,26 +1,21 @@
 #pragma once
+#include "RoomService.h"
 #include <nlohmann/json.hpp>
-#include <functional>
 #include <string>
-#include <unordered_map>
-#include <memory>
 
-// Forward declare uWS types to avoid header issues in this header
 namespace mediasoup {
 
 using json = nlohmann::json;
 
-class RoomManager;
-
 class SignalingServer {
 public:
-	SignalingServer(int port, RoomManager& roomManager);
+	SignalingServer(int port, RoomService& roomService);
 	void run();
 	void stop();
 
 private:
 	int port_;
-	RoomManager& roomManager_;
+	RoomService& roomService_;
 	bool running_ = false;
 };
 

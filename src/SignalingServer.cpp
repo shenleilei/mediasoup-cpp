@@ -1,10 +1,8 @@
 #include "SignalingServer.h"
-#include "RoomManager.h"
-#include "Producer.h"
-#include "Consumer.h"
 #include <App.h>
-#include <nlohmann/json.hpp>
 #include <fstream>
+#include <unordered_map>
+#include <mutex>
 
 namespace mediasoup {
 
@@ -13,24 +11,55 @@ struct PerSocketData {
 	std::string roomId;
 };
 
-SignalingServer::SignalingServer(int port, RoomManager& roomManager)
-	: port_(port), roomManager_(roomManager) {}
+SignalingServer::SignalingServer(int port, RoomService& roomService)
+	: port_(port), roomService_(roomService) {}
 
 void SignalingServer::run() {
 	running_ = true;
+
+	// peerId → ws* mapping for notify/broadcast
+	struct WsMap {
+		std::mutex mutex;
+		std::unordered_map<std::string, uWS::WebSocket<false, true, PerSocketData>*> peers;
+	};
+	auto wsMap = std::make_shared<WsMap>();
+
+	// Wire up RoomService callbacks
+	roomService_.setNotify([wsMap](const std::string& peerId, const json& msg) {
+		std::lock_guard<std::mutex> lock(wsMap->mutex);
+		auto it = wsMap->peers.find(peerId);
+		if (it != wsMap->peers.end())
+			it->second->send(msg.dump(), uWS::OpCode::TEXT);
+	});
+
+	roomService_.setBroadcast([wsMap](const std::string& roomId,
+		const std::string& excludePeerId, const json& msg)
+	{
+		std::string data = msg.dump();
+		std::lock_guard<std::mutex> lock(wsMap->mutex);
+		for (auto& [pid, ws] : wsMap->peers) {
+			if (pid == excludePeerId) continue;
+			auto* sd = ws->getUserData();
+			if (sd->roomId == roomId)
+				ws->send(data, uWS::OpCode::TEXT);
+		}
+	});
+
+	// GC timer
+	struct us_timer_t* gcTimer = nullptr;
 
 	uWS::App().ws<PerSocketData>("/ws", {
 		.compression = uWS::DISABLED,
 		.maxPayloadLength = 16 * 1024,
 		.idleTimeout = 120,
 
-		.open = [this](auto* ws) {
-			auto* data = ws->getUserData();
-			data->peerId = "";
-			data->roomId = "";
+		.open = [wsMap](auto* ws) {
+			auto* d = ws->getUserData();
+			d->peerId = "";
+			d->roomId = "";
 		},
 
-		.message = [this](auto* ws, std::string_view message, uWS::OpCode) {
+		.message = [this, wsMap](auto* ws, std::string_view message, uWS::OpCode) {
 			try {
 				auto req = json::parse(message);
 				if (!req.contains("request") || !req["request"].get<bool>()) return;
@@ -38,223 +67,121 @@ void SignalingServer::run() {
 				std::string method = req.value("method", "");
 				uint64_t id = req.value("id", 0);
 				json data = req.value("data", json::object());
-				auto* socketData = ws->getUserData();
+				auto* sd = ws->getUserData();
 
-				json responseData;
-				bool ok = true;
-				std::string errorMsg;
+				RoomService::Result result;
 
-				try {
-					if (method == "join") {
-						std::string roomId = data.value("roomId", "default");
-						std::string peerId = data.value("peerId", "");
-						socketData->roomId = roomId;
-						socketData->peerId = peerId;
+				if (method == "join") {
+					std::string roomId = data.value("roomId", "default");
+					std::string peerId = data.value("peerId", "");
+					std::string displayName = data.value("displayName", peerId);
+					json rtpCaps = data.value("rtpCapabilities", json::object());
 
-						auto room = roomManager_.getOrCreateRoom(roomId);
-						auto rtpCaps = room->router()->rtpCapabilities();
+					result = roomService_.join(roomId, peerId, displayName, rtpCaps);
 
-						// Collect existing producers for the new peer
-						json existingProducers = json::array();
-						auto router = room->router();
-						for (auto& [tid, transport] : router->transports()) {
-							for (auto& [pid, producer] : transport->producers()) {
-								existingProducers.push_back({
-									{"producerId", producer->id()},
-									{"kind", producer->kind()}
-								});
-							}
-						}
-
-						responseData = {
-							{"routerRtpCapabilities", rtpCaps},
-							{"existingProducers", existingProducers}
-						};
-
-					} else if (method == "createWebRtcTransport") {
-						auto room = roomManager_.getRoom(socketData->roomId);
-						if (!room) throw std::runtime_error("room not found");
-
-						bool producing = data.value("producing", false);
-						bool consuming = data.value("consuming", false);
-
-						WebRtcTransportOptions opts;
-						opts.listenInfos = roomManager_.listenInfos();
-						opts.enableUdp = true;
-						opts.enableTcp = true;
-						opts.preferUdp = true;
-
-						auto transport = room->router()->createWebRtcTransport(opts);
-
-						// Store transport for this peer
-						room->addTransport(socketData->peerId, transport);
-
-						responseData = transport->toJson();
-
-					} else if (method == "connectWebRtcTransport") {
-						auto room = roomManager_.getRoom(socketData->roomId);
-						if (!room) throw std::runtime_error("room not found");
-
-						std::string transportId = data.at("transportId").get<std::string>();
-						DtlsParameters dtlsParams = data.at("dtlsParameters").get<DtlsParameters>();
-
-						auto transport = room->getTransport(transportId);
-						if (!transport) throw std::runtime_error("transport not found");
-
-						auto webRtcTransport = std::dynamic_pointer_cast<WebRtcTransport>(transport);
-						if (!webRtcTransport) throw std::runtime_error("not a WebRtcTransport");
-
-						responseData = webRtcTransport->connect(dtlsParams);
-
-					} else if (method == "produce") {
-						auto room = roomManager_.getRoom(socketData->roomId);
-						if (!room) throw std::runtime_error("room not found");
-
-						std::string transportId = data.at("transportId").get<std::string>();
-						auto transport = room->getTransport(transportId);
-						if (!transport) throw std::runtime_error("transport not found");
-
-						json produceOptions = {
-							{"kind", data.at("kind")},
-							{"rtpParameters", data.at("rtpParameters")},
-							{"routerRtpCapabilities", room->router()->rtpCapabilities()}
-						};
-
-						auto producer = transport->produce(produceOptions);
-						room->router()->addProducer(producer);
-
-						responseData = {{"id", producer->id()}};
-
-						// Notify other peers about new producer
-						std::string producerPeerId = socketData->peerId;
-						json notification = {
-							{"notification", true},
-							{"method", "newProducer"},
-							{"data", {
-								{"producerId", producer->id()},
-								{"producerPeerId", producerPeerId},
-								{"kind", producer->kind()}
-							}}
-						};
-						std::string notifStr = notification.dump();
-
-						// Broadcast to room (uWS publish)
-						ws->publish(socketData->roomId, notifStr, uWS::OpCode::TEXT);
-
-					} else if (method == "consume") {
-						auto room = roomManager_.getRoom(socketData->roomId);
-						if (!room) throw std::runtime_error("room not found");
-
-						std::string transportId = data.at("transportId").get<std::string>();
-						std::string producerId = data.at("producerId").get<std::string>();
-						RtpCapabilities rtpCapabilities = data.at("rtpCapabilities").get<RtpCapabilities>();
-
-						auto transport = room->getTransport(transportId);
-						if (!transport) throw std::runtime_error("transport not found");
-
-						auto producer = room->router()->getProducerById(producerId);
-						if (!producer) throw std::runtime_error("producer not found");
-
-						json consumeOptions = {
-							{"producerId", producerId},
-							{"rtpCapabilities", rtpCapabilities},
-							{"consumableRtpParameters", producer->consumableRtpParameters()}
-						};
-
-						auto consumer = transport->consume(consumeOptions);
-
-						responseData = consumer->toJson();
-
-					} else if (method == "pauseProducer") {
-						auto room = roomManager_.getRoom(socketData->roomId);
-						auto producer = room->router()->getProducerById(data.at("producerId").get<std::string>());
-						if (producer) producer->pause();
-						responseData = json::object();
-
-					} else if (method == "resumeProducer") {
-						auto room = roomManager_.getRoom(socketData->roomId);
-						auto producer = room->router()->getProducerById(data.at("producerId").get<std::string>());
-						if (producer) producer->resume();
-						responseData = json::object();
-
-					} else if (method == "pauseConsumer") {
-						// Consumer pause handled via transport
-						responseData = json::object();
-
-					} else if (method == "resumeConsumer") {
-						responseData = json::object();
-
-					} else if (method == "restartIce") {
-						auto room = roomManager_.getRoom(socketData->roomId);
-						std::string transportId = data.at("transportId").get<std::string>();
-						auto transport = room->getTransport(transportId);
-						auto webRtcTransport = std::dynamic_pointer_cast<WebRtcTransport>(transport);
-						if (webRtcTransport) responseData = webRtcTransport->restartIce();
-						else responseData = json::object();
-
-					} else {
-						throw std::runtime_error("unknown method: " + method);
+					if (!result.redirect.empty()) {
+						// Redirect to correct node
+						json resp = {{"response", true}, {"id", id}, {"ok", false},
+							{"redirect", result.redirect}};
+						ws->send(resp.dump(), uWS::OpCode::TEXT);
+						return;
 					}
-				} catch (const std::exception& e) {
-					ok = false;
-					errorMsg = e.what();
-				}
 
-				json response;
-				if (ok) {
-					response = {{"response", true}, {"id", id}, {"ok", true}, {"data", responseData}};
+					if (result.ok) {
+						sd->roomId = roomId;
+						sd->peerId = peerId;
+						std::lock_guard<std::mutex> lock(wsMap->mutex);
+						wsMap->peers[peerId] = ws;
+					}
+
+				} else if (method == "createWebRtcTransport") {
+					result = roomService_.createTransport(sd->roomId, sd->peerId,
+						data.value("producing", false), data.value("consuming", false));
+
+				} else if (method == "connectWebRtcTransport") {
+					result = roomService_.connectTransport(sd->roomId, sd->peerId,
+						data.at("transportId").get<std::string>(),
+						data.at("dtlsParameters").get<DtlsParameters>());
+
+				} else if (method == "produce") {
+					result = roomService_.produce(sd->roomId, sd->peerId,
+						data.at("transportId").get<std::string>(),
+						data.at("kind").get<std::string>(),
+						data.at("rtpParameters"));
+
+				} else if (method == "consume") {
+					result = roomService_.consume(sd->roomId, sd->peerId,
+						data.at("transportId").get<std::string>(),
+						data.at("producerId").get<std::string>(),
+						data.at("rtpCapabilities"));
+
+				} else if (method == "pauseProducer") {
+					result = roomService_.pauseProducer(sd->roomId,
+						data.at("producerId").get<std::string>());
+
+				} else if (method == "resumeProducer") {
+					result = roomService_.resumeProducer(sd->roomId,
+						data.at("producerId").get<std::string>());
+
+				} else if (method == "restartIce") {
+					result = roomService_.restartIce(sd->roomId, sd->peerId,
+						data.at("transportId").get<std::string>());
+
 				} else {
-					response = {{"response", true}, {"id", id}, {"ok", false}, {"error", errorMsg}};
+					result = {false, {}, "", "unknown method: " + method};
 				}
 
-				ws->send(response.dump(), uWS::OpCode::TEXT);
-
-				// Subscribe to room topic after join
-				if (method == "join" && ok) {
-					ws->subscribe(socketData->roomId);
-				}
+				json resp;
+				if (result.ok)
+					resp = {{"response", true}, {"id", id}, {"ok", true}, {"data", result.data}};
+				else
+					resp = {{"response", true}, {"id", id}, {"ok", false},
+						{"error", result.error}};
+				ws->send(resp.dump(), uWS::OpCode::TEXT);
 
 			} catch (const std::exception& e) {
-				json errResp = {{"response", true}, {"id", 0}, {"ok", false}, {"error", e.what()}};
-				ws->send(errResp.dump(), uWS::OpCode::TEXT);
+				json resp = {{"response", true}, {"id", 0}, {"ok", false}, {"error", e.what()}};
+				ws->send(resp.dump(), uWS::OpCode::TEXT);
 			}
 		},
 
-		.close = [this](auto* ws, int, std::string_view) {
-			auto* data = ws->getUserData();
-			if (!data->roomId.empty() && !data->peerId.empty()) {
-				auto room = roomManager_.getRoom(data->roomId);
-				if (room) {
-					room->removePeer(data->peerId);
+		.close = [this, wsMap](auto* ws, int, std::string_view) {
+			auto* sd = ws->getUserData();
+			if (!sd->peerId.empty()) {
+				{
+					std::lock_guard<std::mutex> lock(wsMap->mutex);
+					wsMap->peers.erase(sd->peerId);
 				}
+				if (!sd->roomId.empty())
+					roomService_.leave(sd->roomId, sd->peerId);
 			}
 		}
+
 	}).get("/*", [](auto* res, auto* req) {
-		// Serve static files from public/
 		std::string url(req->getUrl());
 		if (url == "/") url = "/index.html";
-
 		std::string path = "public" + url;
 		std::ifstream file(path, std::ios::binary);
-		if (!file.is_open()) {
-			res->writeStatus("404 Not Found")->end("Not Found");
-			return;
-		}
-
-		std::string content((std::istreambuf_iterator<char>(file)),
-			std::istreambuf_iterator<char>());
-
-		// Content type
+		if (!file.is_open()) { res->writeStatus("404 Not Found")->end("Not Found"); return; }
+		std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 		std::string ct = "text/plain";
 		if (url.find(".html") != std::string::npos) ct = "text/html";
 		else if (url.find(".js") != std::string::npos) ct = "application/javascript";
 		else if (url.find(".css") != std::string::npos) ct = "text/css";
-
 		res->writeHeader("Content-Type", ct)->end(content);
 
-	}).listen(port_, [this](auto* listenSocket) {
+	}).listen(port_, [this, &gcTimer](auto* listenSocket) {
 		if (listenSocket) {
 			spdlog::info("SignalingServer listening on port {}", port_);
+			auto* loop = uWS::Loop::get();
+			gcTimer = us_create_timer((struct us_loop_t*)loop, 0, sizeof(RoomService*));
+			RoomService* svcPtr = &roomService_;
+			memcpy(us_timer_ext(gcTimer), &svcPtr, sizeof(RoomService*));
+			us_timer_set(gcTimer, [](struct us_timer_t* t) {
+				RoomService* svc;
+				memcpy(&svc, us_timer_ext(t), sizeof(RoomService*));
+				svc->cleanIdleRooms(30);
+			}, 30000, 30000);
 		} else {
 			spdlog::error("SignalingServer failed to listen on port {}", port_);
 		}

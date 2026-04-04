@@ -34,7 +34,6 @@ add_library(mediasoup_lib STATIC
     src/Worker.cpp
     src/Transport.cpp
     src/WebRtcTransport.cpp
-    src/PipeTransport.cpp
     src/Router.cpp
     src/Producer.cpp
     src/Consumer.cpp
@@ -66,4 +65,4 @@ target_include_directories(mediasoup-sfu PRIVATE
     ${USOCKETS_DIR}/src
 )
 
-target_link_libraries(mediasoup-sfu PRIVATE mediasoup_lib z)
+target_link_libraries(mediasoup-sfu PRIVATE mediasoup_lib z hiredis)
