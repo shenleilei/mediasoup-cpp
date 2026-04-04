@@ -23,11 +23,16 @@ public:
 	// Get worker with least routers for load balancing
 	std::shared_ptr<Worker> getLeastLoadedWorker() const {
 		if (workers_.empty()) return nullptr;
-		// Simple: return first non-closed worker
+		std::shared_ptr<Worker> best;
+		size_t minLoad = SIZE_MAX;
 		for (auto& w : workers_) {
-			if (!w->closed()) return w;
+			if (w->closed()) continue;
+			if (w->routerCount() < minLoad) {
+				minLoad = w->routerCount();
+				best = w;
+			}
 		}
-		return nullptr;
+		return best;
 	}
 
 	void close() {

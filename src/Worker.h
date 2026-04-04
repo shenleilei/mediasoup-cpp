@@ -32,6 +32,7 @@ public:
 	bool closed() const { return closed_; }
 	Channel& channel() { return *channel_; }
 	EventEmitter& emitter() { return emitter_; }
+	size_t routerCount() const { return routers_.size(); }
 
 	std::shared_ptr<Router> createRouter(
 		const std::vector<nlohmann::json>& mediaCodecs = {});

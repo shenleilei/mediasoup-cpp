@@ -13,7 +13,6 @@ namespace mediasoup {
 
 class Transport;
 class WebRtcTransport;
-class PipeTransport;
 class Producer;
 
 struct WebRtcTransportOptions {
@@ -25,12 +24,6 @@ struct WebRtcTransportOptions {
 	uint32_t initialAvailableOutgoingBitrate = 600000;
 	bool enableSctp = false;
 	uint8_t iceConsentTimeout = 30;
-};
-
-struct PipeTransportOptions {
-	json listenInfo;
-	bool enableRtx = false;
-	bool enableSrtp = false;
 };
 
 class Router : public std::enable_shared_from_this<Router> {
@@ -45,17 +38,6 @@ public:
 	EventEmitter& emitter() { return emitter_; }
 
 	std::shared_ptr<WebRtcTransport> createWebRtcTransport(const WebRtcTransportOptions& options);
-	std::shared_ptr<PipeTransport> createPipeTransport(const PipeTransportOptions& options);
-
-	struct PipeToRouterResult {
-		std::shared_ptr<PipeTransport> localPipeTransport;
-		std::shared_ptr<PipeTransport> remotePipeTransport;
-	};
-
-	PipeToRouterResult pipeToRouter(
-		const std::string& producerId,
-		std::shared_ptr<Router> destinationRouter,
-		const std::string& listenIp = "127.0.0.1");
 
 	std::shared_ptr<Producer> getProducerById(const std::string& id) const;
 	void addProducer(std::shared_ptr<Producer> producer);
@@ -75,8 +57,6 @@ private:
 	RtpCapabilities rtpCapabilities_;
 	std::unordered_map<std::string, std::shared_ptr<Transport>> transports_;
 	std::unordered_map<std::string, std::shared_ptr<Producer>> producers_;
-	// Cache pipe transport pairs: destinationRouterId -> pair
-	std::unordered_map<std::string, PipeToRouterResult> pipeTransportPairs_;
 	EventEmitter emitter_;
 	std::shared_ptr<spdlog::logger> logger_;
 };

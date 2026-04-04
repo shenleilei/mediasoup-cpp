@@ -11,12 +11,18 @@
 │  C++17 SFU Server (mediasoup-sfu)   │
 │                                     │
 │  ┌───────────┐  ┌────────────────┐  │
-│  │ uWebSockets│  │  RoomManager   │  │
-│  │ HTTP + WS  │  │  Room / Peer   │  │
+│  │ uWebSockets│  │  RoomService   │  │
+│  │ HTTP + WS  │  │  (业务逻辑)    │  │
 │  └─────┬─────┘  └───────┬────────┘  │
 │        │                │           │
-│  ┌─────▼────────────────▼────────┐  │
+│  ┌─────▼──┐  ┌──────────▼────────┐  │
+│  │Signaling│  │  RoomManager      │  │
+│  │ Server  │  │  Room / Peer      │  │
+│  └────────┘  └──────────┬────────┘  │
+│                         │           │
+│  ┌──────────────────────▼────────┐  │
 │  │       WorkerManager           │  │
+│  │  (负载均衡: least routers)     │  │
 │  │  ┌─────────────────────────┐  │  │
 │  │  │  Worker (fork+exec)     │  │  │
 │  │  │  ┌───────────────────┐  │  │  │
@@ -25,6 +31,11 @@
 │  │  │  Router → Transport     │  │  │
 │  │  │    → Producer/Consumer  │  │  │
 │  │  └─────────────────────────┘  │  │
+│  └───────────────────────────────┘  │
+│                                     │
+│  ┌───────────────────────────────┐  │
+│  │  RoomRegistry (Redis, 可选)    │  │
+│  │  多节点路由 + 死节点接管        │  │
 │  └───────────────────────────────┘  │
 └──────────────────┬──────────────────┘
                    │ Unix Pipe (FlatBuffers)
@@ -47,21 +58,23 @@ mediasoup-cpp/
 ├── public/                        # Web 前端
 │   ├── index.html                 # 测试页面
 │   └── mediasoup-client.bundle.js # mediasoup-client 3.7.17 浏览器 bundle
-├── src/                           # 核心源码 (3176 行)
+├── src/                           # 核心源码 (~3400 行)
 │   ├── main.cpp                   # 入口，配置解析，启动流程
 │   ├── Channel.h/cpp              # Worker pipe 通信层
 │   ├── Worker.h/cpp               # Worker 进程管理 (fork/exec)
-│   ├── WorkerManager.h            # 多 Worker 管理，负载均衡
+│   ├── WorkerManager.h            # 多 Worker 管理，负载均衡 (least routers)
 │   ├── Router.h/cpp               # Router 管理，创建 Transport
 │   ├── Transport.h/cpp            # Transport 基类，produce/consume
 │   ├── WebRtcTransport.h/cpp      # WebRTC Transport (ICE/DTLS)
-│   ├── PipeTransport.h/cpp        # Pipe Transport (跨 Router 转发)
 │   ├── Producer.h/cpp             # 媒体生产者
 │   ├── Consumer.h/cpp             # 媒体消费者
 │   ├── ortc.h                     # ORTC 逻辑 (codec 协商/映射)
 │   ├── RtpTypes.h                 # RTP 数据结构 + JSON 序列化
 │   ├── supportedRtpCapabilities.h # mediasoup 支持的 codec 列表
-│   ├── RoomManager.h              # 房间/用户管理
+│   ├── Peer.h                     # Peer 抽象 (transport/producer/consumer)
+│   ├── RoomManager.h              # Room/RoomManager 封装，空闲回收
+│   ├── RoomService.h              # 业务逻辑层 (join/leave/produce/auto-subscribe)
+│   ├── RoomRegistry.h             # Redis 多节点路由 + 死节点接管
 │   ├── SignalingServer.h/cpp      # WebSocket 信令 + HTTP 静态文件
 │   ├── EventEmitter.h             # 轻量级事件系统
 │   ├── Logger.h                   # spdlog 封装
@@ -97,8 +110,6 @@ mediasoup-cpp/
 媒体路由管理，对应 mediasoup 的 Router 概念。
 
 - `createWebRtcTransport()`: 创建 WebRTC Transport，解析 ICE/DTLS 参数
-- `createPipeTransport()`: 创建 Pipe Transport
-- `pipeToRouter()`: 跨 Router 媒体转发（带缓存）
 - 维护 transports、producers 映射
 
 ### ORTC (ortc.h)
@@ -115,6 +126,7 @@ RTP 能力协商逻辑，从 mediasoup 的 ortc.ts 移植。
 
 - WebSocket 路径: `/ws`
 - HTTP 静态文件: `/*` → `public/` 目录
+- GC 定时器: 每 30 秒清理空闲房间
 - JSON 信令协议:
   - `join`: 加入房间，返回 routerRtpCapabilities + existingProducers
   - `createWebRtcTransport`: 创建 Transport，返回 ICE/DTLS 参数
@@ -123,6 +135,28 @@ RTP 能力协商逻辑，从 mediasoup 的 ortc.ts 移植。
   - `consume`: 订阅媒体流
   - `pauseProducer/resumeProducer`: 暂停/恢复
   - `restartIce`: ICE 重启
+
+### Peer (Peer.h)
+Peer 抽象，封装单个参与者的所有媒体资源。
+
+- sendTransport / recvTransport: 发送和接收 Transport
+- producers / consumers: 媒体生产者和消费者映射
+- rtpCapabilities: 客户端 RTP 能力
+
+### RoomService (RoomService.h)
+独立的业务逻辑层，与信令层解耦。
+
+- `join()` / `leave()`: 房间管理，支持 Redis redirect
+- `createTransport()`: 创建 Transport，recvTransport 创建时自动补订阅已有 producer
+- `produce()`: 发布媒体流，服务端自动为其他 peer 创建 consumer 并推送 `newConsumer` 通知
+- `cleanIdleRooms()`: GC 空闲房间
+
+### RoomRegistry (RoomRegistry.h)
+基于 Redis 的多节点房间路由（可选）。
+
+- `claimRoom()`: 房间归属判定，支持死节点检测和自动接管
+- 节点心跳: 每 10 秒刷新，30 秒 TTL
+- 房间 TTL: 300 秒自动过期
 
 ## 开发过程中遇到的问题和修复
 
@@ -183,17 +217,19 @@ RTP 能力协商逻辑，从 mediasoup 的 ortc.ts 移植。
 ### 当前限制
 1. **单线程信令**: uWebSockets 事件循环是单线程的，Channel 的 FlatBufferBuilder 在信令线程使用但没有和读线程完全隔离
 2. **Notification 数据未传递**: Channel 的 notification handler 只传递 event 枚举，不传递 notification body 数据（已做 null 检查避免 crash，但丢失了详细信息）
-3. **调试日志未清理**: SignalingServer 中有多处 `spdlog::info` 调试日志应在生产环境移除
-4. **无 HTTPS 支持**: 当前只有 HTTP，生产环境需要 TLS（uWebSockets 支持 `uWS::SSLApp`）
-5. **Worker 二进制版本锁定**: 当前绑定 mediasoup-worker v3.14.16，升级需要同步更新 FBS schema
+3. **无 HTTPS 支持**: 当前只有 HTTP，生产环境需要 TLS（uWebSockets 支持 `uWS::SSLApp`）
+4. **Worker 二进制版本锁定**: 当前绑定 mediasoup-worker v3.14.16，升级需要同步更新 FBS schema
+
+### 待实现
+1. **Dynacast**: 按需发送视频层，减少带宽消耗
+2. **信令协议标准化**: 定义统一的 request/response/notification schema
 
 ### 建议改进
 1. 将 Notification body 数据拷贝后传递给 handler，而不是传 nullptr
 2. 添加 HTTPS/WSS 支持
 3. 实现 graceful shutdown（当前用 SIGTERM + detach）
 4. 添加 Worker 健康检查和自动重启
-5. 实现多 Worker 负载均衡（当前 WorkerManager 只返回第一个可用 Worker）
-6. 升级到最新 mediasoup-worker 版本（需要更新系统 glibc 或从源码编译）
+5. 升级到最新 mediasoup-worker 版本（需要更新系统 glibc 或从源码编译）
 
 ## 构建和运行
 
@@ -345,6 +381,10 @@ cd mediasoup-cpp
 | `--workerBin` | ./mediasoup-worker | Worker 二进制路径 |
 | `--listenIp` | 0.0.0.0 | WebRTC 监听 IP |
 | `--announcedIp` | (空) | 公网 IP（NAT 环境必须设置） |
+| `--redisHost` | 127.0.0.1 | Redis 地址（多节点模式） |
+| `--redisPort` | 6379 | Redis 端口 |
+| `--nodeId` | hostname:port | 当前节点 ID |
+| `--nodeAddress` | (自动生成) | 当前节点 WebSocket 地址 |
 
 ### 浏览器测试
 1. 访问 `http://<服务器IP>:<端口>/`
