@@ -6,6 +6,7 @@
 #include "SignalingServer.h"
 #include <nlohmann/json.hpp>
 #include <csignal>
+#include <fstream>
 #include <thread>
 
 using namespace mediasoup;
@@ -39,6 +40,34 @@ int main(int argc, char* argv[]) {
 	std::string nodeId;
 	std::string nodeAddress;
 
+	// Load config file (--config=path or default config.json)
+	std::string configPath = "config.json";
+	for (int i = 1; i < argc; i++) {
+		std::string arg = argv[i];
+		if (arg.find("--config=") == 0) configPath = arg.substr(9);
+	}
+	{
+		std::ifstream cfgFile(configPath);
+		if (cfgFile.is_open()) {
+			try {
+				json cfg = json::parse(cfgFile);
+				if (cfg.contains("port"))          signalingPort = cfg["port"].get<int>();
+				if (cfg.contains("workers"))        { int w = cfg["workers"].get<int>(); if (w > 0) numWorkers = w; }
+				if (cfg.contains("workerBin"))      workerBin = cfg["workerBin"].get<std::string>();
+				if (cfg.contains("listenIp"))       listenIp = cfg["listenIp"].get<std::string>();
+				if (cfg.contains("announcedIp"))    announcedIp = cfg["announcedIp"].get<std::string>();
+				if (cfg.contains("redisHost"))      redisHost = cfg["redisHost"].get<std::string>();
+				if (cfg.contains("redisPort"))      redisPort = cfg["redisPort"].get<int>();
+				if (cfg.contains("nodeId"))         nodeId = cfg["nodeId"].get<std::string>();
+				if (cfg.contains("nodeAddress"))    nodeAddress = cfg["nodeAddress"].get<std::string>();
+				spdlog::info("Loaded config from {}", configPath);
+			} catch (const std::exception& e) {
+				spdlog::warn("Failed to parse {}: {}", configPath, e.what());
+			}
+		}
+	}
+
+	// CLI args override config file
 	for (int i = 1; i < argc; i++) {
 		std::string arg = argv[i];
 		if (arg.find("--port=") == 0)          signalingPort = std::stoi(arg.substr(7));
