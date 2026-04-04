@@ -2,13 +2,17 @@
 #include "RoomManager.h"
 #include "RoomRegistry.h"
 #include "WebRtcTransport.h"
+#include "PipeTransport.h"
+#include "PlainTransport.h"
 #include "Consumer.h"
 #include "Producer.h"
+#include "Recorder.h"
 #include "Logger.h"
 #include <nlohmann/json.hpp>
 #include <functional>
 #include <string>
 #include <memory>
+#include <sys/stat.h>
 
 namespace mediasoup {
 
@@ -19,8 +23,10 @@ public:
 	using NotifyFn = std::function<void(const std::string&, const json&)>;
 	using BroadcastFn = std::function<void(const std::string&, const std::string&, const json&)>;
 
-	RoomService(RoomManager& roomManager, RoomRegistry* registry)
+	RoomService(RoomManager& roomManager, RoomRegistry* registry,
+		const std::string& recordDir = "")
 		: roomManager_(roomManager), registry_(registry)
+		, recordDir_(recordDir)
 		, logger_(Logger::Get("RoomService")) {}
 
 	void setNotify(NotifyFn fn) { notify_ = std::move(fn); }
@@ -78,6 +84,18 @@ public:
 	Result leave(const std::string& roomId, const std::string& peerId) {
 		auto room = roomManager_.getRoom(roomId);
 		if (!room) return {true, {}};
+
+		// Stop recorder for this peer
+		{
+			std::string key = roomId + "/" + peerId;
+			std::lock_guard<std::mutex> lock(recorderMutex_);
+			auto it = recorders_.find(key);
+			if (it != recorders_.end()) {
+				it->second->stop();
+				recorders_.erase(it);
+			}
+			recorderTransports_.erase(key);
+		}
 
 		room->removePeer(peerId);
 
@@ -211,7 +229,74 @@ public:
 			}
 		}
 
+		// Auto-record if enabled
+		autoRecord(roomId, peerId, room, producer);
+
 		return {true, {{"id", producer->id()}}};
+	}
+
+	// Auto-record: called after produce, creates PlainTransport + consume → PeerRecorder
+	void autoRecord(const std::string& roomId, const std::string& peerId,
+		std::shared_ptr<Room> room, std::shared_ptr<Producer> producer)
+	{
+		if (recordDir_.empty()) return;
+
+		std::string key = roomId + "/" + peerId;
+		std::lock_guard<std::mutex> lock(recorderMutex_);
+
+		// Get or create recorder for this peer
+		auto& rec = recorders_[key];
+		if (!rec) {
+			// Determine PT from producer's consumable params
+			uint8_t audioPT = 100, videoPT = 101;
+			std::string dir = recordDir_ + "/" + roomId;
+			mkdir(dir.c_str(), 0755);
+			auto ts = std::chrono::system_clock::now().time_since_epoch();
+			auto secs = std::chrono::duration_cast<std::chrono::seconds>(ts).count();
+			std::string path = dir + "/" + peerId + "_" + std::to_string(secs) + ".webm";
+
+			rec = std::make_shared<PeerRecorder>(peerId, path, audioPT, videoPT, 48000, 90000);
+			int port = rec->createSocket();
+			if (port < 0) {
+				MS_ERROR(logger_, "Failed to create recorder socket for {}", key);
+				rec.reset(); return;
+			}
+			if (!rec->start()) {
+				MS_ERROR(logger_, "Failed to start recorder for {}", key);
+				rec.reset(); return;
+			}
+
+			// Create a PlainTransport for recording
+			PlainTransportOptions opts;
+			opts.listenInfos = roomManager_.listenInfos();
+			opts.rtcpMux = true;
+			opts.comedia = true;
+			auto pt = room->router()->createPlainTransport(opts);
+			recorderTransports_[key] = pt;
+
+			// Connect PlainTransport to recorder's UDP port
+			pt->connect("127.0.0.1", port);
+
+			MS_DEBUG(logger_, "Recorder started for {} → port {} file {}", key, port, path);
+		}
+
+		// Consume this producer on the PlainTransport
+		auto pt = recorderTransports_[key];
+		if (!pt) return;
+
+		try {
+			// Use pipe consumer for PlainTransport (no capability negotiation needed)
+			json consumeOpts = {
+				{"producerId", producer->id()},
+				{"rtpCapabilities", room->router()->rtpCapabilities()},
+				{"consumableRtpParameters", producer->consumableRtpParameters()},
+				{"pipe", true}
+			};
+			auto consumer = pt->consume(consumeOpts);
+			MS_DEBUG(logger_, "Recording consumer created for producer {} kind={}", producer->id(), producer->kind());
+		} catch (const std::exception& e) {
+			MS_ERROR(logger_, "Failed to create recording consumer: {}", e.what());
+		}
 	}
 
 	Result consume(const std::string& roomId, const std::string& peerId,
@@ -276,9 +361,14 @@ public:
 private:
 	RoomManager& roomManager_;
 	RoomRegistry* registry_;
+	std::string recordDir_;
 	NotifyFn notify_;
 	BroadcastFn broadcast_;
 	std::shared_ptr<spdlog::logger> logger_;
+
+	std::mutex recorderMutex_;
+	std::unordered_map<std::string, std::shared_ptr<PeerRecorder>> recorders_;
+	std::unordered_map<std::string, std::shared_ptr<PlainTransport>> recorderTransports_;
 };
 
 } // namespace mediasoup

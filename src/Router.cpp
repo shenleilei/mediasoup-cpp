@@ -1,6 +1,8 @@
 #include "Router.h"
 #include "Transport.h"
 #include "WebRtcTransport.h"
+#include "PipeTransport.h"
+#include "PlainTransport.h"
 #include "Producer.h"
 #include "Consumer.h"
 #include "Utils.h"
@@ -9,6 +11,7 @@
 #include "request_generated.h"
 #include "transport_generated.h"
 #include "webRtcTransport_generated.h"
+#include "plainTransport_generated.h"
 #include "sctpParameters_generated.h"
 
 namespace mediasoup {
@@ -140,6 +143,72 @@ std::shared_ptr<WebRtcTransport> Router::createWebRtcTransport(
 	});
 
 	MS_DEBUG(logger_, "WebRtcTransport created [id:{}]", transportId);
+	return transport;
+}
+
+std::shared_ptr<PlainTransport> Router::createPlainTransport(
+	const PlainTransportOptions& options)
+{
+	if (closed_) throw std::runtime_error("Router closed");
+
+	std::string transportId = utils::generateUUIDv4();
+	auto& builder = channel_->bufferBuilder();
+
+	// Use first listenInfo
+	auto& li = options.listenInfos[0];
+	std::string ip = li.value("ip", "127.0.0.1");
+	std::string announcedAddress = li.value("announcedAddress", "");
+	uint16_t port = li.value("port", 0);
+
+	auto portRange = FBS::Transport::CreatePortRange(builder, uint16_t(0), uint16_t(0));
+	auto flags = FBS::Transport::CreateSocketFlags(builder, false, false);
+	auto listenInfo = FBS::Transport::CreateListenInfo(
+		builder, FBS::Transport::Protocol::UDP,
+		builder.CreateString(ip),
+		announcedAddress.empty() ? 0 : builder.CreateString(announcedAddress),
+		port, portRange, flags, 0, 0);
+
+	auto numSctpStreams = FBS::SctpParameters::CreateNumSctpStreams(builder, 1024, 1024);
+	auto baseOptions = FBS::Transport::CreateOptions(
+		builder, false, flatbuffers::Optional<uint32_t>(),
+		flatbuffers::Optional<uint32_t>(), false, numSctpStreams, 262144, 262144, true);
+
+	auto plainOptions = FBS::PlainTransport::CreatePlainTransportOptions(
+		builder, baseOptions, listenInfo, 0,
+		options.rtcpMux, options.comedia, false);
+
+	auto transportIdOff = builder.CreateString(transportId);
+	auto reqOff = FBS::Router::CreateCreatePlainTransportRequest(
+		builder, transportIdOff, plainOptions);
+
+	auto future = channel_->request(
+		FBS::Request::Method::ROUTER_CREATE_PLAINTRANSPORT,
+		FBS::Request::Body::Router_CreatePlainTransportRequest,
+		reqOff.Union(), id_);
+
+	auto owned = future.get();
+	auto* response = owned.response();
+
+	TransportTuple tuple;
+	if (response && response->body_type() == FBS::Response::Body::PlainTransport_DumpResponse) {
+		auto dump = response->body_as_PlainTransport_DumpResponse();
+		if (dump && dump->tuple()) {
+			tuple.localAddress = dump->tuple()->local_address()->str();
+			tuple.localPort = dump->tuple()->local_port();
+		}
+	}
+
+	auto transport = std::make_shared<PlainTransport>(
+		transportId, channel_, id_, tuple, false);
+
+	transports_[transportId] = transport;
+
+	transport->emitter().on("@close", [this, transportId](auto&) {
+		transports_.erase(transportId);
+	});
+
+	MS_DEBUG(logger_, "PlainTransport created [id:{} {}:{}]",
+		transportId, tuple.localAddress, tuple.localPort);
 	return transport;
 }
 

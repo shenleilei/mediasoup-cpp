@@ -46,9 +46,10 @@ target_include_directories(mediasoup_lib PUBLIC
     ${GENERATED_INCLUDE}
     ${UWS_INCLUDE}
     ${USOCKETS_DIR}/src
+    /usr/include/ffmpeg
 )
 
-target_link_libraries(mediasoup_lib PUBLIC spdlog::spdlog uSockets pthread)
+target_link_libraries(mediasoup_lib PUBLIC spdlog::spdlog uSockets pthread avformat avcodec avutil)
 
 # ── Main executable ──
 add_executable(mediasoup-sfu
@@ -63,9 +64,10 @@ target_include_directories(mediasoup-sfu PRIVATE
     ${GENERATED_INCLUDE}
     ${UWS_INCLUDE}
     ${USOCKETS_DIR}/src
+    /usr/include/ffmpeg
 )
 
-target_link_libraries(mediasoup-sfu PRIVATE mediasoup_lib z hiredis)
+target_link_libraries(mediasoup-sfu PRIVATE mediasoup_lib z hiredis avformat avcodec avutil)
 
 # ── Tests ──
 option(BUILD_TESTS "Build unit tests" ON)
@@ -89,9 +91,11 @@ if(BUILD_TESTS)
     add_executable(mediasoup_integration_tests tests/test_integration.cpp)
     target_include_directories(mediasoup_integration_tests PRIVATE
         ${CMAKE_SOURCE_DIR}/tests
+        ${CMAKE_SOURCE_DIR}/src
         ${JSON_INCLUDE}
+        /usr/include/ffmpeg
     )
-    target_link_libraries(mediasoup_integration_tests PRIVATE gtest gtest_main pthread)
+    target_link_libraries(mediasoup_integration_tests PRIVATE gtest gtest_main spdlog::spdlog pthread avformat avcodec avutil)
     add_test(NAME mediasoup_integration_tests COMMAND mediasoup_integration_tests
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 endif()
