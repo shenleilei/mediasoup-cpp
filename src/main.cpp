@@ -8,6 +8,8 @@
 #include <csignal>
 #include <fstream>
 #include <thread>
+#include <array>
+#include <cstdio>
 
 using namespace mediasoup;
 using json = nlohmann::json;
@@ -81,7 +83,40 @@ int main(int argc, char* argv[]) {
 		else if (arg.find("--nodeAddress=") == 0) nodeAddress = arg.substr(14);
 	}
 
-	// Auto-generate nodeId if not set
+	// Auto-detect public IP if announcedIp not set
+	if (announcedIp.empty()) {
+		auto detectPublicIp = []() -> std::string {
+			const char* cmds[] = {
+				"curl -s --max-time 3 http://ifconfig.me 2>/dev/null",
+				"curl -s --max-time 3 http://api.ipify.org 2>/dev/null",
+				"curl -s --max-time 3 http://icanhazip.com 2>/dev/null",
+				nullptr
+			};
+			for (auto cmd = cmds; *cmd; ++cmd) {
+				FILE* fp = popen(*cmd, "r");
+				if (!fp) continue;
+				std::array<char, 64> buf{};
+				std::string result;
+				while (fgets(buf.data(), buf.size(), fp)) result += buf.data();
+				pclose(fp);
+				// trim whitespace
+				while (!result.empty() && (result.back() == '\n' || result.back() == '\r' || result.back() == ' '))
+					result.pop_back();
+				// basic validation: non-empty, contains a dot, no spaces
+				if (!result.empty() && result.find('.') != std::string::npos && result.find(' ') == std::string::npos)
+					return result;
+			}
+			return {};
+		};
+		std::string detected = detectPublicIp();
+		if (!detected.empty()) {
+			announcedIp = detected;
+			spdlog::info("Auto-detected public IP: {}", announcedIp);
+		} else {
+			spdlog::warn("Could not detect public IP, announcedIp is empty. WebRTC may fail for remote clients.");
+		}
+	}
+
 	if (nodeId.empty()) {
 		char hostname[256] = {};
 		gethostname(hostname, sizeof(hostname));
