@@ -98,4 +98,26 @@ if(BUILD_TESTS)
     target_link_libraries(mediasoup_integration_tests PRIVATE gtest gtest_main spdlog::spdlog pthread avformat avcodec avutil)
     add_test(NAME mediasoup_integration_tests COMMAND mediasoup_integration_tests
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+    # E2E publish/subscribe stress test
+    add_executable(mediasoup_e2e_tests tests/test_e2e_pubsub.cpp)
+    target_include_directories(mediasoup_e2e_tests PRIVATE
+        ${CMAKE_SOURCE_DIR}/tests
+        ${CMAKE_SOURCE_DIR}/src
+        ${JSON_INCLUDE}
+    )
+    target_link_libraries(mediasoup_e2e_tests PRIVATE gtest gtest_main pthread)
+    add_test(NAME mediasoup_e2e_tests COMMAND mediasoup_e2e_tests
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+    # Multi-SFU topology test
+    add_executable(mediasoup_topology_tests tests/test_multi_sfu_topology.cpp)
+    target_include_directories(mediasoup_topology_tests PRIVATE
+        ${CMAKE_SOURCE_DIR}/tests
+        ${CMAKE_SOURCE_DIR}/src
+        ${JSON_INCLUDE}
+    )
+    target_link_libraries(mediasoup_topology_tests PRIVATE gtest gtest_main pthread hiredis)
+    add_test(NAME mediasoup_topology_tests COMMAND mediasoup_topology_tests
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 endif()
