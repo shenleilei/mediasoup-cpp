@@ -56,7 +56,8 @@ mediasoup-cpp/
 ├── generated/                     # flatc 生成的 C++ 头文件
 │   └── *_generated.h              # 29 个生成文件
 ├── public/                        # Web 前端
-│   ├── index.html                 # 测试页面
+│   ├── index.html                 # 实时通话页面 (含 QoS Monitor 面板)
+│   ├── playback.html              # 录制回放页面 (视频 + QoS 时间线)
 │   └── mediasoup-client.bundle.js # mediasoup-client 3.7.17 浏览器 bundle
 ├── src/                           # 核心源码 (~3400 行)
 │   ├── main.cpp                   # 入口，配置解析，启动流程
@@ -73,9 +74,12 @@ mediasoup-cpp/
 │   ├── supportedRtpCapabilities.h # mediasoup 支持的 codec 列表
 │   ├── Peer.h                     # Peer 抽象 (transport/producer/consumer)
 │   ├── RoomManager.h              # Room/RoomManager 封装，空闲回收
-│   ├── RoomService.h              # 业务逻辑层 (join/leave/produce/auto-subscribe)
+│   ├── RoomService.h              # 业务逻辑层 (join/leave/produce/auto-subscribe/QoS/recording)
 │   ├── RoomRegistry.h             # Redis 多节点路由 + 死节点接管
-│   ├── SignalingServer.h/cpp      # WebSocket 信令 + HTTP 静态文件
+│   ├── Recorder.h                 # 录制 (RTP→WebM) + QoS 时间线记录
+│   ├── PipeTransport.h/cpp        # Pipe Transport
+│   ├── PlainTransport.h           # Plain Transport (录制用)
+│   ├── SignalingServer.h/cpp      # WebSocket 信令 + HTTP 静态文件 + 录制回放 API
 │   ├── EventEmitter.h             # 轻量级事件系统
 │   ├── Logger.h                   # spdlog 封装
 │   └── Utils.h                    # UUID 生成
@@ -135,6 +139,14 @@ RTP 能力协商逻辑，从 mediasoup 的 ortc.ts 移植。
   - `consume`: 订阅媒体流
   - `pauseProducer/resumeProducer`: 暂停/恢复
   - `restartIce`: ICE 重启
+  - `getStats`: 获取指定 peer 的全链路 QoS 统计
+- Notification 推送:
+  - `newConsumer`: 新的 consumer 创建（auto-subscribe）
+  - `peerJoined/peerLeft`: peer 加入/离开
+  - `statsReport`: 每 2 秒推送房间内所有 peer 的 QoS 数据
+- HTTP API:
+  - `GET /api/recordings`: 录制文件列表（按房间分组）
+  - `GET /recordings/{room}/{file}`: 下载录制文件（.webm / .qos.json）
 
 ### Peer (Peer.h)
 Peer 抽象，封装单个参与者的所有媒体资源。
@@ -157,6 +169,28 @@ Peer 抽象，封装单个参与者的所有媒体资源。
 - `claimRoom()`: 房间归属判定，支持死节点检测和自动接管
 - 节点心跳: 每 10 秒刷新，30 秒 TTL
 - 房间 TTL: 300 秒自动过期
+
+### QoS 实时监控
+全链路 QoS 数据采集和推送，从 mediasoup-worker 到前端可视化。
+
+**数据流**: `mediasoup-worker` → `Channel(OwnedNotification)` → `Producer/Consumer(解析 score)` → `RoomService.broadcastStats()` → WebSocket `statsReport` 通知 → 前端 QoS Monitor 面板
+
+- **Channel**: `OwnedNotification` 结构持有通知的原始 FlatBuffers 数据副本，确保下游可安全解析 notification body
+- **Producer**: `handleNotification()` 解析 `PRODUCER_SCORE`（每个编码层的 ssrc/rid/score）；`getStats()` 获取 bitrate/jitter/RTT/丢包等
+- **Consumer**: 解析 `CONSUMER_SCORE`（score/producerScore）；`getStats()` 获取发送端统计
+- **Transport**: `getStats()` 支持 WebRtcTransport（ICE/DTLS 状态、收发比特率、可用带宽）和 PlainTransport
+- **RoomService**: `collectPeerStats()` 全链路采集单个 peer 的 stats；`broadcastStats()` 每 2 秒广播所有房间的 stats
+- **SignalingServer**: `getStats` 信令方法（主动拉取）；2 秒定时器触发 `statsReport` 推送
+- **前端 QoS Monitor**: 颜色编码（绿≥7/橙≥4/红<4），展示上行/下行比特率、丢包率、ICE/DTLS 状态、Producer score/jitter/RTT/NACK/PLI/FIR、Consumer score
+
+### 录制与回放 (Recorder.h)
+Per-peer 录制，RTP 通过 PlainTransport 转发到本地 UDP，用 libav 封装为 WebM。
+
+- **PeerRecorder**: 接收 RTP → 解析 RTP header → 按 PT 分流 audio/video → `av_interleaved_write_frame()` 写入 WebM
+- **QoS 时间线**: 录制期间同步写入 `.qos.json` 文件（与 `.webm` 同名配对），时间基准与视频 PTS 对齐（以第一个 RTP 包到达时刻为零点）
+- **自动录制**: `RoomService.autoRecord()` 在 produce 时自动创建 PlainTransport + pipe consumer → PeerRecorder
+- **回放 API**: `GET /api/recordings` 列出所有录制；`GET /recordings/{room}/{file}` 下载文件（含路径穿越防护）
+- **回放页面**: `playback.html` — 视频播放器 + QoS 面板随进度同步 + score 时间线条形图（绿/橙/红）
 
 ## 开发过程中遇到的问题和修复
 
@@ -216,20 +250,18 @@ Peer 抽象，封装单个参与者的所有媒体资源。
 
 ### 当前限制
 1. **单线程信令**: uWebSockets 事件循环是单线程的，Channel 的 FlatBufferBuilder 在信令线程使用但没有和读线程完全隔离
-2. **Notification 数据未传递**: Channel 的 notification handler 只传递 event 枚举，不传递 notification body 数据（已做 null 检查避免 crash，但丢失了详细信息）
-3. **无 HTTPS 支持**: 当前只有 HTTP，生产环境需要 TLS（uWebSockets 支持 `uWS::SSLApp`）
-4. **Worker 二进制版本锁定**: 当前绑定 mediasoup-worker v3.14.16，升级需要同步更新 FBS schema
+2. **无 HTTPS 支持**: 当前只有 HTTP，生产环境需要 TLS（uWebSockets 支持 `uWS::SSLApp`）
+3. **Worker 二进制版本锁定**: 当前绑定 mediasoup-worker v3.14.16，升级需要同步更新 FBS schema
 
 ### 待实现
 1. **Dynacast**: 按需发送视频层，减少带宽消耗
 2. **信令协议标准化**: 定义统一的 request/response/notification schema
 
 ### 建议改进
-1. 将 Notification body 数据拷贝后传递给 handler，而不是传 nullptr
-2. 添加 HTTPS/WSS 支持
-3. 实现 graceful shutdown（当前用 SIGTERM + detach）
-4. 添加 Worker 健康检查和自动重启
-5. 升级到最新 mediasoup-worker 版本（需要更新系统 glibc 或从源码编译）
+1. 添加 HTTPS/WSS 支持
+2. 实现 graceful shutdown（当前用 SIGTERM + detach）
+3. 添加 Worker 健康检查和自动重启
+4. 升级到最新 mediasoup-worker 版本（需要更新系统 glibc 或从源码编译）
 
 ## 构建和运行
 
@@ -342,6 +374,20 @@ cd build && ctest --output-on-failure
 | `PeerTest` | 3 | JSON 序列化、Transport 查询、关闭幂等性 |
 | `RtpTypesTest` | 8 | RTP 数据结构 JSON 序列化/反序列化 |
 | `SupportedCapabilitiesTest` | 4 | 支持的 codec 列表校验 |
+| `OwnedNotificationTest` | 3 | FlatBuffers 通知数据所有权、空数据/垃圾数据安全性 |
+| `ProducerScoreTest` | 2 | Producer score 结构体、边界值 |
+| `ConsumerScoreTest` | 2 | Consumer score 结构体、边界值 |
+| `RoomQosTest` | 4 | getPeerIds 空房间/多 peer/删除/不存在 peer |
+| `OwnedResponseTest` | 2 | Response 数据所有权、垃圾数据安全性 |
+| `RecorderQosTest` | 3 | QoS 文件创建、未启动不写入、无 snapshot 不创建文件 |
+
+集成测试（需要启动 SFU + mediasoup-worker）：
+```bash
+./build/mediasoup_integration_tests    # 12 个: join/leave/produce/subscribe/recording
+./build/mediasoup_qos_integration_tests # 15 个: getStats/statsReport/QoS录制/回放API/路径穿越
+./build/mediasoup_e2e_tests            # 3 个: 完整会议生命周期/迟到者/快速进出
+./build/mediasoup_topology_tests       # 6 个: 多SFU拓扑/节点故障接管/跨节点会议
+```
 
 `-fsanitize=address` 的作用：
 - **编译时**：GCC/Clang 在每次内存访问前后插入检查代码（检查越界、use-after-free 等）
@@ -405,7 +451,8 @@ cd mediasoup-cpp
 | `--workers` | CPU 核心数 | Worker 进程数量 |
 | `--workerBin` | ./mediasoup-worker | Worker 二进制路径 |
 | `--listenIp` | 0.0.0.0 | WebRTC 监听 IP |
-| `--announcedIp` | (空) | 公网 IP（NAT 环境必须设置） |
+| `--announcedIp` | (自动探测) | 公网 IP（空则自动探测） |
+| `--recordDir` | ./recordings | 录制文件输出目录 |
 | `--redisHost` | 127.0.0.1 | Redis 地址（多节点模式） |
 | `--redisPort` | 6379 | Redis 端口 |
 | `--nodeId` | hostname:port | 当前节点 ID |
@@ -416,6 +463,12 @@ cd mediasoup-cpp
 2. 点击 "Join Room" 加入房间
 3. 点击 "Publish A/V" 发布音视频
 4. 在另一个标签页重复以上步骤，两端可互相看到视频
+5. 页面下方 QoS Monitor 面板实时展示网络质量
+
+### 录制回放
+1. 启动 SFU（默认录制到 `./recordings`）
+2. 进行一次通话后，访问 `http://<服务器IP>:<端口>/playback.html`
+3. 点击录制文件即可回放，视频下方同步展示当时的 QoS 数据
 
 ## 技术栈
 
