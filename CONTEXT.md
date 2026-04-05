@@ -61,6 +61,15 @@
 - 无 IDR 安全退出: 如果始终没收到 IDR，finalizeMuxer 跳过 av_write_trailer，不崩溃
 - Codec 动态检测: RoomService 从 router RTP capabilities 读取 codec 类型和 PT，自动选择 H264 或 VP8
 
+## 已修复：QoS 指标显示问题
+- Jitter 单位: 之前直接显示 RTP timestamp 单位（如 36 显示为 "36 ms"），实际应除以 clockRate（video 90kHz / audio 48kHz）再转毫秒（36/90000*1000=0.4ms）
+- Fraction Lost: 之前直接显示 0-1 浮点数，改为乘 100 加 % 显示
+- Available BW ⬆: mediasoup 的 availableIncomingBitrate 在 Transport-CC 模式下永远为 0，改为浏览器上报的 candidate-pair.availableOutgoingBitrate（Transport-CC BWE）
+- Available BW ⬇: 移除（mediasoup recvTransport 的 availableOutgoingBitrate 也为 null，BWE 在此方向不可用）
+- 新增浏览器端 stats 上报: 前端每 2 秒采集 RTCPeerConnection.getStats() 中的 candidate-pair，通过 clientStats 信令上报，服务端合并到 QoS 数据
+- 新增 RTT (browser): 显示浏览器 STUN RTT（补充 mediasoup RTCP RTT）
+- playback.html 同步修复 jitter 单位和 Available BW
+
 ## 已修复：黑屏问题
 - 根因：recvTransport 在 publish 时才创建，导致只 join 不 publish 的 peer 无法接收媒体
 - 修复：前端 join 后立即创建 recvTransport 并消费已有 producer，不再依赖 publish 触发
