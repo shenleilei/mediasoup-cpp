@@ -40,6 +40,27 @@
 - HTTP API: GET /api/recordings 列表 + GET /recordings/* 文件下载（含路径穿越防护）
 - playback.html: 视频播放器 + QoS 面板随进度同步 + score 时间线条形图
 
+## 已修复：录制链路问题
+- PlainTransport listenIp: 录制用的 PlainTransport 改为 127.0.0.1（之前复用了 WebRTC 的公网 listenInfos，导致 RTP 包无法到达本地 Recorder）
+- Video Payload Type: 从 router RTP capabilities 动态读取 VP8 的 mapped PT（之前硬编码 101，实际是 102）
+- VP8 帧重组: 将多个 RTP 包的 VP8 payload 拼接为完整帧后再写入 WebM（之前每个 RTP 包单独写入导致 Invalid sync code）
+- VP8 Payload Descriptor: 写入前剥离 VP8 RTP payload descriptor（RFC 7741）
+- VP8 Keyframe 标记: 检测 VP8 keyframe 并设置 AV_PKT_FLAG_KEY，确保浏览器 seek 正常
+- PTS 时基转换: 使用 av_rescale_q 将 RTP timestamp（90kHz/48kHz）转换为 stream time_base，修复视频时长显示异常
+- QoS 文件 double-stop: Recorder::stop() 末尾清空 outputPath_ 防止析构函数二次调用时覆盖已写入的 QoS 数据
+- playback.html QoS 容错: 处理未闭合的 JSON（SFU 异常退出时 .qos.json 可能缺少 ]）
+- playback.html seek 同步: 添加 seeked 事件监听，确保 seek 后 QoS 面板更新
+
+## 已修复：H264 录制支持
+- H264 设为默认视频编码（main.cpp codec 顺序调整，浏览器普遍硬件加速 H264）
+- H264 RTP 解包（RFC 6184）: 支持 Single NAL、FU-A 分片重组、STAP-A 聚合包
+- STAP-A SPS/PPS 提取: 从 STAP-A 包中分离 SPS(7)/PPS(8) 单独缓存，不混入帧缓冲
+- 延迟写 header: H264 matroska 容器需要 SPS/PPS extradata，initMuxer 时不写 header，等收到第一个 IDR 帧后从缓存的 SPS/PPS 构建 AVCC extradata 再写 header
+- 音频缓冲: header 延迟期间 audio RTP 包缓存在 pendingAudio_，header 写入后一次性 flush
+- Annex-B→AVCC 转换: matroska 容器要求 AVCC 格式（4字节 length prefix），flushVideoFrame 时将 Annex-B start code 转换为 AVCC
+- 无 IDR 安全退出: 如果始终没收到 IDR，finalizeMuxer 跳过 av_write_trailer，不崩溃
+- Codec 动态检测: RoomService 从 router RTP capabilities 读取 codec 类型和 PT，自动选择 H264 或 VP8
+
 ## 已修复：黑屏问题
 - 根因：recvTransport 在 publish 时才创建，导致只 join 不 publish 的 peer 无法接收媒体
 - 修复：前端 join 后立即创建 recvTransport 并消费已有 producer，不再依赖 publish 触发

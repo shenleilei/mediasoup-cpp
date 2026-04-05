@@ -469,16 +469,32 @@ TEST_F(MultiNodeTest, RedirectToCorrectNode) {
 
 // Helper: build a minimal RTP packet
 static std::vector<uint8_t> makeRtpPacket(uint8_t pt, uint16_t seq, uint32_t ts, uint32_t ssrc,
-	const uint8_t* payload, int payloadLen)
+	const uint8_t* payload, int payloadLen, bool marker = false)
 {
 	std::vector<uint8_t> pkt(12 + payloadLen);
 	pkt[0] = 0x80; // V=2
-	pkt[1] = pt;
+	pkt[1] = (marker ? 0x80 : 0x00) | pt;
 	pkt[2] = (seq >> 8) & 0xFF; pkt[3] = seq & 0xFF;
 	pkt[4] = (ts >> 24); pkt[5] = (ts >> 16); pkt[6] = (ts >> 8); pkt[7] = ts;
 	pkt[8] = (ssrc >> 24); pkt[9] = (ssrc >> 16); pkt[10] = (ssrc >> 8); pkt[11] = ssrc;
 	memcpy(pkt.data() + 12, payload, payloadLen);
 	return pkt;
+}
+
+// Build a VP8 RTP packet with minimal payload descriptor (S=1 single-partition frame + marker)
+static std::vector<uint8_t> makeVp8RtpPacket(uint8_t pt, uint16_t seq, uint32_t ts, uint32_t ssrc,
+	const uint8_t* payload, int payloadLen, bool keyframe = false)
+{
+	// VP8 payload descriptor: 1 byte, S=1 (start of partition), PartID=0
+	std::vector<uint8_t> vp8payload(1 + payloadLen);
+	vp8payload[0] = 0x10; // S=1
+	if (payloadLen > 0) {
+		memcpy(vp8payload.data() + 1, payload, payloadLen);
+		// VP8 keyframe: first byte of VP8 data has bit0=0
+		if (keyframe) vp8payload[1] &= 0xFE;
+		else          vp8payload[1] |= 0x01;
+	}
+	return makeRtpPacket(pt, seq, ts, ssrc, vp8payload.data(), vp8payload.size(), true);
 }
 
 static void sendUdp(int port, const std::vector<uint8_t>& data) {
@@ -522,7 +538,7 @@ TEST_F(RecordingTest, RecordingFileCreated) {
 		auto audioPkt = makeRtpPacket(100, i, i * 960, 0xAAAA, fakePayload, 80);
 		sendUdp(port, audioPkt);
 		// Video: PT=101, 3000 ticks per frame (33ms at 90kHz ≈ 30fps)
-		auto videoPkt = makeRtpPacket(101, i, i * 3000, 0xBBBB, fakePayload, 160);
+		auto videoPkt = makeVp8RtpPacket(101, i, i * 3000, 0xBBBB, fakePayload, 160, i == 0);
 		sendUdp(port, videoPkt);
 		usleep(20000); // 20ms
 	}
@@ -565,7 +581,7 @@ TEST_F(RecordingTest, AudioVideoAlignment) {
 		auto aPkt = makeRtpPacket(100, i, audioTs + i * 960, 0xAAAA, fakePayload, 80);
 		sendUdp(port, aPkt);
 		if (i % 2 == 0) { // video at ~30fps (every other 20ms = 40ms ≈ 25fps)
-			auto vPkt = makeRtpPacket(101, i/2, videoTs + (i/2) * 3600, 0xBBBB, fakePayload, 160);
+			auto vPkt = makeVp8RtpPacket(101, i/2, videoTs + (i/2) * 3600, 0xBBBB, fakePayload, 160, i == 0);
 			sendUdp(port, vPkt);
 		}
 		usleep(20000);
@@ -707,13 +723,206 @@ TEST_F(SfuRecordingTest, AutoRecordOnProduce) {
 	ws.close();
 	usleep(500000);
 
-	// Verify recording file was created
-	std::string findCmd = "find " + recordDir_ + " -name '*.webm' 2>/dev/null";
+	// Verify recording file was created (.webm or .mp4)
+	std::string findCmd = "find " + recordDir_ + " \\( -name '*.webm' -o -name '*.mp4' \\) 2>/dev/null";
 	FILE* fp = popen(findCmd.c_str(), "r");
 	char buf[512]{};
 	std::string files;
 	while (fgets(buf, sizeof(buf), fp)) files += buf;
 	pclose(fp);
 
-	EXPECT_FALSE(files.empty()) << "No .webm recording file created by SFU auto-record";
+	EXPECT_FALSE(files.empty()) << "No recording file created by SFU auto-record";
+}
+
+// ═══════════════════════════════════════════════════════════════
+// H264 recording tests
+// ═══════════════════════════════════════════════════════════════
+
+// Build H264 STAP-A packet containing SPS + PPS
+static std::vector<uint8_t> makeH264StapA(uint8_t pt, uint16_t seq, uint32_t ts, uint32_t ssrc,
+	const uint8_t* sps, int spsLen, const uint8_t* pps, int ppsLen)
+{
+	// STAP-A: nalType=24, then [2-byte size + NAL] for each
+	std::vector<uint8_t> payload;
+	payload.push_back(24); // STAP-A indicator (NRI=0, type=24)
+	payload.push_back((spsLen >> 8) & 0xFF); payload.push_back(spsLen & 0xFF);
+	payload.insert(payload.end(), sps, sps + spsLen);
+	payload.push_back((ppsLen >> 8) & 0xFF); payload.push_back(ppsLen & 0xFF);
+	payload.insert(payload.end(), pps, pps + ppsLen);
+	return makeRtpPacket(pt, seq, ts, ssrc, payload.data(), payload.size(), false);
+}
+
+// Build H264 FU-A packets from a NAL unit
+static std::vector<std::vector<uint8_t>> makeH264FuA(uint8_t pt, uint16_t& seq, uint32_t ts,
+	uint32_t ssrc, uint8_t nalType, const uint8_t* data, int dataLen, int maxFrag = 900)
+{
+	std::vector<std::vector<uint8_t>> pkts;
+	uint8_t fuIndicator = 0x60 | 28; // NRI=3, type=28
+	int offset = 0;
+	while (offset < dataLen) {
+		int fragLen = std::min(maxFrag, dataLen - offset);
+		bool isFirst = (offset == 0);
+		bool isLast = (offset + fragLen >= dataLen);
+		uint8_t fuHeader = nalType;
+		if (isFirst) fuHeader |= 0x80;
+		if (isLast) fuHeader |= 0x40;
+		std::vector<uint8_t> payload;
+		payload.push_back(fuIndicator);
+		payload.push_back(fuHeader);
+		payload.insert(payload.end(), data + offset, data + offset + fragLen);
+		pkts.push_back(makeRtpPacket(pt, seq++, ts, ssrc, payload.data(), payload.size(), isLast));
+		offset += fragLen;
+	}
+	return pkts;
+}
+
+// Build H264 single NAL RTP packet
+static std::vector<uint8_t> makeH264SingleNal(uint8_t pt, uint16_t seq, uint32_t ts,
+	uint32_t ssrc, uint8_t nalType, int payloadLen, bool marker = true)
+{
+	std::vector<uint8_t> payload(1 + payloadLen);
+	payload[0] = 0x60 | nalType; // NRI=3
+	for (int i = 1; i <= payloadLen; i++) payload[i] = (uint8_t)(i & 0xFF);
+	return makeRtpPacket(pt, seq, ts, ssrc, payload.data(), payload.size(), marker);
+}
+
+TEST_F(RecordingTest, H264RecordingValid) {
+	std::string path = recordDir_ + "/h264_test.webm";
+	mediasoup::PeerRecorder rec("alice", path, 100, 107, 48000, 90000, mediasoup::VideoCodec::H264);
+	int port = rec.createSocket();
+	ASSERT_GT(port, 0);
+	ASSERT_TRUE(rec.start());
+
+	// Minimal SPS (NAL type 7) and PPS (NAL type 8)
+	uint8_t sps[] = {0x67, 0x42, 0xC0, 0x1E, 0xD9, 0x00, 0xA0, 0x47, 0xFE, 0x88};
+	uint8_t pps[] = {0x68, 0xCE, 0x38, 0x80};
+
+	uint16_t vseq = 0;
+	uint32_t vts = 0;
+
+	// Send STAP-A with SPS+PPS
+	auto stap = makeH264StapA(107, vseq++, vts, 0xBBBB, sps, sizeof(sps), pps, sizeof(pps));
+	sendUdp(port, stap);
+
+	// Send IDR frame as FU-A (nalType=5)
+	uint8_t idrData[1500];
+	memset(idrData, 0xAB, sizeof(idrData));
+	auto idrPkts = makeH264FuA(107, vseq, vts, 0xBBBB, 5, idrData, sizeof(idrData));
+	for (auto& p : idrPkts) sendUdp(port, p);
+
+	// Send audio
+	uint8_t fakeAudio[80] = {};
+	for (int i = 0; i < 50; i++) {
+		auto aPkt = makeRtpPacket(100, i, i * 960, 0xAAAA, fakeAudio, 80);
+		sendUdp(port, aPkt);
+	}
+
+	// Send more P-frames (nalType=1)
+	for (int i = 1; i < 30; i++) {
+		vts += 3000;
+		uint8_t pData[500];
+		memset(pData, (uint8_t)i, sizeof(pData));
+		auto pPkt = makeH264SingleNal(107, vseq++, vts, 0xBBBB, 1, sizeof(pData));
+		sendUdp(port, pPkt);
+		usleep(20000);
+	}
+
+	rec.stop();
+
+	// Verify file exists and has content
+	struct stat st;
+	ASSERT_EQ(stat(path.c_str(), &st), 0) << "H264 recording file not found";
+	EXPECT_GT(st.st_size, 200) << "H264 recording file too small: " << st.st_size;
+
+	// ffprobe to verify H264 video stream
+	char buf[4096];
+	std::string probeCmd = "ffprobe -v error -show_entries stream=codec_type,codec_name -of csv=p=0 " + path + " 2>&1";
+	FILE* fp = popen(probeCmd.c_str(), "r");
+	std::string probeOut;
+	while (fgets(buf, sizeof(buf), fp)) probeOut += buf;
+	pclose(fp);
+
+	EXPECT_NE(probeOut.find("audio"), std::string::npos) << "No audio stream. ffprobe: " << probeOut;
+	EXPECT_NE(probeOut.find("h264"), std::string::npos) << "No H264 video stream. ffprobe: " << probeOut;
+}
+
+TEST_F(RecordingTest, H264NoIdrProducesEmptyFile) {
+	std::string path = recordDir_ + "/h264_noidr.webm";
+	mediasoup::PeerRecorder rec("bob", path, 100, 107, 48000, 90000, mediasoup::VideoCodec::H264);
+	int port = rec.createSocket();
+	ASSERT_GT(port, 0);
+	ASSERT_TRUE(rec.start());
+
+	// Send only P-frames (no SPS/PPS/IDR) — should not crash
+	for (int i = 0; i < 10; i++) {
+		auto pPkt = makeH264SingleNal(107, i, i * 3000, 0xBBBB, 1, 200);
+		sendUdp(port, pPkt);
+		usleep(10000);
+	}
+
+	rec.stop(); // must not crash
+
+	struct stat st;
+	if (stat(path.c_str(), &st) == 0) {
+		// File exists but should be very small (no header written)
+		EXPECT_LT(st.st_size, 100) << "File should be nearly empty without IDR";
+	}
+}
+
+TEST_F(RecordingTest, Vp8MultiPacketFrame) {
+	std::string path = recordDir_ + "/vp8_multi.webm";
+	mediasoup::PeerRecorder rec("charlie", path, 100, 101, 48000, 90000, mediasoup::VideoCodec::VP8);
+	int port = rec.createSocket();
+	ASSERT_GT(port, 0);
+	ASSERT_TRUE(rec.start());
+
+	uint8_t fakeAudio[80] = {};
+	uint8_t fakeVideo[400] = {};
+
+	for (int frame = 0; frame < 30; frame++) {
+		// Audio
+		auto aPkt = makeRtpPacket(100, frame, frame * 960, 0xAAAA, fakeAudio, 80);
+		sendUdp(port, aPkt);
+
+		// VP8 frame split into 3 RTP packets
+		uint32_t vts = frame * 3000;
+		for (int frag = 0; frag < 3; frag++) {
+			std::vector<uint8_t> vp8payload;
+			uint8_t desc = 0;
+			if (frag == 0) {
+				desc = 0x10; // S=1
+				vp8payload.push_back(desc);
+				// VP8 keyframe byte: bit0=0 for keyframe on first frame
+				uint8_t firstByte = (frame == 0) ? 0x9c : 0x9d;
+				vp8payload.push_back(firstByte);
+				vp8payload.insert(vp8payload.end(), fakeVideo, fakeVideo + 130);
+			} else {
+				desc = 0x00; // continuation
+				vp8payload.push_back(desc);
+				vp8payload.insert(vp8payload.end(), fakeVideo, fakeVideo + 130);
+			}
+			bool marker = (frag == 2);
+			auto pkt = makeRtpPacket(101, frame * 3 + frag, vts, 0xBBBB,
+				vp8payload.data(), vp8payload.size(), marker);
+			sendUdp(port, pkt);
+		}
+		usleep(20000);
+	}
+
+	rec.stop();
+
+	struct stat st;
+	ASSERT_EQ(stat(path.c_str(), &st), 0);
+	EXPECT_GT(st.st_size, 200);
+
+	// ffprobe
+	char buf[4096];
+	std::string probeCmd = "ffprobe -v error -show_entries stream=codec_type,codec_name -of csv=p=0 " + path + " 2>&1";
+	FILE* fp = popen(probeCmd.c_str(), "r");
+	std::string probeOut;
+	while (fgets(buf, sizeof(buf), fp)) probeOut += buf;
+	pclose(fp);
+
+	EXPECT_NE(probeOut.find("audio"), std::string::npos) << "No audio. ffprobe: " << probeOut;
+	EXPECT_NE(probeOut.find("vp8"), std::string::npos) << "No VP8 video. ffprobe: " << probeOut;
 }
