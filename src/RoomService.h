@@ -377,6 +377,12 @@ public:
 	}
 
 	// Collect full-chain stats for one peer (sendTransport + all producers)
+	// Store browser-side stats (BWE, candidate-pair, etc.)
+	void setClientStats(const std::string& roomId, const std::string& peerId, const json& stats) {
+		std::lock_guard<std::mutex> lock(clientStatsMutex_);
+		clientStats_[roomId + "/" + peerId] = stats;
+	}
+
 	json collectPeerStats(const std::string& roomId, const std::string& peerId) {
 		auto room = roomManager_.getRoom(roomId);
 		if (!room) return {};
@@ -423,6 +429,13 @@ public:
 			};
 		}
 		result["consumers"] = consumers;
+
+		// Merge browser-reported stats (BWE, etc.)
+		{
+			std::lock_guard<std::mutex> lock(clientStatsMutex_);
+			auto it = clientStats_.find(roomId + "/" + peerId);
+			if (it != clientStats_.end()) result["clientStats"] = it->second;
+		}
 
 		return result;
 	}
@@ -482,6 +495,9 @@ private:
 	std::mutex recorderMutex_;
 	std::unordered_map<std::string, std::shared_ptr<PeerRecorder>> recorders_;
 	std::unordered_map<std::string, std::shared_ptr<PlainTransport>> recorderTransports_;
+
+	std::mutex clientStatsMutex_;
+	std::unordered_map<std::string, json> clientStats_;
 };
 
 } // namespace mediasoup

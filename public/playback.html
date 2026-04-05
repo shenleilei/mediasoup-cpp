@@ -138,7 +138,8 @@ function renderSnapshot(stats) {
     html += '<div style="margin:4px 0;color:#4CAF50;font-size:12px;font-weight:bold">⬆ Uplink</div>';
     html += '<div class="qos-grid">';
     html += qosItem('Recv Bitrate', fmtBitrate(st.rtpRecvBitrate));
-    html += qosItem('Available BW', fmtBitrate(st.availableIncomingBitrate));
+    const clientSend = stats.clientStats && stats.clientStats.send;
+    html += qosItem('Available BW ⬆', fmtBitrate(clientSend ? clientSend.availableOutgoingBitrate : null));
     html += qosItem('Packet Loss', st.rtpPacketLossReceived != null ? (st.rtpPacketLossReceived * 100).toFixed(1) + '%' : '-');
     html += qosItem('ICE', st.iceState || '-');
     html += qosItem('DTLS', st.dtlsState || '-');
@@ -155,7 +156,12 @@ function renderSnapshot(stats) {
     if (p.stats && p.stats[0]) {
       let s = p.stats[0];
       html += qosItem('Bitrate', fmtBitrate(s.bitrate));
-      html += qosItem('Jitter', s.jitter != null ? s.jitter + ' ms' : '-');
+      let jitterMs = '-';
+      if (s.jitter != null) {
+        const clock = (p.kind === 'video') ? 90000 : 48000;
+        jitterMs = (s.jitter / clock * 1000).toFixed(1) + ' ms';
+      }
+      html += qosItem('Jitter', jitterMs);
       html += qosItem('RTT', s.roundTripTime != null ? s.roundTripTime.toFixed(1) + ' ms' : '-');
       html += qosItem('Pkt Lost', s.packetsLost != null ? s.packetsLost : '-');
       html += qosItem('NACK', s.nackCount != null ? s.nackCount : '-');

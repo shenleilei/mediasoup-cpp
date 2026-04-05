@@ -206,7 +206,9 @@ function renderQosPanel(data) {
       html += `<div style="margin:4px 0;color:#4CAF50;font-size:12px;font-weight:bold">⬆ Uplink (sendTransport)</div>`;
       html += '<div class="qos-grid">';
       html += qosItem('Recv Bitrate', fmtBitrate(st.rtpRecvBitrate));
-      html += qosItem('Available BW', fmtBitrate(st.availableIncomingBitrate));
+      const clientSend = peer.clientStats && peer.clientStats.send;
+      html += qosItem('Available BW ⬆', fmtBitrate(clientSend ? clientSend.availableOutgoingBitrate : null));
+      html += qosItem('RTT (browser)', clientSend && clientSend.currentRoundTripTime != null ? (clientSend.currentRoundTripTime * 1000).toFixed(0) + ' ms' : '-');
       html += qosItem('Packet Loss', fmtLoss(st.rtpPacketLossReceived));
       html += qosItem('ICE State', st.iceState || '-');
       html += qosItem('DTLS State', st.dtlsState || '-');
@@ -230,10 +232,16 @@ function renderQosPanel(data) {
       if (p.stats && p.stats.length > 0) {
         const s = p.stats[0];
         html += qosItem('Bitrate', fmtBitrate(s.bitrate));
-        html += qosItem('Jitter', s.jitter != null ? s.jitter + ' ms' : '-');
+        // jitter is in RTP timestamp units; convert to ms (video=90kHz, audio=48kHz)
+        let jitterMs = '-';
+        if (s.jitter != null) {
+          const clock = (p.kind === 'video') ? 90000 : 48000;
+          jitterMs = (s.jitter / clock * 1000).toFixed(1) + ' ms';
+        }
+        html += qosItem('Jitter', jitterMs);
         html += qosItem('RTT', s.roundTripTime != null ? s.roundTripTime.toFixed(1) + ' ms' : '-');
         html += qosItem('Packets Lost', s.packetsLost != null ? s.packetsLost : '-');
-        html += qosItem('Fraction Lost', s.fractionLost != null ? s.fractionLost : '-');
+        html += qosItem('Fraction Lost', s.fractionLost != null ? (s.fractionLost * 100).toFixed(1) + '%' : '-');
         html += qosItem('NACK Count', s.nackCount != null ? s.nackCount : '-');
         html += qosItem('PLI Count', s.pliCount != null ? s.pliCount : '-');
         html += qosItem('FIR Count', s.firCount != null ? s.firCount : '-');
@@ -248,7 +256,6 @@ function renderQosPanel(data) {
       html += `<div style="margin:4px 0;color:#FF9800;font-size:12px;font-weight:bold">⬇ Downlink (recvTransport)</div>`;
       html += '<div class="qos-grid">';
       html += qosItem('Send Bitrate', fmtBitrate(rt.rtpSendBitrate));
-      html += qosItem('Available BW', fmtBitrate(rt.availableOutgoingBitrate));
       html += qosItem('Packet Loss', fmtLoss(rt.rtpPacketLossSent));
       html += '</div>';
     }
@@ -394,6 +401,7 @@ async function join() {
 
     document.getElementById('publishBtn').disabled = false;
     setStatus('In room: ' + roomId);
+    startClientStatsReporting();
   } catch(e) {
     log('ERROR: ' + e.message);
     setStatus('Error', '#f00');
@@ -450,6 +458,7 @@ async function publish() {
 
     setStatus('Publishing A/V');
     document.getElementById('publishBtn').disabled = true;
+    startClientStatsReporting();
 
     // Process any newConsumer notifications that arrived during produce
     if (window._pendingConsumers) {
@@ -461,6 +470,53 @@ async function publish() {
     log('ERROR: ' + e.message);
     setStatus('Error', '#f00');
   }
+}
+
+// ── Browser-side stats reporting (BWE, candidate-pair) ──
+let _clientStatsTimer = null;
+function startClientStatsReporting() {
+  if (_clientStatsTimer) return;
+  _clientStatsTimer = setInterval(async () => {
+    if (!ws || ws.readyState !== 1) return;
+    try {
+      const report = {};
+      if (sendTransport && sendTransport._handler) {
+        const pc = sendTransport._handler._pc;
+        if (pc) {
+          const stats = await pc.getStats();
+          stats.forEach(r => {
+            if (r.type === 'candidate-pair' && r.nominated) {
+              report.send = {
+                availableOutgoingBitrate: r.availableOutgoingBitrate || 0,
+                currentRoundTripTime: r.currentRoundTripTime || 0,
+                totalRoundTripTime: r.totalRoundTripTime || 0,
+                bytesSent: r.bytesSent || 0,
+                bytesReceived: r.bytesReceived || 0
+              };
+            }
+          });
+        }
+      }
+      if (recvTransport && recvTransport._handler) {
+        const pc = recvTransport._handler._pc;
+        if (pc) {
+          const stats = await pc.getStats();
+          stats.forEach(r => {
+            if (r.type === 'candidate-pair' && r.nominated) {
+              report.recv = {
+                availableIncomingBitrate: r.availableIncomingBitrate || 0,
+                currentRoundTripTime: r.currentRoundTripTime || 0,
+                bytesReceived: r.bytesReceived || 0
+              };
+            }
+          });
+        }
+      }
+      if (Object.keys(report).length > 0) {
+        wsRequest('clientStats', report).catch(() => {});
+      }
+    } catch(e) {}
+  }, 2000);
 }
 
 async function consumeProducer(producerId, kind) {

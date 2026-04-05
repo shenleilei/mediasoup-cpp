@@ -134,6 +134,10 @@ void SignalingServer::run() {
 						data.value("peerId", sd->peerId));
 					result = {true, stats};
 
+				} else if (method == "clientStats") {
+					roomService_.setClientStats(sd->roomId, sd->peerId, data);
+					result = {true};
+
 				} else {
 					result = {false, {}, "", "unknown method: " + method};
 				}
