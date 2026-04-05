@@ -47,7 +47,11 @@ fetch('/api/recordings').then(r => r.json()).then(rooms => {
   for (let room of rooms) {
     let div = document.createElement('div');
     div.className = 'room-group';
-    div.innerHTML = '<h3>Room: ' + room.roomId + '</h3>';
+    let h3 = document.createElement('h3');
+    h3.textContent = 'Room: ' + room.roomId;
+    h3.style.cursor = 'pointer';
+    h3.onclick = () => loadRecording(room.roomId, room.files[0]);
+    div.appendChild(h3);
     for (let f of room.files) {
       let a = document.createElement('span');
       a.className = 'file-link';
@@ -62,24 +66,45 @@ fetch('/api/recordings').then(r => r.json()).then(rooms => {
 function loadRecording(roomId, filename) {
   document.getElementById('player-area').style.display = 'block';
   video.src = '/recordings/' + roomId + '/' + filename;
+  video.load();
+  document.getElementById('qos-content').innerHTML = '<span style="color:#888">Loading...</span>';
+
+  // Show which file is selected
+  document.querySelectorAll('.file-link').forEach(el => el.style.color = '#2196F3');
+  event.target.style.color = '#4CAF50';
 
   // Load QoS sidecar
   let qosFile = filename.replace('.webm', '.qos.json');
   qosData = [];
   fetch('/recordings/' + roomId + '/' + qosFile)
-    .then(r => r.ok ? r.json() : [])
+    .then(r => r.ok ? r.text() : '[]')
+    .then(text => {
+      // Handle incomplete JSON (e.g. missing trailing ])
+      try { return JSON.parse(text); } catch(e) {
+        let fixed = text.replace(/,\s*$/, '') + ']';
+        try { return JSON.parse(fixed); } catch(e2) { return []; }
+      }
+    })
     .then(data => {
       qosData = data || [];
-      if (qosData.length) drawScoreTimeline();
-      else document.getElementById('no-qos').textContent = 'No QoS data for this recording';
+      if (qosData.length) {
+        drawScoreTimeline();
+        renderSnapshot(qosData[0].stats);
+      } else {
+        document.getElementById('no-qos').textContent = 'No QoS data for this recording';
+      }
     })
     .catch(() => { qosData = []; });
 }
 
-video.addEventListener('timeupdate', () => {
+video.addEventListener('error', () => {
+  document.getElementById('qos-content').innerHTML =
+    '<span style="color:#f44336">⚠ Video cannot be played (empty or corrupt file)</span>';
+});
+
+function updateQosDisplay() {
   if (!qosData.length) return;
   let t = video.currentTime;
-  // Find closest snapshot
   let best = qosData[0];
   for (let s of qosData) {
     if (s.t <= t) best = s;
@@ -87,7 +112,10 @@ video.addEventListener('timeupdate', () => {
   }
   renderSnapshot(best.stats);
   drawPlayhead(t);
-});
+}
+
+video.addEventListener('timeupdate', updateQosDisplay);
+video.addEventListener('seeked', updateQosDisplay);
 
 function fmtBitrate(bps) {
   if (!bps && bps !== 0) return '-';

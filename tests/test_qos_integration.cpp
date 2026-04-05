@@ -403,7 +403,7 @@ protected:
 			" --workers=1 --workerBin=./mediasoup-worker"
 			" --announcedIp=127.0.0.1 --listenIp=127.0.0.1"
 			" --recordDir=" + recordDir_ +
-			" > /dev/null 2>&1 & echo $!";
+			" > /tmp/sfu_qostest.log 2>&1 & echo $!";
 		FILE* fp = popen(cmd.c_str(), "r");
 		ASSERT_NE(fp, nullptr);
 		char buf[64]{};

@@ -247,15 +247,33 @@ public:
 		// Get or create recorder for this peer
 		auto& rec = recorders_[key];
 		if (!rec) {
-			// Determine PT from producer's consumable params
+			// Determine PT and codec from router capabilities
 			uint8_t audioPT = 100, videoPT = 101;
+			VideoCodec videoCodec = VideoCodec::VP8;
+			auto caps = room->router()->rtpCapabilities();
+			for (auto& c : caps.codecs) {
+				if (c.mimeType.find("/rtx") != std::string::npos) continue;
+				if (c.mimeType.find("opus") != std::string::npos) {
+					audioPT = c.preferredPayloadType;
+				} else if (c.mimeType.find("H264") != std::string::npos || c.mimeType.find("h264") != std::string::npos) {
+					if (videoCodec != VideoCodec::H264) {
+						videoPT = c.preferredPayloadType;
+						videoCodec = VideoCodec::H264;
+					}
+				} else if (c.mimeType.find("VP8") != std::string::npos) {
+					if (videoCodec != VideoCodec::H264) {
+						videoPT = c.preferredPayloadType;
+						videoCodec = VideoCodec::VP8;
+					}
+				}
+			}
 			std::string dir = recordDir_ + "/" + roomId;
 			mkdir(dir.c_str(), 0755);
 			auto ts = std::chrono::system_clock::now().time_since_epoch();
 			auto secs = std::chrono::duration_cast<std::chrono::seconds>(ts).count();
 			std::string path = dir + "/" + peerId + "_" + std::to_string(secs) + ".webm";
 
-			rec = std::make_shared<PeerRecorder>(peerId, path, audioPT, videoPT, 48000, 90000);
+			rec = std::make_shared<PeerRecorder>(peerId, path, audioPT, videoPT, 48000, 90000, videoCodec);
 			int port = rec->createSocket();
 			if (port < 0) {
 				MS_ERROR(logger_, "Failed to create recorder socket for {}", key);
@@ -266,17 +284,17 @@ public:
 				rec.reset(); return;
 			}
 
-			// Create a PlainTransport for recording
+			// Create a PlainTransport for recording (local loopback only)
 			PlainTransportOptions opts;
-			opts.listenInfos = roomManager_.listenInfos();
+			opts.listenInfos = {{{"ip", "127.0.0.1"}}};
 			opts.rtcpMux = true;
-			opts.comedia = true;
+			opts.comedia = false;
 			auto pt = room->router()->createPlainTransport(opts);
 			recorderTransports_[key] = pt;
 
 			// Connect PlainTransport to recorder's UDP port
-			pt->connect("127.0.0.1", port);
-
+			auto connResult = pt->connect("127.0.0.1", port);
+			MS_DEBUG(logger_, "Recorder PlainTransport connect result: {}", connResult.dump());
 			MS_DEBUG(logger_, "Recorder started for {} → port {} file {}", key, port, path);
 		}
 
@@ -412,6 +430,7 @@ public:
 	// Broadcast stats for all peers in all rooms
 	void broadcastStats() {
 		auto roomIds = roomManager_.getRoomIds();
+		MS_DEBUG(logger_, "broadcastStats: {} rooms", roomIds.size());
 		for (auto& roomId : roomIds) {
 			auto room = roomManager_.getRoom(roomId);
 			if (!room) continue;
@@ -421,11 +440,12 @@ public:
 			auto participants = room->getPeerIds();
 			for (auto& peerId : participants) {
 				try {
-					auto stats = collectPeerStats(roomId, peerId);
-					if (!stats.empty()) allStats.push_back(stats);
-				} catch (const std::exception& e) {
-					MS_ERROR(logger_, "collectPeerStats failed for {}/{}: {}", roomId, peerId, e.what());
-				}
+				auto stats = collectPeerStats(roomId, peerId);
+				if (!stats.empty()) allStats.push_back(stats);
+			} catch (...) {
+				// Still record a minimal entry so recorder gets QoS snapshots
+				allStats.push_back({{"peerId", peerId}});
+			}
 			}
 
 			if (allStats.empty()) continue;

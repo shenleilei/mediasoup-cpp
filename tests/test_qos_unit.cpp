@@ -236,8 +236,134 @@ TEST_F(RecorderQosTest, StopWithNoSnapshots) {
 	ASSERT_TRUE(rec.start());
 	// Stop without any snapshots
 	rec.stop();
-	// QoS file should not exist (never opened)
+	// QoS file should exist with empty array (prevents 404 on playback)
 	std::string qosPath = tmpDir_ + "/empty.qos.json";
 	std::ifstream f(qosPath);
-	EXPECT_FALSE(f.is_open()) << "QoS file should not exist with zero snapshots";
+	EXPECT_TRUE(f.is_open()) << "QoS file should be created with empty array";
+	if (f.is_open()) {
+		std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+		EXPECT_EQ(content, "[]");
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RTP depacketization unit tests
+// ═══════════════════════════════════════════════════════════════
+
+// ─── RtpHeader tests ───
+
+TEST(RtpHeaderTest, MarkerBitParsed) {
+	uint8_t pkt[20] = {0x80, 0x80 | 100, 0, 1, 0,0,0,0, 0,0,0,1, 0xAA};
+	RtpHeader h;
+	ASSERT_TRUE(RtpHeader::parse(pkt, sizeof(pkt), h));
+	EXPECT_TRUE(h.marker);
+	EXPECT_EQ(h.payloadType, 100);
+
+	pkt[1] = 100; // no marker
+	ASSERT_TRUE(RtpHeader::parse(pkt, sizeof(pkt), h));
+	EXPECT_FALSE(h.marker);
+}
+
+TEST(RtpHeaderTest, TooShortFails) {
+	uint8_t pkt[8] = {};
+	RtpHeader h;
+	EXPECT_FALSE(RtpHeader::parse(pkt, sizeof(pkt), h));
+}
+
+// ─── VP8 descriptor stripping ───
+
+TEST(Vp8DescriptorTest, SimpleDescriptor) {
+	// 1-byte descriptor: S=1, PartID=0
+	uint8_t payload[] = {0x10, 0x9d, 0x01, 0x2a}; // S=1 + VP8 keyframe header
+	int outSize = 0;
+	bool isStart = false;
+	auto* data = PeerRecorder::stripVp8Descriptor(payload, sizeof(payload), outSize, isStart);
+	EXPECT_TRUE(isStart);
+	EXPECT_EQ(outSize, 3);
+	EXPECT_EQ(data[0], 0x9d); // first byte of VP8 data
+}
+
+TEST(Vp8DescriptorTest, ExtendedDescriptorWithPictureId) {
+	// X=1, I=1 (7-bit PictureID)
+	uint8_t payload[] = {0x90, 0x80, 0x42, 0xAA, 0xBB};
+	// byte0: X=1(0x80) | S=1(0x10) = 0x90
+	// byte1: I=1(0x80)
+	// byte2: PictureID 0x42 (7-bit, no M bit)
+	// skip = 3, data starts at byte3
+	int outSize = 0;
+	bool isStart = false;
+	auto* data = PeerRecorder::stripVp8Descriptor(payload, sizeof(payload), outSize, isStart);
+	EXPECT_TRUE(isStart);
+	EXPECT_EQ(outSize, 2);
+	EXPECT_EQ(data[0], 0xAA);
+}
+
+TEST(Vp8DescriptorTest, EmptyPayload) {
+	int outSize = 0;
+	bool isStart = false;
+	PeerRecorder::stripVp8Descriptor(nullptr, 0, outSize, isStart);
+	EXPECT_EQ(outSize, 0);
+	EXPECT_FALSE(isStart);
+}
+
+// ─── Annex-B to AVCC conversion ───
+
+TEST(AnnexBToAvccTest, SingleNal) {
+	std::vector<uint8_t> annexB = {0,0,0,1, 0x65, 0xAA, 0xBB}; // IDR NAL
+	std::vector<uint8_t> avcc;
+	PeerRecorder::annexBToAvcc(annexB, avcc);
+	ASSERT_EQ(avcc.size(), 7u); // 4-byte length + 3 bytes NAL
+	uint32_t len = (avcc[0]<<24)|(avcc[1]<<16)|(avcc[2]<<8)|avcc[3];
+	EXPECT_EQ(len, 3u);
+	EXPECT_EQ(avcc[4], 0x65);
+}
+
+TEST(AnnexBToAvccTest, TwoNals) {
+	std::vector<uint8_t> annexB = {0,0,0,1, 0x67, 0x42, 0,0,0,1, 0x68, 0x01};
+	std::vector<uint8_t> avcc;
+	PeerRecorder::annexBToAvcc(annexB, avcc);
+	// First NAL: len=2 (0x67, 0x42), Second NAL: len=2 (0x68, 0x01)
+	ASSERT_EQ(avcc.size(), 12u);
+	uint32_t len1 = (avcc[0]<<24)|(avcc[1]<<16)|(avcc[2]<<8)|avcc[3];
+	EXPECT_EQ(len1, 2u);
+	EXPECT_EQ(avcc[4], 0x67);
+	uint32_t len2 = (avcc[6]<<24)|(avcc[7]<<16)|(avcc[8]<<8)|avcc[9];
+	EXPECT_EQ(len2, 2u);
+	EXPECT_EQ(avcc[10], 0x68);
+}
+
+TEST(AnnexBToAvccTest, EmptyInput) {
+	std::vector<uint8_t> annexB;
+	std::vector<uint8_t> avcc;
+	PeerRecorder::annexBToAvcc(annexB, avcc);
+	EXPECT_TRUE(avcc.empty());
+}
+
+// ─── H264 deferred header: recorder starts OK without IDR, stop doesn't crash ───
+
+TEST_F(RecorderQosTest, H264DeferredHeaderNoCrash) {
+	std::string path = tmpDir_ + "/h264_deferred.webm";
+	PeerRecorder rec("alice", path, 100, 107, 48000, 90000, VideoCodec::H264);
+	ASSERT_GT(rec.createSocket(), 0);
+	ASSERT_TRUE(rec.start()) << "H264 recorder should start (deferred header)";
+
+	// Send only audio RTP (no video IDR) — should not crash
+	uint8_t rtp[20] = {0x80, 100, 0, 1, 0,0,0,0, 0,0,0,1};
+	int fd = socket(AF_INET, SOCK_DGRAM, 0);
+	sockaddr_in addr{};
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(rec.port());
+	addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	sendto(fd, rtp, sizeof(rtp), 0, (sockaddr*)&addr, sizeof(addr));
+	::close(fd);
+	usleep(100000);
+
+	rec.stop(); // should not crash even without IDR
+	// File should be nearly empty (header never written)
+	struct stat st;
+	stat(path.c_str(), &st);
+	// QoS file should still be created
+	std::string qosPath = tmpDir_ + "/h264_deferred.qos.json";
+	std::ifstream f(qosPath);
+	EXPECT_TRUE(f.is_open());
 }
