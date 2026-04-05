@@ -3,6 +3,8 @@
 #include <fstream>
 #include <unordered_map>
 #include <mutex>
+#include <dirent.h>
+#include <sys/stat.h>
 
 namespace mediasoup {
 
@@ -11,8 +13,8 @@ struct PerSocketData {
 	std::string roomId;
 };
 
-SignalingServer::SignalingServer(int port, RoomService& roomService)
-	: port_(port), roomService_(roomService) {}
+SignalingServer::SignalingServer(int port, RoomService& roomService, const std::string& recordDir)
+	: port_(port), roomService_(roomService), recordDir_(recordDir) {}
 
 void SignalingServer::run() {
 	running_ = true;
@@ -127,6 +129,11 @@ void SignalingServer::run() {
 					result = roomService_.restartIce(sd->roomId, sd->peerId,
 						data.at("transportId").get<std::string>());
 
+				} else if (method == "getStats") {
+					json stats = roomService_.collectPeerStats(sd->roomId,
+						data.value("peerId", sd->peerId));
+					result = {true, stats};
+
 				} else {
 					result = {false, {}, "", "unknown method: " + method};
 				}
@@ -157,6 +164,56 @@ void SignalingServer::run() {
 			}
 		}
 
+	}).get("/api/recordings", [this](auto* res, auto*) {
+		// List all recordings grouped by room
+		if (recordDir_.empty()) {
+			res->writeHeader("Content-Type", "application/json")->end("[]");
+			return;
+		}
+		json rooms = json::array();
+		// Scan recordDir_ for subdirectories (rooms)
+		DIR* dir = opendir(recordDir_.c_str());
+		if (!dir) { res->writeHeader("Content-Type", "application/json")->end("[]"); return; }
+		struct dirent* ent;
+		while ((ent = readdir(dir))) {
+			if (ent->d_name[0] == '.') continue;
+			std::string roomPath = recordDir_ + "/" + ent->d_name;
+			struct stat st;
+			if (stat(roomPath.c_str(), &st) != 0 || !S_ISDIR(st.st_mode)) continue;
+			json files = json::array();
+			DIR* rdir = opendir(roomPath.c_str());
+			if (!rdir) continue;
+			struct dirent* rent;
+			while ((rent = readdir(rdir))) {
+				std::string fname(rent->d_name);
+				if (fname.size() > 5 && fname.substr(fname.size()-5) == ".webm")
+					files.push_back(fname);
+			}
+			closedir(rdir);
+			if (!files.empty())
+				rooms.push_back({{"roomId", std::string(ent->d_name)}, {"files", files}});
+		}
+		closedir(dir);
+		res->writeHeader("Content-Type", "application/json")->end(rooms.dump());
+
+	}).get("/recordings/*", [this](auto* res, auto* req) {
+		// Serve recording files (webm + qos.json)
+		if (recordDir_.empty()) { res->writeStatus("404 Not Found")->end("Not Found"); return; }
+		std::string url(req->getUrl()); // e.g. /recordings/roomId/file.webm
+		std::string relPath = url.substr(12); // strip "/recordings/"
+		// Prevent path traversal
+		if (relPath.find("..") != std::string::npos) {
+			res->writeStatus("403 Forbidden")->end("Forbidden"); return;
+		}
+		std::string fullPath = recordDir_ + "/" + relPath;
+		std::ifstream file(fullPath, std::ios::binary);
+		if (!file.is_open()) { res->writeStatus("404 Not Found")->end("Not Found"); return; }
+		std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+		std::string ct = "application/octet-stream";
+		if (relPath.find(".webm") != std::string::npos) ct = "video/webm";
+		else if (relPath.find(".json") != std::string::npos) ct = "application/json";
+		res->writeHeader("Content-Type", ct)->end(content);
+
 	}).get("/*", [](auto* res, auto* req) {
 		std::string url(req->getUrl());
 		if (url == "/") url = "/index.html";
@@ -182,6 +239,15 @@ void SignalingServer::run() {
 				memcpy(&svc, us_timer_ext(t), sizeof(RoomService*));
 				svc->cleanIdleRooms(30);
 			}, 30000, 30000);
+
+			// Stats broadcast timer — every 2 seconds
+			auto* statsTimer = us_create_timer((struct us_loop_t*)loop, 0, sizeof(RoomService*));
+			memcpy(us_timer_ext(statsTimer), &svcPtr, sizeof(RoomService*));
+			us_timer_set(statsTimer, [](struct us_timer_t* t) {
+				RoomService* svc;
+				memcpy(&svc, us_timer_ext(t), sizeof(RoomService*));
+				try { svc->broadcastStats(); } catch (...) {}
+			}, 2000, 2000);
 		} else {
 			spdlog::error("SignalingServer failed to listen on port {}", port_);
 		}

@@ -46,6 +46,13 @@ public:
 	bool empty() const { std::lock_guard<std::mutex> lock(mutex_); return peers_.empty(); }
 	size_t peerCount() const { std::lock_guard<std::mutex> lock(mutex_); return peers_.size(); }
 
+	std::vector<std::string> getPeerIds() const {
+		std::lock_guard<std::mutex> lock(mutex_);
+		std::vector<std::string> ids;
+		for (auto& [id, _] : peers_) ids.push_back(id);
+		return ids;
+	}
+
 	std::vector<std::shared_ptr<Peer>> getOtherPeers(const std::string& excludeId) {
 		std::lock_guard<std::mutex> lock(mutex_);
 		std::vector<std::shared_ptr<Peer>> result;
@@ -124,6 +131,13 @@ public:
 
 	size_t roomCount() const { std::lock_guard<std::mutex> lock(mutex_); return rooms_.size(); }
 	const std::vector<json>& listenInfos() const { return listenInfos_; }
+
+	std::vector<std::string> getRoomIds() const {
+		std::lock_guard<std::mutex> lock(mutex_);
+		std::vector<std::string> ids;
+		for (auto& [id, _] : rooms_) ids.push_back(id);
+		return ids;
+	}
 
 private:
 	WorkerManager& workerManager_;

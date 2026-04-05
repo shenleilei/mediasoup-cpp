@@ -77,6 +77,9 @@ if(BUILD_TESTS)
 
     file(GLOB TEST_SOURCES tests/test_*.cpp)
     list(FILTER TEST_SOURCES EXCLUDE REGEX "test_integration\\.cpp$")
+    list(FILTER TEST_SOURCES EXCLUDE REGEX "test_multi_sfu_topology\\.cpp$")
+    list(FILTER TEST_SOURCES EXCLUDE REGEX "test_e2e_pubsub\\.cpp$")
+    list(FILTER TEST_SOURCES EXCLUDE REGEX "test_qos_integration\\.cpp$")
     add_executable(mediasoup_tests ${TEST_SOURCES})
     target_include_directories(mediasoup_tests PRIVATE
         ${CMAKE_SOURCE_DIR}/src
@@ -108,6 +111,17 @@ if(BUILD_TESTS)
     )
     target_link_libraries(mediasoup_e2e_tests PRIVATE gtest gtest_main pthread)
     add_test(NAME mediasoup_e2e_tests COMMAND mediasoup_e2e_tests
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+    # QoS integration tests
+    add_executable(mediasoup_qos_integration_tests tests/test_qos_integration.cpp)
+    target_include_directories(mediasoup_qos_integration_tests PRIVATE
+        ${CMAKE_SOURCE_DIR}/tests
+        ${CMAKE_SOURCE_DIR}/src
+        ${JSON_INCLUDE}
+    )
+    target_link_libraries(mediasoup_qos_integration_tests PRIVATE gtest gtest_main pthread)
+    add_test(NAME mediasoup_qos_integration_tests COMMAND mediasoup_qos_integration_tests
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
     # Multi-SFU topology test

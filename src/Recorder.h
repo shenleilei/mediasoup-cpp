@@ -5,6 +5,10 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <fstream>
+#include <chrono>
+#include <cmath>
+#include <nlohmann/json.hpp>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -19,6 +23,8 @@ extern "C" {
 }
 
 namespace mediasoup {
+
+using json = nlohmann::json;
 
 // Parses minimal RTP header to extract PT, SSRC, sequence, timestamp
 struct RtpHeader {
@@ -84,6 +90,7 @@ public:
 	bool start() {
 		if (sock_ < 0) return false;
 		if (!initMuxer()) return false;
+		startTime_ = std::chrono::steady_clock::now();
 		running_ = true;
 		thread_ = std::thread([this] { recvLoop(); });
 		return true;
@@ -94,10 +101,42 @@ public:
 		if (sock_ >= 0) { ::close(sock_); sock_ = -1; }
 		if (thread_.joinable()) thread_.join();
 		finalizeMuxer();
+		{
+			std::lock_guard<std::mutex> lock(qosMutex_);
+			if (qosFile_.is_open()) { qosFile_ << "\n]"; qosFile_.close(); }
+		}
 	}
 
 	int port() const { return port_; }
 	const std::string& peerId() const { return peerId_; }
+	const std::string& outputPath() const { return outputPath_; }
+
+	// Append a QoS snapshot (called periodically from broadcastStats)
+	void appendQosSnapshot(const json& stats) {
+		if (!running_ || outputPath_.empty()) return;
+		std::lock_guard<std::mutex> lock(qosMutex_);
+		if (!qosFile_.is_open()) {
+			std::string qosPath = outputPath_.substr(0, outputPath_.rfind('.')) + ".qos.json";
+			qosFile_.open(qosPath, std::ios::out | std::ios::trunc);
+			if (!qosFile_.is_open()) return;
+			qosFile_ << "[\n";
+			qosFirst_ = true;
+		}
+
+		// Use first RTP arrival as time zero if available, otherwise use start time.
+		// This aligns QoS timestamps with video PTS in the WebM container.
+		auto baseTime = firstRtpReceived_ ? firstRtpTime_ : startTime_;
+		auto elapsed = std::chrono::steady_clock::now() - baseTime;
+		double secs = std::chrono::duration<double>(elapsed).count();
+		if (secs < 0) secs = 0;
+
+		if (!qosFirst_) qosFile_ << ",\n";
+		qosFirst_ = false;
+
+		json entry = {{"t", std::round(secs * 10.0) / 10.0}, {"stats", stats}};
+		qosFile_ << entry.dump();
+		qosFile_.flush();
+	}
 
 private:
 	bool initMuxer() {
@@ -183,6 +222,11 @@ private:
 		std::lock_guard<std::mutex> lock(muxMutex_);
 		if (!fmtCtx_) return;
 
+		if (!firstRtpReceived_) {
+			firstRtpTime_ = std::chrono::steady_clock::now();
+			firstRtpReceived_ = true;
+		}
+
 		AVPacket pkt;
 		av_init_packet(&pkt);
 
@@ -228,6 +272,13 @@ private:
 	bool audioBaseSet_ = false, videoBaseSet_ = false;
 
 	std::shared_ptr<spdlog::logger> logger_;
+
+	std::chrono::steady_clock::time_point startTime_;
+	std::atomic<bool> firstRtpReceived_{false};
+	std::chrono::steady_clock::time_point firstRtpTime_;
+	std::mutex qosMutex_;
+	std::ofstream qosFile_;
+	bool qosFirst_ = true;
 };
 
 } // namespace mediasoup

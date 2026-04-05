@@ -44,6 +44,10 @@ public:
 
 	void handleNotification(FBS::Notification::Event event, const FBS::Notification::Notification* notification);
 
+	struct Score { uint8_t score; uint8_t producerScore; std::vector<uint8_t> producerScores; };
+	const Score& currentScore() const { return score_; }
+	json getStats();
+
 private:
 	std::string id_;
 	std::string producerId_;
@@ -55,6 +59,7 @@ private:
 	bool closed_ = false;
 	bool paused_ = false;
 	bool producerPaused_ = false;
+	Score score_;
 	EventEmitter emitter_;
 	std::shared_ptr<spdlog::logger> logger_;
 };

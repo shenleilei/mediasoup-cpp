@@ -358,6 +358,99 @@ public:
 		}
 	}
 
+	// Collect full-chain stats for one peer (sendTransport + all producers)
+	json collectPeerStats(const std::string& roomId, const std::string& peerId) {
+		auto room = roomManager_.getRoom(roomId);
+		if (!room) return {};
+		auto peer = room->getPeer(peerId);
+		if (!peer) return {};
+
+		json result = {{"peerId", peerId}};
+
+		// sendTransport stats (vehicle uplink)
+		if (peer->sendTransport) {
+			try { result["sendTransport"] = peer->sendTransport->getStats(); }
+			catch (...) { result["sendTransport"] = nullptr; }
+		}
+
+		// recvTransport stats (operator downlink)
+		if (peer->recvTransport) {
+			try { result["recvTransport"] = peer->recvTransport->getStats(); }
+			catch (...) { result["recvTransport"] = nullptr; }
+		}
+
+		// Producer stats + scores
+		json producers = json::object();
+		for (auto& [pid, prod] : peer->producers) {
+			json pstat;
+			try { pstat["stats"] = prod->getStats(); }
+			catch (...) { pstat["stats"] = nullptr; }
+			// Scores from PRODUCER_SCORE notifications
+			json scores = json::array();
+			for (auto& s : prod->scores())
+				scores.push_back({{"ssrc", s.ssrc}, {"score", s.score}, {"rid", s.rid}});
+			pstat["scores"] = scores;
+			pstat["kind"] = prod->kind();
+			producers[pid] = pstat;
+		}
+		result["producers"] = producers;
+
+		// Consumer scores (from CONSUMER_SCORE notifications)
+		json consumers = json::object();
+		for (auto& [cid, cons] : peer->consumers) {
+			auto& sc = cons->currentScore();
+			consumers[cid] = {
+				{"kind", cons->kind()}, {"producerId", cons->producerId()},
+				{"score", sc.score}, {"producerScore", sc.producerScore}
+			};
+		}
+		result["consumers"] = consumers;
+
+		return result;
+	}
+
+	// Broadcast stats for all peers in all rooms
+	void broadcastStats() {
+		auto roomIds = roomManager_.getRoomIds();
+		for (auto& roomId : roomIds) {
+			auto room = roomManager_.getRoom(roomId);
+			if (!room) continue;
+
+			// Collect stats for each peer
+			json allStats = json::array();
+			auto participants = room->getPeerIds();
+			for (auto& peerId : participants) {
+				try {
+					auto stats = collectPeerStats(roomId, peerId);
+					if (!stats.empty()) allStats.push_back(stats);
+				} catch (const std::exception& e) {
+					MS_ERROR(logger_, "collectPeerStats failed for {}/{}: {}", roomId, peerId, e.what());
+				}
+			}
+
+			if (allStats.empty()) continue;
+
+			// Push to all peers in the room
+			if (broadcast_) {
+				broadcast_(roomId, "", {
+					{"notification", true}, {"method", "statsReport"},
+					{"data", {{"roomId", roomId}, {"peers", allStats}}}
+				});
+			}
+
+			// Write QoS snapshots to active recorders
+			{
+				std::lock_guard<std::mutex> lock(recorderMutex_);
+				for (auto& peerStats : allStats) {
+					std::string key = roomId + "/" + peerStats.value("peerId", "");
+					auto it = recorders_.find(key);
+					if (it != recorders_.end() && it->second)
+						it->second->appendQosSnapshot(peerStats);
+				}
+			}
+		}
+	}
+
 private:
 	RoomManager& roomManager_;
 	RoomRegistry* registry_;

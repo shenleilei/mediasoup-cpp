@@ -37,6 +37,16 @@ public:
 		}
 	};
 
+	struct OwnedNotification {
+		std::vector<uint8_t> data;
+		FBS::Notification::Event event = FBS::Notification::Event::WORKER_RUNNING;
+		const FBS::Notification::Notification* notification() const {
+			if (data.empty()) return nullptr;
+			auto* msg = FBS::Message::GetMessage(data.data());
+			return msg ? msg->data_as_Notification() : nullptr;
+		}
+	};
+
 	std::future<OwnedResponse> request(
 		FBS::Request::Method method,
 		FBS::Request::Body bodyType = FBS::Request::Body::NONE,
@@ -54,7 +64,8 @@ public:
 private:
 	void readLoop();
 	void processMessage(const uint8_t* data, size_t len);
-	void processNotification(const FBS::Notification::Notification* notification);
+	void processNotification(const uint8_t* data, size_t len,
+		const FBS::Notification::Notification* notification);
 	void processLog(const FBS::Log::Log* log);
 	void sendBytes(const uint8_t* data, size_t len);
 
