@@ -192,7 +192,7 @@ void Channel::processMessage(const uint8_t* data, size_t len) {
 			break;
 		}
 		case FBS::Message::Body::Notification:
-			processNotification(msg->data_as_Notification());
+			processNotification(data, len, msg->data_as_Notification());
 			break;
 		case FBS::Message::Body::Log:
 			processLog(msg->data_as_Log());
@@ -203,12 +203,18 @@ void Channel::processMessage(const uint8_t* data, size_t len) {
 	}
 }
 
-void Channel::processNotification(const FBS::Notification::Notification* notification) {
+void Channel::processNotification(const uint8_t* data, size_t len,
+	const FBS::Notification::Notification* notification)
+{
 	if (!notification) return;
 	std::string handlerId = notification->handler_id() ? notification->handler_id()->str() : "";
 	auto event = notification->event();
 
-	emitter_.emit(handlerId, {std::any(event)});
+	auto owned = std::make_shared<OwnedNotification>();
+	owned->data.assign(data, data + len);
+	owned->event = event;
+
+	emitter_.emit(handlerId, {std::any(event), std::any(owned)});
 }
 
 void Channel::processLog(const FBS::Log::Log* log) {

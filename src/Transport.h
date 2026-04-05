@@ -28,6 +28,7 @@ public:
 
 	std::shared_ptr<Producer> produce(const json& options);
 	std::shared_ptr<Consumer> consume(const json& options);
+	json getStats();
 
 	void close();
 	void routerClosed();

@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
 	int redisPort = 6379;
 	std::string nodeId;
 	std::string nodeAddress;
-	std::string recordDir;
+	std::string recordDir = "./recordings";
 
 	// Load config file (--config=path or default config.json)
 	std::string configPath = "config.json";
@@ -184,7 +184,7 @@ int main(int argc, char* argv[]) {
 	// Assemble
 	RoomManager roomManager(workerManager, mediaCodecs, listenInfos);
 	RoomService roomService(roomManager, registry.get(), recordDir);
-	SignalingServer server(signalingPort, roomService);
+	SignalingServer server(signalingPort, roomService, recordDir);
 
 	spdlog::info("mediasoup-cpp SFU ready - {} workers, signaling on port {}, nodeId={}",
 		workerManager.size(), signalingPort, nodeId);

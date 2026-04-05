@@ -32,10 +32,16 @@ public:
 	void resume();
 	void close();
 	void transportClosed();
+	void handleNotification(FBS::Notification::Event event,
+		const FBS::Notification::Notification* notification);
+	json getStats();
 
 	json toJson() const {
 		return {{"id", id_}, {"kind", kind_}, {"type", type_}, {"paused", paused_}};
 	}
+
+	struct ScoreEntry { uint32_t encodingIdx; uint32_t ssrc; std::string rid; uint8_t score; };
+	const std::vector<ScoreEntry>& scores() const { return scores_; }
 
 private:
 	std::string id_;
@@ -47,6 +53,7 @@ private:
 	std::string transportId_;
 	bool closed_ = false;
 	bool paused_ = false;
+	std::vector<ScoreEntry> scores_;
 	EventEmitter emitter_;
 	std::shared_ptr<spdlog::logger> logger_;
 };

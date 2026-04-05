@@ -138,7 +138,13 @@ std::shared_ptr<WebRtcTransport> Router::createWebRtcTransport(
 	channel_->emitter().on(transportId, [transport](const std::vector<std::any>& args) {
 		if (!args.empty()) {
 			auto event = std::any_cast<FBS::Notification::Event>(args[0]);
-			transport->handleNotification(event, nullptr);
+			const FBS::Notification::Notification* notif = nullptr;
+			std::shared_ptr<Channel::OwnedNotification> owned;
+			if (args.size() > 1) {
+				owned = std::any_cast<std::shared_ptr<Channel::OwnedNotification>>(args[1]);
+				notif = owned->notification();
+			}
+			transport->handleNotification(event, notif);
 		}
 	});
 

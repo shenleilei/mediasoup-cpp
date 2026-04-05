@@ -19,6 +19,21 @@ button:disabled { opacity:0.5; cursor:default; }
 .video-box video { width:320px; height:240px; object-fit:cover; }
 .video-box .label { position:absolute; bottom:5px; left:5px; background:rgba(0,0,0,0.7); padding:2px 8px; border-radius:4px; font-size:12px; }
 #log { margin-top:15px; background:#0d0d1a; padding:10px; border-radius:4px; height:200px; overflow-y:auto; font-family:monospace; font-size:12px; white-space:pre-wrap; }
+#qos-panel { margin-top:15px; background:#0d0d1a; border:1px solid #333; border-radius:8px; padding:15px; }
+#qos-panel h2 { font-size:1.1em; margin-bottom:10px; color:#4CAF50; }
+.qos-peer { margin-bottom:12px; padding:10px; background:#1a1a2e; border-radius:6px; border-left:3px solid #555; }
+.qos-peer.good { border-left-color:#4CAF50; }
+.qos-peer.fair { border-left-color:#FF9800; }
+.qos-peer.poor { border-left-color:#f44336; }
+.qos-peer-header { font-weight:bold; margin-bottom:6px; display:flex; align-items:center; gap:8px; }
+.qos-score { display:inline-block; padding:2px 8px; border-radius:10px; font-size:12px; color:#fff; }
+.qos-score.good { background:#4CAF50; }
+.qos-score.fair { background:#FF9800; }
+.qos-score.poor { background:#f44336; }
+.qos-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); gap:6px; font-size:12px; }
+.qos-item { background:#222; padding:4px 8px; border-radius:4px; }
+.qos-item .label { color:#888; }
+.qos-item .value { color:#eee; font-family:monospace; }
 </style>
 </head>
 <body>
@@ -34,6 +49,10 @@ button:disabled { opacity:0.5; cursor:default; }
     <video id="localVideo" autoplay muted playsinline></video>
     <div class="label">Local</div>
   </div>
+</div>
+<div id="qos-panel">
+  <h2>📡 QoS Monitor</h2>
+  <div id="qos-content"><span style="color:#888">Waiting for stats...</span></div>
 </div>
 <div id="log"></div>
 
@@ -150,7 +169,113 @@ function handleMessage(ev) {
   }
 }
 
+function fmtBitrate(bps) {
+  if (!bps && bps !== 0) return '-';
+  if (bps >= 1000000) return (bps/1000000).toFixed(1) + ' Mbps';
+  if (bps >= 1000) return (bps/1000).toFixed(0) + ' kbps';
+  return bps + ' bps';
+}
+function fmtLoss(v) { return v != null ? (v * 100).toFixed(1) + '%' : '-'; }
+function scoreClass(s) { return s >= 7 ? 'good' : s >= 4 ? 'fair' : 'poor'; }
+function qosItem(label, value) { return `<div class="qos-item"><span class="label">${label}</span> <span class="value">${value}</span></div>`; }
+
+function renderQosPanel(data) {
+  const el = document.getElementById('qos-content');
+  if (!data || !data.peers || data.peers.length === 0) {
+    el.innerHTML = '<span style="color:#888">No peers</span>';
+    return;
+  }
+  let html = '';
+  for (const peer of data.peers) {
+    // Determine overall score from producers
+    let worstScore = 10;
+    const producers = peer.producers || {};
+    for (const pid in producers) {
+      const p = producers[pid];
+      if (p.scores) for (const s of p.scores) worstScore = Math.min(worstScore, s.score);
+      if (p.stats) for (const s of p.stats) if (s.score != null) worstScore = Math.min(worstScore, s.score);
+    }
+    const sc = Object.keys(producers).length > 0 ? scoreClass(worstScore) : 'good';
+
+    html += `<div class="qos-peer ${sc}">`;
+    html += `<div class="qos-peer-header">${peer.peerId} <span class="qos-score ${sc}">Score: ${worstScore}/10</span></div>`;
+
+    // sendTransport (uplink)
+    const st = peer.sendTransport;
+    if (st && Object.keys(st).length > 0) {
+      html += `<div style="margin:4px 0;color:#4CAF50;font-size:12px;font-weight:bold">⬆ Uplink (sendTransport)</div>`;
+      html += '<div class="qos-grid">';
+      html += qosItem('Recv Bitrate', fmtBitrate(st.rtpRecvBitrate));
+      html += qosItem('Available BW', fmtBitrate(st.availableIncomingBitrate));
+      html += qosItem('Packet Loss', fmtLoss(st.rtpPacketLossReceived));
+      html += qosItem('ICE State', st.iceState || '-');
+      html += qosItem('DTLS State', st.dtlsState || '-');
+      if (st.iceSelectedTuple) {
+        html += qosItem('Remote', (st.iceSelectedTuple.remoteIp || '') + ':' + (st.iceSelectedTuple.remotePort || ''));
+        html += qosItem('Protocol', st.iceSelectedTuple.protocol || '-');
+      }
+      html += '</div>';
+    }
+
+    // Producers (per-track detail)
+    for (const pid in producers) {
+      const p = producers[pid];
+      html += `<div style="margin:4px 0;color:#2196F3;font-size:12px;font-weight:bold">📹 Producer: ${p.kind}</div>`;
+      html += '<div class="qos-grid">';
+      // From score notifications
+      if (p.scores && p.scores.length > 0) {
+        for (const s of p.scores) html += qosItem('Score (SSRC ' + s.ssrc + ')', s.score + '/10');
+      }
+      // From getStats
+      if (p.stats && p.stats.length > 0) {
+        const s = p.stats[0];
+        html += qosItem('Bitrate', fmtBitrate(s.bitrate));
+        html += qosItem('Jitter', s.jitter != null ? s.jitter + ' ms' : '-');
+        html += qosItem('RTT', s.roundTripTime != null ? s.roundTripTime.toFixed(1) + ' ms' : '-');
+        html += qosItem('Packets Lost', s.packetsLost != null ? s.packetsLost : '-');
+        html += qosItem('Fraction Lost', s.fractionLost != null ? s.fractionLost : '-');
+        html += qosItem('NACK Count', s.nackCount != null ? s.nackCount : '-');
+        html += qosItem('PLI Count', s.pliCount != null ? s.pliCount : '-');
+        html += qosItem('FIR Count', s.firCount != null ? s.firCount : '-');
+        html += qosItem('Packets', s.packetCount != null ? s.packetCount : '-');
+      }
+      html += '</div>';
+    }
+
+    // recvTransport (downlink)
+    const rt = peer.recvTransport;
+    if (rt && Object.keys(rt).length > 0) {
+      html += `<div style="margin:4px 0;color:#FF9800;font-size:12px;font-weight:bold">⬇ Downlink (recvTransport)</div>`;
+      html += '<div class="qos-grid">';
+      html += qosItem('Send Bitrate', fmtBitrate(rt.rtpSendBitrate));
+      html += qosItem('Available BW', fmtBitrate(rt.availableOutgoingBitrate));
+      html += qosItem('Packet Loss', fmtLoss(rt.rtpPacketLossSent));
+      html += '</div>';
+    }
+
+    // Consumer scores
+    const consumers = peer.consumers || {};
+    const consumerEntries = Object.entries(consumers);
+    if (consumerEntries.length > 0) {
+      html += `<div style="margin:4px 0;color:#9C27B0;font-size:12px;font-weight:bold">🔊 Consumers</div>`;
+      html += '<div class="qos-grid">';
+      for (const [cid, c] of consumerEntries) {
+        html += qosItem(c.kind + ' score', c.score + '/10');
+        html += qosItem(c.kind + ' prod score', c.producerScore + '/10');
+      }
+      html += '</div>';
+    }
+
+    html += '</div>';
+  }
+  el.innerHTML = html;
+}
+
 function handleNotification(msg) {
+  if (msg.method === 'statsReport') {
+    renderQosPanel(msg.data);
+    return;
+  }
   log('Notification: ' + msg.method);
   if (msg.method === 'newConsumer') {
     // P1: server-driven auto-subscribe — consumer already created server-side

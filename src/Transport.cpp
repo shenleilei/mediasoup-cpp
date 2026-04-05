@@ -7,6 +7,8 @@
 #include "transport_generated.h"
 #include "rtpParameters_generated.h"
 #include "router_generated.h"
+#include "webRtcTransport_generated.h"
+#include "plainTransport_generated.h"
 
 namespace mediasoup {
 
@@ -190,7 +192,13 @@ std::shared_ptr<Producer> Transport::produce(const json& options) {
 	channel_->emitter().on(producerId, [producer](const std::vector<std::any>& args) {
 		if (!args.empty()) {
 			auto event = std::any_cast<FBS::Notification::Event>(args[0]);
-			producer->emitter().emit("notification", {std::any(event)});
+			const FBS::Notification::Notification* notif = nullptr;
+			std::shared_ptr<Channel::OwnedNotification> owned;
+			if (args.size() > 1) {
+				owned = std::any_cast<std::shared_ptr<Channel::OwnedNotification>>(args[1]);
+				notif = owned->notification();
+			}
+			producer->handleNotification(event, notif);
 		}
 	});
 
@@ -261,11 +269,86 @@ std::shared_ptr<Consumer> Transport::consume(const json& options) {
 	channel_->emitter().on(consumerId, [consumer](const std::vector<std::any>& args) {
 		if (!args.empty()) {
 			auto event = std::any_cast<FBS::Notification::Event>(args[0]);
-			consumer->handleNotification(event, nullptr);
+			const FBS::Notification::Notification* notif = nullptr;
+			std::shared_ptr<Channel::OwnedNotification> owned;
+			if (args.size() > 1) {
+				owned = std::any_cast<std::shared_ptr<Channel::OwnedNotification>>(args[1]);
+				notif = owned->notification();
+			}
+			consumer->handleNotification(event, notif);
 		}
 	});
 
 	return consumer;
+}
+
+json Transport::getStats() {
+	if (closed_) return json::object();
+
+	auto future = channel_->request(FBS::Request::Method::TRANSPORT_GET_STATS,
+		FBS::Request::Body::NONE, 0, id_);
+	auto owned = future.get();
+	auto* response = owned.response();
+
+	json result;
+
+	// Try WebRtcTransport stats first (most common)
+	if (response && response->body_type() == FBS::Response::Body::WebRtcTransport_GetStatsResponse) {
+		auto statsResp = response->body_as_WebRtcTransport_GetStatsResponse();
+		if (statsResp && statsResp->base()) {
+			auto* s = statsResp->base();
+			result["transportId"] = s->transport_id() ? s->transport_id()->str() : "";
+			result["timestamp"] = s->timestamp();
+			result["bytesReceived"] = s->bytes_received();
+			result["recvBitrate"] = s->recv_bitrate();
+			result["bytesSent"] = s->bytes_sent();
+			result["sendBitrate"] = s->send_bitrate();
+			result["rtpBytesReceived"] = s->rtp_bytes_received();
+			result["rtpRecvBitrate"] = s->rtp_recv_bitrate();
+			result["rtpBytesSent"] = s->rtp_bytes_sent();
+			result["rtpSendBitrate"] = s->rtp_send_bitrate();
+			result["rtxBytesReceived"] = s->rtx_bytes_received();
+			result["rtxRecvBitrate"] = s->rtx_recv_bitrate();
+			result["rtxBytesSent"] = s->rtx_bytes_sent();
+			result["rtxSendBitrate"] = s->rtx_send_bitrate();
+			result["probationBytesSent"] = s->probation_bytes_sent();
+			result["probationSendBitrate"] = s->probation_send_bitrate();
+			result["availableOutgoingBitrate"] = s->available_outgoing_bitrate();
+			result["availableIncomingBitrate"] = s->available_incoming_bitrate();
+			result["maxIncomingBitrate"] = s->max_incoming_bitrate();
+			result["rtpPacketLossReceived"] = s->rtp_packet_loss_received();
+			result["rtpPacketLossSent"] = s->rtp_packet_loss_sent();
+
+			// WebRTC-specific fields
+			result["iceState"] = FBS::WebRtcTransport::EnumNameIceState(statsResp->ice_state());
+			result["dtlsState"] = FBS::WebRtcTransport::EnumNameDtlsState(statsResp->dtls_state());
+			if (statsResp->ice_selected_tuple()) {
+				auto* t = statsResp->ice_selected_tuple();
+				result["iceSelectedTuple"] = {
+					{"localAddress", t->local_address() ? t->local_address()->str() : ""},
+					{"localPort", t->local_port()},
+					{"remoteIp", t->remote_ip() ? t->remote_ip()->str() : ""},
+					{"remotePort", t->remote_port()},
+					{"protocol", t->protocol() == FBS::Transport::Protocol::UDP ? "udp" : "tcp"}
+				};
+			}
+		}
+	}
+	// PlainTransport stats
+	else if (response && response->body_type() == FBS::Response::Body::PlainTransport_GetStatsResponse) {
+		auto statsResp = response->body_as_PlainTransport_GetStatsResponse();
+		if (statsResp && statsResp->base()) {
+			auto* s = statsResp->base();
+			result["transportId"] = s->transport_id() ? s->transport_id()->str() : "";
+			result["recvBitrate"] = s->recv_bitrate();
+			result["sendBitrate"] = s->send_bitrate();
+			result["rtpRecvBitrate"] = s->rtp_recv_bitrate();
+			result["rtpSendBitrate"] = s->rtp_send_bitrate();
+			result["rtpPacketLossReceived"] = s->rtp_packet_loss_received();
+		}
+	}
+
+	return result;
 }
 
 void Transport::close() {

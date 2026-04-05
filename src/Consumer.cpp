@@ -2,6 +2,7 @@
 #include "request_generated.h"
 #include "transport_generated.h"
 #include "consumer_generated.h"
+#include "rtpStream_generated.h"
 
 namespace mediasoup {
 
@@ -89,12 +90,73 @@ void Consumer::handleNotification(
 		case FBS::Notification::Event::CONSUMER_LAYERS_CHANGE:
 			emitter_.emit("layerschange");
 			break;
-		case FBS::Notification::Event::CONSUMER_SCORE:
+		case FBS::Notification::Event::CONSUMER_SCORE: {
+			if (notification) {
+				auto body = notification->body_as_Consumer_ScoreNotification();
+				if (body && body->score()) {
+					score_.score = body->score()->score();
+					score_.producerScore = body->score()->producer_score();
+					score_.producerScores.clear();
+					if (body->score()->producer_scores())
+						for (size_t i = 0; i < body->score()->producer_scores()->size(); i++)
+							score_.producerScores.push_back(body->score()->producer_scores()->Get(i));
+				}
+			}
 			emitter_.emit("score");
 			break;
+		}
 		default:
 			break;
 	}
+}
+
+json Consumer::getStats() {
+	if (closed_) return json::array();
+
+	auto future = channel_->request(FBS::Request::Method::CONSUMER_GET_STATS,
+		FBS::Request::Body::NONE, 0, id_);
+	auto owned = future.get();
+	auto* response = owned.response();
+
+	json result = json::array();
+	if (!response || response->body_type() != FBS::Response::Body::Consumer_GetStatsResponse)
+		return result;
+
+	auto statsResp = response->body_as_Consumer_GetStatsResponse();
+	if (!statsResp || !statsResp->stats()) return result;
+
+	for (size_t i = 0; i < statsResp->stats()->size(); i++) {
+		auto* stat = statsResp->stats()->Get(i);
+		if (!stat || !stat->data()) continue;
+
+		json entry;
+		auto dataType = stat->data_type();
+
+		if (dataType == FBS::RtpStream::StatsData::SendStats) {
+			auto send = stat->data_as_SendStats();
+			if (!send || !send->base() || !send->base()->data()) continue;
+			auto base = send->base()->data_as_BaseStats();
+			if (!base) continue;
+
+			entry["type"] = "outbound-rtp";
+			entry["ssrc"] = base->ssrc();
+			entry["kind"] = base->kind() == FBS::RtpParameters::MediaKind::AUDIO ? "audio" : "video";
+			entry["mimeType"] = base->mime_type() ? base->mime_type()->str() : "";
+			entry["packetsLost"] = base->packets_lost();
+			entry["fractionLost"] = base->fraction_lost();
+			entry["nackCount"] = base->nack_count();
+			entry["pliCount"] = base->pli_count();
+			entry["firCount"] = base->fir_count();
+			entry["score"] = base->score();
+			entry["roundTripTime"] = base->round_trip_time();
+			entry["packetCount"] = send->packet_count();
+			entry["byteCount"] = send->byte_count();
+			entry["bitrate"] = send->bitrate();
+		}
+
+		if (!entry.empty()) result.push_back(entry);
+	}
+	return result;
 }
 
 } // namespace mediasoup
