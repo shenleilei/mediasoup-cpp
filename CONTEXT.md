@@ -90,6 +90,40 @@
 - join/disconnect 记录 info 级别日志
 - Recorder 日志带 peerId 前缀
 
+## 已完成：稳定性全面加固 (2026-04-06)
+
+### 严重 bug 修复
+- Channel::close() readThread detach→join: 修复 UAF（fd 关闭后 read 返回 0，join 安全）
+- Worker waitThread 生命周期: 析构时检测是否在自身线程中，避免 std::terminate
+- Worker::workerDied() 不调 channel->close(): 避免在 waitThread 中 join readThread 导致死锁
+- Channel request/notify 释放 builderMutex 后再 sendBytes: 防止管道满时全局阻塞
+- leave() 时从 Router 移除 peer 的 producers: 防止 stale shared_ptr 引用
+- Recorder pendingAudio_ 加 kMaxPendingAudioPackets 上限: 防止 H264 无 IDR 时 OOM
+- Transport/Producer/Consumer close 时 off channel listener: 修复 EventEmitter 内存泄漏
+- signalHandler 只设 atomic flag: 不调非 async-signal-safe 函数，uWS timer 轮询后优雅关闭
+- RTP 时间戳回绕: 用 int32 差值防止 pts 溢出
+
+### 长时间运行稳定性
+- Worker 崩溃自动重启: WorkerManager.respawnOne()，独立线程执行，带速率限制（kMaxRespawnsPerWindow/kRespawnWindowSec）
+- Worker 崩溃通知客户端: checkRoomHealth() 每 2 秒检测 dead router，broadcast serverRestart 通知
+- Redis 断连自动重连: ensureConnected() 守卫 + heartbeat 线程定期重试
+- 录制磁盘空间保护: cleanOldRecordings() 超过 kMaxRecordingDirBytes 自动清理最老录制
+- Recorder 空文件清理: finalizeMuxer 中无帧时删除空 webm
+- GC 清理 recorder: cleanIdleRooms 同步清理 recorder/transport/clientStats
+- collectPeerStats 超时保护: 每个 getStats IPC 调用 kStatsTimeoutMs 超时
+
+### 代码整洁度
+- Constants.h: 所有魔数提取为 kXx 命名常量（timer/超时/端口/限制值等）
+- RoomService.h 拆分: .h 声明(90行) + .cpp 实现(583行)
+- Recorder public/private 整理: 内部方法改为 private，测试通过 PeerRecorderTestAccess friend class
+- broadcastStats 日志: 0 rooms 不打印，有 room 时打印房间名
+- stats 广播改为 10s 间隔，health check 保持 2s 独立 timer
+- cleanupRoomResources() 提取消除重复代码
+
+### 测试
+- 71 个单元测试: 含 Room 健康检测、EventEmitter 清理、Recorder 稳定性（pendingAudio cap/空文件清理/时间戳回绕）
+- 2 个 Worker 崩溃恢复集成测试: WorkerCrashSendsServerRestart + WorkerRespawnAllowsNewRooms
+
 ## 线程模型
 - 主线程(uWS): 信令、业务逻辑、定时器(GC 30s / Stats 2s)、Channel.request() 同步阻塞
 - Channel readThread(×N worker): pipe读取、response匹配、notification分发
@@ -117,29 +151,33 @@
 - 构建: `cmake --build build --target mediasoup_tests`
 - 运行: `./build/mediasoup_tests` 或 `cd build && ctest --output-on-failure`
 - 测试文件在 `tests/` 目录
-- 共 51 个单元测试用例，覆盖 ORTC 协商、RTP 类型、Room/Peer 管理、QoS 数据结构、Recorder QoS 文件写入
-- 集成测试: mediasoup_integration_tests (12) + mediasoup_qos_integration_tests (15) + mediasoup_e2e_tests (3) + mediasoup_topology_tests (6)
-- 总计 87 个测试用例
+- 共 71 个单元测试用例，覆盖 ORTC 协商、RTP 类型、Room/Peer 管理、QoS 数据结构、Recorder 稳定性、EventEmitter 清理、Room 健康检测
+- 集成测试: mediasoup_integration_tests (14) + mediasoup_qos_integration_tests (15) + mediasoup_e2e_tests (3) + mediasoup_topology_tests (6)
+- 总计 109 个测试用例
 
 ## 关键规则
 - 每次新增功能都必须同步补充 UT 和集成测试覆盖
 
 ## 关键文件
 - `src/main.cpp` - 入口，参数解析，组装各组件
-- `src/RoomService.h` - 核心业务逻辑（join/leave/produce/QoS采集/录制）
+- `src/Constants.h` - 全局常量定义（kXx 命名，timer/超时/端口/限制值）
+- `src/RoomService.h` - 核心业务逻辑声明
+- `src/RoomService.cpp` - 核心业务逻辑实现（join/leave/produce/QoS采集/录制/健康检测）
 - `src/SignalingServer.cpp` - WebSocket 信令层 + 录制回放 HTTP API
 - `src/RoomManager.h` - Room/RoomManager
-- `src/RoomRegistry.h` - Redis 多节点注册
+- `src/RoomRegistry.h` - Redis 多节点注册（含自动重连）
+- `src/WorkerManager.h` - Worker 管理（负载均衡 + 崩溃自动重启）
 - `src/Peer.h` - Peer 抽象
 - `src/Router.cpp` - Router 封装（创建 transport、管理 producer）
 - `src/Transport.cpp` - produce/consume/getStats 的 FBS 协议实现
 - `src/Channel.h/cpp` - Worker pipe 通信（OwnedResponse/OwnedNotification）
+- `src/Worker.h/cpp` - Worker 进程管理（fork/exec/崩溃检测）
 - `src/Producer.h/cpp` - Producer（score 追踪、getStats）
 - `src/Consumer.h/cpp` - Consumer（score 追踪、getStats）
 - `src/Recorder.h` - 录制（RTP→WebM + QoS 时间线）
 - `src/ortc.h` - RTP 能力协商
 - `public/index.html` - 实时通话页面（含 QoS Monitor）
 - `public/playback.html` - 录制回放页面（视频 + QoS 时间线）
-- `CMakeLists.txt` - 构建配置
+- `tests/test_stability.cpp` - 稳定性单元测试
 - `tests/test_qos_unit.cpp` - QoS 单元测试
-- `tests/test_qos_integration.cpp` - QoS + 录制集成测试
+- `tests/test_integration.cpp` - 集成测试（含 Worker 崩溃恢复）
