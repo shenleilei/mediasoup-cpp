@@ -74,12 +74,10 @@ std::shared_ptr<WebRtcTransport> Router::createWebRtcTransport(
 	auto reqOff = FBS::Router::CreateCreateWebRtcTransportRequest(
 		builder, transportIdOff, webRtcOptions);
 
-	auto future = channel_->request(
+	auto owned = channel_->requestWait(
 		FBS::Request::Method::ROUTER_CREATE_WEBRTCTRANSPORT,
 		FBS::Request::Body::Router_CreateWebRtcTransportRequest,
 		reqOff.Union(), id_);
-
-	auto owned = future.get();
 	auto* response = owned.response();
 
 	IceParameters iceParams;
@@ -187,12 +185,10 @@ std::shared_ptr<PlainTransport> Router::createPlainTransport(
 	auto reqOff = FBS::Router::CreateCreatePlainTransportRequest(
 		builder, transportIdOff, plainOptions);
 
-	auto future = channel_->request(
+	auto owned = channel_->requestWait(
 		FBS::Request::Method::ROUTER_CREATE_PLAINTRANSPORT,
 		FBS::Request::Body::Router_CreatePlainTransportRequest,
 		reqOff.Union(), id_);
-
-	auto owned = future.get();
 	auto* response = owned.response();
 
 	TransportTuple tuple;
@@ -256,7 +252,11 @@ void Router::close() {
 		channel_->request(FBS::Request::Method::WORKER_CLOSE_ROUTER,
 			FBS::Request::Body::Worker_CloseRouterRequest,
 			reqOff.Union()).get();
-	} catch (...) {}
+	} catch (const std::exception& e) {
+		MS_WARN(logger_, "Router::close() request failed [id:{}]: {}", id_, e.what());
+	} catch (...) {
+		MS_WARN(logger_, "Router::close() request failed [id:{}]: unknown error", id_);
+	}
 
 	emitter_.emit("@close");
 }

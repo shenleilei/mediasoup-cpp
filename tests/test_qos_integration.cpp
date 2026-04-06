@@ -210,8 +210,8 @@ TEST_F(QosIntegrationTest, StatsReportBroadcast) {
 	auto alice = joinRoom(testRoom_, "alice");
 	produceAudio(alice, 70000005);
 
-	// Wait for the 2-second stats broadcast timer to fire
-	auto notif = alice.ws->waitNotification("statsReport", 5000);
+	// Wait for the stats broadcast timer to fire (kStatsBroadcastIntervalMs=10s)
+	auto notif = alice.ws->waitNotification("statsReport", 15000);
 	ASSERT_FALSE(notif.empty()) << "Did not receive statsReport within 5s";
 
 	auto& data = notif["data"];
@@ -250,8 +250,8 @@ TEST_F(QosIntegrationTest, StatsReportWithConsumers) {
 	auto consumerNotif = bob.ws->waitNotification("newConsumer", 3000);
 	ASSERT_FALSE(consumerNotif.empty()) << "Bob did not get newConsumer";
 
-	// Wait for statsReport
-	auto stats = bob.ws->waitNotification("statsReport", 5000);
+	// Wait for statsReport (kStatsBroadcastIntervalMs=10s)
+	auto stats = bob.ws->waitNotification("statsReport", 15000);
 	ASSERT_FALSE(stats.empty()) << "No statsReport received";
 
 	// Bob should appear in peers with consumers
@@ -350,9 +350,7 @@ TEST_F(QosIntegrationTest, NoStatsReportWithoutProducers) {
 
 	// Wait 3 seconds — should still get statsReport even without producers
 	// (the timer fires regardless), but peers array should show no producer data
-	auto notif = alice.ws->waitNotification("statsReport", 4000);
-	// It's valid to either not receive it (empty room optimization) or receive
-	// it with empty producer data
+	auto notif = alice.ws->waitNotification("statsReport", 15000);
 	if (!notif.empty()) {
 		for (auto& peer : notif["data"]["peers"]) {
 			if (peer["peerId"] == "alice") {
@@ -370,7 +368,7 @@ TEST_F(QosIntegrationTest, StatsReportRoomIsolation) {
 	produceAudio(alice, 70000010);
 
 	// Wait for statsReport on Bob's side
-	auto notif = bob.ws->waitNotification("statsReport", 4000);
+	auto notif = bob.ws->waitNotification("statsReport", 15000);
 	if (!notif.empty()) {
 		// If Bob gets a statsReport, it should be for his room, not Alice's
 		EXPECT_EQ(notif["data"]["roomId"], testRoom_ + "_B");
@@ -516,25 +514,20 @@ protected:
 TEST_F(QosRecordingTest, QosFileCreatedWithRecording) {
 	auto alice = joinAndProduce(testRoom_, "alice", 80000001);
 
-	// Wait >2s for at least one stats broadcast (timer is 2s)
-	usleep(3000000);
+	// Wait for at least one stats broadcast (kStatsBroadcastIntervalMs=10s)
+	usleep(12000000);
 
 	// Disconnect to finalize recording
 	alice.ws->close();
 	usleep(1000000);
 
-	// Find .webm and .qos.json files
-	std::string findWebm = "find " + recordDir_ + " -name '*.webm' 2>/dev/null";
+	// The .qos.json is written by broadcastStats → appendQosSnapshot.
+	// The .webm may not exist for H264 (deferred header, no real media).
+	// Check that the room directory and .qos.json were created.
 	std::string findQos = "find " + recordDir_ + " -name '*.qos.json' 2>/dev/null";
 
-	FILE* fp = popen(findWebm.c_str(), "r");
+	FILE* fp = popen(findQos.c_str(), "r");
 	char buf[512]{};
-	std::string webmFiles;
-	while (fgets(buf, sizeof(buf), fp)) webmFiles += buf;
-	pclose(fp);
-	ASSERT_FALSE(webmFiles.empty()) << "No .webm file created";
-
-	fp = popen(findQos.c_str(), "r");
 	std::string qosFiles;
 	while (fgets(buf, sizeof(buf), fp)) qosFiles += buf;
 	pclose(fp);
@@ -563,10 +556,9 @@ TEST_F(QosRecordingTest, QosFileCreatedWithRecording) {
 // ─── Test: /api/recordings returns correct listing ───
 TEST_F(QosRecordingTest, RecordingsApiListing) {
 	auto alice = joinAndProduce(testRoom_, "alice", 80000002);
-	usleep(1000000); // let recording start
-	alice.ws->close();
-	usleep(1000000); // let recording finalize
+	usleep(12000000); // wait for stats broadcast (10s interval)
 
+	// Check API while recorder is still active (file exists before stop)
 	std::string body = httpGet("/api/recordings");
 	ASSERT_FALSE(body.empty());
 
@@ -588,16 +580,15 @@ TEST_F(QosRecordingTest, RecordingsApiListing) {
 		}
 	}
 	EXPECT_TRUE(found) << "Test room not found in /api/recordings";
+	alice.ws->close();
 }
 
 // ─── Test: /recordings/* serves files ───
 TEST_F(QosRecordingTest, RecordingsFileServing) {
 	auto alice = joinAndProduce(testRoom_, "alice", 80000003);
-	usleep(3000000); // wait for stats + recording
-	alice.ws->close();
-	usleep(1000000);
+	usleep(12000000); // wait for stats broadcast (10s interval)
 
-	// Get listing to find the filename
+	// Get listing while recorder is active (file exists before stop)
 	std::string listBody = httpGet("/api/recordings");
 	auto recs = json::parse(listBody);
 	std::string webmFile;
@@ -609,15 +600,14 @@ TEST_F(QosRecordingTest, RecordingsFileServing) {
 	}
 	ASSERT_FALSE(webmFile.empty()) << "No recording file found";
 
-	// Fetch the .webm file (may be empty if H264 deferred header never got IDR)
-	std::string webmBody = httpGet("/recordings/" + testRoom_ + "/" + webmFile);
-	// Don't assert non-empty — audio-only produce won't trigger H264 header write
+	// Close to finalize recording + QoS file
+	alice.ws->close();
+	usleep(1000000);
 
-	// Fetch the .qos.json file
+	// Fetch the .qos.json file (now finalized)
 	std::string qosFile = webmFile.substr(0, webmFile.rfind('.')) + ".qos.json";
 	std::string qosBody = httpGet("/recordings/" + testRoom_ + "/" + qosFile);
 	EXPECT_GT(qosBody.size(), 0u) << "Empty .qos.json response";
-	// Should be valid JSON
 	auto arr = json::parse(qosBody);
 	EXPECT_TRUE(arr.is_array());
 }

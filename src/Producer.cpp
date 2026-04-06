@@ -8,18 +8,16 @@ namespace mediasoup {
 
 void Producer::pause() {
 	if (closed_) return;
-	auto future = channel_->request(FBS::Request::Method::PRODUCER_PAUSE,
+	channel_->requestWait(FBS::Request::Method::PRODUCER_PAUSE,
 		FBS::Request::Body::NONE, 0, id_);
-	future.get();
 	paused_ = true;
 	emitter_.emit("pause");
 }
 
 void Producer::resume() {
 	if (closed_) return;
-	auto future = channel_->request(FBS::Request::Method::PRODUCER_RESUME,
+	channel_->requestWait(FBS::Request::Method::PRODUCER_RESUME,
 		FBS::Request::Body::NONE, 0, id_);
-	future.get();
 	paused_ = false;
 	emitter_.emit("resume");
 }
@@ -38,7 +36,11 @@ void Producer::close() {
 		channel_->request(FBS::Request::Method::TRANSPORT_CLOSE_PRODUCER,
 			FBS::Request::Body::Transport_CloseProducerRequest,
 			reqOff.Union(), transportId_).get();
-	} catch (...) {}
+	} catch (const std::exception& e) {
+		spdlog::warn("Producer::close() request failed [id:{}]: {}", id_, e.what());
+	} catch (...) {
+		spdlog::warn("Producer::close() request failed [id:{}]: unknown error", id_);
+	}
 
 	emitter_.emit("@close");
 }
@@ -78,9 +80,8 @@ void Producer::handleNotification(
 json Producer::getStats() {
 	if (closed_) return json::array();
 
-	auto future = channel_->request(FBS::Request::Method::PRODUCER_GET_STATS,
+	auto owned = channel_->requestWait(FBS::Request::Method::PRODUCER_GET_STATS,
 		FBS::Request::Body::NONE, 0, id_);
-	auto owned = future.get();
 	auto* response = owned.response();
 
 	json result = json::array();

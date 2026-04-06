@@ -27,6 +27,9 @@ constexpr uint16_t kRtcMaxPort             = 59999;
 constexpr int kWsIdleTimeoutSec          = 120;
 constexpr int kWsMaxPayloadBytes         = 16 * 1024;
 
+// ── Channel IPC ──
+constexpr int kChannelRequestTimeoutMs   = 5000;    // worker IPC request timeout
+
 // ── Stats ──
 constexpr int kStatsTimeoutMs            = 500;     // per-peer getStats IPC timeout
 

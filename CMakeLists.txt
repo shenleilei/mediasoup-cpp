@@ -81,6 +81,7 @@ if(BUILD_TESTS)
     list(FILTER TEST_SOURCES EXCLUDE REGEX "test_multi_sfu_topology\\.cpp$")
     list(FILTER TEST_SOURCES EXCLUDE REGEX "test_e2e_pubsub\\.cpp$")
     list(FILTER TEST_SOURCES EXCLUDE REGEX "test_qos_integration\\.cpp$")
+    list(FILTER TEST_SOURCES EXCLUDE REGEX "test_stability_integration\\.cpp$")
     add_executable(mediasoup_tests ${TEST_SOURCES})
     target_include_directories(mediasoup_tests PRIVATE
         ${CMAKE_SOURCE_DIR}/src
@@ -134,6 +135,17 @@ if(BUILD_TESTS)
     )
     target_link_libraries(mediasoup_topology_tests PRIVATE gtest gtest_main pthread hiredis)
     add_test(NAME mediasoup_topology_tests COMMAND mediasoup_topology_tests
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+    # Stability integration tests
+    add_executable(mediasoup_stability_integration_tests tests/test_stability_integration.cpp)
+    target_include_directories(mediasoup_stability_integration_tests PRIVATE
+        ${CMAKE_SOURCE_DIR}/tests
+        ${CMAKE_SOURCE_DIR}/src
+        ${JSON_INCLUDE}
+    )
+    target_link_libraries(mediasoup_stability_integration_tests PRIVATE gtest gtest_main pthread)
+    add_test(NAME mediasoup_stability_integration_tests COMMAND mediasoup_stability_integration_tests
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
     # Worker load benchmark (not a test, standalone binary)

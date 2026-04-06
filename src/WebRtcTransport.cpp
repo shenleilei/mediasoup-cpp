@@ -32,13 +32,11 @@ json WebRtcTransport::connect(const DtlsParameters& clientDtlsParams) {
 
 	auto reqOff = FBS::WebRtcTransport::CreateConnectRequest(builder, dtlsParamsOff);
 
-	auto future = channel_->request(
+	channel_->requestWait(
 		FBS::Request::Method::WEBRTCTRANSPORT_CONNECT,
 		FBS::Request::Body::WebRtcTransport_ConnectRequest,
 		reqOff.Union(),
 		id_);
-
-	future.get();
 
 	return {{"dtlsLocalRole", "server"}};
 }
@@ -46,11 +44,9 @@ json WebRtcTransport::connect(const DtlsParameters& clientDtlsParams) {
 json WebRtcTransport::restartIce() {
 	if (closed_) throw std::runtime_error("Transport closed");
 
-	auto future = channel_->request(
+	channel_->requestWait(
 		FBS::Request::Method::TRANSPORT_RESTART_ICE,
 		FBS::Request::Body::NONE, 0, id_);
-
-	future.get();
 	return {{"iceParameters", iceParameters_}};
 }
 

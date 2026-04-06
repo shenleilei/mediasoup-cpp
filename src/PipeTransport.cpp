@@ -29,12 +29,10 @@ json PipeTransport::connect(const std::string& ip, uint16_t port, const json& sr
 		port > 0 ? flatbuffers::Optional<uint16_t>(port) : flatbuffers::Optional<uint16_t>(),
 		srtpOff);
 
-	auto future = channel_->request(
+	channel_->requestWait(
 		FBS::Request::Method::PIPETRANSPORT_CONNECT,
 		FBS::Request::Body::PipeTransport_ConnectRequest,
 		reqOff.Union(), id_);
-
-	future.get();
 
 	return {{"connected", true}};
 }
