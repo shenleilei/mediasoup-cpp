@@ -3,8 +3,11 @@
 #include <fstream>
 #include <unordered_map>
 #include <mutex>
+#include <atomic>
 #include <dirent.h>
 #include <sys/stat.h>
+
+extern std::atomic<bool> g_shutdown;
 
 namespace mediasoup {
 
@@ -274,6 +277,20 @@ void SignalingServer::run() {
 				memcpy(&svc, us_timer_ext(t), sizeof(RoomService*));
 				try { svc->broadcastStats(); } catch (...) {}
 			}, 2000, 2000);
+
+			// Shutdown poll timer — check atomic flag every 500ms
+			struct ShutdownCtx { us_listen_socket_t* sock; };
+			auto* shutdownTimer = us_create_timer((struct us_loop_t*)loop, 0, sizeof(ShutdownCtx));
+			ShutdownCtx sctx{listenSocket};
+			memcpy(us_timer_ext(shutdownTimer), &sctx, sizeof(ShutdownCtx));
+			us_timer_set(shutdownTimer, [](struct us_timer_t* t) {
+				if (g_shutdown) {
+					ShutdownCtx ctx;
+					memcpy(&ctx, us_timer_ext(t), sizeof(ShutdownCtx));
+					us_listen_socket_close(0, ctx.sock);
+					us_timer_close(t);
+				}
+			}, 500, 500);
 		} else {
 			spdlog::error("SignalingServer failed to listen on port {}", port_);
 		}

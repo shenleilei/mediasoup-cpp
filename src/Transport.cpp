@@ -355,6 +355,9 @@ void Transport::close() {
 	if (closed_) return;
 	closed_ = true;
 
+	// Unregister channel listener to break shared_ptr cycle
+	channel_->emitter().off(id_);
+
 	auto& builder = channel_->bufferBuilder();
 	auto idOff = builder.CreateString(id_);
 	auto reqOff = FBS::Router::CreateCloseTransportRequest(builder, idOff);
@@ -377,6 +380,9 @@ void Transport::close() {
 void Transport::routerClosed() {
 	if (closed_) return;
 	closed_ = true;
+
+	channel_->emitter().off(id_);
+
 	for (auto& [id, p] : producers_) p->transportClosed();
 	producers_.clear();
 	for (auto& [id, c] : consumers_) c->transportClosed();

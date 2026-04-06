@@ -34,11 +34,11 @@ void Channel::close() {
 		sents_.clear();
 	}
 
-	// Close fds to unblock the read thread
+	// Close fds to unblock the read thread (read() will return ≤0)
 	if (producerFd_ >= 0) { ::close(producerFd_); producerFd_ = -1; }
 	if (consumerFd_ >= 0) { ::close(consumerFd_); consumerFd_ = -1; }
 
-	if (readThread_.joinable()) readThread_.detach(); // detach instead of join to avoid deadlock
+	if (readThread_.joinable()) readThread_.join();
 }
 
 void Channel::sendBytes(const uint8_t* data, size_t len) {
@@ -62,26 +62,31 @@ void Channel::notify(
 {
 	if (closed_) throw std::runtime_error("Channel closed");
 
-	std::lock_guard<std::mutex> lock(builderMutex_);
+	std::vector<uint8_t> sendBuf;
+	{
+		std::lock_guard<std::mutex> lock(builderMutex_);
 
-	auto handlerIdOff = builder_.CreateString(handlerId);
-	auto notifOff = FBS::Notification::CreateNotification(
-		builder_, handlerIdOff, event, bodyType, bodyOffset);
-	auto msgOff = FBS::Message::CreateMessage(
-		builder_, FBS::Message::Body::Notification, notifOff.Union());
-	builder_.FinishSizePrefixed(msgOff);
+		auto handlerIdOff = builder_.CreateString(handlerId);
+		auto notifOff = FBS::Notification::CreateNotification(
+			builder_, handlerIdOff, event, bodyType, bodyOffset);
+		auto msgOff = FBS::Message::CreateMessage(
+			builder_, FBS::Message::Body::Notification, notifOff.Union());
+		builder_.FinishSizePrefixed(msgOff);
 
-	auto buf = builder_.GetBufferPointer();
-	auto size = builder_.GetSize();
+		auto buf = builder_.GetBufferPointer();
+		auto size = builder_.GetSize();
 
-	if (size > MESSAGE_MAX_LEN) {
-		MS_ERROR(logger_, "notification too big");
+		if (size > MESSAGE_MAX_LEN) {
+			MS_ERROR(logger_, "notification too big");
+			builder_.Clear();
+			return;
+		}
+
+		sendBuf.assign(buf, buf + size);
 		builder_.Clear();
-		return;
 	}
 
-	sendBytes(buf, size);
-	builder_.Clear();
+	sendBytes(sendBuf.data(), sendBuf.size());
 }
 
 std::future<Channel::OwnedResponse> Channel::request(
@@ -92,38 +97,44 @@ std::future<Channel::OwnedResponse> Channel::request(
 {
 	if (closed_) throw std::runtime_error("Channel closed");
 
-	std::lock_guard<std::mutex> lock(builderMutex_);
-
-	if (nextId_ < 4294967295u) ++nextId_; else nextId_ = 1;
-	uint32_t id = nextId_;
-
-	auto handlerIdOff = builder_.CreateString(handlerId);
-	auto reqOff = FBS::Request::CreateRequest(
-		builder_, id, method, handlerIdOff, bodyType, bodyOffset);
-	auto msgOff = FBS::Message::CreateMessage(
-		builder_, FBS::Message::Body::Request, reqOff.Union());
-	builder_.FinishSizePrefixed(msgOff);
-
-	auto buf = builder_.GetBufferPointer();
-	auto size = builder_.GetSize();
-
-	if (size > MESSAGE_MAX_LEN) {
-		builder_.Clear();
-		throw std::runtime_error("request too big");
-	}
-
 	auto sent = std::make_shared<PendingSent>();
-	sent->id = id;
-	sent->method = FBS::Request::EnumNameMethod(method);
-	auto future = sent->promise.get_future();
+	std::vector<uint8_t> sendBuf;
 
 	{
-		std::lock_guard<std::mutex> slock(sentsMutex_);
-		sents_[id] = sent;
+		std::lock_guard<std::mutex> lock(builderMutex_);
+
+		if (nextId_ < 4294967295u) ++nextId_; else nextId_ = 1;
+		uint32_t id = nextId_;
+
+		auto handlerIdOff = builder_.CreateString(handlerId);
+		auto reqOff = FBS::Request::CreateRequest(
+			builder_, id, method, handlerIdOff, bodyType, bodyOffset);
+		auto msgOff = FBS::Message::CreateMessage(
+			builder_, FBS::Message::Body::Request, reqOff.Union());
+		builder_.FinishSizePrefixed(msgOff);
+
+		auto buf = builder_.GetBufferPointer();
+		auto size = builder_.GetSize();
+
+		if (size > MESSAGE_MAX_LEN) {
+			builder_.Clear();
+			throw std::runtime_error("request too big");
+		}
+
+		sendBuf.assign(buf, buf + size);
+		builder_.Clear();
+
+		sent->id = id;
+		sent->method = FBS::Request::EnumNameMethod(method);
+
+		{
+			std::lock_guard<std::mutex> slock(sentsMutex_);
+			sents_[id] = sent;
+		}
 	}
 
-	sendBytes(buf, size);
-	builder_.Clear();
+	auto future = sent->promise.get_future();
+	sendBytes(sendBuf.data(), sendBuf.size());
 
 	return future;
 }

@@ -117,7 +117,6 @@ void Worker::spawn(const WorkerSettings& settings) {
 			workerDied("worker process exited with status " + std::to_string(status));
 		}
 	});
-	waitThread_.detach();
 }
 
 void Worker::close() {
@@ -144,6 +143,9 @@ void Worker::close() {
 	if (pid_ > 0) {
 		::kill(pid_, SIGTERM);
 	}
+
+	// Wait for waitThread to finish (waitpid will return after SIGTERM)
+	if (waitThread_.joinable()) waitThread_.join();
 
 	emitter_.emit("close");
 }
