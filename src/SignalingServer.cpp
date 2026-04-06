@@ -275,7 +275,10 @@ void SignalingServer::run() {
 			us_timer_set(statsTimer, [](struct us_timer_t* t) {
 				RoomService* svc;
 				memcpy(&svc, us_timer_ext(t), sizeof(RoomService*));
-				try { svc->broadcastStats(); } catch (...) {}
+				try {
+					svc->checkRoomHealth();
+					svc->broadcastStats();
+				} catch (...) {}
 			}, 2000, 2000);
 
 			// Shutdown poll timer — check atomic flag every 500ms

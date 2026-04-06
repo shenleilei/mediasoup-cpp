@@ -431,9 +431,6 @@ public:
 	}
 
 	void cleanIdleRooms(int idleSeconds = 30) {
-		// First: detect rooms whose worker crashed and notify peers to reconnect
-		checkRoomHealth();
-
 		for (auto& id : roomManager_.getIdleRooms(idleSeconds)) {
 			MS_DEBUG(logger_, "GC idle room: {}", id);
 
