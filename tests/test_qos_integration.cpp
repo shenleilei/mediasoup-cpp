@@ -19,7 +19,7 @@ protected:
 		testRoom_ = "qos_" + std::to_string(getpid()) + "_" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 
-		std::string cmd = "./build/mediasoup-sfu"
+		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(SFU_PORT) +
 			" --workers=1"
 			" --workerBin=./mediasoup-worker"
@@ -398,7 +398,7 @@ protected:
 		system(("rm -rf " + recordDir_).c_str());
 		mkdir(recordDir_.c_str(), 0755);
 
-		std::string cmd = "./build/mediasoup-sfu"
+		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(SFU_PORT) +
 			" --workers=1 --workerBin=./mediasoup-worker"
 			" --announcedIp=127.0.0.1 --listenIp=127.0.0.1"

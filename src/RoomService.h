@@ -153,7 +153,7 @@ public:
 							{"producerPaused", prod->paused()}
 						});
 					} catch (const std::exception& e) {
-						MS_ERROR(logger_, "auto-subscribe on createTransport FAILED for producer {}: {}", pid, e.what());
+						MS_ERROR(logger_, "[room:{} {}] auto-subscribe on createTransport FAILED for producer {}: {}", roomId, peerId, pid, e.what());
 					}
 				}
 			}
@@ -198,13 +198,13 @@ public:
 
 		// Server-driven auto-subscribe
 		auto others = room->getOtherPeers(peerId);
-		MS_DEBUG(logger_, "auto-subscribe: producer {} by peer {}, otherPeers={}", producer->id(), peerId, others.size());
+		MS_DEBUG(logger_, "[room:{} {}] auto-subscribe: producer {}, otherPeers={}", roomId, peerId, producer->id(), others.size());
 		for (auto& other : others) {
-			MS_DEBUG(logger_, "  peer {} recvTransport={}", other->id, other->recvTransport ? "yes" : "NO");
+			MS_DEBUG(logger_, "[room:{} {}]   → {} recvTransport={}", roomId, peerId, other->id, other->recvTransport ? "yes" : "NO");
 			if (!other->recvTransport) continue;
 			try {
-				MS_DEBUG(logger_, "  creating consumer on recvTransport {} for producer {}", other->recvTransport->id(), producer->id());
-				MS_DEBUG(logger_, "  rtpCaps codecs count={}", other->rtpCapabilities.codecs.size());
+				MS_DEBUG(logger_, "[room:{} {}]   creating consumer on {} for producer {}", roomId, peerId, other->recvTransport->id(), producer->id());
+				MS_DEBUG(logger_, "[room:{} {}]   rtpCaps codecs count={}", roomId, peerId, other->rtpCapabilities.codecs.size());
 				json consumeOpts = {
 					{"producerId", producer->id()},
 					{"rtpCapabilities", other->rtpCapabilities},
@@ -225,7 +225,7 @@ public:
 					});
 				}
 			} catch (const std::exception& e) {
-				MS_ERROR(logger_, "auto-subscribe FAILED for peer {}: {}", other->id, e.what());
+				MS_ERROR(logger_, "[room:{} {}] auto-subscribe FAILED for {}: {}", roomId, peerId, other->id, e.what());
 			}
 		}
 
@@ -276,11 +276,11 @@ public:
 			rec = std::make_shared<PeerRecorder>(peerId, path, audioPT, videoPT, 48000, 90000, videoCodec);
 			int port = rec->createSocket();
 			if (port < 0) {
-				MS_ERROR(logger_, "Failed to create recorder socket for {}", key);
+				MS_ERROR(logger_, "[{}] Failed to create recorder socket", key);
 				rec.reset(); return;
 			}
 			if (!rec->start()) {
-				MS_ERROR(logger_, "Failed to start recorder for {}", key);
+				MS_ERROR(logger_, "[{}] Failed to start recorder", key);
 				rec.reset(); return;
 			}
 
@@ -294,8 +294,8 @@ public:
 
 			// Connect PlainTransport to recorder's UDP port
 			auto connResult = pt->connect("127.0.0.1", port);
-			MS_DEBUG(logger_, "Recorder PlainTransport connect result: {}", connResult.dump());
-			MS_DEBUG(logger_, "Recorder started for {} → port {} file {}", key, port, path);
+			MS_DEBUG(logger_, "[{}] PlainTransport connect: {}", key, connResult.dump());
+			MS_DEBUG(logger_, "[{}] Recorder started → port {} file {}", key, port, path);
 		}
 
 		// Consume this producer on the PlainTransport
@@ -311,9 +311,9 @@ public:
 				{"pipe", true}
 			};
 			auto consumer = pt->consume(consumeOpts);
-			MS_DEBUG(logger_, "Recording consumer created for producer {} kind={}", producer->id(), producer->kind());
+			MS_DEBUG(logger_, "[{}] Recording consumer created: producer {} kind={}", key, producer->id(), producer->kind());
 		} catch (const std::exception& e) {
-			MS_ERROR(logger_, "Failed to create recording consumer: {}", e.what());
+			MS_ERROR(logger_, "[{}] Failed to create recording consumer: {}", key, e.what());
 		}
 	}
 
@@ -370,7 +370,7 @@ public:
 
 	void cleanIdleRooms(int idleSeconds = 30) {
 		for (auto& id : roomManager_.getIdleRooms(idleSeconds)) {
-			MS_DEBUG(logger_, "GC idle room: {}", id);
+				MS_DEBUG(logger_, "GC idle room: {}", id);
 			if (registry_) registry_->unregisterRoom(id);
 			roomManager_.removeRoom(id);
 		}

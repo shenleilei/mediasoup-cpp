@@ -71,6 +71,11 @@ void SignalingServer::run() {
 				json data = req.value("data", json::object());
 				auto* sd = ws->getUserData();
 
+				// Log every request with room/peer context
+				if (method != "clientStats") {
+					spdlog::debug("[room:{} {}] {} id={}", sd->roomId, sd->peerId, method, id);
+				}
+
 				RoomService::Result result;
 
 				if (method == "join") {
@@ -92,6 +97,7 @@ void SignalingServer::run() {
 					if (result.ok) {
 						sd->roomId = roomId;
 						sd->peerId = peerId;
+						spdlog::info("[room:{} {}] joined", roomId, peerId);
 						std::lock_guard<std::mutex> lock(wsMap->mutex);
 						wsMap->peers[peerId] = ws;
 					}
@@ -151,6 +157,8 @@ void SignalingServer::run() {
 				ws->send(resp.dump(), uWS::OpCode::TEXT);
 
 			} catch (const std::exception& e) {
+				auto* esd = ws->getUserData();
+				spdlog::error("[room:{} {}] signaling error: {}", esd->roomId, esd->peerId, e.what());
 				json resp = {{"response", true}, {"id", 0}, {"ok", false}, {"error", e.what()}};
 				ws->send(resp.dump(), uWS::OpCode::TEXT);
 			}
@@ -159,6 +167,7 @@ void SignalingServer::run() {
 		.close = [this, wsMap](auto* ws, int, std::string_view) {
 			auto* sd = ws->getUserData();
 			if (!sd->peerId.empty()) {
+				spdlog::info("[room:{} {}] disconnected", sd->roomId, sd->peerId);
 				{
 					std::lock_guard<std::mutex> lock(wsMap->mutex);
 					wsMap->peers.erase(sd->peerId);

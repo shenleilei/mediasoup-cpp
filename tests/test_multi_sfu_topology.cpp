@@ -46,7 +46,7 @@ protected:
 	std::string testPrefix_;
 
 	static pid_t startSfu(int port, int workers) {
-		std::string cmd = "./build/mediasoup-sfu"
+		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(port) +
 			" --workers=" + std::to_string(workers) +
 			" --workerBin=./mediasoup-worker"

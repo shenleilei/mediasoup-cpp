@@ -62,7 +62,7 @@ protected:
 		room_ = "e2e_" + std::to_string(getpid()) + "_" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 
-		std::string cmd = "./build/mediasoup-sfu"
+		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(PORT) +
 			" --workers=2 --workerBin=./mediasoup-worker"
 			" --announcedIp=127.0.0.1 --listenIp=127.0.0.1"

@@ -10,6 +10,7 @@
 #include <thread>
 #include <array>
 #include <cstdio>
+#include <sys/stat.h>
 
 using namespace mediasoup;
 using json = nlohmann::json;
@@ -24,10 +25,34 @@ void signalHandler(int sig) {
 	exit(0);
 }
 
-int main(int argc, char* argv[]) {
-	Logger::Init();
-	spdlog::info("mediasoup-cpp SFU starting...");
+static bool daemonize(const std::string& logFile, const std::string& pidFile) {
+	pid_t pid = fork();
+	if (pid < 0) return false;
+	if (pid > 0) {
+		// Parent: write PID file and exit
+		if (!pidFile.empty()) {
+			std::ofstream pf(pidFile);
+			if (pf.is_open()) { pf << pid; pf.close(); }
+		}
+		_exit(0);
+	}
+	// Child: new session
+	setsid();
+	// Redirect stdout/stderr to log file
+	if (!logFile.empty()) {
+		FILE* f = fopen(logFile.c_str(), "a");
+		if (f) {
+			dup2(fileno(f), STDOUT_FILENO);
+			dup2(fileno(f), STDERR_FILENO);
+			fclose(f);
+		}
+	}
+	// Close stdin
+	close(STDIN_FILENO);
+	return true;
+}
 
+int main(int argc, char* argv[]) {
 	signal(SIGINT, signalHandler);
 	signal(SIGTERM, signalHandler);
 
@@ -42,6 +67,9 @@ int main(int argc, char* argv[]) {
 	std::string nodeId;
 	std::string nodeAddress;
 	std::string recordDir = "./recordings";
+	bool noDaemon = false;
+	std::string logFile = "/var/log/mediasoup-sfu.log";
+	std::string pidFile = "/var/run/mediasoup-sfu.pid";
 
 	// Load config file (--config=path or default config.json)
 	std::string configPath = "config.json";
@@ -64,6 +92,9 @@ int main(int argc, char* argv[]) {
 				if (cfg.contains("nodeId"))         nodeId = cfg["nodeId"].get<std::string>();
 				if (cfg.contains("nodeAddress"))    nodeAddress = cfg["nodeAddress"].get<std::string>();
 				if (cfg.contains("recordDir"))      recordDir = cfg["recordDir"].get<std::string>();
+				if (cfg.contains("logFile"))        logFile = cfg["logFile"].get<std::string>();
+				if (cfg.contains("pidFile"))        pidFile = cfg["pidFile"].get<std::string>();
+				if (cfg.contains("nodaemon"))        noDaemon = cfg["nodaemon"].get<bool>();
 				spdlog::info("Loaded config from {}", configPath);
 			} catch (const std::exception& e) {
 				spdlog::warn("Failed to parse {}: {}", configPath, e.what());
@@ -84,7 +115,18 @@ int main(int argc, char* argv[]) {
 		else if (arg.find("--nodeId=") == 0)    nodeId = arg.substr(9);
 		else if (arg.find("--nodeAddress=") == 0) nodeAddress = arg.substr(14);
 		else if (arg.find("--recordDir=") == 0) recordDir = arg.substr(12);
+		else if (arg.find("--logFile=") == 0)  logFile = arg.substr(10);
+		else if (arg.find("--pidFile=") == 0)  pidFile = arg.substr(10);
+		else if (arg == "--nodaemon")           noDaemon = true;
 	}
+
+	// Daemonize unless --nodaemon
+	if (!noDaemon) {
+		daemonize(logFile, pidFile);
+	}
+
+	Logger::Init(noDaemon ? "" : logFile);
+	spdlog::info("mediasoup-cpp SFU starting...");
 
 	// Auto-detect public IP if announcedIp not set
 	if (announcedIp.empty()) {

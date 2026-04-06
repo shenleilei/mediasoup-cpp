@@ -81,6 +81,15 @@
 - 用户手动配置 `--announcedIp` 时跳过探测
 - 探测失败打 warn 日志提醒
 
+## 已完成：Daemon 模式 + 结构化日志
+- 默认 daemonize 运行（fork + setsid），`--nodaemon` 前台运行
+- daemon 模式日志写入文件（默认 /var/log/mediasoup-sfu.log），同时输出到 stdout
+- PID 文件（默认 /var/run/mediasoup-sfu.pid）
+- 所有业务日志统一 `[room:X Y]` 前缀（X=roomId, Y=peerId），方便 grep 定位问题
+- 信令层每个请求记录 `[room:X Y] method id=N`
+- join/disconnect 记录 info 级别日志
+- Recorder 日志带 peerId 前缀
+
 ## 任务完成状态
 - P0: ✅ Peer 抽象 + 服务端自动订阅
 - P0: ✅ 信令与业务解耦
