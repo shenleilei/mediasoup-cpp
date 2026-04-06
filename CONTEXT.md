@@ -145,7 +145,7 @@
 - P2: ✅ Worker 负载均衡（getLeastLoadedWorker 按 routerCount 选最少的 worker）
 - P2: 待做 Dynacast
 - P2: 待做 信令协议标准化
-- P2: 待优化 virtio 单队列网络瓶颈（详见"网络瓶颈分析"）
+- P0: 待优化 virtio 单队列网络瓶颈（详见"网络瓶颈分析"），上线前必须换多队列 VM 或物理机
 
 ## 单元测试
 - 框架: GoogleTest，`BUILD_TESTS` 默认 ON
