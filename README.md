@@ -355,6 +355,17 @@ RoomRegistry heartbeat (0 或 1)
 - 使用 audio/opus 而非 video/VP8，因为 mediasoup Worker 的 video PipeConsumer 需要有效 VP8 keyframe 才开始转发，PlainTransport 场景下无法完成 keyframe 协商
 - PlainTransport 不经过 SRTP 加解密，测的是 Worker 纯 RTP 路由转发能力
 - `--ip=` 参数控制是否走真实网络栈，默认 127.0.0.1 走 loopback
+- UdpDrops 列读取 `/proc/net/udp` drops，是系统全局口径（包含非本测试的 socket），仅供参考
+- 两个 Consumer 均为 PIPE 类型（绕过 keyframe 等待），与真实场景的 SIMPLE Consumer 行为略有差异（SIMPLE 有 BWE/NACK 反馈开销）
+
+**方法学保障**:
+- 计数器使用 `std::atomic<uint64_t>` + relaxed ordering，无数据竞争
+- Payload Type 从 router capabilities 动态获取，不硬编码
+- 时间戳步进 1600（48kHz/30fps），匹配 opus 时钟域
+- SendRate% 列校验发送端是否维持目标速率，峰值判定要求 ≥95%
+- sender 超时不补偿（reset nextTick），避免"降载后低丢包"假象
+- 预热阶段（默认 20 秒）排除 Worker/JIT/缓存冷启动影响
+- 每轮增量统计（reset counters），不用全局累计，避免稀释后期抖动
 
 ### 当前限制
 1. **单线程信令**: uWebSockets 事件循环是单线程的，Channel 的 FlatBufferBuilder 在信令线程使用但没有和读线程完全隔离
