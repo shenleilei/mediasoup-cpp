@@ -1,7 +1,7 @@
 // Worker load benchmark: simulated 1080p-equivalent RTP load, 1 Producer + 2 Consumers per room
 // Uses audio/opus with 1200-byte packets at 300 pps (equivalent bandwidth to 1080p 30fps video)
 // Video codecs require keyframe negotiation which doesn't work with PlainTransport-only setup
-// Usage: ./mediasoup_bench [--rooms-per-round=10] [--warmup-sec=20] [--round-sec=5]
+// Usage: ./mediasoup_bench [--rooms-per-round=10] [--warmup-sec=20] [--round-sec=5] [--ip=x.x.x.x]
 //
 // Data flow per room:
 //   sender UDP sock ──RTP──► PlainTransport(producer, comedia=false)
@@ -81,8 +81,6 @@ static double cpuPercent(const CpuSample& a, const CpuSample& b) {
 	auto dt = b.totalJiffies - a.totalJiffies;
 	auto dp = b.procJiffies - a.procJiffies;
 	if (dt == 0) return 0.0;
-	// Normalize: /proc/stat total is across all cores, so multiply by ncpu
-	// to get single-core percentage
 	return 100.0 * (double)dp / (double)dt * std::thread::hardware_concurrency();
 }
 
@@ -106,7 +104,6 @@ static uint64_t readUdpDrops() {
 	std::string line;
 	std::getline(f, line); // skip header
 	while (std::getline(f, line)) {
-		// The drops field is the last (13th) column
 		std::istringstream iss(line);
 		std::vector<std::string> tokens;
 		std::string tok;
@@ -147,7 +144,8 @@ static int createUdpSocket(uint16_t& outPort, int rcvBuf = 0) {
 
 static const int PKTS_PER_FRAME = 10;
 static const int PKT_SIZE = 1200;
-static const uint32_t TS_INCREMENT = 90000 / 30; // 3000 per frame at 90kHz clock
+static const uint32_t TS_INCREMENT = 48000 / 30; // 1600 per frame at 48kHz (opus clock)
+static const int TARGET_PPS_PER_ROOM = PKTS_PER_FRAME * 30; // 300
 
 struct BenchRoom {
 	std::shared_ptr<Router> router;
@@ -161,23 +159,38 @@ struct BenchRoom {
 	int senderFd = -1;
 	int recv1Fd = -1;
 	int recv2Fd = -1;
-	uint16_t prodPort = 0;  // Worker's PlainTransport listen port
+	uint16_t prodPort = 0;
 	uint16_t recv1Port = 0;
 	uint16_t recv2Port = 0;
 
 	uint16_t seq = 0;
 	uint32_t ts = 0;
 	uint32_t ssrc = 0;
+	uint8_t pt = 100; // dynamic, set from router capabilities
 
-	// Aligned to avoid false sharing. Written by sender/receiver threads respectively.
-	alignas(64) volatile uint64_t sentPkts = 0;
-	alignas(64) volatile uint64_t recv1Pkts = 0;
-	alignas(64) volatile uint64_t recv2Pkts = 0;
+	std::atomic<uint64_t> sentPkts{0};
+	std::atomic<uint64_t> recv1Pkts{0};
+	std::atomic<uint64_t> recv2Pkts{0};
+
+	BenchRoom() = default;
+	BenchRoom(BenchRoom&& o) noexcept
+		: router(std::move(o.router)), prodTransport(std::move(o.prodTransport))
+		, cons1Transport(std::move(o.cons1Transport)), cons2Transport(std::move(o.cons2Transport))
+		, producer(std::move(o.producer)), consumer1(std::move(o.consumer1)), consumer2(std::move(o.consumer2))
+		, senderFd(o.senderFd), recv1Fd(o.recv1Fd), recv2Fd(o.recv2Fd)
+		, prodPort(o.prodPort), recv1Port(o.recv1Port), recv2Port(o.recv2Port)
+		, seq(o.seq), ts(o.ts), ssrc(o.ssrc), pt(o.pt)
+		, sentPkts(o.sentPkts.load(std::memory_order_relaxed))
+		, recv1Pkts(o.recv1Pkts.load(std::memory_order_relaxed))
+		, recv2Pkts(o.recv2Pkts.load(std::memory_order_relaxed))
+	{
+		o.senderFd = o.recv1Fd = o.recv2Fd = -1;
+	}
 
 	void resetCounters() {
-		sentPkts = 0;
-		recv1Pkts = 0;
-		recv2Pkts = 0;
+		sentPkts.store(0, std::memory_order_relaxed);
+		recv1Pkts.store(0, std::memory_order_relaxed);
+		recv2Pkts.store(0, std::memory_order_relaxed);
 	}
 
 	void cleanup() {
@@ -198,8 +211,8 @@ static void sendFrame(BenchRoom& room) {
 	dest.sin_port = htons(room.prodPort);
 
 	for (int i = 0; i < PKTS_PER_FRAME; i++) {
-		buf[0] = 0x80; // V=2
-		buf[1] = 100 | ((i == PKTS_PER_FRAME - 1) ? 0x80 : 0x00); // PT=100 (opus)
+		buf[0] = 0x80;
+		buf[1] = room.pt | ((i == PKTS_PER_FRAME - 1) ? 0x80 : 0x00);
 		buf[2] = (room.seq >> 8) & 0xFF;
 		buf[3] = room.seq & 0xFF;
 		buf[4] = (room.ts >> 24) & 0xFF;
@@ -210,13 +223,11 @@ static void sendFrame(BenchRoom& room) {
 		buf[9] = (room.ssrc >> 16) & 0xFF;
 		buf[10] = (room.ssrc >> 8) & 0xFF;
 		buf[11] = room.ssrc & 0xFF;
-
-		// Opus payload (dummy)
 		memset(buf + 12, 0xFC, PKT_SIZE - 12);
 
 		sendto(room.senderFd, buf, PKT_SIZE, 0, (sockaddr*)&dest, sizeof(dest));
 		room.seq++;
-		room.sentPkts++;
+		room.sentPkts.fetch_add(1, std::memory_order_relaxed);
 	}
 	room.ts += TS_INCREMENT;
 }
@@ -234,12 +245,11 @@ static BenchRoom createBenchRoom(std::shared_ptr<Worker>& worker) {
 	static thread_local std::mt19937 rng(std::random_device{}());
 	std::uniform_int_distribution<uint32_t> dist(100000000, 999999999);
 	room.ssrc = dist(rng);
-	room.seq = 1; // Start from 1, not 0
+	room.seq = 1;
 
 	room.router = worker->createRouter(kMediaCodecs);
 	auto& caps = room.router->rtpCapabilities();
 
-	// Find opus PT assigned by router
 	uint8_t codecPt = 100;
 	for (auto& c : caps.codecs) {
 		if (c.mimeType.find("opus") != std::string::npos &&
@@ -248,21 +258,18 @@ static BenchRoom createBenchRoom(std::shared_ptr<Worker>& worker) {
 			break;
 		}
 	}
+	room.pt = codecPt;
 
 	PlainTransportOptions opts;
 	opts.listenInfos = {{{"ip", g_bindIp}}};
 	opts.rtcpMux = true;
 
-	// ── Producer PlainTransport (comedia=false, explicit connect) ──
 	opts.comedia = false;
 	room.prodTransport = room.router->createPlainTransport(opts);
 	room.prodPort = room.prodTransport->tuple().localPort;
 
-	// Sender socket
 	uint16_t senderPort;
 	room.senderFd = createUdpSocket(senderPort);
-
-	// Connect producer transport: tell Worker our sender address
 	room.prodTransport->connect(g_bindIp, senderPort);
 
 	json rtpParams = {
@@ -282,7 +289,6 @@ static BenchRoom createBenchRoom(std::shared_ptr<Worker>& worker) {
 	};
 	room.producer = room.prodTransport->produce(produceOpts);
 
-	// ── Consumer1 PlainTransport ──
 	opts.comedia = false;
 	room.cons1Transport = room.router->createPlainTransport(opts);
 	room.recv1Fd = createUdpSocket(room.recv1Port, 4 * 1024 * 1024);
@@ -296,8 +302,6 @@ static BenchRoom createBenchRoom(std::shared_ptr<Worker>& worker) {
 	};
 	room.consumer1 = room.cons1Transport->consume(consumeOpts1);
 
-	// ── Consumer2 PlainTransport (simulates recording) ──
-	opts.comedia = false;
 	room.cons2Transport = room.router->createPlainTransport(opts);
 	room.recv2Fd = createUdpSocket(room.recv2Port, 4 * 1024 * 1024);
 	room.cons2Transport->connect(g_bindIp, room.recv2Port);
@@ -317,14 +321,14 @@ static BenchRoom createBenchRoom(std::shared_ptr<Worker>& worker) {
 
 struct EpollReceiver {
 	int epfd = -1;
-	struct FdInfo { volatile uint64_t* counter; };
+	struct FdInfo { std::atomic<uint64_t>* counter; };
 	std::unordered_map<int, FdInfo> fds;
 	std::mutex mu;
 
 	EpollReceiver() { epfd = epoll_create1(0); }
 	~EpollReceiver() { if (epfd >= 0) close(epfd); }
 
-	void addFd(int fd, volatile uint64_t* counter) {
+	void addFd(int fd, std::atomic<uint64_t>* counter) {
 		std::lock_guard<std::mutex> lock(mu);
 		epoll_event ev{};
 		ev.events = EPOLLIN | EPOLLET;
@@ -336,21 +340,20 @@ struct EpollReceiver {
 	void poll() {
 		uint8_t buf[2048];
 		epoll_event events[256];
-		int n = epoll_wait(epfd, events, 256, 5); // 5ms timeout
+		int n = epoll_wait(epfd, events, 256, 5);
 		for (int i = 0; i < n; i++) {
 			int fd = events[i].data.fd;
-			volatile uint64_t* counter = nullptr;
+			std::atomic<uint64_t>* counter = nullptr;
 			{
 				std::lock_guard<std::mutex> lock(mu);
 				auto it = fds.find(fd);
 				if (it != fds.end()) counter = it->second.counter;
 			}
 			if (!counter) continue;
-			// Drain all available packets (edge-triggered)
 			while (true) {
 				int r = recv(fd, buf, sizeof(buf), MSG_DONTWAIT);
 				if (r <= 0) break;
-				(*counter)++;
+				counter->fetch_add(1, std::memory_order_relaxed);
 			}
 		}
 	}
@@ -383,11 +386,10 @@ int main(int argc, char* argv[]) {
 
 	printf("=== mediasoup Worker Load Benchmark ===\n");
 	printf("1080p-equivalent RTP load (opus %d-byte packets), 1P+2C per room, %d pps/stream\n",
-		PKT_SIZE, PKTS_PER_FRAME * 30);
+		PKT_SIZE, TARGET_PPS_PER_ROOM);
 	printf("Rooms/round=%d, warmup=%ds, round=%ds, max=%d, ip=%s\n\n",
 		roomsPerRound, warmupSec, roundSec, maxRooms, g_bindIp.c_str());
 
-	// ── Create Worker ──
 	WorkerSettings ws;
 	ws.workerBin = "./mediasoup-worker";
 	ws.logLevel = "warn";
@@ -412,30 +414,32 @@ int main(int argc, char* argv[]) {
 	}
 	printf("Worker RSS: %lu KB\n\n", readRssKb(workerPid));
 
-	// ── Rooms + threads ──
 	std::vector<std::unique_ptr<BenchRoom>> rooms;
 	std::mutex roomsMutex;
 
-	// Sender threads: round-robin rooms, 30fps per room
 	std::atomic<bool> running{true};
 	const int NUM_SENDERS = 2;
 
+	// Sender: strict 33ms frame interval. If a cycle overruns, skip sleep but
+	// never try to "catch up" — this means actual send rate drops under load,
+	// which we detect via SendRate% column.
 	auto senderFn = [&](int threadIdx) {
+		auto nextTick = Clock::now();
 		while (running && !g_stop) {
-			auto t0 = Clock::now();
 			{
 				std::lock_guard<std::mutex> lock(roomsMutex);
 				for (size_t i = threadIdx; i < rooms.size(); i += NUM_SENDERS)
 					sendFrame(*rooms[i]);
 			}
-			auto elapsed = Clock::now() - t0;
-			auto remain = std::chrono::microseconds(33333) - elapsed;
-			if (remain.count() > 0)
-				std::this_thread::sleep_for(remain);
+			nextTick += std::chrono::microseconds(33333);
+			auto now = Clock::now();
+			if (nextTick > now)
+				std::this_thread::sleep_until(nextTick);
+			else
+				nextTick = now; // overrun: reset, don't accumulate debt
 		}
 	};
 
-	// Receiver threads with epoll
 	const int NUM_RECEIVERS = 2;
 	std::vector<EpollReceiver> receivers(NUM_RECEIVERS);
 
@@ -444,14 +448,12 @@ int main(int argc, char* argv[]) {
 			receivers[threadIdx].poll();
 	};
 
-	// Helper: register a room's recv fds with receivers
 	auto registerRoom = [&](BenchRoom& r, size_t roomIdx) {
 		int ri = roomIdx % NUM_RECEIVERS;
 		receivers[ri].addFd(r.recv1Fd, &r.recv1Pkts);
 		receivers[ri].addFd(r.recv2Fd, &r.recv2Pkts);
 	};
 
-	// Start threads
 	std::vector<std::thread> senderThreads, receiverThreads;
 	for (int i = 0; i < NUM_SENDERS; i++)
 		senderThreads.emplace_back(senderFn, i);
@@ -482,9 +484,9 @@ int main(int argc, char* argv[]) {
 	printf("Warmup done.\n\n");
 
 	// ── Table header ──
-	printf("%-6s | %-11s | %-7s | %-9s | %-9s | %-6s | %-8s\n",
-		"Rooms", "CPU%(1core)", "RSS(MB)", "Send pps", "Recv pps", "Loss%", "UdpDrops");
-	printf("-------+-------------+---------+-----------+-----------+--------+----------\n");
+	printf("%-6s | %-11s | %-7s | %-9s | %-9s | %-6s | %-8s | %-8s\n",
+		"Rooms", "CPU%(1core)", "RSS(MB)", "Send pps", "Recv pps", "Loss%", "UdpDrops", "SendRate");
+	printf("-------+-------------+---------+-----------+-----------+--------+----------+----------\n");
 	fflush(stdout);
 
 	int consecutiveHighLoss = 0;
@@ -494,7 +496,6 @@ int main(int argc, char* argv[]) {
 
 	// ── Main loop ──
 	while (!g_stop && (int)rooms.size() < maxRooms) {
-		// Add rooms
 		int toAdd = roomsPerRound;
 		if ((int)rooms.size() + toAdd > maxRooms)
 			toAdd = maxRooms - (int)rooms.size();
@@ -514,7 +515,6 @@ int main(int argc, char* argv[]) {
 		}
 		if (g_stop) break;
 
-		// Reset counters for this round's measurement
 		{
 			std::lock_guard<std::mutex> lock(roomsMutex);
 			for (auto& r : rooms) r->resetCounters();
@@ -534,13 +534,13 @@ int main(int argc, char* argv[]) {
 		uint64_t udpDropsAfter = readUdpDrops();
 		uint64_t rssKb = readRssKb(workerPid);
 
-		// Collect incremental stats
 		uint64_t totalSent = 0, totalRecv = 0;
 		{
 			std::lock_guard<std::mutex> lock(roomsMutex);
 			for (auto& r : rooms) {
-				totalSent += r->sentPkts;
-				totalRecv += r->recv1Pkts + r->recv2Pkts;
+				totalSent += r->sentPkts.load(std::memory_order_relaxed);
+				totalRecv += r->recv1Pkts.load(std::memory_order_relaxed)
+				           + r->recv2Pkts.load(std::memory_order_relaxed);
 			}
 		}
 
@@ -553,34 +553,37 @@ int main(int argc, char* argv[]) {
 		double sendPps = (double)totalSent / roundSec;
 		double recvPps = (double)totalRecv / roundSec;
 
-		printf("%5zu | %10.1f%% | %7.1f | %9.0f | %9.0f | %5.1f%% | %8lu\n",
-			rooms.size(), cpu, rssKb / 1024.0, sendPps, recvPps, loss, udpDrops);
+		// Check if sender maintained target rate
+		double targetPps = (double)rooms.size() * TARGET_PPS_PER_ROOM;
+		double sendRate = targetPps > 0 ? 100.0 * sendPps / targetPps : 0.0;
+
+		printf("%5zu | %10.1f%% | %7.1f | %9.0f | %9.0f | %5.1f%% | %8lu | %6.1f%%\n",
+			rooms.size(), cpu, rssKb / 1024.0, sendPps, recvPps, loss, udpDrops, sendRate);
 		fflush(stdout);
 
-		if (loss <= 1.0) {
+		// Peak: only count if loss <=1% AND sender maintained >=95% target rate
+		if (loss <= 1.0 && sendRate >= 95.0) {
 			peakRooms = (int)rooms.size();
 			peakCpu = cpu;
 			peakRssKb = rssKb;
 			consecutiveHighLoss = 0;
-		} else {
+		} else if (loss > 1.0 || sendRate < 90.0) {
 			consecutiveHighLoss++;
 			if (consecutiveHighLoss >= 3) {
-				printf("\n*** Stopping: 3 consecutive rounds with >1%% loss ***\n");
+				printf("\n*** Stopping: 3 consecutive rounds with >1%% loss or <90%% send rate ***\n");
 				break;
 			}
 		}
 	}
 
-	// ── Summary ──
 	printf("\n=== Result ===\n");
 	printf("Peak: %d rooms (1P+2C each), CPU %.1f%% (single core), RSS %.1f MB\n",
 		peakRooms, peakCpu, peakRssKb / 1024.0);
 	printf("= %d producers + %d consumers on 1 Worker\n",
 		peakRooms, peakRooms * 2);
 	printf("= %d pps in, %d pps out (theoretical max at peak)\n",
-		peakRooms * PKTS_PER_FRAME * 30, peakRooms * PKTS_PER_FRAME * 30 * 2);
+		peakRooms * TARGET_PPS_PER_ROOM, peakRooms * TARGET_PPS_PER_ROOM * 2);
 
-	// ── Cleanup ──
 	printf("\nCleaning up...\n");
 	running = false;
 	for (auto& t : senderThreads) t.join();

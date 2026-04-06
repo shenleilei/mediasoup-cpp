@@ -162,10 +162,11 @@
 - 测试工具: `tests/bench_worker_load.cpp` → `mediasoup_bench`
 - 场景: 每房间 1P+2C, PlainTransport, opus 1200字节 300pps（等效1080p带宽）
 - 环境: Intel Xeon Platinum 2.5GHz, 2 vCPU
-- loopback 结果: 250 rooms peak, 87% CPU(单核), 113MB RSS, 75k→150k pps
-- 真实网络栈结果: 170 rooms peak, 54% CPU(单核), 82MB RSS, 51k→102k pps
-- 真实场景估算（WebRTC+SRTP+audio+video双流）: 单Worker约70-90个1v1房间
-- 关键发现: Worker每房间CPU约0.33%线性扩展; 走真实网络栈时内核softirq是瓶颈而非Worker本身
+- loopback 结果: 240 rooms peak, 82% CPU(单核), 180MB RSS, 72k→144k pps
+- 真实网络栈结果: 80 rooms peak, 23% CPU(单核), 67MB RSS, 24k→48k pps
+- 真实场景估算（WebRTC+SRTP+audio+video双流）: 单Worker约30-40个1v1房间
+- 关键发现: Worker每房间CPU约0.33%线性扩展; 走真实网络栈时内核softirq是瓶颈(90rooms就丢包,Worker CPU才26%)
+- 方法学: std::atomic计数器(relaxed), 动态PT从router获取, 48kHz时间戳步进, SendRate%列校验发送速率≥95%才计入峰值
 - 注意: video PipeConsumer需要有效keyframe才转发，PlainTransport无法完成keyframe协商，因此用opus替代
 
 ## 关键文件
