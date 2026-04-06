@@ -288,7 +288,7 @@ public:
 
 		uint8_t nalType = data[0] & 0x1F;
 
-		if (h264NalLog_ < 20) {
+		if (h264NalLog_ < 5) {
 			h264NalLog_++;
 			if (nalType == 28 && size >= 2) {
 				uint8_t fuNalType = data[1] & 0x1F;
