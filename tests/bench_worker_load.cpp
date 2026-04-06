@@ -4,9 +4,9 @@
 // Usage: ./mediasoup_bench [--rooms-per-round=10] [--warmup-sec=20] [--round-sec=5]
 //
 // Data flow per room:
-//   sender UDP sock ──RTP──► PlainTransport(producer, comedia=true)
+//   sender UDP sock ──RTP──► PlainTransport(producer, comedia=false)
 //                                │ Router
-//                                ├──► PlainTransport(consumer1, SIMPLE) ──► recv sock 1
+//                                ├──► PlainTransport(consumer1, PIPE)   ──► recv sock 1
 //                                └──► PlainTransport(consumer2, PIPE)   ──► recv sock 2
 
 #include "Worker.h"
@@ -38,6 +38,7 @@ using Clock = std::chrono::steady_clock;
 
 static std::atomic<bool> g_stop{false};
 static void sigHandler(int) { g_stop = true; }
+static std::string g_bindIp = "127.0.0.1"; // --ip= to override
 
 // ── /proc helpers ──────────────────────────────────────────────────────────────
 
@@ -128,7 +129,7 @@ static int createUdpSocket(uint16_t& outPort, int rcvBuf = 0) {
 	if (fd < 0) return -1;
 	sockaddr_in addr{};
 	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	inet_pton(AF_INET, g_bindIp.c_str(), &addr.sin_addr);
 	addr.sin_port = 0;
 	if (bind(fd, (sockaddr*)&addr, sizeof(addr)) < 0) {
 		close(fd);
@@ -193,7 +194,7 @@ static void sendFrame(BenchRoom& room) {
 
 	sockaddr_in dest{};
 	dest.sin_family = AF_INET;
-	dest.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	inet_pton(AF_INET, g_bindIp.c_str(), &dest.sin_addr);
 	dest.sin_port = htons(room.prodPort);
 
 	for (int i = 0; i < PKTS_PER_FRAME; i++) {
@@ -249,7 +250,7 @@ static BenchRoom createBenchRoom(std::shared_ptr<Worker>& worker) {
 	}
 
 	PlainTransportOptions opts;
-	opts.listenInfos = {{{"ip", "127.0.0.1"}}};
+	opts.listenInfos = {{{"ip", g_bindIp}}};
 	opts.rtcpMux = true;
 
 	// ── Producer PlainTransport (comedia=false, explicit connect) ──
@@ -262,7 +263,7 @@ static BenchRoom createBenchRoom(std::shared_ptr<Worker>& worker) {
 	room.senderFd = createUdpSocket(senderPort);
 
 	// Connect producer transport: tell Worker our sender address
-	room.prodTransport->connect("127.0.0.1", senderPort);
+	room.prodTransport->connect(g_bindIp, senderPort);
 
 	json rtpParams = {
 		{"codecs", {{
@@ -285,7 +286,7 @@ static BenchRoom createBenchRoom(std::shared_ptr<Worker>& worker) {
 	opts.comedia = false;
 	room.cons1Transport = room.router->createPlainTransport(opts);
 	room.recv1Fd = createUdpSocket(room.recv1Port, 4 * 1024 * 1024);
-	room.cons1Transport->connect("127.0.0.1", room.recv1Port);
+	room.cons1Transport->connect(g_bindIp, room.recv1Port);
 
 	json consumeOpts1 = {
 		{"producerId", room.producer->id()},
@@ -299,7 +300,7 @@ static BenchRoom createBenchRoom(std::shared_ptr<Worker>& worker) {
 	opts.comedia = false;
 	room.cons2Transport = room.router->createPlainTransport(opts);
 	room.recv2Fd = createUdpSocket(room.recv2Port, 4 * 1024 * 1024);
-	room.cons2Transport->connect("127.0.0.1", room.recv2Port);
+	room.cons2Transport->connect(g_bindIp, room.recv2Port);
 
 	json consumeOpts2 = {
 		{"producerId", room.producer->id()},
@@ -376,13 +377,15 @@ int main(int argc, char* argv[]) {
 			roundSec = std::stoi(arg.substr(12));
 		else if (arg.find("--max-rooms=") == 0)
 			maxRooms = std::stoi(arg.substr(12));
+		else if (arg.find("--ip=") == 0)
+			g_bindIp = arg.substr(5);
 	}
 
 	printf("=== mediasoup Worker Load Benchmark ===\n");
 	printf("1080p-equivalent RTP load (opus %d-byte packets), 1P+2C per room, %d pps/stream\n",
 		PKT_SIZE, PKTS_PER_FRAME * 30);
-	printf("Rooms/round=%d, warmup=%ds, round=%ds, max=%d\n\n",
-		roomsPerRound, warmupSec, roundSec, maxRooms);
+	printf("Rooms/round=%d, warmup=%ds, round=%ds, max=%d, ip=%s\n\n",
+		roomsPerRound, warmupSec, roundSec, maxRooms, g_bindIp.c_str());
 
 	// ── Create Worker ──
 	WorkerSettings ws;
@@ -471,38 +474,6 @@ int main(int argc, char* argv[]) {
 
 	printf("Warming up for %d seconds...\n", warmupSec);
 	std::this_thread::sleep_for(std::chrono::seconds(warmupSec));
-
-	// Post-warmup diagnostics
-	{
-		std::lock_guard<std::mutex> lock(roomsMutex);
-		for (size_t i = 0; i < rooms.size(); i++) {
-			auto& r = rooms[i];
-			auto ps = r->prodTransport->getStats();
-			auto cs = r->cons1Transport->getStats();
-			auto prodStats = r->producer->getStats();
-			auto consStats = r->consumer1->getStats();
-			// Try blocking recv with timeout
-			struct timeval tv{1, 0};
-			setsockopt(r->recv1Fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-			uint8_t tbuf[2048];
-			int got = recv(r->recv1Fd, tbuf, sizeof(tbuf), 0);
-			// Restore non-blocking
-			tv = {0, 0};
-			setsockopt(r->recv1Fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-
-			fprintf(stderr, "DEBUG room[%zu]: sent=%lu recv1=%lu recv2=%lu "
-				"prodRtpRecv=%s cons1RtpSend=%s blocking_recv=%d\n"
-				"  prodStats=%s\n  consStats=%s\n"
-				"  cons1Tuple: %s\n",
-				i, r->sentPkts, r->recv1Pkts, r->recv2Pkts,
-				ps.value("rtpRecvBitrate", 0) > 0 ? "YES" : "NO",
-				cs.value("rtpSendBitrate", 0) > 0 ? "YES" : "NO",
-				got,
-				prodStats.dump().c_str(),
-				consStats.dump().c_str(),
-				json(r->cons1Transport->tuple()).dump().c_str());
-		}
-	}
 
 	{
 		std::lock_guard<std::mutex> lock(roomsMutex);

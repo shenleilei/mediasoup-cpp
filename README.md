@@ -313,6 +313,48 @@ RoomRegistry heartbeat (0 或 1)
 
 ## 已知限制和待改进
 
+### 单 Worker 性能基准
+
+使用 `mediasoup_bench` 压测工具测量单 Worker 的 RTP 转发极限。
+
+**测试方法**:
+- 每房间 1 Producer + 2 Consumer（模拟对端观看 + 录制）
+- 使用 PlainTransport + audio/opus，1200 字节包，300 pps/stream（等效 1080p 30fps 带宽）
+- 逐步加压（每轮 +10 房间），稳定 5 秒后采集指标
+- 停止条件：连续 3 轮丢包率 >1%
+- 测试环境：Intel Xeon Platinum 2.5GHz, 2 vCPU
+
+**测试结果**:
+
+| 网络模式 | 峰值房间 | 峰值 CPU(单核) | 峰值 RSS | 峰值吞吐 | 丢包起点 |
+|----------|---------|---------------|---------|---------|---------|
+| loopback (127.0.0.1) | 250 | 87% | 113 MB | 75k→150k pps | 260 rooms |
+| 真实网络栈 (eth0 IP) | 170 | 54% | 82 MB | 51k→102k pps | 150 rooms |
+
+**关键发现**:
+- Worker 进程每房间 CPU 开销约 0.33%（两种模式一致），瓶颈在 Worker 内部 RTP 路由
+- 走真实网络栈时，内核 softirq 处理 UDP 包的开销导致 150 rooms 就开始丢包，此时 Worker CPU 才 47%
+- 线性扩展：CPU 和房间数严格线性关系，RSS 每房间约 0.4 MB
+
+**真实场景估算**（WebRtcTransport + SRTP + audio+video 双流）:
+- SRTP 加解密额外 5-10% CPU
+- audio+video 双流 = 负载翻倍
+- 保守估计单 Worker 约 **70-90 个 1v1 房间**
+
+**运行压测**:
+```bash
+# loopback 模式
+./build/mediasoup_bench --rooms-per-round=10 --warmup-sec=10 --round-sec=5 --max-rooms=500
+
+# 走真实网络栈
+./build/mediasoup_bench --ip=$(hostname -I | awk '{print $1}') --rooms-per-round=10 --warmup-sec=10 --round-sec=5 --max-rooms=500
+```
+
+**注意事项**:
+- 使用 audio/opus 而非 video/VP8，因为 mediasoup Worker 的 video PipeConsumer 需要有效 VP8 keyframe 才开始转发，PlainTransport 场景下无法完成 keyframe 协商
+- PlainTransport 不经过 SRTP 加解密，测的是 Worker 纯 RTP 路由转发能力
+- `--ip=` 参数控制是否走真实网络栈，默认 127.0.0.1 走 loopback
+
 ### 当前限制
 1. **单线程信令**: uWebSockets 事件循环是单线程的，Channel 的 FlatBufferBuilder 在信令线程使用但没有和读线程完全隔离
 2. **无 HTTPS 支持**: 当前只有 HTTP，生产环境需要 TLS（uWebSockets 支持 `uWS::SSLApp`）

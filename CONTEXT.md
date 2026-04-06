@@ -151,12 +151,22 @@
 - 构建: `cmake --build build --target mediasoup_tests`
 - 运行: `./build/mediasoup_tests` 或 `cd build && ctest --output-on-failure`
 - 测试文件在 `tests/` 目录
-- 共 71 个单元测试用例，覆盖 ORTC 协商、RTP 类型、Room/Peer 管理、QoS 数据结构、Recorder 稳定性、EventEmitter 清理、Room 健康检测
+- 共 84 个单元测试用例，覆盖 ORTC 协商、RTP 类型、Room/Peer 管理、QoS 数据结构、Recorder 稳定性、EventEmitter 清理、Room 健康检测、Utils
 - 集成测试: mediasoup_integration_tests (14) + mediasoup_qos_integration_tests (15) + mediasoup_e2e_tests (3) + mediasoup_topology_tests (6)
 - 总计 109 个测试用例
 
 ## 关键规则
 - 每次新增功能都必须同步补充 UT 和集成测试覆盖
+
+## 单 Worker 性能基准（已测）
+- 测试工具: `tests/bench_worker_load.cpp` → `mediasoup_bench`
+- 场景: 每房间 1P+2C, PlainTransport, opus 1200字节 300pps（等效1080p带宽）
+- 环境: Intel Xeon Platinum 2.5GHz, 2 vCPU
+- loopback 结果: 250 rooms peak, 87% CPU(单核), 113MB RSS, 75k→150k pps
+- 真实网络栈结果: 170 rooms peak, 54% CPU(单核), 82MB RSS, 51k→102k pps
+- 真实场景估算（WebRTC+SRTP+audio+video双流）: 单Worker约70-90个1v1房间
+- 关键发现: Worker每房间CPU约0.33%线性扩展; 走真实网络栈时内核softirq是瓶颈而非Worker本身
+- 注意: video PipeConsumer需要有效keyframe才转发，PlainTransport无法完成keyframe协商，因此用opus替代
 
 ## 关键文件
 - `src/main.cpp` - 入口，参数解析，组装各组件
@@ -181,3 +191,4 @@
 - `tests/test_stability.cpp` - 稳定性单元测试
 - `tests/test_qos_unit.cpp` - QoS 单元测试
 - `tests/test_integration.cpp` - 集成测试（含 Worker 崩溃恢复）
+- `tests/bench_worker_load.cpp` - Worker 并发压测工具（1P+2C, PlainTransport, 逐步加压）
