@@ -85,16 +85,24 @@ public:
 		auto room = roomManager_.getRoom(roomId);
 		if (!room) return {true, {}};
 
-		// Stop recorder for this peer
+		// Stop recorder for this peer (outside lock to avoid blocking broadcastStats)
+		std::shared_ptr<PeerRecorder> recToStop;
 		{
 			std::string key = roomId + "/" + peerId;
 			std::lock_guard<std::mutex> lock(recorderMutex_);
 			auto it = recorders_.find(key);
 			if (it != recorders_.end()) {
-				it->second->stop();
+				recToStop = std::move(it->second);
 				recorders_.erase(it);
 			}
 			recorderTransports_.erase(key);
+		}
+		if (recToStop) recToStop->stop(); // join recvLoop thread outside lock
+
+		// Clean up client stats
+		{
+			std::lock_guard<std::mutex> lock(clientStatsMutex_);
+			clientStats_.erase(roomId + "/" + peerId);
 		}
 
 		room->removePeer(peerId);
@@ -370,19 +378,19 @@ public:
 
 	void cleanIdleRooms(int idleSeconds = 30) {
 		for (auto& id : roomManager_.getIdleRooms(idleSeconds)) {
-				MS_DEBUG(logger_, "GC idle room: {}", id);
+			MS_DEBUG(logger_, "GC idle room: {}", id);
 			if (registry_) registry_->unregisterRoom(id);
 			roomManager_.removeRoom(id);
 		}
 	}
 
-	// Collect full-chain stats for one peer (sendTransport + all producers)
 	// Store browser-side stats (BWE, candidate-pair, etc.)
 	void setClientStats(const std::string& roomId, const std::string& peerId, const json& stats) {
 		std::lock_guard<std::mutex> lock(clientStatsMutex_);
 		clientStats_[roomId + "/" + peerId] = stats;
 	}
 
+	// Collect full-chain stats for one peer (sendTransport + all producers)
 	json collectPeerStats(const std::string& roomId, const std::string& peerId) {
 		auto room = roomManager_.getRoom(roomId);
 		if (!room) return {};
@@ -453,12 +461,11 @@ public:
 			auto participants = room->getPeerIds();
 			for (auto& peerId : participants) {
 				try {
-				auto stats = collectPeerStats(roomId, peerId);
-				if (!stats.empty()) allStats.push_back(stats);
-			} catch (...) {
-				// Still record a minimal entry so recorder gets QoS snapshots
-				allStats.push_back({{"peerId", peerId}});
-			}
+					auto stats = collectPeerStats(roomId, peerId);
+					if (!stats.empty()) allStats.push_back(stats);
+				} catch (...) {
+					allStats.push_back({{"peerId", peerId}});
+				}
 			}
 
 			if (allStats.empty()) continue;
