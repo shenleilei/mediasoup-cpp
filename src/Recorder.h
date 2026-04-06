@@ -183,13 +183,13 @@ private:
 		// H264: defer write_header until we have SPS/PPS extradata from first IDR
 		if (videoCodec_ == VideoCodec::H264) {
 			headerDeferred_ = true;
-			MS_DEBUG(logger_, "Recording deferred (waiting for H264 IDR): {}", outputPath_);
+			MS_DEBUG(logger_, "[{}] Recording deferred (waiting for H264 IDR): {}", peerId_, outputPath_);
 		} else {
 			if (avformat_write_header(fmtCtx_, nullptr) < 0) {
 				avio_closep(&fmtCtx_->pb);
 				avformat_free_context(fmtCtx_); fmtCtx_ = nullptr; return false;
 			}
-			MS_DEBUG(logger_, "Recording started: {} (VP8)", outputPath_);
+			MS_DEBUG(logger_, "[{}] Recording started: {} (VP8)", peerId_, outputPath_);
 		}
 		return true;
 	}
@@ -216,13 +216,13 @@ private:
 
 	bool commitDeferredHeader() {
 		if (avformat_write_header(fmtCtx_, nullptr) < 0) {
-			MS_ERROR(logger_, "avformat_write_header failed for H264: {}", outputPath_);
+			MS_ERROR(logger_, "[{}] avformat_write_header failed for H264: {}", peerId_, outputPath_);
 			avio_closep(&fmtCtx_->pb);
 			avformat_free_context(fmtCtx_); fmtCtx_ = nullptr;
 			return false;
 		}
 		headerDeferred_ = false;
-		MS_DEBUG(logger_, "Recording started: {} (H264, header written)", outputPath_);
+		MS_DEBUG(logger_, "[{}] Recording started: {} (H264, header written)", peerId_, outputPath_);
 		return true;
 	}
 
@@ -236,7 +236,7 @@ private:
 		avio_closep(&fmtCtx_->pb);
 		avformat_free_context(fmtCtx_);
 		fmtCtx_ = nullptr;
-		MS_DEBUG(logger_, "Recording finalized: {}", outputPath_);
+		MS_DEBUG(logger_, "[{}] Recording finalized: {}", peerId_, outputPath_);
 	}
 
 	void recvLoop() {
@@ -252,10 +252,10 @@ private:
 			RtpHeader rtp;
 			if (!RtpHeader::parse(buf, n, rtp)) continue;
 			if (pktCount <= 10 || pktCount % 500 == 0)
-				MS_DEBUG(logger_, "RTP recv #{} size={} PT={} (audio={} video={})", pktCount, n, rtp.payloadType, audioPT_, videoPT_);
+				MS_DEBUG(logger_, "[{}] RTP recv #{} size={} PT={} (audio={} video={})", peerId_, pktCount, n, rtp.payloadType, audioPT_, videoPT_);
 			writePacket(rtp);
 		}
-		MS_DEBUG(logger_, "recvLoop exited, total packets={}", pktCount);
+		MS_DEBUG(logger_, "[{}] recvLoop exited, total packets={}", peerId_, pktCount);
 	}
 
 	// ── VP8 depacketization (public for testing) ──
@@ -292,10 +292,10 @@ public:
 			if (nalType == 28 && size >= 2) {
 				uint8_t fuNalType = data[1] & 0x1F;
 				bool fuStart = (data[1] & 0x80) != 0;
-				MS_DEBUG(logger_, "H264 RTP: nalType={} FU-A fuNalType={} fuStart={} size={} marker={}",
-					nalType, fuNalType, fuStart, size, rtp.marker);
+				MS_DEBUG(logger_, "[{}] H264 RTP: nalType={} FU-A fuNalType={} fuStart={} size={} marker={}",
+					peerId_, nalType, fuNalType, fuStart, size, rtp.marker);
 			} else {
-				MS_DEBUG(logger_, "H264 RTP: nalType={} size={} marker={}", nalType, size, rtp.marker);
+				MS_DEBUG(logger_, "[{}] H264 RTP: nalType={} size={} marker={}", peerId_, nalType, size, rtp.marker);
 			}
 		}
 

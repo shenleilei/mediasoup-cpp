@@ -481,6 +481,9 @@ cd mediasoup-cpp
 | `--redisPort` | 6379 | Redis 端口 |
 | `--nodeId` | hostname:port | 当前节点 ID |
 | `--nodeAddress` | (自动生成) | 当前节点 WebSocket 地址 |
+| `--nodaemon` | (默认后台运行) | 前台运行，不 daemonize |
+| `--logFile` | /var/log/mediasoup-sfu.log | 日志文件路径（daemon 模式） |
+| `--pidFile` | /var/run/mediasoup-sfu.pid | PID 文件路径（daemon 模式） |
 
 ### 浏览器测试
 1. 访问 `http://<服务器IP>:<端口>/`
