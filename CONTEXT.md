@@ -90,6 +90,16 @@
 - join/disconnect 记录 info 级别日志
 - Recorder 日志带 peerId 前缀
 
+## 线程模型
+- 主线程(uWS): 信令、业务逻辑、定时器(GC 30s / Stats 2s)、Channel.request() 同步阻塞
+- Channel readThread(×N worker): pipe读取、response匹配、notification分发
+- Worker waitThread(×N worker): waitpid子进程
+- Recorder recvLoop(×M peer): UDP收RTP、H264/VP8解包、写WebM/MKV
+- Registry heartbeat(0或1): Redis心跳10s
+- 典型1 worker + 2录制 = 6线程
+- 共享数据: Channel.pendingRequests_(锁)、Recorder.muxMutex_/qosMutex_(锁)
+- 风险: 主线程future.get()阻塞，worker慢会卡信令
+
 ## 任务完成状态
 - P0: ✅ Peer 抽象 + 服务端自动订阅
 - P0: ✅ 信令与业务解耦
