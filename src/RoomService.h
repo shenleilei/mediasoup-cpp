@@ -396,11 +396,9 @@ public:
 			auto room = roomManager_.getRoom(roomId);
 			if (!room) continue;
 
-			MS_WARN(logger_, "Room {} has dead router, notifying peers to reconnect", roomId);
+			MS_WARN(logger_, "Room {} has dead router, notifying {} peers to reconnect", roomId, room->getPeerIds().size());
 
 			// Notify all peers in this room to reconnect
-			auto peerIds = room->getPeerIds();
-			MS_WARN(logger_, "Room {} dead, {} peers, broadcast_={}", roomId, peerIds.size(), broadcast_ ? "yes" : "no");
 			if (broadcast_) {
 				broadcast_(roomId, "", {
 					{"notification", true}, {"method", "serverRestart"},
@@ -408,25 +406,8 @@ public:
 				});
 			}
 
-			// Clean up recorders for this room
-			{
-				std::lock_guard<std::mutex> lock(recorderMutex_);
-				std::string prefix = roomId + "/";
-				for (auto it = recorders_.begin(); it != recorders_.end(); ) {
-					if (it->first.compare(0, prefix.size(), prefix) == 0) {
-						if (it->second) it->second->stop();
-						recorderTransports_.erase(it->first);
-						it = recorders_.erase(it);
-					} else ++it;
-				}
-			}
-			{
-				std::lock_guard<std::mutex> lock(clientStatsMutex_);
-				std::string prefix = roomId + "/";
-				for (auto it = clientStats_.begin(); it != clientStats_.end(); )
-					if (it->first.compare(0, prefix.size(), prefix) == 0) it = clientStats_.erase(it);
-					else ++it;
-			}
+			// Clean up recorders, stats for this room
+			cleanupRoomResources(roomId);
 
 			if (registry_) registry_->unregisterRoom(roomId);
 			roomManager_.removeRoom(roomId);
@@ -436,27 +417,7 @@ public:
 	void cleanIdleRooms(int idleSeconds = 30) {
 		for (auto& id : roomManager_.getIdleRooms(idleSeconds)) {
 			MS_DEBUG(logger_, "GC idle room: {}", id);
-
-			// Clean up recorders for this room
-			{
-				std::lock_guard<std::mutex> lock(recorderMutex_);
-				std::string prefix = id + "/";
-				for (auto it = recorders_.begin(); it != recorders_.end(); ) {
-					if (it->first.compare(0, prefix.size(), prefix) == 0) {
-						if (it->second) it->second->stop();
-						recorderTransports_.erase(it->first);
-						it = recorders_.erase(it);
-					} else ++it;
-				}
-			}
-			// Clean up client stats for this room
-			{
-				std::lock_guard<std::mutex> lock(clientStatsMutex_);
-				std::string prefix = id + "/";
-				for (auto it = clientStats_.begin(); it != clientStats_.end(); )
-					if (it->first.compare(0, prefix.size(), prefix) == 0) it = clientStats_.erase(it);
-					else ++it;
-			}
+			cleanupRoomResources(id);
 
 			if (registry_) registry_->unregisterRoom(id);
 			roomManager_.removeRoom(id);
@@ -513,8 +474,11 @@ public:
 			{
 				std::lock_guard<std::mutex> lock(recorderMutex_);
 				bool active = false;
+				// d.path ends with "/roomId", extract roomId
+				std::string dirName = d.path.substr(d.path.rfind('/') + 1);
+				std::string prefix = dirName + "/";
 				for (auto& [key, _] : recorders_) {
-					if (d.path.find(key.substr(0, key.find('/'))) != std::string::npos) {
+					if (key.compare(0, prefix.size(), prefix) == 0) {
 						active = true; break;
 					}
 				}
@@ -662,6 +626,28 @@ public:
 	}
 
 private:
+	// Clean up recorders, transports, and client stats for a given room
+	void cleanupRoomResources(const std::string& roomId) {
+		{
+			std::lock_guard<std::mutex> lock(recorderMutex_);
+			std::string prefix = roomId + "/";
+			for (auto it = recorders_.begin(); it != recorders_.end(); ) {
+				if (it->first.compare(0, prefix.size(), prefix) == 0) {
+					if (it->second) it->second->stop();
+					recorderTransports_.erase(it->first);
+					it = recorders_.erase(it);
+				} else ++it;
+			}
+		}
+		{
+			std::lock_guard<std::mutex> lock(clientStatsMutex_);
+			std::string prefix = roomId + "/";
+			for (auto it = clientStats_.begin(); it != clientStats_.end(); )
+				if (it->first.compare(0, prefix.size(), prefix) == 0) it = clientStats_.erase(it);
+				else ++it;
+		}
+	}
+
 	RoomManager& roomManager_;
 	RoomRegistry* registry_;
 	std::string recordDir_;

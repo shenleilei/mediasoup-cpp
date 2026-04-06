@@ -20,6 +20,8 @@ Worker::Worker(const WorkerSettings& settings)
 
 Worker::~Worker() {
 	close();
+	// If workerDied() set closed_ but didn't close channel, do it now
+	if (channel_) channel_->close();
 	// Ensure waitThread is not joinable at destruction (would call std::terminate)
 	if (waitThread_.joinable()) {
 		if (waitThread_.get_id() == std::this_thread::get_id())
