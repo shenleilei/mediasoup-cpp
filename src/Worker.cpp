@@ -144,7 +144,11 @@ void Worker::close() {
 	if (channel_) {
 		try {
 			channel_->request(FBS::Request::Method::WORKER_CLOSE);
-		} catch (...) {}
+		} catch (const std::exception& e) {
+			MS_WARN(logger_, "Worker::close() WORKER_CLOSE request failed [pid:{}]: {}", pid_, e.what());
+		} catch (...) {
+			MS_WARN(logger_, "Worker::close() WORKER_CLOSE request failed [pid:{}]: unknown error", pid_);
+		}
 		channel_->close();
 	}
 
@@ -191,13 +195,11 @@ std::shared_ptr<Router> Worker::createRouter(
 	auto routerIdOff = builder.CreateString(routerId);
 	auto reqOff = FBS::Worker::CreateCreateRouterRequest(builder, routerIdOff);
 
-	auto future = channel_->request(
+	channel_->requestWait(
 		FBS::Request::Method::WORKER_CREATE_ROUTER,
 		FBS::Request::Body::Worker_CreateRouterRequest,
 		reqOff.Union(),
-		"");
-
-	future.get(); // wait for response
+		""); // wait for response
 
 	auto router = std::make_shared<Router>(routerId, channel_.get(), mediaCodecs);
 	routers_.insert(router);

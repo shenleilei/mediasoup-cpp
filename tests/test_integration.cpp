@@ -720,10 +720,9 @@ TEST_F(SfuRecordingTest, AutoRecordOnProduce) {
 	ASSERT_TRUE(videoResp.value("ok", false));
 
 	usleep(500000); // let recorder initialize
-	ws.close();
-	usleep(500000);
 
-	// Verify recording file was created (.webm or .mp4)
+	// Verify recording file was created while recorder is active
+	// (H264 deferred header creates the file via avio_open, but deletes it on stop if empty)
 	std::string findCmd = "find " + recordDir_ + " \\( -name '*.webm' -o -name '*.mp4' \\) 2>/dev/null";
 	FILE* fp = popen(findCmd.c_str(), "r");
 	char buf[512]{};
@@ -732,6 +731,9 @@ TEST_F(SfuRecordingTest, AutoRecordOnProduce) {
 	pclose(fp);
 
 	EXPECT_FALSE(files.empty()) << "No recording file created by SFU auto-record";
+
+	ws.close();
+	usleep(500000);
 }
 
 // ═══════════════════════════════════════════════════════════════

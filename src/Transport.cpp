@@ -166,12 +166,10 @@ std::shared_ptr<Producer> Transport::produce(const json& options) {
 	auto reqOff = FBS::Transport::CreateProduceRequest(
 		builder, producerIdOff, fbKind, rtpParamsOff, rtpMappingOff, 0, paused);
 
-	auto future = channel_->request(
+	channel_->requestWait(
 		FBS::Request::Method::TRANSPORT_PRODUCE,
 		FBS::Request::Body::Transport_ProduceRequest,
 		reqOff.Union(), id_);
-
-	future.get();
 
 	// Compute consumable RTP parameters
 	auto consumableRtpParams = ortc::getConsumableRtpParameters(
@@ -246,12 +244,10 @@ std::shared_ptr<Consumer> Transport::consume(const json& options) {
 		builder, consumerIdOff, producerIdOff, fbKind, rtpParamsOff,
 		fbType, builder.CreateVector(fbConsumableEncodings), paused, 0, false);
 
-	auto future = channel_->request(
+	channel_->requestWait(
 		FBS::Request::Method::TRANSPORT_CONSUME,
 		FBS::Request::Body::Transport_ConsumeRequest,
 		reqOff.Union(), id_);
-
-	future.get();
 
 	std::string kind = (fbKind == FBS::RtpParameters::MediaKind::AUDIO) ? "audio" : "video";
 	std::string type = pipe ? "pipe" : "simple";
@@ -285,9 +281,8 @@ std::shared_ptr<Consumer> Transport::consume(const json& options) {
 json Transport::getStats() {
 	if (closed_) return json::object();
 
-	auto future = channel_->request(FBS::Request::Method::TRANSPORT_GET_STATS,
+	auto owned = channel_->requestWait(FBS::Request::Method::TRANSPORT_GET_STATS,
 		FBS::Request::Body::NONE, 0, id_);
-	auto owned = future.get();
 	auto* response = owned.response();
 
 	json result;
@@ -366,7 +361,11 @@ void Transport::close() {
 		channel_->request(FBS::Request::Method::ROUTER_CLOSE_TRANSPORT,
 			FBS::Request::Body::Router_CloseTransportRequest,
 			reqOff.Union(), routerId_).get();
-	} catch (...) {}
+	} catch (const std::exception& e) {
+		spdlog::warn("Transport::close() request failed [id:{}]: {}", id_, e.what());
+	} catch (...) {
+		spdlog::warn("Transport::close() request failed [id:{}]: unknown error", id_);
+	}
 
 	// Close all producers and consumers
 	for (auto& [id, p] : producers_) p->transportClosed();

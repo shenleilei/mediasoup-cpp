@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <mutex>
 #include <atomic>
+#include <thread>
 #include <dirent.h>
 #include <sys/stat.h>
 
@@ -176,8 +177,15 @@ void SignalingServer::run() {
 					std::lock_guard<std::mutex> lock(wsMap->mutex);
 					wsMap->peers.erase(sd->peerId);
 				}
-				if (!sd->roomId.empty())
-					roomService_.leave(sd->roomId, sd->peerId);
+				if (!sd->roomId.empty()) {
+					try {
+						roomService_.leave(sd->roomId, sd->peerId);
+					} catch (const std::exception& e) {
+						spdlog::error("[{} {}] leave failed on disconnect: {}", sd->roomId, sd->peerId, e.what());
+					} catch (...) {
+						spdlog::error("[{} {}] leave failed on disconnect: unknown error", sd->roomId, sd->peerId);
+					}
+				}
 			}
 		}
 
@@ -276,7 +284,11 @@ void SignalingServer::run() {
 			us_timer_set(healthTimer, [](struct us_timer_t* t) {
 				RoomService* svc;
 				memcpy(&svc, us_timer_ext(t), sizeof(RoomService*));
-				try { svc->checkRoomHealth(); } catch (...) {}
+				try { svc->checkRoomHealth(); } catch (const std::exception& e) {
+					spdlog::error("checkRoomHealth exception: {}", e.what());
+				} catch (...) {
+					spdlog::error("checkRoomHealth unknown exception");
+				}
 			}, kHealthCheckIntervalMs, kHealthCheckIntervalMs);
 
 			// Stats broadcast timer — every 10 seconds
@@ -285,7 +297,11 @@ void SignalingServer::run() {
 			us_timer_set(statsTimer, [](struct us_timer_t* t) {
 				RoomService* svc;
 				memcpy(&svc, us_timer_ext(t), sizeof(RoomService*));
-				try { svc->broadcastStats(); } catch (...) {}
+				try { svc->broadcastStats(); } catch (const std::exception& e) {
+					spdlog::error("broadcastStats exception: {}", e.what());
+				} catch (...) {
+					spdlog::error("broadcastStats unknown exception");
+				}
 			}, kStatsBroadcastIntervalMs, kStatsBroadcastIntervalMs);
 
 			// Shutdown poll timer — check atomic flag every 500ms

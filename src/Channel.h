@@ -53,6 +53,23 @@ public:
 		flatbuffers::Offset<void> bodyOffset = 0,
 		const std::string& handlerId = "");
 
+	// Convenience: request + timed wait. Throws on timeout.
+	OwnedResponse requestWait(
+		FBS::Request::Method method,
+		FBS::Request::Body bodyType = FBS::Request::Body::NONE,
+		flatbuffers::Offset<void> bodyOffset = 0,
+		const std::string& handlerId = "",
+		int timeoutMs = 5000)
+	{
+		auto fut = request(method, bodyType, bodyOffset, handlerId);
+		if (fut.wait_for(std::chrono::milliseconds(timeoutMs)) != std::future_status::ready) {
+			spdlog::error("Channel request timeout [method:{} handler:{} timeout:{}ms]",
+				FBS::Request::EnumNameMethod(method), handlerId, timeoutMs);
+			throw std::runtime_error("Channel request timeout (" + std::to_string(timeoutMs) + "ms)");
+		}
+		return fut.get();
+	}
+
 	void notify(
 		FBS::Notification::Event event,
 		FBS::Notification::Body bodyType = FBS::Notification::Body::NONE,

@@ -493,11 +493,23 @@ json RoomService::collectPeerStats(const std::string& roomId, const std::string&
 
 	if (peer->sendTransport) {
 		try { result["sendTransport"] = timedGetStats(peer->sendTransport); }
-		catch (...) { result["sendTransport"] = nullptr; }
+		catch (const std::exception& e) {
+			MS_WARN(logger_, "[{} {}] sendTransport getStats failed: {}", roomId, peerId, e.what());
+			result["sendTransport"] = nullptr;
+		} catch (...) {
+			MS_WARN(logger_, "[{} {}] sendTransport getStats failed: unknown error", roomId, peerId);
+			result["sendTransport"] = nullptr;
+		}
 	}
 	if (peer->recvTransport) {
 		try { result["recvTransport"] = timedGetStats(peer->recvTransport); }
-		catch (...) { result["recvTransport"] = nullptr; }
+		catch (const std::exception& e) {
+			MS_WARN(logger_, "[{} {}] recvTransport getStats failed: {}", roomId, peerId, e.what());
+			result["recvTransport"] = nullptr;
+		} catch (...) {
+			MS_WARN(logger_, "[{} {}] recvTransport getStats failed: unknown error", roomId, peerId);
+			result["recvTransport"] = nullptr;
+		}
 	}
 
 	json producers = json::object();
@@ -508,7 +520,13 @@ json RoomService::collectPeerStats(const std::string& roomId, const std::string&
 			if (fut.wait_for(kTimeout) == std::future_status::ready)
 				pstat["stats"] = fut.get();
 			else { MS_WARN(logger_, "[{} {}] producer {} getStats timeout", roomId, peerId, pid); pstat["stats"] = nullptr; }
-		} catch (...) { pstat["stats"] = nullptr; }
+		} catch (const std::exception& e) {
+			MS_WARN(logger_, "[{} {}] producer {} getStats failed: {}", roomId, peerId, pid, e.what());
+			pstat["stats"] = nullptr;
+		} catch (...) {
+			MS_WARN(logger_, "[{} {}] producer {} getStats failed: unknown error", roomId, peerId, pid);
+			pstat["stats"] = nullptr;
+		}
 		json scores = json::array();
 		for (auto& s : prod->scores())
 			scores.push_back({{"ssrc", s.ssrc}, {"score", s.score}, {"rid", s.rid}});
@@ -554,7 +572,11 @@ void RoomService::broadcastStats() {
 			try {
 				auto stats = collectPeerStats(roomId, peerId);
 				if (!stats.empty()) allStats.push_back(stats);
+			} catch (const std::exception& e) {
+				MS_WARN(logger_, "broadcastStats collectPeerStats failed [room:{} peer:{}]: {}", roomId, peerId, e.what());
+				allStats.push_back({{"peerId", peerId}});
 			} catch (...) {
+				MS_WARN(logger_, "broadcastStats collectPeerStats failed [room:{} peer:{}]: unknown error", roomId, peerId);
 				allStats.push_back({{"peerId", peerId}});
 			}
 		}

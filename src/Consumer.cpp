@@ -8,16 +8,16 @@ namespace mediasoup {
 
 void Consumer::pause() {
 	if (closed_) return;
-	channel_->request(FBS::Request::Method::CONSUMER_PAUSE,
-		FBS::Request::Body::NONE, 0, id_).get();
+	channel_->requestWait(FBS::Request::Method::CONSUMER_PAUSE,
+		FBS::Request::Body::NONE, 0, id_);
 	paused_ = true;
 	emitter_.emit("pause");
 }
 
 void Consumer::resume() {
 	if (closed_) return;
-	channel_->request(FBS::Request::Method::CONSUMER_RESUME,
-		FBS::Request::Body::NONE, 0, id_).get();
+	channel_->requestWait(FBS::Request::Method::CONSUMER_RESUME,
+		FBS::Request::Body::NONE, 0, id_);
 	paused_ = false;
 	emitter_.emit("resume");
 }
@@ -27,24 +27,24 @@ void Consumer::setPreferredLayers(uint8_t spatialLayer, uint8_t temporalLayer) {
 	auto& builder = channel_->bufferBuilder();
 	auto layersOff = FBS::Consumer::CreateConsumerLayers(builder, spatialLayer, temporalLayer);
 	auto reqOff = FBS::Consumer::CreateSetPreferredLayersRequest(builder, layersOff);
-	channel_->request(FBS::Request::Method::CONSUMER_SET_PREFERRED_LAYERS,
+	channel_->requestWait(FBS::Request::Method::CONSUMER_SET_PREFERRED_LAYERS,
 		FBS::Request::Body::Consumer_SetPreferredLayersRequest,
-		reqOff.Union(), id_).get();
+		reqOff.Union(), id_);
 }
 
 void Consumer::setPriority(uint8_t priority) {
 	if (closed_) return;
 	auto& builder = channel_->bufferBuilder();
 	auto reqOff = FBS::Consumer::CreateSetPriorityRequest(builder, priority);
-	channel_->request(FBS::Request::Method::CONSUMER_SET_PRIORITY,
+	channel_->requestWait(FBS::Request::Method::CONSUMER_SET_PRIORITY,
 		FBS::Request::Body::Consumer_SetPriorityRequest,
-		reqOff.Union(), id_).get();
+		reqOff.Union(), id_);
 }
 
 void Consumer::requestKeyFrame() {
 	if (closed_) return;
-	channel_->request(FBS::Request::Method::CONSUMER_REQUEST_KEY_FRAME,
-		FBS::Request::Body::NONE, 0, id_).get();
+	channel_->requestWait(FBS::Request::Method::CONSUMER_REQUEST_KEY_FRAME,
+		FBS::Request::Body::NONE, 0, id_);
 }
 
 void Consumer::close() {
@@ -61,7 +61,11 @@ void Consumer::close() {
 		channel_->request(FBS::Request::Method::TRANSPORT_CLOSE_CONSUMER,
 			FBS::Request::Body::Transport_CloseConsumerRequest,
 			reqOff.Union(), transportId_).get();
-	} catch (...) {}
+	} catch (const std::exception& e) {
+		spdlog::warn("Consumer::close() request failed [id:{}]: {}", id_, e.what());
+	} catch (...) {
+		spdlog::warn("Consumer::close() request failed [id:{}]: unknown error", id_);
+	}
 
 	emitter_.emit("@close");
 }
@@ -116,9 +120,8 @@ void Consumer::handleNotification(
 json Consumer::getStats() {
 	if (closed_) return json::array();
 
-	auto future = channel_->request(FBS::Request::Method::CONSUMER_GET_STATS,
+	auto owned = channel_->requestWait(FBS::Request::Method::CONSUMER_GET_STATS,
 		FBS::Request::Body::NONE, 0, id_);
-	auto owned = future.get();
 	auto* response = owned.response();
 
 	json result = json::array();
