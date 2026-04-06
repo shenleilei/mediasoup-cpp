@@ -308,6 +308,10 @@ RoomRegistry heartbeat (0 或 1)
 ### 待实现
 1. **Dynacast**: 按需发送视频层，减少带宽消耗
 2. **信令协议标准化**: 定义统一的 request/response/notification schema
+3. **多节点录制回放**: 当前每个节点只能查看本地录制文件。方案选项：
+   - 共享存储（NFS/S3 FUSE）— 零代码改动，运维层面解决
+   - 对象存储上传 — 录制完成后异步上传到 S3/OSS，API 从对象存储列文件
+   - Redis 索引 + 跨节点 proxy — 录制开始/结束时写 Redis 索引，查询时聚合所有节点，播放时 proxy 到文件所在节点（需处理 CORS、节点下线等问题）
 
 ### 建议改进
 1. 添加 HTTPS/WSS 支持
