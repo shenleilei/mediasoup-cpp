@@ -570,21 +570,20 @@ TEST_F(QosRecordingTest, RecordingsApiListing) {
 	std::string body = httpGet("/api/recordings");
 	ASSERT_FALSE(body.empty());
 
-	auto rooms = json::parse(body);
-	ASSERT_TRUE(rooms.is_array());
-	EXPECT_GE(rooms.size(), 1u);
+	auto recs = json::parse(body);
+	ASSERT_TRUE(recs.is_array());
+	EXPECT_GE(recs.size(), 1u);
 
 	// Find our test room
 	bool found = false;
-	for (auto& room : rooms) {
-		if (room["roomId"] == testRoom_) {
+	for (auto& r : recs) {
+		if (r["roomId"] == testRoom_) {
 			found = true;
-			EXPECT_FALSE(room["files"].empty());
-			// Each file should be a .webm
-			for (auto& f : room["files"]) {
-				std::string fname = f.get<std::string>();
-				EXPECT_NE(fname.find(".webm"), std::string::npos);
-			}
+			EXPECT_TRUE(r.contains("peerId"));
+			EXPECT_TRUE(r.contains("timestamp"));
+			EXPECT_TRUE(r.contains("file"));
+			std::string fname = r["file"].get<std::string>();
+			EXPECT_NE(fname.find(".webm"), std::string::npos);
 			break;
 		}
 	}
@@ -600,11 +599,11 @@ TEST_F(QosRecordingTest, RecordingsFileServing) {
 
 	// Get listing to find the filename
 	std::string listBody = httpGet("/api/recordings");
-	auto rooms = json::parse(listBody);
+	auto recs = json::parse(listBody);
 	std::string webmFile;
-	for (auto& room : rooms) {
-		if (room["roomId"] == testRoom_ && !room["files"].empty()) {
-			webmFile = room["files"][0].get<std::string>();
+	for (auto& r : recs) {
+		if (r["roomId"] == testRoom_) {
+			webmFile = r["file"].get<std::string>();
 			break;
 		}
 	}

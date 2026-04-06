@@ -1,100 +1,165 @@
 <!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
-<title>Recording Playback + QoS</title>
+<title>Recording Playback</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
-body { background:#111; color:#eee; font-family:sans-serif; padding:20px; }
+body { background:#111; color:#eee; font-family:sans-serif; padding:20px; max-width:1200px; margin:0 auto; }
 h1 { font-size:1.3em; margin-bottom:15px; }
-#room-list { margin-bottom:20px; }
-.room-group { margin-bottom:12px; }
-.room-group h3 { color:#4CAF50; font-size:0.95em; margin-bottom:4px; }
-.file-link { color:#2196F3; cursor:pointer; margin-right:15px; font-size:0.9em; }
-.file-link:hover { text-decoration:underline; }
-#player-area { display:none; }
-video { max-width:640px; background:#000; border-radius:6px; }
-#qos-timeline { margin-top:15px; background:#0d0d1a; border:1px solid #333; border-radius:8px; padding:15px; }
-#qos-timeline h2 { font-size:1.1em; margin-bottom:10px; color:#4CAF50; }
-.qos-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); gap:6px; font-size:12px; }
-.qos-item { background:#222; padding:4px 8px; border-radius:4px; }
+a { color:#2196F3; cursor:pointer; }
+a:hover { text-decoration:underline; }
+
+/* Search form */
+#search-panel { background:#1a1a1a; padding:16px; border-radius:8px; margin-bottom:20px; }
+#search-panel label { display:inline-block; margin-right:8px; font-size:13px; color:#aaa; }
+#search-panel input { background:#222; border:1px solid #444; color:#eee; padding:6px 10px; border-radius:4px; font-size:13px; width:160px; margin-right:16px; }
+#search-panel button { background:#2196F3; color:#fff; border:none; padding:8px 20px; border-radius:4px; cursor:pointer; font-size:13px; }
+#search-panel button:hover { background:#1976D2; }
+
+/* Results table */
+#results { margin-bottom:20px; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th { text-align:left; padding:8px 10px; background:#1a1a1a; color:#aaa; border-bottom:1px solid #333; }
+td { padding:8px 10px; border-bottom:1px solid #222; }
+tr:hover { background:#1a1a2a; }
+.size { color:#888; }
+.qos-badge { background:#4CAF50; color:#fff; padding:2px 6px; border-radius:3px; font-size:11px; }
+.no-qos { color:#666; font-size:11px; }
+
+/* Player */
+#player-area { display:none; background:#1a1a1a; padding:16px; border-radius:8px; margin-bottom:20px; }
+#player-area video { width:100%; max-width:640px; background:#000; border-radius:4px; }
+#player-header { margin-bottom:10px; font-size:13px; color:#aaa; }
+#player-header span { color:#eee; }
+#back-link { margin-bottom:12px; display:inline-block; font-size:13px; }
+
+/* QoS panel */
+#qos-panel { margin-top:12px; }
+#qos-content { font-size:12px; }
+.qos-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); gap:4px 12px; margin-bottom:8px; }
+.qos-item { display:flex; justify-content:space-between; padding:2px 0; }
 .qos-item .label { color:#888; }
 .qos-item .value { color:#eee; font-family:monospace; }
-.score-bar { margin-top:10px; }
-.score-bar canvas { width:100%; height:40px; border-radius:4px; background:#1a1a2e; }
-#no-qos { color:#888; font-size:13px; }
+
+/* Score timeline */
+#score-timeline { margin-top:12px; }
+canvas { width:100%; height:60px; background:#0a0a0a; border-radius:4px; }
+
+.empty-msg { color:#666; padding:40px; text-align:center; }
 </style>
 </head><body>
 <h1>📼 Recording Playback</h1>
-<div id="room-list">Loading recordings...</div>
+
+<div id="search-panel">
+  <label>Room <input type="text" id="f-room" placeholder="e.g. test-room"></label>
+  <label>User <input type="text" id="f-peer" placeholder="e.g. peer-abc"></label>
+  <label>From <input type="date" id="f-from"></label>
+  <label>To <input type="date" id="f-to"></label>
+  <button onclick="doSearch()">Search</button>
+</div>
+
+<div id="results"></div>
+
 <div id="player-area">
+  <a id="back-link" onclick="closePlayer()">← Back to results</a>
+  <div id="player-header"></div>
   <video id="video" controls></video>
-  <div id="qos-timeline">
-    <h2>📡 QoS at current time</h2>
-    <div id="qos-content"><span id="no-qos">No QoS data</span></div>
-    <div class="score-bar"><canvas id="score-canvas" height="40"></canvas></div>
+  <div id="qos-panel">
+    <div id="qos-content"></div>
+    <div id="score-timeline"><canvas id="timeline-canvas" height="60"></canvas></div>
   </div>
 </div>
 
 <script>
+let allRecordings = [];
 let qosData = [];
-let video = document.getElementById('video');
+const video = document.getElementById('video');
 
-// Load recording list
-fetch('/api/recordings').then(r => r.json()).then(rooms => {
-  let el = document.getElementById('room-list');
-  if (!rooms.length) { el.textContent = 'No recordings found.'; return; }
-  el.innerHTML = '';
-  for (let room of rooms) {
-    let div = document.createElement('div');
-    div.className = 'room-group';
-    let h3 = document.createElement('h3');
-    h3.textContent = 'Room: ' + room.roomId;
-    h3.style.cursor = 'pointer';
-    h3.onclick = () => loadRecording(room.roomId, room.files[0]);
-    div.appendChild(h3);
-    for (let f of room.files) {
-      let a = document.createElement('span');
-      a.className = 'file-link';
-      a.textContent = f;
-      a.onclick = () => loadRecording(room.roomId, f);
-      div.appendChild(a);
-    }
-    el.appendChild(div);
-  }
+// Load all recordings on page load
+fetch('/api/recordings').then(r => r.json()).then(data => {
+  allRecordings = data.sort((a,b) => b.timestamp - a.timestamp);
+  doSearch();
 });
 
-function loadRecording(roomId, filename) {
+function doSearch() {
+  const room = document.getElementById('f-room').value.trim().toLowerCase();
+  const peer = document.getElementById('f-peer').value.trim().toLowerCase();
+  const fromDate = document.getElementById('f-from').value;
+  const toDate = document.getElementById('f-to').value;
+  const fromTs = fromDate ? new Date(fromDate).getTime() / 1000 : 0;
+  const toTs = toDate ? (new Date(toDate).getTime() / 1000 + 86400) : Infinity;
+
+  const filtered = allRecordings.filter(r => {
+    if (room && !r.roomId.toLowerCase().includes(room)) return false;
+    if (peer && !r.peerId.toLowerCase().includes(peer)) return false;
+    if (r.timestamp < fromTs || r.timestamp > toTs) return false;
+    return true;
+  });
+
+  renderResults(filtered);
+}
+
+function renderResults(list) {
+  if (list.length === 0) {
+    document.getElementById('results').innerHTML = '<div class="empty-msg">No recordings found</div>';
+    return;
+  }
+  let html = '<table><thead><tr><th>Time</th><th>Room</th><th>User</th><th>Size</th><th>QoS</th><th></th></tr></thead><tbody>';
+  for (const r of list) {
+    const dt = new Date(r.timestamp * 1000);
+    const time = dt.toLocaleString();
+    const size = r.size > 1048576 ? (r.size/1048576).toFixed(1)+' MB' : r.size > 1024 ? (r.size/1024).toFixed(0)+' KB' : r.size+' B';
+    const qosBadge = r.hasQos ? '<span class="qos-badge">QoS</span>' : '<span class="no-qos">—</span>';
+    html += `<tr>
+      <td>${time}</td>
+      <td>${r.roomId}</td>
+      <td>${r.peerId}</td>
+      <td class="size">${size}</td>
+      <td>${qosBadge}</td>
+      <td><a onclick="openPlayer('${r.roomId}','${r.file}','${r.peerId}',${r.timestamp},${r.hasQos})">Play</a></td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('results').innerHTML = html;
+}
+
+function openPlayer(roomId, file, peerId, ts, hasQos) {
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('search-panel').style.display = 'none';
   document.getElementById('player-area').style.display = 'block';
-  video.src = '/recordings/' + roomId + '/' + filename;
+
+  const dt = new Date(ts * 1000).toLocaleString();
+  document.getElementById('player-header').innerHTML =
+    `<span>${roomId}</span> / <span>${peerId}</span> — ${dt}`;
+
+  video.src = '/recordings/' + roomId + '/' + file;
   video.load();
-  document.getElementById('qos-content').innerHTML = '<span style="color:#888">Loading...</span>';
 
-  // Show which file is selected
-  document.querySelectorAll('.file-link').forEach(el => el.style.color = '#2196F3');
-  event.target.style.color = '#4CAF50';
-
-  // Load QoS sidecar
-  let qosFile = filename.replace('.webm', '.qos.json');
   qosData = [];
-  fetch('/recordings/' + roomId + '/' + qosFile)
-    .then(r => r.ok ? r.text() : '[]')
-    .then(text => {
-      // Handle incomplete JSON (e.g. missing trailing ])
-      try { return JSON.parse(text); } catch(e) {
-        let fixed = text.replace(/,\s*$/, '') + ']';
-        try { return JSON.parse(fixed); } catch(e2) { return []; }
-      }
-    })
-    .then(data => {
-      qosData = data || [];
-      if (qosData.length) {
-        drawScoreTimeline();
-        renderSnapshot(qosData[0].stats);
-      } else {
-        document.getElementById('no-qos').textContent = 'No QoS data for this recording';
-      }
-    })
-    .catch(() => { qosData = []; });
+  document.getElementById('qos-content').innerHTML = '';
+  if (hasQos) {
+    const qosFile = file.replace('.webm', '.qos.json');
+    fetch('/recordings/' + roomId + '/' + qosFile)
+      .then(r => r.ok ? r.text() : '[]')
+      .then(text => {
+        try { return JSON.parse(text); } catch(e) {
+          let fixed = text.replace(/,\s*$/, '') + ']';
+          try { return JSON.parse(fixed); } catch(e2) { return []; }
+        }
+      })
+      .then(data => {
+        qosData = data || [];
+        if (qosData.length) { drawScoreTimeline(); renderSnapshot(qosData[0].stats); }
+      })
+      .catch(() => { qosData = []; });
+  }
+}
+
+function closePlayer() {
+  document.getElementById('player-area').style.display = 'none';
+  document.getElementById('results').style.display = '';
+  document.getElementById('search-panel').style.display = '';
+  video.pause(); video.src = '';
 }
 
 video.addEventListener('error', () => {
@@ -104,16 +169,11 @@ video.addEventListener('error', () => {
 
 function updateQosDisplay() {
   if (!qosData.length) return;
-  let t = video.currentTime;
-  let best = qosData[0];
-  for (let s of qosData) {
-    if (s.t <= t) best = s;
-    else break;
-  }
+  let t = video.currentTime, best = qosData[0];
+  for (let s of qosData) { if (s.t <= t) best = s; else break; }
   renderSnapshot(best.stats);
   drawPlayhead(t);
 }
-
 video.addEventListener('timeupdate', updateQosDisplay);
 video.addEventListener('seeked', updateQosDisplay);
 
@@ -123,16 +183,12 @@ function fmtBitrate(bps) {
   if (bps >= 1000) return (bps/1000).toFixed(0) + ' kbps';
   return bps + ' bps';
 }
-function qosItem(label, value) {
-  return '<div class="qos-item"><span class="label">' + label + '</span> <span class="value">' + value + '</span></div>';
-}
+function qosItem(label, value) { return `<div class="qos-item"><span class="label">${label}</span> <span class="value">${value}</span></div>`; }
 
 function renderSnapshot(stats) {
-  let el = document.getElementById('qos-content');
-  if (!stats) { el.innerHTML = '<span style="color:#888">-</span>'; return; }
+  if (!stats) { document.getElementById('qos-content').innerHTML = ''; return; }
   let html = '';
 
-  // sendTransport
   let st = stats.sendTransport;
   if (st && typeof st === 'object' && Object.keys(st).length) {
     html += '<div style="margin:4px 0;color:#4CAF50;font-size:12px;font-weight:bold">⬆ Uplink</div>';
@@ -146,13 +202,12 @@ function renderSnapshot(stats) {
     html += '</div>';
   }
 
-  // Producers
   let prods = stats.producers || {};
   for (let pid in prods) {
     let p = prods[pid];
     html += '<div style="margin:4px 0;color:#2196F3;font-size:12px;font-weight:bold">📹 ' + (p.kind||'?') + '</div>';
     html += '<div class="qos-grid">';
-    if (p.scores) for (let s of p.scores) html += qosItem('Score (SSRC ' + s.ssrc + ')', s.score + '/10');
+    if (p.scores) for (let s of p.scores) html += qosItem('Score', s.score + '/10');
     if (p.stats && p.stats[0]) {
       let s = p.stats[0];
       html += qosItem('Bitrate', fmtBitrate(s.bitrate));
@@ -170,62 +225,55 @@ function renderSnapshot(stats) {
     html += '</div>';
   }
 
-  // recvTransport
-  let rt = stats.recvTransport;
-  if (rt && typeof rt === 'object' && Object.keys(rt).length) {
-    html += '<div style="margin:4px 0;color:#FF9800;font-size:12px;font-weight:bold">⬇ Downlink</div>';
+  let consumers = stats.consumers || {};
+  let cEntries = Object.entries(consumers);
+  if (cEntries.length > 0) {
+    html += '<div style="margin:4px 0;color:#9C27B0;font-size:12px;font-weight:bold">🔊 Consumers</div>';
     html += '<div class="qos-grid">';
-    html += qosItem('Send Bitrate', fmtBitrate(rt.rtpSendBitrate));
+    for (let [cid, c] of cEntries) {
+      html += qosItem(c.kind + ' score', c.score + '/10');
+    }
     html += '</div>';
   }
 
-  el.innerHTML = html || '<span style="color:#888">No data at this time</span>';
+  document.getElementById('qos-content').innerHTML = html;
 }
 
 function drawScoreTimeline() {
-  let canvas = document.getElementById('score-canvas');
-  let ctx = canvas.getContext('2d');
+  const canvas = document.getElementById('timeline-canvas');
+  const ctx = canvas.getContext('2d');
   canvas.width = canvas.offsetWidth * 2;
-  canvas.height = 80;
+  canvas.height = 120;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-
   if (!qosData.length) return;
-  let maxT = qosData[qosData.length - 1].t || 1;
+
+  const maxT = qosData[qosData.length-1].t || 1;
+  const barW = Math.max(2, canvas.width / qosData.length - 1);
 
   for (let i = 0; i < qosData.length; i++) {
-    let s = qosData[i];
-    let x = (s.t / maxT) * canvas.width;
-    let nextT = (i + 1 < qosData.length) ? qosData[i+1].t : maxT;
-    let w = Math.max(((nextT - s.t) / maxT) * canvas.width, 2);
-
-    // Get worst producer score
+    const entry = qosData[i];
     let score = 10;
-    let prods = s.stats && s.stats.producers || {};
+    const prods = entry.stats && entry.stats.producers || {};
     for (let pid in prods) {
-      let p = prods[pid];
-      if (p.scores) for (let sc of p.scores) score = Math.min(score, sc.score);
+      if (prods[pid].scores) for (let s of prods[pid].scores) score = Math.min(score, s.score);
     }
-
-    let color = score >= 7 ? '#4CAF50' : score >= 4 ? '#FF9800' : '#f44336';
-    ctx.fillStyle = color;
-    ctx.fillRect(x, canvas.height - (score / 10) * canvas.height, w, (score / 10) * canvas.height);
+    const x = (entry.t / maxT) * canvas.width;
+    const h = (score / 10) * canvas.height;
+    ctx.fillStyle = score >= 7 ? '#4CAF50' : score >= 4 ? '#FF9800' : '#f44336';
+    ctx.fillRect(x, canvas.height - h, barW, h);
   }
 }
 
 function drawPlayhead(t) {
-  let canvas = document.getElementById('score-canvas');
-  let ctx = canvas.getContext('2d');
-  // Redraw timeline then playhead
-  drawScoreTimeline();
   if (!qosData.length) return;
-  let maxT = qosData[qosData.length - 1].t || 1;
-  let x = (t / maxT) * canvas.width;
+  const canvas = document.getElementById('timeline-canvas');
+  const ctx = canvas.getContext('2d');
+  drawScoreTimeline();
+  const maxT = qosData[qosData.length-1].t || 1;
+  const x = (t / maxT) * canvas.width;
   ctx.strokeStyle = '#fff';
   ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(x, 0);
-  ctx.lineTo(x, canvas.height);
-  ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
 }
 </script>
 </body></html>

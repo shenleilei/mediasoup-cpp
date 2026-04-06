@@ -178,13 +178,12 @@ void SignalingServer::run() {
 		}
 
 	}).get("/api/recordings", [this](auto* res, auto*) {
-		// List all recordings grouped by room
+		// List all recordings with structured metadata
 		if (recordDir_.empty()) {
 			res->writeHeader("Content-Type", "application/json")->end("[]");
 			return;
 		}
-		json rooms = json::array();
-		// Scan recordDir_ for subdirectories (rooms)
+		json result = json::array();
 		DIR* dir = opendir(recordDir_.c_str());
 		if (!dir) { res->writeHeader("Content-Type", "application/json")->end("[]"); return; }
 		struct dirent* ent;
@@ -193,21 +192,35 @@ void SignalingServer::run() {
 			std::string roomPath = recordDir_ + "/" + ent->d_name;
 			struct stat st;
 			if (stat(roomPath.c_str(), &st) != 0 || !S_ISDIR(st.st_mode)) continue;
-			json files = json::array();
+			std::string roomId(ent->d_name);
 			DIR* rdir = opendir(roomPath.c_str());
 			if (!rdir) continue;
 			struct dirent* rent;
 			while ((rent = readdir(rdir))) {
 				std::string fname(rent->d_name);
-				if (fname.size() > 5 && fname.substr(fname.size()-5) == ".webm")
-					files.push_back(fname);
+				if (fname.size() < 6 || fname.substr(fname.size()-5) != ".webm") continue;
+				// Parse: {peerId}_{timestamp}.webm
+				std::string base = fname.substr(0, fname.size()-5);
+				auto pos = base.rfind('_');
+				std::string peerId = (pos != std::string::npos) ? base.substr(0, pos) : base;
+				int64_t ts = 0;
+				if (pos != std::string::npos) try { ts = std::stoll(base.substr(pos+1)); } catch(...) {}
+				// File size
+				std::string fullPath = roomPath + "/" + fname;
+				struct stat fst;
+				int64_t fileSize = 0;
+				if (stat(fullPath.c_str(), &fst) == 0) fileSize = fst.st_size;
+				// Check QoS sidecar
+				bool hasQos = (stat((roomPath + "/" + base + ".qos.json").c_str(), &fst) == 0);
+				result.push_back({
+					{"roomId", roomId}, {"peerId", peerId}, {"timestamp", ts},
+					{"file", fname}, {"size", fileSize}, {"hasQos", hasQos}
+				});
 			}
 			closedir(rdir);
-			if (!files.empty())
-				rooms.push_back({{"roomId", std::string(ent->d_name)}, {"files", files}});
 		}
 		closedir(dir);
-		res->writeHeader("Content-Type", "application/json")->end(rooms.dump());
+		res->writeHeader("Content-Type", "application/json")->end(result.dump());
 
 	}).get("/recordings/*", [this](auto* res, auto* req) {
 		// Serve recording files (webm + qos.json)
