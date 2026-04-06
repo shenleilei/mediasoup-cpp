@@ -148,6 +148,12 @@ TEST(OrtcTest, MatchCodecsDifferentChannels) {
 	EXPECT_FALSE(ortc::matchCodecs(a, b));
 }
 
+TEST(OrtcTest, MatchCodecsSameChannels) {
+	RtpCodecCapability a{"audio", "audio/opus", 100, 48000, 2, {}, {}};
+	RtpCodecCapability b{"audio", "audio/opus", 101, 48000, 2, {}, {}};
+	EXPECT_TRUE(ortc::matchCodecs(a, b));
+}
+
 TEST(OrtcTest, MatchCodecsVp9StrictProfileId) {
 	RtpCodecCapability a{"video", "video/VP9", 0, 90000, 0, {{"profile-id", 0}}, {}};
 	RtpCodecCapability b{"video", "video/VP9", 0, 90000, 0, {{"profile-id", 1}}, {}};
@@ -217,7 +223,7 @@ TEST(OrtcTest, ConsumableRtpParametersMapsCodecsAndDefaultsScalability) {
 	RtpParameters params;
 	params.codecs.push_back({"video/VP8", 112, 90000, 0, {}, {}});
 	params.codecs.push_back({"video/rtx", 113, 90000, 0, {{"apt", 112}}, {}});
-	params.encodings.push_back(RtpEncodingParameters{1234u, "r0", std::nullopt, std::nullopt, false, "", 500000u});
+	params.encodings.push_back(RtpEncodingParameters{1234u, "r0", std::nullopt, std::nullopt, false, "S1T1", 500000u});
 	params.rtcp.cname = "stream-cname";
 
 	auto mapping = ortc::getProducerRtpParametersMapping(params, caps);
