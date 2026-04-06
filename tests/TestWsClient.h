@@ -17,6 +17,7 @@
 #include <queue>
 #include <atomic>
 #include <chrono>
+#include <cerrno>
 
 using json = nlohmann::json;
 
@@ -143,7 +144,12 @@ private:
 		std::vector<uint8_t> pending; // buffer for incomplete frames
 		while (connected_) {
 			int n = ::recv(fd_, buf.data(), buf.size(), 0);
-			if (n <= 0) break;
+			if (n < 0) {
+				// Timeout (EAGAIN/EWOULDBLOCK) — just retry
+				if (errno == EAGAIN || errno == EWOULDBLOCK) continue;
+				break; // real error
+			}
+			if (n == 0) break; // connection closed
 			pending.insert(pending.end(), buf.begin(), buf.begin() + n);
 
 			// Parse all complete frames in pending buffer

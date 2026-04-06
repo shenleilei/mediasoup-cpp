@@ -20,6 +20,13 @@ Worker::Worker(const WorkerSettings& settings)
 
 Worker::~Worker() {
 	close();
+	// Ensure waitThread is not joinable at destruction (would call std::terminate)
+	if (waitThread_.joinable()) {
+		if (waitThread_.get_id() == std::this_thread::get_id())
+			waitThread_.detach();
+		else
+			waitThread_.join();
+	}
 }
 
 void Worker::spawn(const WorkerSettings& settings) {
@@ -144,8 +151,11 @@ void Worker::close() {
 		::kill(pid_, SIGTERM);
 	}
 
-	// Wait for waitThread to finish (waitpid will return after SIGTERM)
-	if (waitThread_.joinable()) waitThread_.join();
+	// Wait for waitThread to finish — but not if we ARE the waitThread
+	if (waitThread_.joinable() && waitThread_.get_id() != std::this_thread::get_id())
+		waitThread_.join();
+	else if (waitThread_.joinable())
+		waitThread_.detach();
 
 	emitter_.emit("close");
 }
@@ -156,12 +166,14 @@ void Worker::workerDied(const std::string& reason) {
 
 	MS_ERROR(logger_, "worker died [pid:{}]: {}", pid_, reason);
 
-	if (channel_) channel_->close();
-
 	for (auto& router : routers_) {
 		router->workerClosed();
 	}
 	routers_.clear();
+
+	// Don't call channel_->close() here — we're in waitThread, and close()
+	// would join readThread which may deadlock. Channel will be cleaned up
+	// when the Worker shared_ptr is released.
 
 	emitter_.emit("died", {std::any(reason)});
 }
