@@ -13,6 +13,8 @@
 #include <string>
 #include <memory>
 #include <future>
+#include <algorithm>
+#include <dirent.h>
 #include <sys/stat.h>
 
 namespace mediasoup {
@@ -411,6 +413,78 @@ public:
 
 			if (registry_) registry_->unregisterRoom(id);
 			roomManager_.removeRoom(id);
+		}
+
+		// Periodically check disk usage of recording directory
+		cleanOldRecordings();
+	}
+
+	// Remove oldest recording directories when total size exceeds limit
+	void cleanOldRecordings(uint64_t maxBytes = 10ULL * 1024 * 1024 * 1024) { // 10 GB default
+		if (recordDir_.empty()) return;
+
+		struct DirEntry { std::string path; time_t mtime; uint64_t size; };
+		std::vector<DirEntry> dirs;
+		uint64_t totalSize = 0;
+
+		DIR* dir = opendir(recordDir_.c_str());
+		if (!dir) return;
+		struct dirent* ent;
+		while ((ent = readdir(dir))) {
+			if (ent->d_name[0] == '.') continue;
+			std::string subdir = recordDir_ + "/" + ent->d_name;
+			struct stat st;
+			if (stat(subdir.c_str(), &st) != 0 || !S_ISDIR(st.st_mode)) continue;
+
+			uint64_t dirSize = 0;
+			time_t newest = 0;
+			DIR* rdir = opendir(subdir.c_str());
+			if (!rdir) continue;
+			struct dirent* rent;
+			while ((rent = readdir(rdir))) {
+				std::string fpath = subdir + "/" + rent->d_name;
+				struct stat fst;
+				if (stat(fpath.c_str(), &fst) == 0 && S_ISREG(fst.st_mode)) {
+					dirSize += fst.st_size;
+					if (fst.st_mtime > newest) newest = fst.st_mtime;
+				}
+			}
+			closedir(rdir);
+			totalSize += dirSize;
+			dirs.push_back({subdir, newest, dirSize});
+		}
+		closedir(dir);
+
+		if (totalSize <= maxBytes) return;
+
+		// Sort oldest first
+		std::sort(dirs.begin(), dirs.end(), [](auto& a, auto& b) { return a.mtime < b.mtime; });
+
+		for (auto& d : dirs) {
+			if (totalSize <= maxBytes) break;
+			// Don't delete dirs that have active recorders
+			{
+				std::lock_guard<std::mutex> lock(recorderMutex_);
+				bool active = false;
+				for (auto& [key, _] : recorders_) {
+					if (d.path.find(key.substr(0, key.find('/'))) != std::string::npos) {
+						active = true; break;
+					}
+				}
+				if (active) continue;
+			}
+			// Remove all files in directory, then the directory
+			DIR* rdir = opendir(d.path.c_str());
+			if (rdir) {
+				struct dirent* rent;
+				while ((rent = readdir(rdir)))
+					if (rent->d_name[0] != '.')
+						std::remove((d.path + "/" + rent->d_name).c_str());
+				closedir(rdir);
+			}
+			rmdir(d.path.c_str());
+			totalSize -= d.size;
+			MS_DEBUG(logger_, "Cleaned old recording dir: {} (freed {} bytes)", d.path, d.size);
 		}
 	}
 
