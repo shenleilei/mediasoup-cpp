@@ -17,7 +17,7 @@ public:
 			sinks.push_back(fileSink);
 		}
 		auto defaultLogger = std::make_shared<spdlog::logger>("", sinks.begin(), sinks.end());
-		defaultLogger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%n] [%^%l%$] %v");
+		defaultLogger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%n] [%^%l%$] [%s:%#] %v");
 		defaultLogger->set_level(spdlog::level::debug);
 		spdlog::set_default_logger(defaultLogger);
 		sinks_ = sinks;
@@ -30,7 +30,7 @@ public:
 				logger = std::make_shared<spdlog::logger>(name, sinks_.begin(), sinks_.end());
 			else
 				logger = spdlog::stdout_color_mt(name);
-			logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%n] [%^%l%$] %v");
+			logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%n] [%^%l%$] [%s:%#] %v");
 			logger->set_level(spdlog::level::debug);
 			try { spdlog::register_logger(logger); } catch (...) {}
 		}
@@ -41,10 +41,9 @@ private:
 	static inline std::vector<spdlog::sink_ptr> sinks_;
 };
 
-// Standard log macros
-#define MS_LOG(logger, level, ...) (logger)->level(__VA_ARGS__)
-#define MS_DEBUG(logger, ...) MS_LOG(logger, debug, __VA_ARGS__)
-#define MS_WARN(logger, ...) MS_LOG(logger, warn, __VA_ARGS__)
-#define MS_ERROR(logger, ...) MS_LOG(logger, error, __VA_ARGS__)
+// Log macros with source location (file:line)
+#define MS_DEBUG(logger, ...) (logger)->log(spdlog::source_loc{__FILE__, __LINE__, __FUNCTION__}, spdlog::level::debug, __VA_ARGS__)
+#define MS_WARN(logger, ...)  (logger)->log(spdlog::source_loc{__FILE__, __LINE__, __FUNCTION__}, spdlog::level::warn, __VA_ARGS__)
+#define MS_ERROR(logger, ...) (logger)->log(spdlog::source_loc{__FILE__, __LINE__, __FUNCTION__}, spdlog::level::err, __VA_ARGS__)
 
 } // namespace mediasoup

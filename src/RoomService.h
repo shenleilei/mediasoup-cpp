@@ -153,7 +153,7 @@ public:
 							{"producerPaused", prod->paused()}
 						});
 					} catch (const std::exception& e) {
-						MS_ERROR(logger_, "[room:{} {}] auto-subscribe on createTransport FAILED for producer {}: {}", roomId, peerId, pid, e.what());
+						MS_ERROR(logger_, "[{} {}] auto-subscribe on createTransport FAILED for producer {}: {}", roomId, peerId, pid, e.what());
 					}
 				}
 			}
@@ -198,13 +198,13 @@ public:
 
 		// Server-driven auto-subscribe
 		auto others = room->getOtherPeers(peerId);
-		MS_DEBUG(logger_, "[room:{} {}] auto-subscribe: producer {}, otherPeers={}", roomId, peerId, producer->id(), others.size());
+		MS_DEBUG(logger_, "[{} {}] auto-subscribe: producer {}, otherPeers={}", roomId, peerId, producer->id(), others.size());
 		for (auto& other : others) {
-			MS_DEBUG(logger_, "[room:{} {}]   → {} recvTransport={}", roomId, peerId, other->id, other->recvTransport ? "yes" : "NO");
+			MS_DEBUG(logger_, "[{} {}]   → {} recvTransport={}", roomId, peerId, other->id, other->recvTransport ? "yes" : "NO");
 			if (!other->recvTransport) continue;
 			try {
-				MS_DEBUG(logger_, "[room:{} {}]   creating consumer on {} for producer {}", roomId, peerId, other->recvTransport->id(), producer->id());
-				MS_DEBUG(logger_, "[room:{} {}]   rtpCaps codecs count={}", roomId, peerId, other->rtpCapabilities.codecs.size());
+				MS_DEBUG(logger_, "[{} {}]   creating consumer on {} for producer {}", roomId, peerId, other->recvTransport->id(), producer->id());
+				MS_DEBUG(logger_, "[{} {}]   rtpCaps codecs count={}", roomId, peerId, other->rtpCapabilities.codecs.size());
 				json consumeOpts = {
 					{"producerId", producer->id()},
 					{"rtpCapabilities", other->rtpCapabilities},
@@ -225,7 +225,7 @@ public:
 					});
 				}
 			} catch (const std::exception& e) {
-				MS_ERROR(logger_, "[room:{} {}] auto-subscribe FAILED for {}: {}", roomId, peerId, other->id, e.what());
+				MS_ERROR(logger_, "[{} {}] auto-subscribe FAILED for {}: {}", roomId, peerId, other->id, e.what());
 			}
 		}
 

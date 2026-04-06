@@ -68,7 +68,7 @@ public:
 		, audioPT_(audioPT), videoPT_(videoPT)
 		, audioClockRate_(audioClockRate), videoClockRate_(videoClockRate)
 		, videoCodec_(videoCodec)
-		, logTag_("[room:" + roomId + " " + peerId + "]")
+		, logTag_("[" + roomId + " " + peerId + "]")
 		, logger_(Logger::Get("Recorder"))
 	{}
 
