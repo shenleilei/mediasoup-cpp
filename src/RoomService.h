@@ -386,7 +386,54 @@ public:
 		return {true, wt->restartIce()};
 	}
 
+	// Detect rooms whose worker/router has died and notify peers to reconnect
+	void checkRoomHealth() {
+		for (auto& roomId : roomManager_.getDeadRooms()) {
+			auto room = roomManager_.getRoom(roomId);
+			if (!room) continue;
+
+			MS_WARN(logger_, "Room {} has dead router, notifying peers to reconnect", roomId);
+
+			// Notify all peers in this room to reconnect
+			auto peerIds = room->getPeerIds();
+			for (auto& peerId : peerIds) {
+				if (notify_) {
+					notify_(peerId, {
+						{"notification", true}, {"method", "serverRestart"},
+						{"data", {{"roomId", roomId}, {"reason", "worker crashed"}}}
+					});
+				}
+			}
+
+			// Clean up recorders for this room
+			{
+				std::lock_guard<std::mutex> lock(recorderMutex_);
+				std::string prefix = roomId + "/";
+				for (auto it = recorders_.begin(); it != recorders_.end(); ) {
+					if (it->first.compare(0, prefix.size(), prefix) == 0) {
+						if (it->second) it->second->stop();
+						recorderTransports_.erase(it->first);
+						it = recorders_.erase(it);
+					} else ++it;
+				}
+			}
+			{
+				std::lock_guard<std::mutex> lock(clientStatsMutex_);
+				std::string prefix = roomId + "/";
+				for (auto it = clientStats_.begin(); it != clientStats_.end(); )
+					if (it->first.compare(0, prefix.size(), prefix) == 0) it = clientStats_.erase(it);
+					else ++it;
+			}
+
+			if (registry_) registry_->unregisterRoom(roomId);
+			roomManager_.removeRoom(roomId);
+		}
+	}
+
 	void cleanIdleRooms(int idleSeconds = 30) {
+		// First: detect rooms whose worker crashed and notify peers to reconnect
+		checkRoomHealth();
+
 		for (auto& id : roomManager_.getIdleRooms(idleSeconds)) {
 			MS_DEBUG(logger_, "GC idle room: {}", id);
 

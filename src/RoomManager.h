@@ -76,6 +76,9 @@ public:
 		return std::chrono::duration_cast<std::chrono::seconds>(elapsed).count() >= seconds;
 	}
 
+	// Check if the underlying router/worker is still alive
+	bool routerAlive() const { return router_ && !router_->closed(); }
+
 	void close() {
 		std::lock_guard<std::mutex> lock(mutex_);
 		for (auto& [_, p] : peers_) p->close();
@@ -126,6 +129,15 @@ public:
 		std::vector<std::string> result;
 		for (auto& [id, room] : rooms_)
 			if (room->isIdle(seconds)) result.push_back(id);
+		return result;
+	}
+
+	// Find rooms whose worker/router has died
+	std::vector<std::string> getDeadRooms() {
+		std::lock_guard<std::mutex> lock(mutex_);
+		std::vector<std::string> result;
+		for (auto& [id, room] : rooms_)
+			if (!room->routerAlive()) result.push_back(id);
 		return result;
 	}
 
