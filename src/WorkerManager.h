@@ -4,11 +4,14 @@
 #include <vector>
 #include <memory>
 #include <mutex>
+#include <thread>
 
 namespace mediasoup {
 
 class WorkerManager {
 public:
+	~WorkerManager() { close(); }
+
 	std::shared_ptr<Worker> createWorker(const WorkerSettings& settings = {}) {
 		auto worker = std::make_shared<Worker>(settings);
 		{
@@ -17,15 +20,7 @@ public:
 			lastSettings_ = settings;
 		}
 
-		worker->emitter().on("died", [this, weak = std::weak_ptr<Worker>(worker)](auto&) {
-			{
-				std::lock_guard<std::mutex> lock(mutex_);
-				if (auto w = weak.lock())
-					workers_.erase(std::remove(workers_.begin(), workers_.end(), w), workers_.end());
-			}
-			// Respawn in a detached thread to avoid blocking workerDied/waitThread
-			std::thread([this]{ respawnOne(); }).detach();
-		});
+		installDiedHandler(worker);
 
 		return worker;
 	}
@@ -46,15 +41,34 @@ public:
 	}
 
 	void close() {
-		std::lock_guard<std::mutex> lock(mutex_);
-		closing_ = true;
-		for (auto& w : workers_) w->close();
-		workers_.clear();
+		std::vector<std::shared_ptr<Worker>> workersToClose;
+		std::vector<std::thread> threadsToJoin;
+		{
+			std::lock_guard<std::mutex> lock(mutex_);
+			if (closing_) return;
+			closing_ = true;
+			workersToClose.swap(workers_);
+			threadsToJoin.swap(respawnThreads_);
+		}
+		for (auto& w : workersToClose) w->close();
+		for (auto& t : threadsToJoin) {
+			if (t.joinable()) t.join();
+		}
 	}
 
 	size_t size() const { std::lock_guard<std::mutex> lock(mutex_); return workers_.size(); }
 
 private:
+	void installDiedHandler(const std::shared_ptr<Worker>& worker) {
+		worker->emitter().on("died", [this, weak = std::weak_ptr<Worker>(worker)](auto&) {
+			std::lock_guard<std::mutex> lock(mutex_);
+			if (auto w = weak.lock())
+				workers_.erase(std::remove(workers_.begin(), workers_.end(), w), workers_.end());
+			if (!closing_)
+				respawnThreads_.emplace_back([this]{ respawnOne(); });
+		});
+	}
+
 	void respawnOne() {
 		// Small delay to let workerDied() finish cleanup
 		std::this_thread::sleep_for(std::chrono::milliseconds(kRespawnDelayMs));
@@ -77,14 +91,7 @@ private:
 		try {
 			auto worker = std::make_shared<Worker>(lastSettings_);
 			workers_.push_back(worker);
-			worker->emitter().on("died", [this, weak = std::weak_ptr<Worker>(worker)](auto&) {
-				{
-					std::lock_guard<std::mutex> lock(mutex_);
-					if (auto w = weak.lock())
-						workers_.erase(std::remove(workers_.begin(), workers_.end(), w), workers_.end());
-				}
-				std::thread([this]{ respawnOne(); }).detach();
-			});
+			installDiedHandler(worker);
 			spdlog::warn("Worker respawned (now {} workers)", workers_.size());
 		} catch (const std::exception& e) {
 			spdlog::error("Failed to respawn worker: {}", e.what());
@@ -96,6 +103,7 @@ private:
 	WorkerSettings lastSettings_;
 	bool closing_ = false;
 	std::vector<std::chrono::steady_clock::time_point> respawnTimes_;
+	std::vector<std::thread> respawnThreads_;
 };
 
 } // namespace mediasoup
