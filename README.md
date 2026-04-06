@@ -379,6 +379,7 @@ RoomRegistry heartbeat (0 或 1)
    - 共享存储（NFS/S3 FUSE）— 零代码改动，运维层面解决
    - 对象存储上传 — 录制完成后异步上传到 S3/OSS，API 从对象存储列文件
    - Redis 索引 + 跨节点 proxy — 录制开始/结束时写 Redis 索引，查询时聚合所有节点，播放时 proxy 到文件所在节点（需处理 CORS、节点下线等问题）
+4. **virtio 单队列网络瓶颈突破**: 当前 2 vCPU virtio 单队列环境下，真实网络栈峰值 80 rooms，内核 softirq 是瓶颈（Worker CPU 才 24%）。内核参数调优（netdev_budget/usecs 翻倍）无效，time_squeeze 仍持续增长。根因是 virtio_net 单队列所有包的 NAPI poll 只能单核串行。解决路径：多队列 virtio VM、物理机 + 万兆网卡、或 SR-IOV。物理机场景下网络不再是瓶颈（8 Worker 240 rooms 仅需 216k pps，万兆网卡不到 10%），瓶颈回到 Worker CPU，多 Worker 水平扩展即可
 
 ### 建议改进
 1. 添加 HTTPS/WSS 支持

@@ -145,6 +145,7 @@
 - P2: ✅ Worker 负载均衡（getLeastLoadedWorker 按 routerCount 选最少的 worker）
 - P2: 待做 Dynacast
 - P2: 待做 信令协议标准化
+- P2: 待优化 virtio 单队列网络瓶颈（详见"网络瓶颈分析"）
 
 ## 单元测试
 - 框架: GoogleTest，`BUILD_TESTS` 默认 ON
@@ -170,6 +171,15 @@
 - 注意: video PipeConsumer需要有效keyframe才转发，PlainTransport无法完成keyframe协商，因此用opus替代
 - 已知局限: UdpDrops是/proc/net/udp全局口径; 两个Consumer均为PIPE类型(无BWE/NACK); PlainTransport无SRTP开销
 - 热路径优化: sendFrame预计算dest sockaddr, epoll_data.ptr直存fd+counter指针(零查表)
+
+## 网络瓶颈分析（virtio 单队列）
+- 内核参数调优无效: net.core.netdev_budget 翻倍到 600、netdev_budget_usecs 翻倍到 4000，峰值仍为 80 rooms
+- softnet_stat 证据: 测试期间 time_squeeze 增加约 3 万次/核，说明 softirq 仍处理不过来
+- 根因: virtio_net 单队列，所有包的硬中断→NAPI poll 路径只能在单核串行处理，RPS 只分散 backlog 不分散 poll
+- 多队列可解决: 多队列让网卡有 N 个独立 ring buffer 绑不同 CPU 核，收包 softirq 并行化
+- 多队列不需要同步增加 Worker: 多队列是内核层面的收包并行化，Worker 数量由 CPU 瓶颈决定
+- 物理机估算: 8 核物理机 + 万兆网卡 16 队列，8 Worker 保守 240 个 1v1 房间，总 pps 约 216k，万兆网卡不到 10% 负载
+- 结论: 当前网络瓶颈是 virtio 虚拟化特有问题，非架构性问题；上物理机或多队列 VM 后瓶颈回到 Worker CPU，多 Worker 水平扩展即可
 
 ## 关键文件
 - `src/main.cpp` - 入口，参数解析，组装各组件
