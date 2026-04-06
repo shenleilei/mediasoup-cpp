@@ -247,6 +247,11 @@ void SignalingServer::run() {
 	}).get("/*", [](auto* res, auto* req) {
 		std::string url(req->getUrl());
 		if (url == "/") url = "/index.html";
+		// Prevent path traversal for static files
+		if (url.find("..") != std::string::npos || url.find('\\') != std::string::npos) {
+			res->writeStatus("403 Forbidden")->end("Forbidden");
+			return;
+		}
 		std::string path = "public" + url;
 		std::ifstream file(path, std::ios::binary);
 		if (!file.is_open()) { res->writeStatus("404 Not Found")->end("Not Found"); return; }
