@@ -328,18 +328,19 @@ RoomRegistry heartbeat (0 或 1)
 
 | 网络模式 | 峰值房间 | 峰值 CPU(单核) | 峰值 RSS | 峰值吞吐 | 丢包起点 |
 |----------|---------|---------------|---------|---------|---------|
-| loopback (127.0.0.1) | 250 | 87% | 113 MB | 75k→150k pps | 260 rooms |
-| 真实网络栈 (eth0 IP) | 170 | 54% | 82 MB | 51k→102k pps | 150 rooms |
+| loopback (127.0.0.1) | 240 | 82% | 180 MB | 72k→144k pps | 250 rooms |
+| 真实网络栈 (eth0 IP) | 80 | 23% | 67 MB | 24k→48k pps | 90 rooms |
 
 **关键发现**:
-- Worker 进程每房间 CPU 开销约 0.33%（两种模式一致），瓶颈在 Worker 内部 RTP 路由
-- 走真实网络栈时，内核 softirq 处理 UDP 包的开销导致 150 rooms 就开始丢包，此时 Worker CPU 才 47%
-- 线性扩展：CPU 和房间数严格线性关系，RSS 每房间约 0.4 MB
+- Worker 进程每房间 CPU 开销约 0.33%（loopback），瓶颈在 Worker 内部 RTP 路由
+- 走真实网络栈时，内核 softirq 处理 UDP 包的开销导致 90 rooms 就开始丢包，此时 Worker CPU 才 26%
+- 线性扩展：CPU 和房间数严格线性关系，RSS 每房间约 0.75 MB
+- SendRate 列验证发送端始终维持 100% 目标速率，排除"降载假低丢包"
 
 **真实场景估算**（WebRtcTransport + SRTP + audio+video 双流）:
 - SRTP 加解密额外 5-10% CPU
 - audio+video 双流 = 负载翻倍
-- 保守估计单 Worker 约 **70-90 个 1v1 房间**
+- 保守估计单 Worker 约 **30-40 个 1v1 房间**（走真实网络栈口径）
 
 **运行压测**:
 ```bash
