@@ -926,3 +926,63 @@ TEST_F(RecordingTest, Vp8MultiPacketFrame) {
 	EXPECT_NE(probeOut.find("audio"), std::string::npos) << "No audio. ffprobe: " << probeOut;
 	EXPECT_NE(probeOut.find("vp8"), std::string::npos) << "No VP8 video. ffprobe: " << probeOut;
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Worker crash recovery: kill worker process, verify serverRestart
+// ═══════════════════════════════════════════════════════════════
+
+TEST_F(IntegrationTest, WorkerCrashSendsServerRestart) {
+	auto alice = joinRoom(testRoom_, "alice");
+
+	auto sendResp = alice.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(sendResp.value("ok", false));
+	usleep(500000);
+
+	// Kill all mediasoup-worker processes (exact process name match)
+	FILE* fp = popen("pgrep -x mediasoup-worke 2>/dev/null", "r");
+	char buf[64]{};
+	while (fgets(buf, sizeof(buf), fp)) {
+		pid_t p = atoi(buf);
+		if (p > 0) kill(p, SIGKILL);
+	}
+	pclose(fp);
+
+	// Alice should receive serverRestart notification (checkRoomHealth runs every 2s)
+	auto notif = alice.ws->waitNotification("serverRestart", 10000);
+	ASSERT_FALSE(notif.empty()) << "Alice did not receive serverRestart after worker crash";
+	EXPECT_EQ(notif["data"]["roomId"], testRoom_);
+
+	usleep(2000000);
+	auto alice2 = joinRoom(testRoom_ + "_new", "alice2");
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Worker respawn: after crash, new rooms can be created
+// ═══════════════════════════════════════════════════════════════
+
+TEST_F(IntegrationTest, WorkerRespawnAllowsNewRooms) {
+	auto alice = joinRoom(testRoom_, "alice");
+
+	// Kill all workers
+	FILE* fp = popen("pgrep -x mediasoup-worke 2>/dev/null", "r");
+	char buf[64]{};
+	while (fgets(buf, sizeof(buf), fp)) {
+		pid_t p = atoi(buf);
+		if (p > 0) kill(p, SIGKILL);
+	}
+	pclose(fp);
+
+	// Wait for respawn
+	usleep(4000000); // 4s — enough for respawn + checkRoomHealth
+
+	// New room should work on the respawned worker
+	std::string newRoom = testRoom_ + "_after_crash";
+	auto bob = joinRoom(newRoom, "bob");
+	auto sendResp = bob.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	EXPECT_TRUE(sendResp.value("ok", false))
+		<< "createTransport failed after worker respawn: " << sendResp.dump();
+}

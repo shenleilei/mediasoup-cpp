@@ -17,12 +17,13 @@ public:
 		}
 
 		worker->emitter().on("died", [this, weak = std::weak_ptr<Worker>(worker)](auto&) {
-			if (auto w = weak.lock()) {
+			{
 				std::lock_guard<std::mutex> lock(mutex_);
-				workers_.erase(std::remove(workers_.begin(), workers_.end(), w), workers_.end());
+				if (auto w = weak.lock())
+					workers_.erase(std::remove(workers_.begin(), workers_.end(), w), workers_.end());
 			}
-			// Auto-respawn after a short delay to avoid tight crash loops
-			respawnOne();
+			// Respawn in a detached thread to avoid blocking workerDied/waitThread
+			std::thread([this]{ respawnOne(); }).detach();
 		});
 
 		return worker;
@@ -54,6 +55,9 @@ public:
 
 private:
 	void respawnOne() {
+		// Small delay to let workerDied() finish cleanup
+		std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
 		std::lock_guard<std::mutex> lock(mutex_);
 		if (closing_) return;
 
@@ -73,11 +77,12 @@ private:
 			auto worker = std::make_shared<Worker>(lastSettings_);
 			workers_.push_back(worker);
 			worker->emitter().on("died", [this, weak = std::weak_ptr<Worker>(worker)](auto&) {
-				if (auto w = weak.lock()) {
+				{
 					std::lock_guard<std::mutex> lock(mutex_);
-					workers_.erase(std::remove(workers_.begin(), workers_.end(), w), workers_.end());
+					if (auto w = weak.lock())
+						workers_.erase(std::remove(workers_.begin(), workers_.end(), w), workers_.end());
 				}
-				respawnOne();
+				std::thread([this]{ respawnOne(); }).detach();
 			});
 			spdlog::warn("Worker respawned (now {} workers)", workers_.size());
 		} catch (const std::exception& e) {

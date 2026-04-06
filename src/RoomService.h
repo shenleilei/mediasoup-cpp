@@ -388,7 +388,11 @@ public:
 
 	// Detect rooms whose worker/router has died and notify peers to reconnect
 	void checkRoomHealth() {
-		for (auto& roomId : roomManager_.getDeadRooms()) {
+		auto deadRooms = roomManager_.getDeadRooms();
+		if (!deadRooms.empty()) {
+			MS_WARN(logger_, "checkRoomHealth: found {} dead rooms", deadRooms.size());
+		}
+		for (auto& roomId : deadRooms) {
 			auto room = roomManager_.getRoom(roomId);
 			if (!room) continue;
 
@@ -396,13 +400,12 @@ public:
 
 			// Notify all peers in this room to reconnect
 			auto peerIds = room->getPeerIds();
-			for (auto& peerId : peerIds) {
-				if (notify_) {
-					notify_(peerId, {
-						{"notification", true}, {"method", "serverRestart"},
-						{"data", {{"roomId", roomId}, {"reason", "worker crashed"}}}
-					});
-				}
+			MS_WARN(logger_, "Room {} dead, {} peers, broadcast_={}", roomId, peerIds.size(), broadcast_ ? "yes" : "no");
+			if (broadcast_) {
+				broadcast_(roomId, "", {
+					{"notification", true}, {"method", "serverRestart"},
+					{"data", {{"roomId", roomId}, {"reason", "worker crashed"}}}
+				});
 			}
 
 			// Clean up recorders for this room
