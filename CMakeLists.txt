@@ -135,4 +135,14 @@ if(BUILD_TESTS)
     target_link_libraries(mediasoup_topology_tests PRIVATE gtest gtest_main pthread hiredis)
     add_test(NAME mediasoup_topology_tests COMMAND mediasoup_topology_tests
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+    # Worker load benchmark (not a test, standalone binary)
+    add_executable(mediasoup_bench tests/bench_worker_load.cpp)
+    target_include_directories(mediasoup_bench PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${FLATBUFFERS_INCLUDE}
+        ${JSON_INCLUDE}
+        ${GENERATED_INCLUDE}
+    )
+    target_link_libraries(mediasoup_bench PRIVATE mediasoup_lib pthread)
 endif()

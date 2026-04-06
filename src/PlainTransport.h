@@ -37,6 +37,9 @@ public:
 			if (cr && cr->tuple()) {
 				tuple_.localAddress = cr->tuple()->local_address()->str();
 				tuple_.localPort = cr->tuple()->local_port();
+				if (cr->tuple()->remote_ip())
+					tuple_.remoteIp = cr->tuple()->remote_ip()->str();
+				tuple_.remotePort = cr->tuple()->remote_port();
 			}
 		}
 
