@@ -273,7 +273,7 @@ public:
 			auto secs = std::chrono::duration_cast<std::chrono::seconds>(ts).count();
 			std::string path = dir + "/" + peerId + "_" + std::to_string(secs) + ".webm";
 
-			rec = std::make_shared<PeerRecorder>(peerId, path, audioPT, videoPT, 48000, 90000, videoCodec);
+			rec = std::make_shared<PeerRecorder>(peerId, path, audioPT, videoPT, 48000, 90000, videoCodec, roomId);
 			int port = rec->createSocket();
 			if (port < 0) {
 				MS_ERROR(logger_, "[{}] Failed to create recorder socket", key);
