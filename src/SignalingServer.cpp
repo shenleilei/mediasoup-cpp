@@ -1,4 +1,5 @@
 #include "SignalingServer.h"
+#include "Constants.h"
 #include <App.h>
 #include <fstream>
 #include <unordered_map>
@@ -55,8 +56,8 @@ void SignalingServer::run() {
 
 	uWS::App().ws<PerSocketData>("/ws", {
 		.compression = uWS::DISABLED,
-		.maxPayloadLength = 16 * 1024,
-		.idleTimeout = 120,
+		.maxPayloadLength = kWsMaxPayloadBytes,
+		.idleTimeout = kWsIdleTimeoutSec,
 
 		.open = [wsMap](auto* ws) {
 			auto* d = ws->getUserData();
@@ -266,20 +267,26 @@ void SignalingServer::run() {
 			us_timer_set(gcTimer, [](struct us_timer_t* t) {
 				RoomService* svc;
 				memcpy(&svc, us_timer_ext(t), sizeof(RoomService*));
-				svc->cleanIdleRooms(30);
-			}, 30000, 30000);
+				svc->cleanIdleRooms(kIdleRoomTimeoutSec);
+			}, kGcIntervalMs, kGcIntervalMs);
 
-			// Stats broadcast timer — every 2 seconds
+			// Health check timer — every 2 seconds (fast worker crash detection)
+			auto* healthTimer = us_create_timer((struct us_loop_t*)loop, 0, sizeof(RoomService*));
+			memcpy(us_timer_ext(healthTimer), &svcPtr, sizeof(RoomService*));
+			us_timer_set(healthTimer, [](struct us_timer_t* t) {
+				RoomService* svc;
+				memcpy(&svc, us_timer_ext(t), sizeof(RoomService*));
+				try { svc->checkRoomHealth(); } catch (...) {}
+			}, kHealthCheckIntervalMs, kHealthCheckIntervalMs);
+
+			// Stats broadcast timer — every 10 seconds
 			auto* statsTimer = us_create_timer((struct us_loop_t*)loop, 0, sizeof(RoomService*));
 			memcpy(us_timer_ext(statsTimer), &svcPtr, sizeof(RoomService*));
 			us_timer_set(statsTimer, [](struct us_timer_t* t) {
 				RoomService* svc;
 				memcpy(&svc, us_timer_ext(t), sizeof(RoomService*));
-				try {
-					svc->checkRoomHealth();
-					svc->broadcastStats();
-				} catch (...) {}
-			}, 2000, 2000);
+				try { svc->broadcastStats(); } catch (...) {}
+			}, kStatsBroadcastIntervalMs, kStatsBroadcastIntervalMs);
 
 			// Shutdown poll timer — check atomic flag every 500ms
 			struct ShutdownCtx { us_listen_socket_t* sock; };
@@ -293,7 +300,7 @@ void SignalingServer::run() {
 					us_listen_socket_close(0, ctx.sock);
 					us_timer_close(t);
 				}
-			}, 500, 500);
+			}, kShutdownPollIntervalMs, kShutdownPollIntervalMs);
 		} else {
 			spdlog::error("SignalingServer failed to listen on port {}", port_);
 		}

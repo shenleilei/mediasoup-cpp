@@ -3,6 +3,7 @@
 #include "RtpTypes.h"
 #include "ortc.h"
 #include "EventEmitter.h"
+#include "Constants.h"
 #include "Logger.h"
 #include <string>
 #include <memory>
@@ -28,9 +29,9 @@ struct WebRtcTransportOptions {
 	bool enableTcp = false;
 	bool preferUdp = true;
 	bool preferTcp = false;
-	uint32_t initialAvailableOutgoingBitrate = 600000;
+	uint32_t initialAvailableOutgoingBitrate = kInitialOutgoingBitrate;
 	bool enableSctp = false;
-	uint8_t iceConsentTimeout = 30;
+	uint8_t iceConsentTimeout = kIceConsentTimeout;
 };
 
 class Router : public std::enable_shared_from_this<Router> {

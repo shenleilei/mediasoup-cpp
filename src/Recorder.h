@@ -1,5 +1,6 @@
 #pragma once
 #include "Logger.h"
+#include "Constants.h"
 #include <string>
 #include <thread>
 #include <atomic>
@@ -60,6 +61,7 @@ struct RtpHeader {
 enum class VideoCodec { VP8, H264 };
 
 class PeerRecorder {
+	friend class PeerRecorderTestAccess; // test helper
 public:
 	PeerRecorder(const std::string& peerId, const std::string& outputPath,
 		uint8_t audioPT, uint8_t videoPT, uint32_t audioClockRate, uint32_t videoClockRate,
@@ -266,8 +268,8 @@ private:
 		MS_DEBUG(logger_, "{} recvLoop exited, total packets={}", logTag_, pktCount);
 	}
 
-	// ── VP8 depacketization (public for testing) ──
-public:
+	// ── VP8 depacketization ──
+private:
 	static const uint8_t* stripVp8Descriptor(const uint8_t* data, int size,
 		int& outSize, bool& isStart)
 	{
@@ -295,7 +297,7 @@ public:
 
 		uint8_t nalType = data[0] & 0x1F;
 
-		if (h264NalLog_ < 5) {
+		if (h264NalLog_ < kMaxH264NalDebugLogs) {
 			h264NalLog_++;
 			if (nalType == 28 && size >= 2) {
 				uint8_t fuNalType = data[1] & 0x1F;
@@ -371,7 +373,7 @@ public:
 			if (!audioBaseSet_) { audioBaseTs_ = rtp.timestamp; audioBaseSet_ = true; }
 			if (headerDeferred_) {
 				// Buffer audio until header is written (cap at 500 packets to prevent OOM)
-				if (pendingAudio_.size() < 500)
+				if (pendingAudio_.size() < kMaxPendingAudioPackets)
 					pendingAudio_.push_back({rtp.timestamp,
 						std::vector<uint8_t>(rtp.payload, rtp.payload + rtp.payloadSize)});
 				return;
@@ -453,7 +455,6 @@ public:
 	}
 
 	// Convert Annex-B (00 00 00 01 + NAL) to AVCC (4-byte length + NAL)
-public:
 	static void annexBToAvcc(const std::vector<uint8_t>& annexB, std::vector<uint8_t>& avcc) {
 		avcc.clear();
 		size_t i = 0;

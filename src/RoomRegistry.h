@@ -1,5 +1,6 @@
 #pragma once
 #include "Logger.h"
+#include "Constants.h"
 #include <string>
 #include <mutex>
 #include <thread>
@@ -29,7 +30,7 @@ public:
 		running_ = true;
 		heartbeatThread_ = std::thread([this]() {
 			while (running_) {
-				std::this_thread::sleep_for(std::chrono::seconds(10));
+				std::this_thread::sleep_for(std::chrono::seconds(kRedisHeartbeatIntervalSec));
 				if (!running_) break;
 				std::lock_guard<std::mutex> lock(mutex_);
 				if (!ensureConnected()) continue;
@@ -99,7 +100,7 @@ public:
 private:
 	bool reconnect() {
 		if (ctx_) { redisFree(ctx_); ctx_ = nullptr; }
-		struct timeval tv = {2, 0}; // 2s connect timeout
+		struct timeval tv = {kRedisConnectTimeoutSec, 0};
 		ctx_ = redisConnectWithTimeout(redisHost_.c_str(), redisPort_, tv);
 		if (!ctx_ || ctx_->err) {
 			std::string err = ctx_ ? ctx_->errstr : "alloc failed";
@@ -146,8 +147,8 @@ private:
 	std::mutex mutex_;
 	std::atomic<bool> running_{false};
 	std::thread heartbeatThread_;
-	int roomTTL_ = 300;
-	int nodeTTL_ = 30;
+	int roomTTL_ = kRedisRoomTtlSec;
+	int nodeTTL_ = kRedisNodeTtlSec;
 	std::shared_ptr<spdlog::logger> logger_;
 };
 

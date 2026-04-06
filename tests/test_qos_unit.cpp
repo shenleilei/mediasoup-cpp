@@ -270,6 +270,22 @@ TEST(RtpHeaderTest, TooShortFails) {
 	EXPECT_FALSE(RtpHeader::parse(pkt, sizeof(pkt), h));
 }
 
+// ─── Test accessor for PeerRecorder private methods ───
+
+namespace mediasoup {
+class PeerRecorderTestAccess {
+public:
+	static const uint8_t* stripVp8Descriptor(const uint8_t* data, int size,
+		int& outSize, bool& isStart) {
+		return PeerRecorder::stripVp8Descriptor(data, size, outSize, isStart);
+	}
+	static void annexBToAvcc(const std::vector<uint8_t>& annexB, std::vector<uint8_t>& avcc) {
+		PeerRecorder::annexBToAvcc(annexB, avcc);
+	}
+};
+} // namespace mediasoup
+using mediasoup::PeerRecorderTestAccess;
+
 // ─── VP8 descriptor stripping ───
 
 TEST(Vp8DescriptorTest, SimpleDescriptor) {
@@ -277,7 +293,7 @@ TEST(Vp8DescriptorTest, SimpleDescriptor) {
 	uint8_t payload[] = {0x10, 0x9d, 0x01, 0x2a}; // S=1 + VP8 keyframe header
 	int outSize = 0;
 	bool isStart = false;
-	auto* data = PeerRecorder::stripVp8Descriptor(payload, sizeof(payload), outSize, isStart);
+	auto* data = PeerRecorderTestAccess::stripVp8Descriptor(payload, sizeof(payload), outSize, isStart);
 	EXPECT_TRUE(isStart);
 	EXPECT_EQ(outSize, 3);
 	EXPECT_EQ(data[0], 0x9d); // first byte of VP8 data
@@ -292,7 +308,7 @@ TEST(Vp8DescriptorTest, ExtendedDescriptorWithPictureId) {
 	// skip = 3, data starts at byte3
 	int outSize = 0;
 	bool isStart = false;
-	auto* data = PeerRecorder::stripVp8Descriptor(payload, sizeof(payload), outSize, isStart);
+	auto* data = PeerRecorderTestAccess::stripVp8Descriptor(payload, sizeof(payload), outSize, isStart);
 	EXPECT_TRUE(isStart);
 	EXPECT_EQ(outSize, 2);
 	EXPECT_EQ(data[0], 0xAA);
@@ -301,7 +317,7 @@ TEST(Vp8DescriptorTest, ExtendedDescriptorWithPictureId) {
 TEST(Vp8DescriptorTest, EmptyPayload) {
 	int outSize = 0;
 	bool isStart = false;
-	PeerRecorder::stripVp8Descriptor(nullptr, 0, outSize, isStart);
+	PeerRecorderTestAccess::stripVp8Descriptor(nullptr, 0, outSize, isStart);
 	EXPECT_EQ(outSize, 0);
 	EXPECT_FALSE(isStart);
 }
@@ -311,7 +327,7 @@ TEST(Vp8DescriptorTest, EmptyPayload) {
 TEST(AnnexBToAvccTest, SingleNal) {
 	std::vector<uint8_t> annexB = {0,0,0,1, 0x65, 0xAA, 0xBB}; // IDR NAL
 	std::vector<uint8_t> avcc;
-	PeerRecorder::annexBToAvcc(annexB, avcc);
+	PeerRecorderTestAccess::annexBToAvcc(annexB, avcc);
 	ASSERT_EQ(avcc.size(), 7u); // 4-byte length + 3 bytes NAL
 	uint32_t len = (avcc[0]<<24)|(avcc[1]<<16)|(avcc[2]<<8)|avcc[3];
 	EXPECT_EQ(len, 3u);
@@ -321,7 +337,7 @@ TEST(AnnexBToAvccTest, SingleNal) {
 TEST(AnnexBToAvccTest, TwoNals) {
 	std::vector<uint8_t> annexB = {0,0,0,1, 0x67, 0x42, 0,0,0,1, 0x68, 0x01};
 	std::vector<uint8_t> avcc;
-	PeerRecorder::annexBToAvcc(annexB, avcc);
+	PeerRecorderTestAccess::annexBToAvcc(annexB, avcc);
 	// First NAL: len=2 (0x67, 0x42), Second NAL: len=2 (0x68, 0x01)
 	ASSERT_EQ(avcc.size(), 12u);
 	uint32_t len1 = (avcc[0]<<24)|(avcc[1]<<16)|(avcc[2]<<8)|avcc[3];
@@ -335,7 +351,7 @@ TEST(AnnexBToAvccTest, TwoNals) {
 TEST(AnnexBToAvccTest, EmptyInput) {
 	std::vector<uint8_t> annexB;
 	std::vector<uint8_t> avcc;
-	PeerRecorder::annexBToAvcc(annexB, avcc);
+	PeerRecorderTestAccess::annexBToAvcc(annexB, avcc);
 	EXPECT_TRUE(avcc.empty());
 }
 

@@ -1,5 +1,6 @@
 #pragma once
 #include "Worker.h"
+#include "Constants.h"
 #include <vector>
 #include <memory>
 #include <mutex>
@@ -56,20 +57,20 @@ public:
 private:
 	void respawnOne() {
 		// Small delay to let workerDied() finish cleanup
-		std::this_thread::sleep_for(std::chrono::milliseconds(500));
+		std::this_thread::sleep_for(std::chrono::milliseconds(kRespawnDelayMs));
 
 		std::lock_guard<std::mutex> lock(mutex_);
 		if (closing_) return;
 
-		// Rate-limit: max 3 respawns within 10 seconds
+		// Rate-limit: max N respawns within window
 		auto now = std::chrono::steady_clock::now();
 		respawnTimes_.push_back(now);
 		while (!respawnTimes_.empty() &&
-			   (now - respawnTimes_.front()) > std::chrono::seconds(10))
+			   (now - respawnTimes_.front()) > std::chrono::seconds(kRespawnWindowSec))
 			respawnTimes_.erase(respawnTimes_.begin());
-		if (respawnTimes_.size() > 3) {
-			spdlog::error("Worker respawn rate limit hit ({} in 10s), not respawning",
-				respawnTimes_.size());
+		if (respawnTimes_.size() > kMaxRespawnsPerWindow) {
+			spdlog::error("Worker respawn rate limit hit ({} in {}s), not respawning",
+				respawnTimes_.size(), kRespawnWindowSec);
 			return;
 		}
 

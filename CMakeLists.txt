@@ -55,6 +55,7 @@ target_link_libraries(mediasoup_lib PUBLIC spdlog::spdlog uSockets pthread avfor
 add_executable(mediasoup-sfu
     src/main.cpp
     src/SignalingServer.cpp
+    src/RoomService.cpp
 )
 
 target_include_directories(mediasoup-sfu PRIVATE
