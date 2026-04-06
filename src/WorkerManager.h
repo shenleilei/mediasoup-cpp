@@ -2,6 +2,7 @@
 #include "Worker.h"
 #include "Constants.h"
 #include <vector>
+#include <list>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -42,11 +43,12 @@ public:
 
 	void close() {
 		std::vector<std::shared_ptr<Worker>> workersToClose;
-		std::vector<std::thread> threadsToJoin;
+		std::list<std::thread> threadsToJoin;
 		{
 			std::lock_guard<std::mutex> lock(mutex_);
 			if (closing_) return;
 			closing_ = true;
+			lifetimeToken_.reset();
 			workersToClose.swap(workers_);
 			threadsToJoin.swap(respawnThreads_);
 		}
@@ -60,21 +62,25 @@ public:
 
 private:
 	void installDiedHandler(const std::shared_ptr<Worker>& worker) {
-		worker->emitter().on("died", [this, weak = std::weak_ptr<Worker>(worker)](auto&) {
+		auto weakToken = std::weak_ptr<void>(lifetimeToken_);
+		worker->emitter().on("died", [this, weak = std::weak_ptr<Worker>(worker), weakToken](auto&) {
+			if (weakToken.expired()) return;
 			std::lock_guard<std::mutex> lock(mutex_);
+			if (closing_ || weakToken.expired()) return;
 			if (auto w = weak.lock())
 				workers_.erase(std::remove(workers_.begin(), workers_.end(), w), workers_.end());
-			if (!closing_)
-				respawnThreads_.emplace_back([this]{ respawnOne(); });
+			respawnThreads_.emplace_back([this, weakToken]{ respawnOne(weakToken); });
 		});
 	}
 
-	void respawnOne() {
+	void respawnOne(const std::weak_ptr<void>& weakToken) {
+		if (weakToken.expired()) return;
 		// Small delay to let workerDied() finish cleanup
 		std::this_thread::sleep_for(std::chrono::milliseconds(kRespawnDelayMs));
+		if (weakToken.expired()) return;
 
 		std::lock_guard<std::mutex> lock(mutex_);
-		if (closing_) return;
+		if (closing_ || weakToken.expired()) return;
 
 		// Rate-limit: max N respawns within window
 		auto now = std::chrono::steady_clock::now();
@@ -103,7 +109,8 @@ private:
 	WorkerSettings lastSettings_;
 	bool closing_ = false;
 	std::vector<std::chrono::steady_clock::time_point> respawnTimes_;
-	std::vector<std::thread> respawnThreads_;
+	std::list<std::thread> respawnThreads_;
+	std::shared_ptr<void> lifetimeToken_ = std::make_shared<int>(0);
 };
 
 } // namespace mediasoup
