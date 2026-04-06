@@ -59,11 +59,12 @@ mediasoup-cpp/
 │   ├── index.html                 # 实时通话页面 (含 QoS Monitor 面板)
 │   ├── playback.html              # 录制回放页面 (视频 + QoS 时间线)
 │   └── mediasoup-client.bundle.js # mediasoup-client 3.7.17 浏览器 bundle
-├── src/                           # 核心源码 (~3400 行)
+├── src/                           # 核心源码 (~3800 行)
 │   ├── main.cpp                   # 入口，配置解析，启动流程
+│   ├── Constants.h                # 全局常量 (kXx 命名规范)
 │   ├── Channel.h/cpp              # Worker pipe 通信层
-│   ├── Worker.h/cpp               # Worker 进程管理 (fork/exec)
-│   ├── WorkerManager.h            # 多 Worker 管理，负载均衡 (least routers)
+│   ├── Worker.h/cpp               # Worker 进程管理 (fork/exec/崩溃重启)
+│   ├── WorkerManager.h            # 多 Worker 管理，负载均衡，自动 respawn
 │   ├── Router.h/cpp               # Router 管理，创建 Transport
 │   ├── Transport.h/cpp            # Transport 基类，produce/consume
 │   ├── WebRtcTransport.h/cpp      # WebRTC Transport (ICE/DTLS)
@@ -73,9 +74,9 @@ mediasoup-cpp/
 │   ├── RtpTypes.h                 # RTP 数据结构 + JSON 序列化
 │   ├── supportedRtpCapabilities.h # mediasoup 支持的 codec 列表
 │   ├── Peer.h                     # Peer 抽象 (transport/producer/consumer)
-│   ├── RoomManager.h              # Room/RoomManager 封装，空闲回收
-│   ├── RoomService.h              # 业务逻辑层 (join/leave/produce/auto-subscribe/QoS/recording)
-│   ├── RoomRegistry.h             # Redis 多节点路由 + 死节点接管
+│   ├── RoomManager.h              # Room/RoomManager 封装，空闲回收，dead room 检测
+│   ├── RoomService.h/cpp          # 业务逻辑层 (join/leave/produce/auto-subscribe/QoS/recording)
+│   ├── RoomRegistry.h             # Redis 多节点路由 + 死节点接管 + 自动重连
 │   ├── Recorder.h                 # 录制 (RTP→WebM) + QoS 时间线记录
 │   ├── PipeTransport.h/cpp        # Pipe Transport
 │   ├── PlainTransport.h           # Plain Transport (录制用)
@@ -109,6 +110,18 @@ mediasoup-cpp/
 - 传入命令行参数: logLevel, rtcMinPort, rtcMaxPort, dtls 证书等
 - 监听 WORKER_RUNNING notification 确认启动成功
 - 子进程退出时触发 workerDied 事件
+- 崩溃自动重启: WorkerManager 检测到 worker 死亡后在独立线程中 respawn，带速率限制
+- 崩溃通知: checkRoomHealth 每 2 秒检测 dead router，向受影响房间广播 serverRestart
+
+### 稳定性保障
+- **Worker 崩溃恢复**: 自动 respawn + serverRestart 通知客户端重连，最多 2 秒感知
+- **Redis 自动重连**: 每次操作前 ensureConnected()，heartbeat 线程定期重试
+- **磁盘空间保护**: 录制目录超过 10GB 自动清理最老录制（跳过活跃录制）
+- **Channel 安全**: builderMutex 只保护序列化，sendBytes 在锁外执行；readThread 用 join 不用 detach
+- **EventEmitter 清理**: Transport/Producer/Consumer close 时 off 掉 channel listener，防止内存泄漏
+- **getStats 超时**: collectPeerStats 中每个 IPC 调用 500ms 超时，防止阻塞事件循环
+- **优雅关闭**: signal handler 只设 atomic flag，uWS timer 轮询后关闭 listen socket
+- **常量管理**: Constants.h 统一管理所有 timer/超时/限制值，kXx 命名规范
 
 ### Router (Router.h/cpp)
 媒体路由管理，对应 mediasoup 的 Router 概念。
