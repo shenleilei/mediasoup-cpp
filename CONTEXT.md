@@ -168,6 +168,8 @@
 - 关键发现: Worker每房间CPU约0.33%线性扩展; 走真实网络栈时内核softirq是瓶颈(90rooms就丢包,Worker CPU才26%)
 - 方法学: std::atomic计数器(relaxed), 动态PT从router获取, 48kHz时间戳步进, SendRate%列校验发送速率≥95%才计入峰值
 - 注意: video PipeConsumer需要有效keyframe才转发，PlainTransport无法完成keyframe协商，因此用opus替代
+- 已知局限: UdpDrops是/proc/net/udp全局口径; 两个Consumer均为PIPE类型(无BWE/NACK); PlainTransport无SRTP开销
+- 热路径优化: sendFrame预计算dest sockaddr, epoll_data.ptr直存fd+counter指针(零查表)
 
 ## 关键文件
 - `src/main.cpp` - 入口，参数解析，组装各组件

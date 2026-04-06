@@ -167,6 +167,7 @@ struct BenchRoom {
 	uint32_t ts = 0;
 	uint32_t ssrc = 0;
 	uint8_t pt = 100; // dynamic, set from router capabilities
+	sockaddr_in destAddr{}; // pre-computed, set in createBenchRoom
 
 	std::atomic<uint64_t> sentPkts{0};
 	std::atomic<uint64_t> recv1Pkts{0};
@@ -179,7 +180,7 @@ struct BenchRoom {
 		, producer(std::move(o.producer)), consumer1(std::move(o.consumer1)), consumer2(std::move(o.consumer2))
 		, senderFd(o.senderFd), recv1Fd(o.recv1Fd), recv2Fd(o.recv2Fd)
 		, prodPort(o.prodPort), recv1Port(o.recv1Port), recv2Port(o.recv2Port)
-		, seq(o.seq), ts(o.ts), ssrc(o.ssrc), pt(o.pt)
+		, seq(o.seq), ts(o.ts), ssrc(o.ssrc), pt(o.pt), destAddr(o.destAddr)
 		, sentPkts(o.sentPkts.load(std::memory_order_relaxed))
 		, recv1Pkts(o.recv1Pkts.load(std::memory_order_relaxed))
 		, recv2Pkts(o.recv2Pkts.load(std::memory_order_relaxed))
@@ -201,14 +202,8 @@ struct BenchRoom {
 	}
 };
 
-static void sendFrame(BenchRoom& room) {
+static void sendFrame(BenchRoom& room, const sockaddr_in& dest) {
 	uint8_t buf[PKT_SIZE];
-	memset(buf, 0x00, PKT_SIZE);
-
-	sockaddr_in dest{};
-	dest.sin_family = AF_INET;
-	inet_pton(AF_INET, g_bindIp.c_str(), &dest.sin_addr);
-	dest.sin_port = htons(room.prodPort);
 
 	for (int i = 0; i < PKTS_PER_FRAME; i++) {
 		buf[0] = 0x80;
@@ -268,6 +263,11 @@ static BenchRoom createBenchRoom(std::shared_ptr<Worker>& worker) {
 	room.prodTransport = room.router->createPlainTransport(opts);
 	room.prodPort = room.prodTransport->tuple().localPort;
 
+	// Pre-compute dest address for sendFrame hot path
+	room.destAddr.sin_family = AF_INET;
+	inet_pton(AF_INET, g_bindIp.c_str(), &room.destAddr.sin_addr);
+	room.destAddr.sin_port = htons(room.prodPort);
+
 	uint16_t senderPort;
 	room.senderFd = createUdpSocket(senderPort);
 	room.prodTransport->connect(g_bindIp, senderPort);
@@ -321,20 +321,19 @@ static BenchRoom createBenchRoom(std::shared_ptr<Worker>& worker) {
 
 struct EpollReceiver {
 	int epfd = -1;
-	struct FdInfo { std::atomic<uint64_t>* counter; };
-	std::unordered_map<int, FdInfo> fds;
-	std::mutex mu;
+	struct FdCtx { int fd; std::atomic<uint64_t>* counter; };
+	std::vector<std::unique_ptr<FdCtx>> ctxs; // owns the FdCtx pointers stored in epoll_data
 
 	EpollReceiver() { epfd = epoll_create1(0); }
 	~EpollReceiver() { if (epfd >= 0) close(epfd); }
 
 	void addFd(int fd, std::atomic<uint64_t>* counter) {
-		std::lock_guard<std::mutex> lock(mu);
+		auto ctx = std::make_unique<FdCtx>(FdCtx{fd, counter});
 		epoll_event ev{};
 		ev.events = EPOLLIN | EPOLLET;
-		ev.data.fd = fd;
+		ev.data.ptr = ctx.get();
 		epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev);
-		fds[fd] = {counter};
+		ctxs.push_back(std::move(ctx));
 	}
 
 	void poll() {
@@ -342,18 +341,11 @@ struct EpollReceiver {
 		epoll_event events[256];
 		int n = epoll_wait(epfd, events, 256, 5);
 		for (int i = 0; i < n; i++) {
-			int fd = events[i].data.fd;
-			std::atomic<uint64_t>* counter = nullptr;
-			{
-				std::lock_guard<std::mutex> lock(mu);
-				auto it = fds.find(fd);
-				if (it != fds.end()) counter = it->second.counter;
-			}
-			if (!counter) continue;
+			auto* ctx = static_cast<FdCtx*>(events[i].data.ptr);
 			while (true) {
-				int r = recv(fd, buf, sizeof(buf), MSG_DONTWAIT);
+				int r = recv(ctx->fd, buf, sizeof(buf), MSG_DONTWAIT);
 				if (r <= 0) break;
-				counter->fetch_add(1, std::memory_order_relaxed);
+				ctx->counter->fetch_add(1, std::memory_order_relaxed);
 			}
 		}
 	}
@@ -429,7 +421,7 @@ int main(int argc, char* argv[]) {
 			{
 				std::lock_guard<std::mutex> lock(roomsMutex);
 				for (size_t i = threadIdx; i < rooms.size(); i += NUM_SENDERS)
-					sendFrame(*rooms[i]);
+					sendFrame(*rooms[i], rooms[i]->destAddr);
 			}
 			nextTick += std::chrono::microseconds(33333);
 			auto now = Clock::now();
