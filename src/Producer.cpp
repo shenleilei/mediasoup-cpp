@@ -28,6 +28,8 @@ void Producer::close() {
 	if (closed_) return;
 	closed_ = true;
 
+	channel_->emitter().off(id_);
+
 	auto& builder = channel_->bufferBuilder();
 	auto idOff = builder.CreateString(id_);
 	auto reqOff = FBS::Transport::CreateCloseProducerRequest(builder, idOff);
@@ -44,6 +46,7 @@ void Producer::close() {
 void Producer::transportClosed() {
 	if (closed_) return;
 	closed_ = true;
+	channel_->emitter().off(id_);
 	emitter_.emit("transportclose");
 }
 

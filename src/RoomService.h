@@ -12,6 +12,7 @@
 #include <functional>
 #include <string>
 #include <memory>
+#include <future>
 #include <sys/stat.h>
 
 namespace mediasoup {
@@ -103,6 +104,13 @@ public:
 		{
 			std::lock_guard<std::mutex> lock(clientStatsMutex_);
 			clientStats_.erase(roomId + "/" + peerId);
+		}
+
+		// Remove this peer's producers from the router before closing the peer
+		auto peer = room->getPeer(peerId);
+		if (peer) {
+			for (auto& [pid, _] : peer->producers)
+				room->router()->removeProducer(pid);
 		}
 
 		room->removePeer(peerId);
@@ -379,6 +387,28 @@ public:
 	void cleanIdleRooms(int idleSeconds = 30) {
 		for (auto& id : roomManager_.getIdleRooms(idleSeconds)) {
 			MS_DEBUG(logger_, "GC idle room: {}", id);
+
+			// Clean up recorders for this room
+			{
+				std::lock_guard<std::mutex> lock(recorderMutex_);
+				std::string prefix = id + "/";
+				for (auto it = recorders_.begin(); it != recorders_.end(); ) {
+					if (it->first.compare(0, prefix.size(), prefix) == 0) {
+						if (it->second) it->second->stop();
+						recorderTransports_.erase(it->first);
+						it = recorders_.erase(it);
+					} else ++it;
+				}
+			}
+			// Clean up client stats for this room
+			{
+				std::lock_guard<std::mutex> lock(clientStatsMutex_);
+				std::string prefix = id + "/";
+				for (auto it = clientStats_.begin(); it != clientStats_.end(); )
+					if (it->first.compare(0, prefix.size(), prefix) == 0) it = clientStats_.erase(it);
+					else ++it;
+			}
+
 			if (registry_) registry_->unregisterRoom(id);
 			roomManager_.removeRoom(id);
 		}
@@ -391,7 +421,10 @@ public:
 	}
 
 	// Collect full-chain stats for one peer (sendTransport + all producers)
+	// Each worker IPC call is guarded by a timeout to avoid blocking the event loop.
 	json collectPeerStats(const std::string& roomId, const std::string& peerId) {
+		static constexpr auto kStatsTimeout = std::chrono::milliseconds(500);
+
 		auto room = roomManager_.getRoom(roomId);
 		if (!room) return {};
 		auto peer = room->getPeer(peerId);
@@ -399,15 +432,25 @@ public:
 
 		json result = {{"peerId", peerId}};
 
+		// Helper: run getStats in an async task with timeout
+		auto timedGetStats = [&](auto& transport) -> json {
+			auto fut = std::async(std::launch::async, [&]{ return transport->getStats(); });
+			if (fut.wait_for(kStatsTimeout) == std::future_status::ready) {
+				return fut.get();
+			}
+			MS_WARN(logger_, "[{} {}] getStats timeout", roomId, peerId);
+			return nullptr;
+		};
+
 		// sendTransport stats (vehicle uplink)
 		if (peer->sendTransport) {
-			try { result["sendTransport"] = peer->sendTransport->getStats(); }
+			try { result["sendTransport"] = timedGetStats(peer->sendTransport); }
 			catch (...) { result["sendTransport"] = nullptr; }
 		}
 
 		// recvTransport stats (operator downlink)
 		if (peer->recvTransport) {
-			try { result["recvTransport"] = peer->recvTransport->getStats(); }
+			try { result["recvTransport"] = timedGetStats(peer->recvTransport); }
 			catch (...) { result["recvTransport"] = nullptr; }
 		}
 
@@ -415,9 +458,15 @@ public:
 		json producers = json::object();
 		for (auto& [pid, prod] : peer->producers) {
 			json pstat;
-			try { pstat["stats"] = prod->getStats(); }
-			catch (...) { pstat["stats"] = nullptr; }
-			// Scores from PRODUCER_SCORE notifications
+			try {
+				auto fut = std::async(std::launch::async, [&]{ return prod->getStats(); });
+				if (fut.wait_for(kStatsTimeout) == std::future_status::ready)
+					pstat["stats"] = fut.get();
+				else {
+					MS_WARN(logger_, "[{} {}] producer {} getStats timeout", roomId, peerId, pid);
+					pstat["stats"] = nullptr;
+				}
+			} catch (...) { pstat["stats"] = nullptr; }
 			json scores = json::array();
 			for (auto& s : prod->scores())
 				scores.push_back({{"ssrc", s.ssrc}, {"score", s.score}, {"rid", s.rid}});
@@ -427,7 +476,7 @@ public:
 		}
 		result["producers"] = producers;
 
-		// Consumer scores (from CONSUMER_SCORE notifications)
+		// Consumer scores (from CONSUMER_SCORE notifications — no IPC, no timeout needed)
 		json consumers = json::object();
 		for (auto& [cid, cons] : peer->consumers) {
 			auto& sc = cons->currentScore();

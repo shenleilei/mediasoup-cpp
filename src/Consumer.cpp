@@ -51,6 +51,8 @@ void Consumer::close() {
 	if (closed_) return;
 	closed_ = true;
 
+	channel_->emitter().off(id_);
+
 	auto& builder = channel_->bufferBuilder();
 	auto idOff = builder.CreateString(id_);
 	auto reqOff = FBS::Transport::CreateCloseConsumerRequest(builder, idOff);
@@ -67,6 +69,7 @@ void Consumer::close() {
 void Consumer::transportClosed() {
 	if (closed_) return;
 	closed_ = true;
+	channel_->emitter().off(id_);
 	emitter_.emit("transportclose");
 }
 

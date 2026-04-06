@@ -230,6 +230,7 @@ private:
 	void finalizeMuxer() {
 		std::lock_guard<std::mutex> lock(muxMutex_);
 		if (!fmtCtx_) return;
+		bool wroteFrames = !headerDeferred_;
 		flushVideoFrame();
 		if (!headerDeferred_) {
 			av_write_trailer(fmtCtx_);
@@ -237,7 +238,13 @@ private:
 		avio_closep(&fmtCtx_->pb);
 		avformat_free_context(fmtCtx_);
 		fmtCtx_ = nullptr;
-		MS_DEBUG(logger_, "{} Recording finalized: {}", logTag_, outputPath_);
+		// Remove empty recording files (no frames written)
+		if (!wroteFrames && !outputPath_.empty()) {
+			std::remove(outputPath_.c_str());
+			MS_DEBUG(logger_, "{} Removed empty recording: {}", logTag_, outputPath_);
+		} else {
+			MS_DEBUG(logger_, "{} Recording finalized: {}", logTag_, outputPath_);
+		}
 	}
 
 	void recvLoop() {
@@ -363,9 +370,10 @@ public:
 		if (rtp.payloadType == audioPT_) {
 			if (!audioBaseSet_) { audioBaseTs_ = rtp.timestamp; audioBaseSet_ = true; }
 			if (headerDeferred_) {
-				// Buffer audio until header is written
-				pendingAudio_.push_back({rtp.timestamp,
-					std::vector<uint8_t>(rtp.payload, rtp.payload + rtp.payloadSize)});
+				// Buffer audio until header is written (cap at 500 packets to prevent OOM)
+				if (pendingAudio_.size() < 500)
+					pendingAudio_.push_back({rtp.timestamp,
+						std::vector<uint8_t>(rtp.payload, rtp.payload + rtp.payloadSize)});
 				return;
 			}
 			writeAudioPacket(rtp.timestamp, rtp.payload, rtp.payloadSize);
@@ -393,8 +401,9 @@ public:
 	}
 
 	void writeAudioPacket(uint32_t ts, const uint8_t* data, int size) {
-		int64_t pts = av_rescale_q(ts - audioBaseTs_,
+		int64_t pts = av_rescale_q((int32_t)(ts - audioBaseTs_),
 			{1, (int)audioClockRate_}, audioStream_->time_base);
+		if (pts < 0) pts = 0;
 		AVPacket pkt;
 		av_init_packet(&pkt);
 		pkt.stream_index = audioStream_->index;
@@ -428,8 +437,9 @@ public:
 			writeData = &avccBuf;
 		}
 
-		int64_t pts = av_rescale_q(videoFrameTs_ - videoBaseTs_,
+		int64_t pts = av_rescale_q((int32_t)(videoFrameTs_ - videoBaseTs_),
 			{1, (int)videoClockRate_}, videoStream_->time_base);
+		if (pts < 0) pts = 0;
 		AVPacket pkt;
 		av_init_packet(&pkt);
 		pkt.stream_index = videoStream_->index;

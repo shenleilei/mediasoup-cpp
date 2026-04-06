@@ -6,6 +6,7 @@
 #include "SignalingServer.h"
 #include <nlohmann/json.hpp>
 #include <csignal>
+#include <atomic>
 #include <fstream>
 #include <thread>
 #include <array>
@@ -18,11 +19,10 @@ using json = nlohmann::json;
 static WorkerManager* g_workerManager = nullptr;
 static RoomRegistry* g_registry = nullptr;
 
+std::atomic<bool> g_shutdown{false};
+
 void signalHandler(int sig) {
-	spdlog::info("Received signal {}, shutting down...", sig);
-	if (g_registry) g_registry->stop();
-	if (g_workerManager) g_workerManager->close();
-	exit(0);
+	g_shutdown = true;
 }
 
 static bool daemonize(const std::string& logFile, const std::string& pidFile) {
@@ -232,5 +232,11 @@ int main(int argc, char* argv[]) {
 		workerManager.size(), signalingPort, nodeId);
 
 	server.run();
+
+	// Graceful shutdown (reached when g_shutdown causes uWS loop to stop)
+	spdlog::info("Shutting down...");
+	if (registry) registry->stop();
+	workerManager.close();
+	spdlog::info("Shutdown complete");
 	return 0;
 }
