@@ -62,6 +62,7 @@ public:
 	void setClientStats(const std::string& roomId, const std::string& peerId, const json& stats);
 	json collectPeerStats(const std::string& roomId, const std::string& peerId);
 	void broadcastStats();
+	void heartbeatRegistry();
 
 private:
 	void autoRecord(const std::string& roomId, const std::string& peerId,

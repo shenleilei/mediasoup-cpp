@@ -555,6 +555,10 @@ json RoomService::collectPeerStats(const std::string& roomId, const std::string&
 	return result;
 }
 
+void RoomService::heartbeatRegistry() {
+	if (registry_) registry_->heartbeat();
+}
+
 void RoomService::broadcastStats() {
 	auto roomIds = roomManager_.getRoomIds();
 	if (roomIds.empty()) return;

@@ -376,6 +376,17 @@ void SignalingServer::run() {
 				});
 			}, kStatsBroadcastIntervalMs, kStatsBroadcastIntervalMs);
 
+			// Redis heartbeat timer — dispatch to worker thread
+			auto* redisTimer = us_create_timer((struct us_loop_t*)loop, 0, sizeof(SignalingServer*));
+			memcpy(us_timer_ext(redisTimer), &self, sizeof(SignalingServer*));
+			us_timer_set(redisTimer, [](struct us_timer_t* t) {
+				SignalingServer* s;
+				memcpy(&s, us_timer_ext(t), sizeof(SignalingServer*));
+				s->postWork([s] {
+					s->roomService_.heartbeatRegistry();
+				});
+			}, kRedisHeartbeatIntervalSec * 1000, kRedisHeartbeatIntervalSec * 1000);
+
 			struct ShutdownCtx { us_listen_socket_t* sock; };
 			auto* shutdownTimer = us_create_timer((struct us_loop_t*)loop, 0, sizeof(ShutdownCtx));
 			ShutdownCtx sctx{listenSocket};
