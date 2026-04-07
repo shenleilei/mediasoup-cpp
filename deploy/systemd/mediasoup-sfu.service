@@ -16,7 +16,7 @@ NoNewPrivileges=true
 ProtectSystem=full
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/var/log /var/lib/mediasoup-cpp
+ReadWritePaths=/var/log/mediasoup-sfu.log /var/lib/mediasoup-cpp
 Environment=TZ=UTC
 
 [Install]

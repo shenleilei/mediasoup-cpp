@@ -72,7 +72,7 @@ int main(int argc, char* argv[]) {
 	std::string logFile = "/var/log/mediasoup-sfu.log";
 	std::string pidFile = "/var/run/mediasoup-sfu.pid";
 	std::string logLevel = "info";
-	std::string environment = "development";
+	std::string deploymentEnvironment = "development";
 	std::string wsAuthToken;
 	std::string recordingsToken;
 	int maxWsConnectionsPerIp = 0;
@@ -104,7 +104,7 @@ int main(int argc, char* argv[]) {
 				if (cfg.contains("pidFile"))        pidFile = cfg["pidFile"].get<std::string>();
 				if (cfg.contains("logLevel"))       logLevel = cfg["logLevel"].get<std::string>();
 				if (cfg.contains("nodaemon"))        noDaemon = cfg["nodaemon"].get<bool>();
-				if (cfg.contains("environment"))    environment = cfg["environment"].get<std::string>();
+				if (cfg.contains("environment"))    deploymentEnvironment = cfg["environment"].get<std::string>();
 				if (cfg.contains("wsAuthToken"))    wsAuthToken = cfg["wsAuthToken"].get<std::string>();
 				if (cfg.contains("recordingsToken")) recordingsToken = cfg["recordingsToken"].get<std::string>();
 				if (cfg.contains("maxWsConnectionsPerIp")) maxWsConnectionsPerIp = cfg["maxWsConnectionsPerIp"].get<int>();
@@ -133,7 +133,7 @@ int main(int argc, char* argv[]) {
 		else if (arg.find("--logFile=") == 0)  logFile = arg.substr(10);
 		else if (arg.find("--pidFile=") == 0)  pidFile = arg.substr(10);
 		else if (arg.find("--logLevel=") == 0) logLevel = arg.substr(11);
-		else if (arg.find("--env=") == 0)      environment = arg.substr(6);
+		else if (arg.find("--env=") == 0)      deploymentEnvironment = arg.substr(6);
 		else if (arg.find("--wsAuthToken=") == 0) wsAuthToken = arg.substr(14);
 		else if (arg.find("--recordingsToken=") == 0) recordingsToken = arg.substr(18);
 		else if (arg.find("--maxWsConnectionsPerIp=") == 0) maxWsConnectionsPerIp = std::stoi(arg.substr(24));
@@ -146,13 +146,13 @@ int main(int argc, char* argv[]) {
 		std::cerr << "Config error: " << msg << std::endl;
 		return 1;
 	};
-	if (signalingPort <= 0 || signalingPort > 65535) return configError("port must be in range 1-65535");
+	if (signalingPort <= 0 || signalingPort > 65535) return configError("signalingPort must be in range 1-65535");
 	if (numWorkers <= 0) return configError("workers must be > 0");
 	if (redisPort <= 0 || redisPort > 65535) return configError("redisPort must be in range 1-65535");
 	if (requestWindowSec <= 0) return configError("requestWindowSec must be > 0");
 	if (maxWsConnectionsPerIp < 0) return configError("maxWsConnectionsPerIp must be >= 0");
 	if (maxRequestsPerIpPerWindow < 0) return configError("maxRequestsPerIpPerWindow must be >= 0");
-	if (environment == "production") {
+	if (deploymentEnvironment == "production") {
 		if (wsAuthToken.empty()) return configError("production requires wsAuthToken");
 		if (!recordDir.empty() && recordingsToken.empty()) return configError("production requires recordingsToken when recordDir is enabled");
 	}

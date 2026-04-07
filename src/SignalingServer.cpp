@@ -140,7 +140,7 @@ void SignalingServer::run() {
 				{
 					std::lock_guard<std::mutex> lock(*securityMutex);
 					size_t& counter = (*connCountPerIp)[d->remoteIp];
-					if (counter >= security_.maxWsConnectionsPerIp) overLimit = true;
+					if (counter + 1 > security_.maxWsConnectionsPerIp) overLimit = true;
 					else ++counter;
 				}
 				if (overLimit) {
@@ -172,7 +172,7 @@ void SignalingServer::run() {
 					std::lock_guard<std::mutex> lock(*securityMutex);
 					RateState& state = (*reqRatePerIp)[sd->remoteIp];
 					const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - state.windowStart).count();
-					if (elapsed >= static_cast<long long>(security_.requestWindowSec)) {
+					if (elapsed >= security_.requestWindowSec) {
 						state.windowStart = now;
 						state.count = 0;
 					}
