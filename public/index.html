@@ -241,7 +241,7 @@ function renderQosPanel(data) {
         html += qosItem('Jitter', jitterMs);
         html += qosItem('RTT', s.roundTripTime != null ? s.roundTripTime.toFixed(1) + ' ms' : '-');
         html += qosItem('Packets Lost', s.packetsLost != null ? s.packetsLost : '-');
-        html += qosItem('Fraction Lost', s.fractionLost != null ? (s.fractionLost * 100).toFixed(1) + '%' : '-');
+        html += qosItem('Fraction Lost', s.fractionLost != null ? (s.fractionLost / 256 * 100).toFixed(1) + '%' : '-');
         html += qosItem('NACK Count', s.nackCount != null ? s.nackCount : '-');
         html += qosItem('PLI Count', s.pliCount != null ? s.pliCount : '-');
         html += qosItem('FIR Count', s.firCount != null ? s.firCount : '-');
