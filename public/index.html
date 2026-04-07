@@ -252,29 +252,46 @@ function renderQosPanel(data) {
 
     // recvTransport (downlink)
     const rt = peer.recvTransport;
-    if (rt && Object.keys(rt).length > 0) {
+    const vf = peer.clientStats && peer.clientStats.videoFreeze;
+    const iv = peer.clientStats && peer.clientStats.inboundVideo;
+    const ia = peer.clientStats && peer.clientStats.inboundAudio;
+    const rc = peer.clientStats && peer.clientStats.recv;
+    if (rt || vf || iv) {
       html += `<div style="margin:4px 0;color:#FF9800;font-size:12px;font-weight:bold">⬇ Downlink</div>`;
       html += '<div class="qos-grid">';
-      html += qosItem('Recv Bitrate ⬇', fmtBitrate(rt.rtpSendBitrate));
-      html += qosItem('Packet Loss ⬇', fmtLoss(rt.rtpPacketLossSent));
-      html += '</div>';
-    }
-
-    // Video freeze / stutter stats (from browser inbound-rtp)
-    const vf = peer.clientStats && peer.clientStats.videoFreeze;
-    if (vf) {
-      html += `<div style="margin:4px 0;color:#E91E63;font-size:12px;font-weight:bold">🧊 Video Stutter</div>`;
-      html += '<div class="qos-grid">';
-      const freezeRate = vf.totalFramesDuration > 0
-        ? (vf.totalFreezesDuration / vf.totalFramesDuration * 100).toFixed(1) + '%' : '-';
-      const recentFreeze = vf.recentFreezeRate != null
-        ? (vf.recentFreezeRate * 100).toFixed(1) + '%' : '-';
-      html += qosItem('Freeze Rate', freezeRate);
-      html += qosItem('Recent Freeze', recentFreeze);
-      html += qosItem('Freeze Count', vf.freezeCount);
-      html += qosItem('Total Freeze', vf.totalFreezesDuration != null ? vf.totalFreezesDuration.toFixed(1) + 's' : '-');
-      html += qosItem('Frames Dropped', vf.framesDropped);
-      html += qosItem('JB Delay', vf.jitterBufferDelayMs != null ? vf.jitterBufferDelayMs.toFixed(0) + ' ms' : '-');
+      if (rt) {
+        html += qosItem('Recv Bitrate ⬇', fmtBitrate(rt.rtpSendBitrate));
+        html += qosItem('Packet Loss ⬇', fmtLoss(rt.rtpPacketLossSent));
+      }
+      if (rc) {
+        html += qosItem('RTT ⬇', rc.currentRoundTripTime ? (rc.currentRoundTripTime * 1000).toFixed(0) + ' ms' : '-');
+      }
+      if (iv) {
+        html += qosItem('Video Jitter ⬇', (iv.jitter * 1000).toFixed(1) + ' ms');
+        html += qosItem('Video Lost ⬇', iv.packetsLost);
+        html += qosItem('Resolution', iv.frameWidth && iv.frameHeight ? iv.frameWidth + '×' + iv.frameHeight : '-');
+        html += qosItem('FPS', iv.framesPerSecond || '-');
+        html += qosItem('NACK ⬇', iv.nackCount);
+        html += qosItem('PLI ⬇', iv.pliCount);
+      }
+      if (ia) {
+        html += qosItem('Audio Jitter ⬇', (ia.jitter * 1000).toFixed(1) + ' ms');
+        html += qosItem('Audio Lost ⬇', ia.packetsLost);
+        const concealRate = ia.totalSamplesReceived > 0
+          ? (ia.concealedSamples / ia.totalSamplesReceived * 100).toFixed(1) + '%' : '-';
+        html += qosItem('Audio Conceal', concealRate);
+      }
+      if (vf) {
+        const freezeRate = vf.totalFramesDuration > 0
+          ? (vf.totalFreezesDuration / vf.totalFramesDuration * 100).toFixed(1) + '%' : '-';
+        const recentFreeze = vf.recentFreezeRate != null
+          ? (vf.recentFreezeRate * 100).toFixed(1) + '%' : '-';
+        html += qosItem('Freeze Rate', freezeRate);
+        html += qosItem('Recent Freeze', recentFreeze);
+        html += qosItem('Freeze Count', vf.freezeCount);
+        html += qosItem('Frames Dropped', vf.framesDropped);
+        html += qosItem('JB Delay', vf.jitterBufferDelayMs != null ? vf.jitterBufferDelayMs.toFixed(0) + ' ms' : '-');
+      }
       html += '</div>';
     }
 
@@ -524,6 +541,8 @@ function startClientStatsReporting() {
         if (pc) {
           const stats = await pc.getStats();
           const videoFreeze = {};
+          const inboundVideo = {};
+          const inboundAudio = {};
           stats.forEach(r => {
             if (r.type === 'candidate-pair' && r.nominated) {
               report.recv = {
@@ -533,13 +552,23 @@ function startClientStatsReporting() {
               };
             }
             if (r.type === 'inbound-rtp' && r.kind === 'video') {
+              inboundVideo.jitter = r.jitter || 0;
+              inboundVideo.packetsLost = r.packetsLost || 0;
+              inboundVideo.packetsReceived = r.packetsReceived || 0;
+              inboundVideo.bytesReceived = r.bytesReceived || 0;
+              inboundVideo.framesPerSecond = r.framesPerSecond || 0;
+              inboundVideo.frameWidth = r.frameWidth || 0;
+              inboundVideo.frameHeight = r.frameHeight || 0;
+              inboundVideo.nackCount = r.nackCount || 0;
+              inboundVideo.pliCount = r.pliCount || 0;
+              // Freeze stats
               videoFreeze.freezeCount = r.freezeCount || 0;
               videoFreeze.totalFreezesDuration = r.totalFreezesDuration || 0;
               videoFreeze.totalFramesDuration = r.totalFramesDuration || 0;
               videoFreeze.framesReceived = r.framesReceived || 0;
               videoFreeze.framesDecoded = r.framesDecoded || 0;
               videoFreeze.framesDropped = r.framesDropped || 0;
-              // Incremental JB delay (current, not cumulative average)
+              // Incremental JB delay
               const curDelay = r.jitterBufferDelay || 0;
               const curCount = r.jitterBufferEmittedCount || 0;
               const dDelay = curDelay - _prevJbDelay;
@@ -547,7 +576,7 @@ function startClientStatsReporting() {
               videoFreeze.jitterBufferDelayMs = dCount > 0 ? (dDelay / dCount * 1000) : 0;
               _prevJbDelay = curDelay;
               _prevJbCount = curCount;
-              // Incremental freeze rate (recent interval, not cumulative)
+              // Incremental freeze rate
               const curFreeze = r.totalFreezesDuration || 0;
               const curFrames = r.totalFramesDuration || 0;
               const dFreeze = curFreeze - _prevFreezesDuration;
@@ -556,8 +585,17 @@ function startClientStatsReporting() {
               _prevFreezesDuration = curFreeze;
               _prevFramesDuration = curFrames;
             }
+            if (r.type === 'inbound-rtp' && r.kind === 'audio') {
+              inboundAudio.jitter = r.jitter || 0;
+              inboundAudio.packetsLost = r.packetsLost || 0;
+              inboundAudio.packetsReceived = r.packetsReceived || 0;
+              inboundAudio.concealedSamples = r.concealedSamples || 0;
+              inboundAudio.totalSamplesReceived = r.totalSamplesReceived || 0;
+            }
           });
           if (Object.keys(videoFreeze).length > 0) report.videoFreeze = videoFreeze;
+          if (Object.keys(inboundVideo).length > 0) report.inboundVideo = inboundVideo;
+          if (Object.keys(inboundAudio).length > 0) report.inboundAudio = inboundAudio;
         }
       }
       if (Object.keys(report).length > 0) {
