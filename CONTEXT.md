@@ -117,9 +117,9 @@
 - RTP 时间戳回绕: 用 int32 差值防止 pts 溢出
 
 ### 长时间运行稳定性
-- Worker 崩溃自动重启: WorkerManager.respawnOne()，独立线程执行，带速率限制（kMaxRespawnsPerWindow/kRespawnWindowSec）
+- Worker 崩溃自动重启: WorkerManager.respawnOne()，在 waitThread 的 died 回调中直接执行，带速率限制（kMaxRespawnsPerWindow/kRespawnWindowSec）
 - Worker 崩溃通知客户端: checkRoomHealth() 每 2 秒检测 dead router，broadcast serverRestart 通知
-- Redis 断连自动重连: ensureConnected() 守卫 + heartbeat 线程定期重试
+- Redis 断连自动重连: ensureConnected() 守卫，heartbeat 通过 SignalingServer timer + postWork 定期重试
 - 录制磁盘空间保护: cleanOldRecordings() 超过 kMaxRecordingDirBytes 自动清理最老录制
 - Recorder 空文件清理: finalizeMuxer 中无帧时删除空 webm
 - GC 清理 recorder: cleanIdleRooms 同步清理 recorder/transport/clientStats
@@ -138,16 +138,103 @@
 - 2 个 Worker 崩溃恢复集成测试: WorkerCrashSendsServerRestart + WorkerRespawnAllowsNewRooms
 
 ## 线程模型
-- 主线程(uWS): WebSocket 收发、JSON 解析、定时器触发，**不阻塞**
-- 信令工作线程(1): 串行执行 RoomService 方法（join/produce/consume/leave/getStats 等），Channel::RequestWait() 阻塞在此线程，通过 Loop::defer() 回到主线程发送 WS 响应
-- Channel readThread(×N worker): pipe读取、response匹配、notification分发
-- Worker waitThread(×N worker): waitpid子进程
-- Recorder recvLoop(×M peer): UDP收RTP、H264/VP8解包、写WebM/MKV
-- Registry heartbeat(0或1): Redis心跳10s
-- 典型1 worker + 2录制 = 7线程（含信令工作线程）
-- 共享数据: Channel.pendingRequests_(锁)、Recorder.muxMutex_/qosMutex_(锁)
+
+### 线程清单（典型 1 worker + 2 录制 peer = 5 线程）
+
+| 线程 | 数量 | 阻塞方式 | 职责 |
+|------|------|----------|------|
+| uWS 主线程 | 1 | epoll_wait（非阻塞事件循环） | WebSocket 收发、HTTP、定时器触发、defer 回调执行 |
+| 信令工作线程 | 1 | condition_variable::wait / future::wait_for | 串行执行 RoomService 方法 + Redis heartbeat |
+| Channel readThread | ×N worker | read() on pipe fd | 读取 worker 响应和通知 |
+| Worker waitThread | ×N worker | waitpid() | 等待子进程退出，崩溃时直接 respawn |
+| Recorder recvLoop | ×M peer | recv() on UDP socket | 收 RTP 包，解包写 WebM |
+
+多 worker 时 readThread 和 waitThread 各乘 N，多录制 peer 时 recvLoop 乘 M。
+
+### 已消除的线程
+- ~~Respawn 线程~~: 之前 worker 崩溃时创建临时线程做 sleep+respawn，现在直接在 waitThread 的 died 回调里 respawn（waitThread 此时已无事可做）
+- ~~Registry heartbeat 线程~~: 之前独立线程 sleep(10s)+redis SET 循环，现在改为 SignalingServer timer + postWork 到信令工作线程
+
+### 共享数据与锁
+- Channel.pendingRequests_: mutex 保护，readThread 写、信令工作线程读
+- Recorder.muxMutex_/qosMutex_: recvLoop 线程写、broadcastStats 读
 - 信令工作线程串行执行，RoomService/Room/Peer 无需额外加锁
-- per-connection alive token (shared_ptr<atomic<bool>>) 防止向已关闭的 ws 发送
+- per-connection alive token (shared_ptr<atomic<bool>>) 防止 defer 回调向已关闭的 ws 发送
+
+## Channel IPC 协议（控制层 ↔ Worker）
+
+Channel 是控制层与 mediasoup-worker 子进程的唯一通信通道。
+
+### 通信方式
+- Unix Pipe: fd 3（控制层→worker 写请求）、fd 4（worker→控制层 写响应/通知）
+- 帧格式: 4 字节 little-endian size prefix + FlatBuffers payload
+- 序列化: FlatBuffers（mediasoup v3.14.16 schema，29 个 .fbs 文件）
+
+### 消息类型
+
+**Request → Response（控制层主动调用）**
+- 控制层发 Request（带递增 id），worker 处理后返回 Response（同 id）
+- 信令工作线程通过 Channel::RequestWait() 发送并阻塞等待
+- readThread 收到 Response 后通过 promise.set_value() 唤醒等待方
+- 典型请求: ROUTER_CREATE_WEBRTCTRANSPORT, TRANSPORT_PRODUCE, TRANSPORT_CONSUME, TRANSPORT_GET_STATS, TRANSPORT_CONNECT 等
+
+**Notification（worker 主动推送）**
+- worker 在媒体传输过程中主动通知状态变化
+- readThread 收到后通过 EventEmitter.emit(handlerId) 分发给对应的 Producer/Consumer 对象
+- 典型通知:
+  - PRODUCER_SCORE: 上行网络质量分变化 → QoS 面板显示
+  - CONSUMER_SCORE: 下行质量分变化
+  - CONSUMER_LAYERS_CHANGED: Simulcast 层切换（720p→360p）
+  - TRANSPORT_ICE_STATE_CHANGE: ICE 连接状态变化
+  - TRANSPORT_DTLS_STATE_CHANGE: DTLS 握手状态
+
+**Log（worker 日志转发）**
+- worker 内部日志通过 pipe 转发到控制层的 spdlog
+
+## 数据流（完整调用链）
+
+### 信令流（一次 produce 请求）
+```
+浏览器A ws.send({method:"produce"})
+  → ① uWS 主线程: JSON 解析, postWork()
+  → ② 信令工作线程: RoomService.produce()
+  → ③ Transport.produce(): ORTC 协商 + FlatBuffers 序列化
+  → ④ Channel.RequestWait(): write(pipe fd 3) → future.wait()
+  → ⑤ Worker 创建 Producer, 通过 pipe fd 4 返回 Response
+  → ⑥ readThread: promise.set_value() → 信令工作线程被唤醒
+  → ⑦ RoomService: auto-subscribe (对每个其他 peer 重复 ③→⑥)
+  → ⑧ RoomService: autoRecord (创建 PlainTransport + PIPE Consumer)
+  → ⑨ loop->defer(response) → 主线程 ws->send() → 浏览器A
+  → ⑩ loop->defer(newConsumer) → 主线程 ws->send() → 浏览器B
+```
+
+### 媒体流（RTP 数据路径，不经过控制层）
+```
+浏览器A ──SRTP/UDP──→ WebRtcTransport(A.send)
+                        │ ICE + DTLS 解密
+                        ▼
+                     Producer(A.audio/video)
+                        │
+            ┌───────────┼──────────────┐
+            ▼                          ▼
+    Consumer(SIMPLE)            Consumer(PIPE)
+    给 B 的实时观看              给录制的 PlainTransport
+            │                          │
+            ▼                          ▼
+    WebRtcTransport(B.recv)     PlainTransport
+    DTLS 加密 + ICE              明文 RTP
+            │                          │
+            ▼                          │ UDP 127.0.0.1:port
+        浏览器B                         ▼
+                              PeerRecorder.recvLoop()
+                                recv() → RTP 解包 → FFmpeg → .webm
+```
+
+### 录制链路说明
+- Worker 是预编译二进制（v3.14.16），不可修改，所以录制在控制层实现
+- PlainTransport 是 mediasoup 提供的机制，将明文 RTP 通过 UDP 转发到外部
+- PIPE 类型 Consumer 不做 BWE/NACK，直接转发所有 layer，适合录制
+- 走 UDP loopback 而非 pipe 是因为 Worker 的 PlainTransport 只支持 UDP/TCP 输出
 
 ## 任务完成状态
 - P0: ✅ Peer 抽象 + 服务端自动订阅

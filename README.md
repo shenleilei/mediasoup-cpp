@@ -110,12 +110,22 @@ mediasoup-cpp/
 - 传入命令行参数: logLevel, rtcMinPort, rtcMaxPort, dtls 证书等
 - 监听 WORKER_RUNNING notification 确认启动成功
 - 子进程退出时触发 workerDied 事件
-- 崩溃自动重启: WorkerManager 检测到 worker 死亡后在独立线程中 respawn，带速率限制
+- 崩溃自动重启: WorkerManager 检测到 worker 死亡后直接在 waitThread 的 died 回调中 respawn，带速率限制
 - 崩溃通知: checkRoomHealth 每 2 秒检测 dead router，向受影响房间广播 serverRestart
+
+### SignalingServer (SignalingServer.h/cpp)
+WebSocket 信令层 + HTTP 静态文件 + 录制回放 API。
+
+- **uWS 主线程**: epoll 事件循环，处理 WS 收发、HTTP 请求、定时器触发。**不执行任何阻塞操作**
+- **信令工作线程**: 单线程 + 任务队列（生产者-消费者模式），串行执行所有 RoomService 方法
+- **流程**: .message 回调 → JSON 解析 → postWork() → 工作线程执行 → loop->defer() → 主线程发响应
+- **线程安全**: uWS::Loop::get() 是 thread-local 的，必须在 uWS 线程捕获 loop 指针传给工作线程
+- **ws 生命周期**: per-connection alive token (shared_ptr<atomic<bool>>)，.close 时设 false，defer 回调检查后跳过
+- **定时器**: GC(30s) / HealthCheck(2s) / Stats(10s) / Redis heartbeat(10s) / Shutdown(500ms)，全部通过 postWork 卸载到工作线程
 
 ### 稳定性保障
 - **Worker 崩溃恢复**: 自动 respawn + serverRestart 通知客户端重连，最多 2 秒感知
-- **Redis 自动重连**: 每次操作前 ensureConnected()，heartbeat 线程定期重试
+- **Redis 自动重连**: 每次操作前 ensureConnected()，heartbeat 通过 timer + postWork 定期重试
 - **磁盘空间保护**: 录制目录超过 10GB 自动清理最老录制（跳过活跃录制）
 - **Channel 安全**: builderMutex 只保护序列化，sendBytes 在锁外执行；readThread 用 join 不用 detach
 - **EventEmitter 清理**: Transport/Producer/Consumer close 时 off 掉 channel listener，防止内存泄漏
