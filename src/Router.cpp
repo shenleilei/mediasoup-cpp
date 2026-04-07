@@ -16,6 +16,23 @@
 
 namespace mediasoup {
 
+static void validateNotificationArgs(const std::vector<std::any>& args,
+	const char* owner, const std::string& id,
+	FBS::Notification::Event& event,
+	const FBS::Notification::Notification*& notif)
+{
+	notif = nullptr;
+	if (args.empty()) {
+		spdlog::warn("{} notification args empty [id:{}]", owner, id);
+		throw std::invalid_argument("empty notification args");
+	}
+	event = std::any_cast<FBS::Notification::Event>(args[0]);
+	if (args.size() > 1) {
+		auto owned = std::any_cast<std::shared_ptr<Channel::OwnedNotification>>(args[1]);
+		if (owned) notif = owned->notification();
+	}
+}
+
 Router::Router(const std::string& id, Channel* channel,
 	const std::vector<json>& mediaCodecs)
 	: id_(id), channel_(channel), logger_(Logger::Get("Router"))
@@ -134,15 +151,17 @@ std::shared_ptr<WebRtcTransport> Router::createWebRtcTransport(
 	});
 
 	channel_->emitter().on(transportId, [transport](const std::vector<std::any>& args) {
-		if (!args.empty()) {
-			auto event = std::any_cast<FBS::Notification::Event>(args[0]);
+		try {
+			FBS::Notification::Event event;
 			const FBS::Notification::Notification* notif = nullptr;
-			std::shared_ptr<Channel::OwnedNotification> owned;
-			if (args.size() > 1) {
-				owned = std::any_cast<std::shared_ptr<Channel::OwnedNotification>>(args[1]);
-				notif = owned->notification();
-			}
+			validateNotificationArgs(args, "WebRtcTransport", transport->id(), event, notif);
 			transport->handleNotification(event, notif);
+		} catch (const std::bad_any_cast& e) {
+			spdlog::warn("WebRtcTransport notification cast failed [id:{}]: {}", transport->id(), e.what());
+		} catch (const std::exception& e) {
+			spdlog::warn("WebRtcTransport notification dropped [id:{}]: {}", transport->id(), e.what());
+		} catch (...) {
+			spdlog::warn("WebRtcTransport notification dropped [id:{}]: unknown error", transport->id());
 		}
 	});
 
@@ -154,6 +173,10 @@ std::shared_ptr<PlainTransport> Router::createPlainTransport(
 	const PlainTransportOptions& options)
 {
 	if (closed_) throw std::runtime_error("Router closed");
+	if (options.listenInfos.empty()) {
+		MS_WARN(logger_, "createPlainTransport failed: listenInfos is empty [routerId:{}]", id_);
+		throw std::invalid_argument("invalid 'listenInfos': cannot be empty");
+	}
 
 	std::string transportId = utils::generateUUIDv4();
 	auto& builder = channel_->bufferBuilder();

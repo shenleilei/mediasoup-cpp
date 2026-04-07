@@ -12,6 +12,38 @@
 
 namespace mediasoup {
 
+static std::string getRequiredString(const json& options, const char* key)
+{
+	if (!options.contains(key) || !options.at(key).is_string())
+		throw std::invalid_argument(std::string("invalid or missing '") + key + "'");
+	return options.at(key).get<std::string>();
+}
+
+static bool getOptionalBool(const json& options, const char* key, bool defaultValue)
+{
+	if (!options.contains(key)) return defaultValue;
+	if (!options.at(key).is_boolean())
+		throw std::invalid_argument(std::string("invalid '") + key + "': expected boolean");
+	return options.at(key).get<bool>();
+}
+
+static void validateNotificationArgs(const std::vector<std::any>& args,
+	const char* owner, const std::string& id,
+	FBS::Notification::Event& event,
+	const FBS::Notification::Notification*& notif)
+{
+	notif = nullptr;
+	if (args.empty()) {
+		spdlog::warn("{} notification args empty [id:{}]", owner, id);
+		throw std::invalid_argument("empty notification args");
+	}
+	event = std::any_cast<FBS::Notification::Event>(args[0]);
+	if (args.size() > 1) {
+		auto owned = std::any_cast<std::shared_ptr<Channel::OwnedNotification>>(args[1]);
+		if (owned) notif = owned->notification();
+	}
+}
+
 // Helper: build FBS RtpParameters from our types
 static flatbuffers::Offset<FBS::RtpParameters::RtpParameters> buildFbsRtpParameters(
 	flatbuffers::FlatBufferBuilder& builder, const RtpParameters& params)
@@ -142,9 +174,15 @@ static flatbuffers::Offset<FBS::RtpParameters::RtpMapping> buildFbsRtpMapping(
 std::shared_ptr<Producer> Transport::produce(const json& options) {
 	if (closed_) throw std::runtime_error("Transport closed");
 
-	std::string kind = options.at("kind").get<std::string>();
+	if (!options.contains("rtpParameters") || !options.at("rtpParameters").is_object())
+		throw std::invalid_argument("invalid or missing 'rtpParameters'");
+	if (!options.contains("routerRtpCapabilities") || !options.at("routerRtpCapabilities").is_object())
+		throw std::invalid_argument("invalid or missing 'routerRtpCapabilities'");
+	std::string kind = getRequiredString(options, "kind");
+	if (kind != "audio" && kind != "video")
+		throw std::invalid_argument("invalid 'kind': expected 'audio' or 'video'");
 	RtpParameters rtpParameters = options.at("rtpParameters").get<RtpParameters>();
-	bool paused = options.value("paused", false);
+	bool paused = getOptionalBool(options, "paused", false);
 
 	// Get router RTP capabilities from options (must be passed in)
 	RtpCapabilities routerRtpCapabilities = options.at("routerRtpCapabilities").get<RtpCapabilities>();
@@ -188,15 +226,17 @@ std::shared_ptr<Producer> Transport::produce(const json& options) {
 
 	// Register for notifications
 	channel_->emitter().on(producerId, [producer](const std::vector<std::any>& args) {
-		if (!args.empty()) {
-			auto event = std::any_cast<FBS::Notification::Event>(args[0]);
+		try {
+			FBS::Notification::Event event;
 			const FBS::Notification::Notification* notif = nullptr;
-			std::shared_ptr<Channel::OwnedNotification> owned;
-			if (args.size() > 1) {
-				owned = std::any_cast<std::shared_ptr<Channel::OwnedNotification>>(args[1]);
-				notif = owned->notification();
-			}
+			validateNotificationArgs(args, "Producer", producer->id(), event, notif);
 			producer->handleNotification(event, notif);
+		} catch (const std::bad_any_cast& e) {
+			spdlog::warn("Producer notification cast failed [id:{}]: {}", producer->id(), e.what());
+		} catch (const std::exception& e) {
+			spdlog::warn("Producer notification dropped [id:{}]: {}", producer->id(), e.what());
+		} catch (...) {
+			spdlog::warn("Producer notification dropped [id:{}]: unknown error", producer->id());
 		}
 	});
 
@@ -206,11 +246,21 @@ std::shared_ptr<Producer> Transport::produce(const json& options) {
 std::shared_ptr<Consumer> Transport::consume(const json& options) {
 	if (closed_) throw std::runtime_error("Transport closed");
 
-	std::string producerId = options.at("producerId").get<std::string>();
+	if (!options.contains("rtpCapabilities") || !options.at("rtpCapabilities").is_object())
+		throw std::invalid_argument("invalid or missing 'rtpCapabilities'");
+	if (!options.contains("consumableRtpParameters") || !options.at("consumableRtpParameters").is_object())
+		throw std::invalid_argument("invalid or missing 'consumableRtpParameters'");
+	std::string producerId = getRequiredString(options, "producerId");
 	RtpCapabilities rtpCapabilities = options.at("rtpCapabilities").get<RtpCapabilities>();
 	RtpParameters consumableRtpParameters = options.at("consumableRtpParameters").get<RtpParameters>();
-	bool paused = options.value("paused", false);
-	bool pipe = options.value("pipe", false);
+	bool paused = getOptionalBool(options, "paused", false);
+	bool pipe = getOptionalBool(options, "pipe", false);
+	if (consumableRtpParameters.codecs.empty()) {
+		throw std::invalid_argument("invalid 'consumableRtpParameters': codecs cannot be empty");
+	}
+	if (consumableRtpParameters.codecs[0].mimeType.empty()) {
+		throw std::invalid_argument("invalid 'consumableRtpParameters': codecs[0].mimeType cannot be empty");
+	}
 
 	auto consumerRtpParams = pipe
 		? ortc::getPipeConsumerRtpParameters(consumableRtpParameters)
@@ -263,15 +313,17 @@ std::shared_ptr<Consumer> Transport::consume(const json& options) {
 
 	// Register for notifications
 	channel_->emitter().on(consumerId, [consumer](const std::vector<std::any>& args) {
-		if (!args.empty()) {
-			auto event = std::any_cast<FBS::Notification::Event>(args[0]);
+		try {
+			FBS::Notification::Event event;
 			const FBS::Notification::Notification* notif = nullptr;
-			std::shared_ptr<Channel::OwnedNotification> owned;
-			if (args.size() > 1) {
-				owned = std::any_cast<std::shared_ptr<Channel::OwnedNotification>>(args[1]);
-				notif = owned->notification();
-			}
+			validateNotificationArgs(args, "Consumer", consumer->id(), event, notif);
 			consumer->handleNotification(event, notif);
+		} catch (const std::bad_any_cast& e) {
+			spdlog::warn("Consumer notification cast failed [id:{}]: {}", consumer->id(), e.what());
+		} catch (const std::exception& e) {
+			spdlog::warn("Consumer notification dropped [id:{}]: {}", consumer->id(), e.what());
+		} catch (...) {
+			spdlog::warn("Consumer notification dropped [id:{}]: unknown error", consumer->id());
 		}
 	});
 
