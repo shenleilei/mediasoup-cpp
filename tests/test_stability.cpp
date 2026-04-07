@@ -85,6 +85,15 @@ TEST(EventEmitterTest, NoLeakAfterOff) {
 	emitter.emit("event-0"); // should not crash
 }
 
+TEST(EventEmitterTest, ListenerExceptionsDoNotCrashEmit) {
+	EventEmitter emitter;
+	int called = 0;
+	emitter.on("evt", [](auto&) { throw std::bad_any_cast(); });
+	emitter.on("evt", [&](auto&) { called++; });
+	emitter.emit("evt");
+	EXPECT_EQ(called, 1);
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Recorder: pendingAudio cap (500 packets)
 // ═══════════════════════════════════════════════════════════════
