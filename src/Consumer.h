@@ -44,7 +44,7 @@ public:
 
 	void handleNotification(FBS::Notification::Event event, const FBS::Notification::Notification* notification);
 
-	struct Score { uint8_t score; uint8_t producerScore; std::vector<uint8_t> producerScores; };
+	struct Score { uint8_t score = 0; uint8_t producerScore = 0; std::vector<uint8_t> producerScores; };
 	const Score& currentScore() const { return score_; }
 	json getStats();
 
