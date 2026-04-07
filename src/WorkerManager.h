@@ -93,6 +93,7 @@ private:
 	void respawnOne(const std::weak_ptr<void>& weakToken, const WorkerSettings& settings) {
 		try {
 			auto worker = std::make_shared<Worker>(settings);
+			size_t count = 0;
 			{
 				std::lock_guard<std::mutex> lock(mutex_);
 				if (closing_ || weakToken.expired()) {
@@ -100,9 +101,10 @@ private:
 					return;
 				}
 				workers_.push_back(worker);
+				count = workers_.size();
 			}
 			installDiedHandler(worker);
-			spdlog::warn("Worker respawned");
+			spdlog::warn("Worker respawned (now {} workers in pool)", count);
 		} catch (const std::exception& e) {
 			spdlog::error("Failed to respawn worker: {}", e.what());
 		}

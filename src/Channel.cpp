@@ -40,6 +40,10 @@ void Channel::close() {
 	if (consumerFd_ >= 0) { ::close(consumerFd_); consumerFd_ = -1; }
 
 	if (readThread_.joinable()) {
+		// Do not join the readThread_ from itself (e.g. when Channel::close() is
+		// called from a notification handler that runs on readThread_). Calling
+		// join() would deadlock. The read loop will exit naturally because close()
+		// already closed consumerFd_ above, causing the next read() to return ≤0.
 		if (readThread_.get_id() != std::this_thread::get_id())
 			readThread_.join();
 	}

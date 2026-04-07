@@ -9,6 +9,7 @@
 #include "router_generated.h"
 #include "webRtcTransport_generated.h"
 #include "plainTransport_generated.h"
+#include "ChannelUtils.h"
 
 namespace mediasoup {
 
@@ -25,23 +26,6 @@ static bool getOptionalBool(const json& options, const char* key, bool defaultVa
 	if (!options.at(key).is_boolean())
 		throw std::invalid_argument(std::string("invalid '") + key + "': expected boolean");
 	return options.at(key).get<bool>();
-}
-
-static void validateNotificationArgs(const std::vector<std::any>& args,
-	const char* owner, const std::string& id,
-	FBS::Notification::Event& event,
-	const FBS::Notification::Notification*& notif)
-{
-	notif = nullptr;
-	if (args.empty()) {
-		spdlog::warn("{} notification args empty [id:{}]", owner, id);
-		throw std::invalid_argument("empty notification args");
-	}
-	event = std::any_cast<FBS::Notification::Event>(args[0]);
-	if (args.size() > 1) {
-		auto owned = std::any_cast<std::shared_ptr<Channel::OwnedNotification>>(args[1]);
-		if (owned) notif = owned->notification();
-	}
 }
 
 // Helper: build FBS RtpParameters from our types
@@ -235,7 +219,7 @@ std::shared_ptr<Producer> Transport::produce(const json& options) {
 		try {
 			FBS::Notification::Event event;
 			const FBS::Notification::Notification* notif = nullptr;
-			validateNotificationArgs(args, "Producer", producer->id(), event, notif);
+			extractNotificationArgs(args, "Producer", producer->id(), event, notif);
 			producer->handleNotification(event, notif);
 		} catch (const std::bad_any_cast& e) {
 			spdlog::warn("Producer notification cast failed [id:{}]: {}", producer->id(), e.what());
@@ -328,7 +312,7 @@ std::shared_ptr<Consumer> Transport::consume(const json& options) {
 		try {
 			FBS::Notification::Event event;
 			const FBS::Notification::Notification* notif = nullptr;
-			validateNotificationArgs(args, "Consumer", consumer->id(), event, notif);
+			extractNotificationArgs(args, "Consumer", consumer->id(), event, notif);
 			consumer->handleNotification(event, notif);
 		} catch (const std::bad_any_cast& e) {
 			spdlog::warn("Consumer notification cast failed [id:{}]: {}", consumer->id(), e.what());

@@ -13,25 +13,9 @@
 #include "webRtcTransport_generated.h"
 #include "plainTransport_generated.h"
 #include "sctpParameters_generated.h"
+#include "ChannelUtils.h"
 
 namespace mediasoup {
-
-static void validateNotificationArgs(const std::vector<std::any>& args,
-	const char* owner, const std::string& id,
-	FBS::Notification::Event& event,
-	const FBS::Notification::Notification*& notif)
-{
-	notif = nullptr;
-	if (args.empty()) {
-		spdlog::warn("{} notification args empty [id:{}]", owner, id);
-		throw std::invalid_argument("empty notification args");
-	}
-	event = std::any_cast<FBS::Notification::Event>(args[0]);
-	if (args.size() > 1) {
-		auto owned = std::any_cast<std::shared_ptr<Channel::OwnedNotification>>(args[1]);
-		if (owned) notif = owned->notification();
-	}
-}
 
 Router::Router(const std::string& id, Channel* channel,
 	const std::vector<json>& mediaCodecs)
@@ -154,7 +138,7 @@ std::shared_ptr<WebRtcTransport> Router::createWebRtcTransport(
 		try {
 			FBS::Notification::Event event;
 			const FBS::Notification::Notification* notif = nullptr;
-			validateNotificationArgs(args, "WebRtcTransport", transport->id(), event, notif);
+			extractNotificationArgs(args, "WebRtcTransport", transport->id(), event, notif);
 			transport->handleNotification(event, notif);
 		} catch (const std::bad_any_cast& e) {
 			spdlog::warn("WebRtcTransport notification cast failed [id:{}]: {}", transport->id(), e.what());

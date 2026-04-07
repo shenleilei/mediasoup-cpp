@@ -116,6 +116,8 @@ public:
 		std::lock_guard<std::mutex> lock(mutex_);
 		auto [it, inserted] = rooms_.emplace(roomId, room);
 		if (!inserted) {
+			// Another thread already created this room while we were constructing ours.
+			spdlog::info("createRoom race: room '{}' already inserted by concurrent request, discarding duplicate", roomId);
 			try {
 				room->close();
 			} catch (const std::exception& e) {
