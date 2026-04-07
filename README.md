@@ -167,6 +167,16 @@ Browser A ──SRTP/UDP──→ WebRtcTransport → Producer
 ./build/mediasoup_bench
 ```
 
+## Operations: Monitoring & Alerting
+
+A ready-to-use monitoring stack scaffold is included at:
+
+- `deploy/monitoring` (Prometheus, Alertmanager, Grafana, Loki/Promtail, Node Exporter, Process Exporter, Blackbox Exporter)
+
+Runbook and rollout guidance:
+
+- `docs/MONITORING_RUNBOOK.md`
+
 ## Performance
 
 Tested on Intel Xeon Platinum 2.5GHz, 2 vCPU:

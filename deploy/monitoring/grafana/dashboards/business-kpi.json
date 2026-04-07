@@ -1,0 +1,47 @@
+{
+  "uid": "mediasoup-business-kpi",
+  "title": "Business KPI",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "text",
+      "title": "KPI Integration TODO",
+      "gridPos": { "h": 5, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "接入业务指标后将此面板替换为真实查询：\\n- 活跃房间数\\n- 会话成功率\\n- 平均通话时长\\n- 失败原因分布"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Session Success Rate (placeholder)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "targets": [
+        {
+          "expr": "vector(0)",
+          "legendFormat": "replace with real metric"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Active Rooms (placeholder)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "targets": [
+        {
+          "expr": "vector(0)",
+          "legendFormat": "replace with real metric"
+        }
+      ]
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  }
+}

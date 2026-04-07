@@ -1,0 +1,7 @@
+process_names:
+  - name: "mediasoup-sfu"
+    cmdline:
+      - ".*/mediasoup-sfu.*"
+  - name: "mediasoup-worker"
+    cmdline:
+      - ".*/mediasoup-worker.*"
