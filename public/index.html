@@ -203,13 +203,13 @@ function renderQosPanel(data) {
     // sendTransport (uplink)
     const st = peer.sendTransport;
     if (st && Object.keys(st).length > 0) {
-      html += `<div style="margin:4px 0;color:#4CAF50;font-size:12px;font-weight:bold">⬆ Uplink (sendTransport)</div>`;
+      html += `<div style="margin:4px 0;color:#4CAF50;font-size:12px;font-weight:bold">⬆ Uplink</div>`;
       html += '<div class="qos-grid">';
-      html += qosItem('Recv Bitrate', fmtBitrate(st.rtpRecvBitrate));
+      html += qosItem('Send Bitrate ⬆', fmtBitrate(st.rtpRecvBitrate));
       const clientSend = peer.clientStats && peer.clientStats.send;
       html += qosItem('Available BW ⬆', fmtBitrate(clientSend ? clientSend.availableOutgoingBitrate : null));
-      html += qosItem('RTT (browser)', clientSend && clientSend.currentRoundTripTime != null ? (clientSend.currentRoundTripTime * 1000).toFixed(0) + ' ms' : '-');
-      html += qosItem('Packet Loss', fmtLoss(st.rtpPacketLossReceived));
+      html += qosItem('RTT', clientSend && clientSend.currentRoundTripTime != null ? (clientSend.currentRoundTripTime * 1000).toFixed(0) + ' ms' : '-');
+      html += qosItem('Packet Loss ⬆', fmtLoss(st.rtpPacketLossReceived));
       html += qosItem('ICE State', st.iceState || '-');
       html += qosItem('DTLS State', st.dtlsState || '-');
       if (st.iceSelectedTuple) {
@@ -253,10 +253,10 @@ function renderQosPanel(data) {
     // recvTransport (downlink)
     const rt = peer.recvTransport;
     if (rt && Object.keys(rt).length > 0) {
-      html += `<div style="margin:4px 0;color:#FF9800;font-size:12px;font-weight:bold">⬇ Downlink (recvTransport)</div>`;
+      html += `<div style="margin:4px 0;color:#FF9800;font-size:12px;font-weight:bold">⬇ Downlink</div>`;
       html += '<div class="qos-grid">';
-      html += qosItem('Send Bitrate', fmtBitrate(rt.rtpSendBitrate));
-      html += qosItem('Packet Loss', fmtLoss(rt.rtpPacketLossSent));
+      html += qosItem('Recv Bitrate ⬇', fmtBitrate(rt.rtpSendBitrate));
+      html += qosItem('Packet Loss ⬇', fmtLoss(rt.rtpPacketLossSent));
       html += '</div>';
     }
 
