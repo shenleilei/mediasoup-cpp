@@ -157,4 +157,16 @@ if(BUILD_TESTS)
         ${GENERATED_INCLUDE}
     )
     target_link_libraries(mediasoup_bench PRIVATE mediasoup_lib pthread)
+
+    # QoS accuracy tests (requires mediasoup-worker binary)
+    add_executable(mediasoup_qos_accuracy_tests tests/test_qos_accuracy.cpp)
+    target_include_directories(mediasoup_qos_accuracy_tests PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${FLATBUFFERS_INCLUDE}
+        ${JSON_INCLUDE}
+        ${GENERATED_INCLUDE}
+    )
+    target_link_libraries(mediasoup_qos_accuracy_tests PRIVATE gtest gtest_main mediasoup_lib pthread)
+    add_test(NAME mediasoup_qos_accuracy_tests COMMAND mediasoup_qos_accuracy_tests
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 endif()
