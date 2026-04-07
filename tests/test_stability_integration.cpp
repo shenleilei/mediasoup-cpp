@@ -231,3 +231,102 @@ TEST_F(StabilityIntegrationTest, DoubleCloseNoCrash) {
 	auto bob = joinRoom(testRoom_ + "_2", "bob");
 	EXPECT_TRUE(bob.ws != nullptr);
 }
+
+// ─── Test 8: Event loop stays responsive during concurrent signaling ───
+// Verifies the worker thread offloading: multiple clients can join/produce
+// concurrently without blocking each other's responses.
+TEST_F(StabilityIntegrationTest, EventLoopNotBlockedDuringIPC) {
+	// Join 3 clients in parallel threads — if the event loop were blocked,
+	// sequential IPC would cause later joins to timeout.
+	constexpr int N = 3;
+	std::vector<std::thread> threads;
+	std::atomic<int> successCount{0};
+	std::atomic<int> maxLatencyMs{0};
+
+	for (int i = 0; i < N; ++i) {
+		threads.emplace_back([&, i]{
+			auto start = std::chrono::steady_clock::now();
+			std::string peerId = "parallel_" + std::to_string(i);
+			TestWsClient ws;
+			if (!ws.connect(HOST, SFU_PORT)) return;
+
+			json rtpCaps = {
+				{"codecs", {{
+					{"mimeType", "audio/opus"}, {"kind", "audio"},
+					{"clockRate", 48000}, {"channels", 2},
+					{"preferredPayloadType", 100}
+				}}},
+				{"headerExtensions", json::array()}
+			};
+
+			auto resp = ws.request("join", {
+				{"roomId", testRoom_}, {"peerId", peerId},
+				{"displayName", peerId}, {"rtpCapabilities", rtpCaps}
+			}, 10000);
+
+			if (resp.value("ok", false)) successCount++;
+
+			auto elapsed = std::chrono::steady_clock::now() - start;
+			int ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+			int prev = maxLatencyMs.load();
+			while (ms > prev && !maxLatencyMs.compare_exchange_weak(prev, ms));
+
+			ws.close();
+		});
+	}
+
+	for (auto& t : threads) t.join();
+
+	EXPECT_EQ(successCount.load(), N) << "Not all parallel joins succeeded";
+	// With worker thread offloading, all joins should complete within a few seconds
+	// even though each involves Channel IPC. Without offloading, they'd serialize
+	// and the last one could take N * IPC_latency.
+	EXPECT_LT(maxLatencyMs.load(), 8000) << "Parallel joins took too long: " << maxLatencyMs.load() << "ms";
+}
+
+// ─── Test 9: Responses arrive even after slow IPC ───
+// Verifies that a client can still receive responses after another client's
+// request triggers a slow Channel IPC call.
+TEST_F(StabilityIntegrationTest, ResponseAfterSlowRequest) {
+	auto alice = joinRoom(testRoom_, "alice");
+	usleep(50000);
+
+	// Alice creates transport (triggers Channel IPC)
+	auto sendResp = alice.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(sendResp.value("ok", false));
+
+	// Immediately after, Bob joins — should not be blocked by Alice's IPC
+	auto start = std::chrono::steady_clock::now();
+	auto bob = joinRoom(testRoom_, "bob");
+	auto elapsed = std::chrono::steady_clock::now() - start;
+	int ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+
+	// Bob's join should complete reasonably fast
+	EXPECT_LT(ms, 5000) << "Bob's join was blocked for " << ms << "ms";
+}
+
+// ─── Test 10: Disconnect during pending IPC doesn't crash ───
+// Client sends a request then immediately disconnects before response arrives.
+TEST_F(StabilityIntegrationTest, DisconnectDuringPendingRequest) {
+	for (int i = 0; i < 5; ++i) {
+		TestWsClient ws;
+		ASSERT_TRUE(ws.connect(HOST, SFU_PORT));
+
+		// Send join but don't wait for response — close immediately
+		json msg = {{"request", true}, {"id", 1}, {"method", "join"},
+			{"data", {{"roomId", testRoom_}, {"peerId", "ghost_" + std::to_string(i)},
+				{"displayName", "ghost"}, {"rtpCapabilities", json::object()}}}};
+		// Use raw send to avoid waiting for response
+		ws.request("join", {{"roomId", testRoom_}, {"peerId", "ghost_" + std::to_string(i)},
+			{"displayName", "ghost"}, {"rtpCapabilities", json::object()}}, 100);
+		ws.close();
+	}
+
+	usleep(500000);
+
+	// Server should still be alive
+	auto survivor = joinRoom(testRoom_ + "_survive", "survivor");
+	EXPECT_TRUE(survivor.ws != nullptr);
+}

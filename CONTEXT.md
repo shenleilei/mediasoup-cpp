@@ -81,6 +81,19 @@
 - 用户手动配置 `--announcedIp` 时跳过探测
 - 探测失败打 warn 日志提醒
 
+## 已完成：信令非阻塞（uWS 事件循环卸载）
+- 问题: 之前所有 RoomService 方法（join/produce/consume 等）在 uWS 主线程同步执行，Channel::RequestWait() 会阻塞事件循环，worker 响应慢时所有 WS 连接的信令都会卡住
+- 方案: SignalingServer 新增单工作线程 + 任务队列（生产者-消费者模式）
+- uWS 主线程只做 JSON 解析和 postWork()，立即返回不阻塞
+- 工作线程串行执行 RoomService 方法，Channel IPC 阻塞在此线程
+- 完成后通过 uWS::Loop::defer() 回到主线程发送 WS 响应
+- 单工作线程保证请求串行，无需改 RoomService/Room/Peer 的锁
+- per-connection alive token (shared_ptr<atomic<bool>>) 防止 defer 回调向已关闭的 ws 发送
+- notify/broadcast 回调也通过 defer() 回到 uWS 线程（线程安全）
+- 定时器回调（GC/健康检测/stats广播）也卸载到工作线程
+- clientStats 仍在主线程处理（只写 map，不涉及 Channel IPC）
+- 关键: uWS::Loop::get() 是 thread-local 的，必须在 uWS 线程捕获 loop 指针传给工作线程
+
 ## 已完成：Daemon 模式 + 结构化日志
 - 默认 daemonize 运行（fork + setsid），`--nodaemon` 前台运行
 - daemon 模式日志写入文件（默认 /var/log/mediasoup-sfu.log），同时输出到 stdout
@@ -125,14 +138,16 @@
 - 2 个 Worker 崩溃恢复集成测试: WorkerCrashSendsServerRestart + WorkerRespawnAllowsNewRooms
 
 ## 线程模型
-- 主线程(uWS): 信令、业务逻辑、定时器(GC 30s / Stats 2s)、Channel.request() 同步阻塞
+- 主线程(uWS): WebSocket 收发、JSON 解析、定时器触发，**不阻塞**
+- 信令工作线程(1): 串行执行 RoomService 方法（join/produce/consume/leave/getStats 等），Channel::RequestWait() 阻塞在此线程，通过 Loop::defer() 回到主线程发送 WS 响应
 - Channel readThread(×N worker): pipe读取、response匹配、notification分发
 - Worker waitThread(×N worker): waitpid子进程
 - Recorder recvLoop(×M peer): UDP收RTP、H264/VP8解包、写WebM/MKV
 - Registry heartbeat(0或1): Redis心跳10s
-- 典型1 worker + 2录制 = 6线程
+- 典型1 worker + 2录制 = 7线程（含信令工作线程）
 - 共享数据: Channel.pendingRequests_(锁)、Recorder.muxMutex_/qosMutex_(锁)
-- 风险: 主线程future.get()阻塞，worker慢会卡信令
+- 信令工作线程串行执行，RoomService/Room/Peer 无需额外加锁
+- per-connection alive token (shared_ptr<atomic<bool>>) 防止向已关闭的 ws 发送
 
 ## 任务完成状态
 - P0: ✅ Peer 抽象 + 服务端自动订阅
@@ -143,6 +158,7 @@
 - P1: ✅ QoS 实时监控（全链路 stats 采集 + 2 秒广播 + 前端面板）
 - P1: ✅ 录制 + QoS 时间线 + 回放页面
 - P2: ✅ Worker 负载均衡（getLeastLoadedWorker 按 routerCount 选最少的 worker）
+- P2: ✅ 信令非阻塞（SignalingServer 工作线程卸载 Channel IPC，uWS 事件循环不再阻塞）
 - P2: 待做 Dynacast
 - P2: 待做 信令协议标准化
 - P0: 待优化 virtio 单队列网络瓶颈（详见"网络瓶颈分析"），上线前必须换多队列 VM 或物理机
@@ -152,9 +168,9 @@
 - 构建: `cmake --build build --target mediasoup_tests`
 - 运行: `./build/mediasoup_tests` 或 `cd build && ctest --output-on-failure`
 - 测试文件在 `tests/` 目录
-- 共 84 个单元测试用例，覆盖 ORTC 协商、RTP 类型、Room/Peer 管理、QoS 数据结构、Recorder 稳定性、EventEmitter 清理、Room 健康检测、Utils
-- 集成测试: mediasoup_integration_tests (14) + mediasoup_qos_integration_tests (15) + mediasoup_e2e_tests (3) + mediasoup_topology_tests (6)
-- 总计 109 个测试用例
+- 共 98 个单元测试用例，覆盖 ORTC 协商、RTP 类型、Room/Peer 管理、QoS 数据结构、Recorder 稳定性、EventEmitter 清理、Room 健康检测、Utils、WorkerQueue（任务队列 FIFO/并发/alive token）
+- 集成测试: mediasoup_integration_tests (14) + mediasoup_qos_integration_tests (15) + mediasoup_e2e_tests (3) + mediasoup_topology_tests (6) + mediasoup_stability_integration_tests (10)
+- 总计 122 个测试用例
 
 ## 关键规则
 - 每次新增功能都必须同步补充 UT 和集成测试覆盖
@@ -205,3 +221,4 @@
 - `tests/test_qos_unit.cpp` - QoS 单元测试
 - `tests/test_integration.cpp` - 集成测试（含 Worker 崩溃恢复）
 - `tests/bench_worker_load.cpp` - Worker 并发压测工具（1P+2C, PlainTransport, 逐步加压）
+- `tests/test_worker_queue.cpp` - 信令工作线程单元测试（FIFO/并发/alive token/阻塞隔离）
