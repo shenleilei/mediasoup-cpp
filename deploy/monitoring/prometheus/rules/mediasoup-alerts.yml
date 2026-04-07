@@ -1,0 +1,81 @@
+groups:
+  - name: mediasoup-infra-alerts
+    rules:
+      - alert: SfuHttpEndpointDown
+        expr: probe_success{job="blackbox-http"} == 0
+        for: 2m
+        labels:
+          severity: P1
+          team: rtc
+          escalation: immediate
+        annotations:
+          summary: "SFU HTTP endpoint unavailable"
+          description: "Blackbox probe failed for {{ $labels.instance }} for >2m."
+          runbook: "docs/MONITORING_RUNBOOK.md"
+
+      - alert: NodeCpuHigh
+        expr: (100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)) > 85
+        for: 10m
+        labels:
+          severity: P2
+          team: rtc
+        annotations:
+          summary: "Node CPU usage high"
+          description: "CPU usage > 85% on {{ $labels.instance }} for 10m."
+          runbook: "docs/MONITORING_RUNBOOK.md"
+
+      - alert: NodeMemoryPressure
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.90
+        for: 10m
+        labels:
+          severity: P2
+          team: rtc
+        annotations:
+          summary: "Node memory pressure high"
+          description: "Memory usage > 90% on {{ $labels.instance }} for 10m."
+          runbook: "docs/MONITORING_RUNBOOK.md"
+
+      - alert: NodeDiskPressure
+        expr: (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"})) > 0.85
+        for: 15m
+        labels:
+          severity: P2
+          team: rtc
+        annotations:
+          summary: "Node disk usage high"
+          description: "Disk usage > 85% on {{ $labels.instance }} for 15m."
+          runbook: "docs/MONITORING_RUNBOOK.md"
+
+      - alert: MediasoupProcessDown
+        expr: sum by (instance) (namedprocess_namegroup_num_procs{groupname="mediasoup-sfu"}) < 1
+        for: 2m
+        labels:
+          severity: P1
+          team: rtc
+          escalation: immediate
+        annotations:
+          summary: "mediasoup-sfu process down"
+          description: "No mediasoup-sfu process is detected for >2m on {{ $labels.instance }}."
+          runbook: "docs/MONITORING_RUNBOOK.md"
+
+      - alert: WorkerCrashSuspected
+        expr: increase(namedprocess_namegroup_oldest_start_time_seconds{groupname=~"mediasoup-worker.*"}[10m]) > 0
+        for: 1m
+        labels:
+          severity: P2
+          team: rtc
+        annotations:
+          summary: "mediasoup-worker restart detected"
+          description: "A mediasoup-worker process appears to have restarted on {{ $labels.instance }}."
+          runbook: "docs/MONITORING_RUNBOOK.md"
+
+      - alert: RecordingDiskWillFillSoon
+        expr: predict_linear(node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}[6h], 4 * 3600) < 0
+        for: 10m
+        labels:
+          severity: P3
+          team: rtc
+        annotations:
+          summary: "Disk may fill within 4 hours"
+          description: "Predicted available disk bytes becomes negative within 4h on {{ $labels.instance }}."
+          runbook: "docs/MONITORING_RUNBOOK.md"
