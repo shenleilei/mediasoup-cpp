@@ -58,18 +58,22 @@ private:
 		auto weakToken = std::weak_ptr<void>(lifetimeToken_);
 		worker->emitter().on("died", [this, weak = std::weak_ptr<Worker>(worker), weakToken](auto&) {
 			if (weakToken.expired()) return;
-			std::lock_guard<std::mutex> lock(mutex_);
-			if (closing_ || weakToken.expired()) return;
-			if (auto w = weak.lock())
-				workers_.erase(std::remove(workers_.begin(), workers_.end(), w), workers_.end());
-			// Respawn directly — we're on the waitThread which has nothing left to do
-			respawnOne(weakToken);
+			WorkerSettings settingsSnapshot;
+			bool shouldRespawn = false;
+			{
+				std::lock_guard<std::mutex> lock(mutex_);
+				if (closing_ || weakToken.expired()) return;
+				if (auto w = weak.lock())
+					workers_.erase(std::remove(workers_.begin(), workers_.end(), w), workers_.end());
+				shouldRespawn = prepareRespawnLocked(weakToken, settingsSnapshot);
+			}
+			// Heavy work outside lock.
+			if (shouldRespawn) respawnOne(weakToken, settingsSnapshot);
 		});
 	}
 
-	void respawnOne(const std::weak_ptr<void>& weakToken) {
-		// Called with mutex_ held
-		if (closing_ || weakToken.expired()) return;
+	bool prepareRespawnLocked(const std::weak_ptr<void>& weakToken, WorkerSettings& outSettings) {
+		if (closing_ || weakToken.expired()) return false;
 
 		// Rate-limit: max N respawns within window
 		auto now = std::chrono::steady_clock::now();
@@ -80,14 +84,25 @@ private:
 		if (respawnTimes_.size() > kMaxRespawnsPerWindow) {
 			spdlog::error("Worker respawn rate limit hit ({} in {}s), not respawning",
 				respawnTimes_.size(), kRespawnWindowSec);
-			return;
+			return false;
 		}
+		outSettings = lastSettings_;
+		return true;
+	}
 
+	void respawnOne(const std::weak_ptr<void>& weakToken, const WorkerSettings& settings) {
 		try {
-			auto worker = std::make_shared<Worker>(lastSettings_);
-			workers_.push_back(worker);
+			auto worker = std::make_shared<Worker>(settings);
+			{
+				std::lock_guard<std::mutex> lock(mutex_);
+				if (closing_ || weakToken.expired()) {
+					worker->close();
+					return;
+				}
+				workers_.push_back(worker);
+			}
 			installDiedHandler(worker);
-			spdlog::warn("Worker respawned (now {} workers)", workers_.size());
+			spdlog::warn("Worker respawned");
 		} catch (const std::exception& e) {
 			spdlog::error("Failed to respawn worker: {}", e.what());
 		}

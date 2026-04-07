@@ -6,6 +6,7 @@
 #include <any>
 #include <mutex>
 #include <cstdint>
+#include <spdlog/spdlog.h>
 
 namespace mediasoup {
 
@@ -56,7 +57,15 @@ public:
 				it->second.end());
 		}
 		for (auto& entry : toCall) {
-			entry.fn(args);
+			try {
+				entry.fn(args);
+			} catch (const std::bad_any_cast& e) {
+				spdlog::warn("EventEmitter bad_any_cast in listener [event:{}]: {}", event, e.what());
+			} catch (const std::exception& e) {
+				spdlog::warn("EventEmitter listener exception [event:{}]: {}", event, e.what());
+			} catch (...) {
+				spdlog::warn("EventEmitter listener unknown exception [event:{}]", event);
+			}
 		}
 	}
 

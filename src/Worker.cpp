@@ -109,12 +109,22 @@ void Worker::spawn(const WorkerSettings& settings) {
 
 	// Listen for WORKER_RUNNING notification
 	channel_->emitter().once(std::to_string(pid_), [this](const std::vector<std::any>& args) {
-		if (!args.empty()) {
+		try {
+			if (args.empty()) {
+				MS_WARN(logger_, "worker running notification args empty [pid:{}]", pid_);
+				return;
+			}
 			auto event = std::any_cast<FBS::Notification::Event>(args[0]);
 			if (event == FBS::Notification::Event::WORKER_RUNNING) {
 				MS_DEBUG(logger_, "worker running [pid:{}]", pid_);
 				emitter_.emit("@success");
 			}
+		} catch (const std::bad_any_cast& e) {
+			MS_WARN(logger_, "worker notification cast failed [pid:{}]: {}", pid_, e.what());
+		} catch (const std::exception& e) {
+			MS_WARN(logger_, "worker notification failed [pid:{}]: {}", pid_, e.what());
+		} catch (...) {
+			MS_WARN(logger_, "worker notification failed [pid:{}]: unknown error", pid_);
 		}
 	});
 

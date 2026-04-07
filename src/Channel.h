@@ -2,6 +2,7 @@
 #include "EventEmitter.h"
 #include "Logger.h"
 #include <flatbuffers/flatbuffers.h>
+#include <flatbuffers/verifier.h>
 #include "message_generated.h"
 #include "request_generated.h"
 #include "response_generated.h"
@@ -80,7 +81,7 @@ public:
 
 private:
 	void readLoop();
-	void processMessage(const uint8_t* data, size_t len);
+	bool processMessage(const uint8_t* data, size_t len);
 	void processNotification(const uint8_t* data, size_t len,
 		const FBS::Notification::Notification* notification);
 	void processLog(const FBS::Log::Log* log);

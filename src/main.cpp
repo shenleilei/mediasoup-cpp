@@ -70,6 +70,7 @@ int main(int argc, char* argv[]) {
 	bool noDaemon = false;
 	std::string logFile = "/var/log/mediasoup-sfu.log";
 	std::string pidFile = "/var/run/mediasoup-sfu.pid";
+	std::string logLevel = "info";
 
 	// Load config file (--config=path or default config.json)
 	std::string configPath = "config.json";
@@ -94,6 +95,7 @@ int main(int argc, char* argv[]) {
 				if (cfg.contains("recordDir"))      recordDir = cfg["recordDir"].get<std::string>();
 				if (cfg.contains("logFile"))        logFile = cfg["logFile"].get<std::string>();
 				if (cfg.contains("pidFile"))        pidFile = cfg["pidFile"].get<std::string>();
+				if (cfg.contains("logLevel"))       logLevel = cfg["logLevel"].get<std::string>();
 				if (cfg.contains("nodaemon"))        noDaemon = cfg["nodaemon"].get<bool>();
 				spdlog::info("Loaded config from {}", configPath);
 			} catch (const std::exception& e) {
@@ -117,6 +119,7 @@ int main(int argc, char* argv[]) {
 		else if (arg.find("--recordDir=") == 0) recordDir = arg.substr(12);
 		else if (arg.find("--logFile=") == 0)  logFile = arg.substr(10);
 		else if (arg.find("--pidFile=") == 0)  pidFile = arg.substr(10);
+		else if (arg.find("--logLevel=") == 0) logLevel = arg.substr(11);
 		else if (arg == "--nodaemon")           noDaemon = true;
 	}
 
@@ -125,7 +128,7 @@ int main(int argc, char* argv[]) {
 		daemonize(logFile, pidFile);
 	}
 
-	Logger::Init(noDaemon ? "" : logFile);
+	Logger::Init(noDaemon ? "" : logFile, logLevel);
 	spdlog::info("mediasoup-cpp SFU starting...");
 
 	// Auto-detect public IP if announcedIp not set

@@ -7,6 +7,7 @@
 namespace mediasoup {
 
 static constexpr uint32_t MESSAGE_MAX_LEN = 4194308;
+static constexpr size_t RECV_BUFFER_MAX_LEN = 16 * 1024 * 1024;
 
 Channel::Channel(int producerFd, int consumerFd, int pid)
 	: producerFd_(producerFd), consumerFd_(consumerFd), pid_(pid)
@@ -38,7 +39,12 @@ void Channel::close() {
 	if (producerFd_ >= 0) { ::close(producerFd_); producerFd_ = -1; }
 	if (consumerFd_ >= 0) { ::close(consumerFd_); consumerFd_ = -1; }
 
-	if (readThread_.joinable()) readThread_.join();
+	if (readThread_.joinable()) {
+		if (readThread_.get_id() == std::this_thread::get_id())
+			readThread_.detach();
+		else
+			readThread_.join();
+	}
 }
 
 void Channel::sendBytes(const uint8_t* data, size_t len) {
@@ -151,14 +157,34 @@ void Channel::readLoop() {
 		}
 
 		recvBuf.insert(recvBuf.end(), tmp, tmp + n);
+		if (recvBuf.size() > RECV_BUFFER_MAX_LEN) {
+			MS_WARN(logger_,
+				"recv buffer exceeded limit [pid:{} size:{} limit:{}], closing channel",
+				pid_, recvBuf.size(), RECV_BUFFER_MAX_LEN);
+			close();
+			break;
+		}
 
 		size_t offset = 0;
 		while (offset + 4 <= recvBuf.size()) {
 			uint32_t msgLen;
 			std::memcpy(&msgLen, recvBuf.data() + offset, 4);
+			if (msgLen == 0 || msgLen > MESSAGE_MAX_LEN) {
+				MS_WARN(logger_,
+					"invalid frame length [pid:{} msgLen:{} max:{}], closing channel",
+					pid_, msgLen, MESSAGE_MAX_LEN);
+				close();
+				offset = recvBuf.size();
+				break;
+			}
 			if (offset + 4 + msgLen > recvBuf.size()) break;
 
-			processMessage(recvBuf.data() + offset + 4, msgLen);
+			if (!processMessage(recvBuf.data() + offset + 4, msgLen)) {
+				MS_WARN(logger_, "invalid FlatBuffers message [pid:{} len:{}], closing channel", pid_, msgLen);
+				close();
+				offset = recvBuf.size();
+				break;
+			}
 			offset += 4 + msgLen;
 		}
 
@@ -168,14 +194,17 @@ void Channel::readLoop() {
 	}
 }
 
-void Channel::processMessage(const uint8_t* data, size_t len) {
+bool Channel::processMessage(const uint8_t* data, size_t len) {
+	flatbuffers::Verifier verifier(data, len);
+	if (!FBS::Message::VerifyMessageBuffer(verifier)) return false;
+
 	auto msg = FBS::Message::GetMessage(data);
-	if (!msg) return;
+	if (!msg) return false;
 
 	switch (msg->data_type()) {
 		case FBS::Message::Body::Response: {
 			auto response = msg->data_as_Response();
-			if (!response) return;
+			if (!response) return true;
 			uint32_t id = response->id();
 
 			std::shared_ptr<PendingSent> sent;
@@ -184,7 +213,7 @@ void Channel::processMessage(const uint8_t* data, size_t len) {
 				auto it = sents_.find(id);
 				if (it == sents_.end()) {
 					MS_ERROR(logger_, "response does not match any request [id:{}]", id);
-					return;
+					return true;
 				}
 				sent = it->second;
 				sents_.erase(it);
@@ -212,6 +241,7 @@ void Channel::processMessage(const uint8_t* data, size_t len) {
 			MS_WARN(logger_, "unexpected message type");
 			break;
 	}
+	return true;
 }
 
 void Channel::processNotification(const uint8_t* data, size_t len,
