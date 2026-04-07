@@ -6,7 +6,7 @@ namespace mediasoup {
 // ── Timers ──
 constexpr int kGcIntervalMs              = 30000;   // idle room cleanup
 constexpr int kHealthCheckIntervalMs     = 2000;    // dead router detection
-constexpr int kStatsBroadcastIntervalMs  = 10000;   // stats push to clients
+constexpr int kStatsBroadcastIntervalMs  = 3000;    // stats push to clients
 constexpr int kShutdownPollIntervalMs    = 500;
 
 // ── Rooms ──

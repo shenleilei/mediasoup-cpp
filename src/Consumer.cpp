@@ -103,6 +103,8 @@ void Consumer::handleNotification(
 				if (body && body->score()) {
 					score_.score = body->score()->score();
 					score_.producerScore = body->score()->producer_score();
+					MS_DEBUG(logger_, "Consumer {} ({}) score={} producerScore={}",
+						id_, kind_, score_.score, score_.producerScore);
 					score_.producerScores.clear();
 					if (body->score()->producer_scores())
 						for (size_t i = 0; i < body->score()->producer_scores()->size(); i++)

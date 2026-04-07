@@ -192,7 +192,11 @@ RoomService::Result RoomService::produce(const std::string& roomId,
 
 	// Server-driven auto-subscribe
 	for (auto& other : room->getOtherPeers(peerId)) {
-		if (!other->recvTransport) continue;
+		if (!other->recvTransport) {
+			MS_DEBUG(logger_, "[{} {}] auto-subscribe skip {}: no recvTransport", roomId, peerId, other->id);
+			continue;
+		}
+		MS_DEBUG(logger_, "[{} {}] auto-subscribe → {} for producer {}", roomId, peerId, other->id, producer->id());
 		try {
 			json consumeOpts = {
 				{"producerId", producer->id()},
@@ -538,11 +542,32 @@ json RoomService::collectPeerStats(const std::string& roomId, const std::string&
 
 	json consumers = json::object();
 	for (auto& [cid, cons] : peer->consumers) {
-		auto& sc = cons->currentScore();
-		consumers[cid] = {
-			{"kind", cons->kind()}, {"producerId", cons->producerId()},
-			{"score", sc.score}, {"producerScore", sc.producerScore}
-		};
+		json cstat;
+		cstat["kind"] = cons->kind();
+		cstat["producerId"] = cons->producerId();
+		// Get consumer score from getStats (reliable) with notification as fallback
+		try {
+			auto fut = std::async(std::launch::async, [c = cons]{ return c->getStats(); });
+			if (fut.wait_for(kTimeout) == std::future_status::ready) {
+				auto stats = fut.get();
+				if (!stats.empty() && stats[0].contains("score"))
+					cstat["score"] = stats[0]["score"];
+				else
+					cstat["score"] = cons->currentScore().score;
+			} else {
+				cstat["score"] = cons->currentScore().score;
+			}
+		} catch (...) {
+			cstat["score"] = cons->currentScore().score;
+		}
+		// Get producerScore from the actual Producer object
+		auto prod = room->router()->getProducerById(cons->producerId());
+		if (prod && !prod->scores().empty()) {
+			cstat["producerScore"] = prod->scores().back().score;
+		} else {
+			cstat["producerScore"] = cons->currentScore().producerScore;
+		}
+		consumers[cid] = cstat;
 	}
 	result["consumers"] = consumers;
 
