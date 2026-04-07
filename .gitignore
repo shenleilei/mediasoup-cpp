@@ -2,18 +2,16 @@
 build/
 build_dbg/
 
-# Third-party (managed as git submodules)
-# third_party/
-
 # Generated files (can regenerate from fbs/)
 generated/
 
 # mediasoup-worker binary (download separately)
 mediasoup-worker
 
-# IDE
+# IDE / tools
 .vscode/
 .idea/
+.kiro/
 compile_commands.json
 
 # OS
@@ -25,7 +23,13 @@ node_modules/
 package.json
 package-lock.json
 
-# Logs
+# Python
+__pycache__/
+*.pyc
+
+# Logs & runtime
 log/
 *.log
 recordings/
+*.pid
+config.json
