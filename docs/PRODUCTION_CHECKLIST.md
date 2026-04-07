@@ -11,6 +11,19 @@
 - [ ] 防火墙开放 UDP 端口范围 10000-59999（WebRTC 媒体端口）
 - [ ] 防火墙开放 TCP 443（WSS 信令）
 
+### 网络内核与缓冲区
+- [ ] 调整系统 socket 缓冲区上限：`net.core.rmem_max`、`net.core.wmem_max`
+- [ ] 调整 UDP 最小缓冲区：`net.ipv4.udp_rmem_min`、`net.ipv4.udp_wmem_min`
+- [ ] 调整 UDP 全局内存池：`net.ipv4.udp_mem`
+- [ ] 调整排队参数：`net.core.somaxconn`、`net.core.netdev_max_backlog`
+- [ ] 复核端口配置：`net.ipv4.ip_local_port_range` 覆盖业务并发场景
+- [ ] 有 NAT/状态防火墙时调大 `nf_conntrack_max`，避免连接跟踪表打满
+- [ ] 开启并校验网卡多队列 + IRQ 亲和性（RPS/XPS/irqbalance）
+- [ ] 依据延迟目标调优网卡 ring buffer / 中断合并（`ethtool -G` / `ethtool -C`）
+- [ ] 评估并按需关闭不利于实时性的特性（GRO/LRO/TSO/GSO）
+- [ ] 将所有 sysctl 变更持久化到 `/etc/sysctl.d/*.conf` 并执行重启后复核
+- [ ] 压测阶段记录并留档网络指标：丢包/重传/softirq/队列丢包（`ss -u -i`、`ethtool -S`、`sar -n DEV`）
+
 ### 安全
 - [ ] WebSocket 信令加认证（当前任何人都能 join 任何房间）
   - 方案：JWT token 验证，join 时校验
