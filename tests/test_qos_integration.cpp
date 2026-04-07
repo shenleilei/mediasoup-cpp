@@ -627,3 +627,131 @@ TEST_F(QosRecordingTest, EmptyRecordingsApi) {
 	EXPECT_TRUE(rooms.is_array());
 	EXPECT_TRUE(rooms.empty());
 }
+
+// ─── Test: clientStats with downlink metrics are stored and retrievable ───
+TEST_F(QosIntegrationTest, ClientStatsDownlinkPassthrough) {
+	auto alice = joinRoom(testRoom_, "alice");
+	produceAudio(alice, 80000001);
+	usleep(200000);
+
+	auto observer = joinRoom(testRoom_, "observer");
+	usleep(200000);
+
+	// Simulate browser sending clientStats with downlink metrics
+	json clientReport = {
+		{"recv", {
+			{"currentRoundTripTime", 0.025},
+			{"bytesReceived", 500000}
+		}},
+		{"inboundVideo", {
+			{"jitter", 0.005},
+			{"packetsLost", 3},
+			{"packetsReceived", 1500},
+			{"framesPerSecond", 30},
+			{"frameWidth", 1280},
+			{"frameHeight", 720},
+			{"nackCount", 2},
+			{"pliCount", 1}
+		}},
+		{"inboundAudio", {
+			{"jitter", 0.002},
+			{"packetsLost", 0},
+			{"packetsReceived", 2500},
+			{"concealedSamples", 480},
+			{"totalSamplesReceived", 240000}
+		}},
+		{"videoFreeze", {
+			{"freezeCount", 2},
+			{"totalFreezesDuration", 0.8},
+			{"totalFramesDuration", 30.0},
+			{"framesDropped", 1},
+			{"jitterBufferDelayMs", 45}
+		}}
+	};
+	alice.ws->request("clientStats", clientReport);
+	usleep(500000);
+
+	// Query stats — clientStats should be included
+	auto resp = observer.ws->request("getStats", {{"peerId", "alice"}});
+	ASSERT_TRUE(resp.value("ok", false)) << resp.dump();
+
+	auto& data = resp["data"];
+	ASSERT_TRUE(data.contains("clientStats")) << "clientStats missing from getStats response";
+
+	auto& cs = data["clientStats"];
+
+	// Verify inboundVideo passthrough
+	ASSERT_TRUE(cs.contains("inboundVideo"));
+	EXPECT_NEAR(cs["inboundVideo"]["jitter"].get<double>(), 0.005, 0.001);
+	EXPECT_EQ(cs["inboundVideo"]["packetsLost"].get<int>(), 3);
+	EXPECT_EQ(cs["inboundVideo"]["frameWidth"].get<int>(), 1280);
+	EXPECT_EQ(cs["inboundVideo"]["frameHeight"].get<int>(), 720);
+	EXPECT_EQ(cs["inboundVideo"]["framesPerSecond"].get<int>(), 30);
+
+	// Verify inboundAudio passthrough
+	ASSERT_TRUE(cs.contains("inboundAudio"));
+	EXPECT_NEAR(cs["inboundAudio"]["jitter"].get<double>(), 0.002, 0.001);
+	EXPECT_EQ(cs["inboundAudio"]["concealedSamples"].get<int>(), 480);
+
+	// Verify videoFreeze passthrough
+	ASSERT_TRUE(cs.contains("videoFreeze"));
+	EXPECT_EQ(cs["videoFreeze"]["freezeCount"].get<int>(), 2);
+	EXPECT_NEAR(cs["videoFreeze"]["totalFreezesDuration"].get<double>(), 0.8, 0.01);
+	EXPECT_EQ(cs["videoFreeze"]["framesDropped"].get<int>(), 1);
+
+	// Verify recv passthrough
+	ASSERT_TRUE(cs.contains("recv"));
+	EXPECT_NEAR(cs["recv"]["currentRoundTripTime"].get<double>(), 0.025, 0.001);
+}
+
+// ─── Test: clientStats appear in statsReport broadcast ───
+TEST_F(QosIntegrationTest, ClientStatsInBroadcast) {
+	auto alice = joinRoom(testRoom_, "alice");
+	produceAudio(alice, 80000002);
+	usleep(200000);
+
+	// Send clientStats
+	json clientReport = {
+		{"inboundVideo", {
+			{"jitter", 0.012},
+			{"packetsLost", 7},
+			{"frameWidth", 640},
+			{"frameHeight", 480}
+		}},
+		{"videoFreeze", {
+			{"freezeCount", 5},
+			{"totalFreezesDuration", 2.5},
+			{"totalFramesDuration", 60.0}
+		}}
+	};
+	alice.ws->request("clientStats", clientReport);
+
+	// Wait for statsReport notification (3s interval)
+	auto notif = alice.ws->waitNotification("statsReport", 8000);
+	ASSERT_FALSE(notif.empty()) << "Did not receive statsReport";
+
+	auto& peers = notif["data"]["peers"];
+	ASSERT_FALSE(peers.empty());
+
+	// Find alice's stats in the broadcast
+	bool found = false;
+	for (auto& p : peers) {
+		if (p.value("peerId", "") == "alice") {
+			found = true;
+			ASSERT_TRUE(p.contains("clientStats"));
+			auto& cs = p["clientStats"];
+			ASSERT_TRUE(cs.contains("inboundVideo"));
+			EXPECT_EQ(cs["inboundVideo"]["packetsLost"].get<int>(), 7);
+			ASSERT_TRUE(cs.contains("videoFreeze"));
+			EXPECT_EQ(cs["videoFreeze"]["freezeCount"].get<int>(), 5);
+			break;
+		}
+	}
+	EXPECT_TRUE(found) << "Alice not found in statsReport";
+}
+
+// ─── Test: clientStats in recording QoS file ───
+// Note: clientStats passthrough to QoS file is implicitly tested by
+// test_qos_recording_accuracy.cpp (appendQosSnapshot writes full stats
+// including clientStats). The passthrough itself is verified by
+// ClientStatsDownlinkPassthrough and ClientStatsInBroadcast above.
