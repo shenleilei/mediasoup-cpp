@@ -8,6 +8,10 @@ Try it now: **http://47.99.237.234:3000**
 
 Open in two browser tabs (or two devices) to start a 1-on-1 video call with real-time QoS monitoring.
 
+Recording playback: **http://47.99.237.234:3000/playback.html**
+
+Browse, search and play back recorded sessions with synchronized QoS timeline overlay.
+
 ## Why
 
 mediasoup is the most widely used open-source SFU, but its control layer is Node.js. This project replaces it with C++17 for:
