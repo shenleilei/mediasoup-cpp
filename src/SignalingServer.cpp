@@ -6,6 +6,8 @@
 #include <mutex>
 #include <atomic>
 #include <thread>
+#include <chrono>
+#include <utility>
 #include <dirent.h>
 #include <sys/stat.h>
 
@@ -16,12 +18,13 @@ namespace mediasoup {
 struct PerSocketData {
 	std::string peerId;
 	std::string roomId;
+	std::string remoteIp;
 	// Shared token: set to false when .close fires, checked in deferred callbacks
 	std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>>(true);
 };
 
-SignalingServer::SignalingServer(int port, RoomService& roomService, const std::string& recordDir)
-	: port_(port), roomService_(roomService), recordDir_(recordDir) {}
+SignalingServer::SignalingServer(int port, RoomService& roomService, const std::string& recordDir, SecurityOptions security)
+	: port_(port), roomService_(roomService), recordDir_(recordDir), security_(std::move(security)) {}
 
 SignalingServer::~SignalingServer() {
 	stop();
@@ -67,6 +70,13 @@ void SignalingServer::run() {
 		std::unordered_map<std::string, uWS::WebSocket<false, true, PerSocketData>*> peers;
 	};
 	auto wsMap = std::make_shared<WsMap>();
+	struct RateState {
+		std::chrono::steady_clock::time_point windowStart = std::chrono::steady_clock::now();
+		size_t count = 0;
+	};
+	auto connCountPerIp = std::make_shared<std::unordered_map<std::string, size_t>>();
+	auto reqRatePerIp = std::make_shared<std::unordered_map<std::string, RateState>>();
+	auto securityMutex = std::make_shared<std::mutex>();
 
 	// Capture the uWS event loop for defer() calls from worker thread
 	uwsLoop_ = (void*)uWS::Loop::get();
@@ -102,18 +112,45 @@ void SignalingServer::run() {
 	// GC timer
 	struct us_timer_t* gcTimer = nullptr;
 
+	auto isRecordingRequestAuthorized = [this](auto* req) -> bool {
+		if (security_.recordingsToken.empty()) return true;
+		std::string headerToken;
+		auto auth = req->getHeader("authorization");
+		if (!auth.empty()) {
+			static constexpr std::string_view kBearer = "Bearer ";
+			if (auth.size() > kBearer.size() && auth.substr(0, kBearer.size()) == kBearer)
+				headerToken = std::string(auth.substr(kBearer.size()));
+		}
+		std::string queryToken = std::string(req->getQuery("token"));
+		return headerToken == security_.recordingsToken || queryToken == security_.recordingsToken;
+	};
+
 	uWS::App().ws<PerSocketData>("/ws", {
 		.compression = uWS::DISABLED,
 		.maxPayloadLength = kWsMaxPayloadBytes,
 		.idleTimeout = kWsIdleTimeoutSec,
 
-		.open = [wsMap](auto* ws) {
+		.open = [this, wsMap, connCountPerIp, securityMutex](auto* ws) {
 			auto* d = ws->getUserData();
 			d->peerId = "";
 			d->roomId = "";
+			d->remoteIp = std::string(ws->getRemoteAddressAsText());
+			if (security_.maxWsConnectionsPerIp > 0) {
+				bool overLimit = false;
+				{
+					std::lock_guard<std::mutex> lock(*securityMutex);
+					size_t& counter = (*connCountPerIp)[d->remoteIp];
+					if (counter >= security_.maxWsConnectionsPerIp) overLimit = true;
+					else ++counter;
+				}
+				if (overLimit) {
+					spdlog::warn("WS connection rejected for ip={} due to connection limit", d->remoteIp);
+					ws->close();
+				}
+			}
 		},
 
-		.message = [this, wsMap, loop](auto* ws, std::string_view message, uWS::OpCode) {
+		.message = [this, wsMap, loop, reqRatePerIp, securityMutex](auto* ws, std::string_view message, uWS::OpCode) {
 			// Parse on the main thread (cheap) to extract parameters
 			json req;
 			try {
@@ -128,8 +165,48 @@ void SignalingServer::run() {
 			std::string roomId = sd->roomId;
 			std::string peerId = sd->peerId;
 
+			if (security_.maxRequestsPerIpPerWindow > 0) {
+				const auto now = std::chrono::steady_clock::now();
+				bool overLimit = false;
+				{
+					std::lock_guard<std::mutex> lock(*securityMutex);
+					RateState& state = (*reqRatePerIp)[sd->remoteIp];
+					const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - state.windowStart).count();
+					if (elapsed >= static_cast<long long>(security_.requestWindowSec)) {
+						state.windowStart = now;
+						state.count = 0;
+					}
+					++state.count;
+					if (state.count > security_.maxRequestsPerIpPerWindow) overLimit = true;
+				}
+				if (overLimit) {
+					json resp = {
+						{"response", true},
+						{"id", id},
+						{"ok", false},
+						{"error", "rate limit exceeded"}
+					};
+					ws->send(resp.dump(), uWS::OpCode::TEXT);
+					return;
+				}
+			}
+
 			if (method != "clientStats") {
 				spdlog::debug("[{} {}] {} id={}", roomId, peerId, method, id);
+			}
+
+			if (method == "join" && !security_.wsAuthToken.empty()) {
+				const std::string token = data.value("token", "");
+				if (token != security_.wsAuthToken) {
+					json resp = {
+						{"response", true},
+						{"id", id},
+						{"ok", false},
+						{"error", "unauthorized"}
+					};
+					ws->send(resp.dump(), uWS::OpCode::TEXT);
+					return;
+				}
 			}
 
 			// clientStats is lightweight — handle inline, no IPC
@@ -233,9 +310,17 @@ void SignalingServer::run() {
 			});
 		},
 
-		.close = [this, wsMap](auto* ws, int, std::string_view) {
+		.close = [this, wsMap, connCountPerIp, securityMutex](auto* ws, int, std::string_view) {
 			auto* sd = ws->getUserData();
 			sd->alive->store(false);  // Signal deferred callbacks to skip this ws
+			if (security_.maxWsConnectionsPerIp > 0 && !sd->remoteIp.empty()) {
+				std::lock_guard<std::mutex> lock(*securityMutex);
+				auto it = connCountPerIp->find(sd->remoteIp);
+				if (it != connCountPerIp->end()) {
+					if (it->second > 0) --(it->second);
+					if (it->second == 0) connCountPerIp->erase(it);
+				}
+			}
 			if (!sd->peerId.empty()) {
 				spdlog::info("[{} {}] disconnected", sd->roomId, sd->peerId);
 				std::string roomId = sd->roomId;
@@ -259,7 +344,11 @@ void SignalingServer::run() {
 			}
 		}
 
-	}).get("/api/recordings", [this](auto* res, auto*) {
+	}).get("/api/recordings", [this, isRecordingRequestAuthorized](auto* res, auto* req) {
+		if (!isRecordingRequestAuthorized(req)) {
+			res->writeStatus("401 Unauthorized")->writeHeader("Content-Type", "application/json")->end(R"({"error":"unauthorized"})");
+			return;
+		}
 		if (recordDir_.empty()) {
 			res->writeHeader("Content-Type", "application/json")->end("[]");
 			return;
@@ -300,7 +389,11 @@ void SignalingServer::run() {
 		closedir(dir);
 		res->writeHeader("Content-Type", "application/json")->end(result.dump());
 
-	}).get("/recordings/*", [this](auto* res, auto* req) {
+	}).get("/recordings/*", [this, isRecordingRequestAuthorized](auto* res, auto* req) {
+		if (!isRecordingRequestAuthorized(req)) {
+			res->writeStatus("401 Unauthorized")->end("Unauthorized");
+			return;
+		}
 		if (recordDir_.empty()) { res->writeStatus("404 Not Found")->end("Not Found"); return; }
 		std::string url(req->getUrl());
 		std::string relPath = url.substr(12);

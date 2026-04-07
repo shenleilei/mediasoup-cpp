@@ -1,0 +1,23 @@
+[Unit]
+Description=mediasoup-cpp SFU
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mediasoup
+Group=mediasoup
+WorkingDirectory=/opt/mediasoup-cpp
+ExecStart=/opt/mediasoup-cpp/build/mediasoup-sfu --config=/etc/mediasoup-cpp/config.json --nodaemon
+Restart=always
+RestartSec=2
+LimitNOFILE=1048576
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/log /var/lib/mediasoup-cpp
+Environment=TZ=UTC
+
+[Install]
+WantedBy=multi-user.target

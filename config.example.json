@@ -1,11 +1,21 @@
 {
+  "environment": "production",
   "port": 3000,
-  "workers": 0,
-  "workerBin": "./mediasoup-worker",
+  "workers": 2,
+  "workerBin": "/opt/mediasoup-cpp/mediasoup-worker",
   "listenIp": "0.0.0.0",
-  "announcedIp": "",
+  "announcedIp": "YOUR_PUBLIC_IP",
   "redisHost": "127.0.0.1",
   "redisPort": 6379,
-  "nodeId": "",
-  "nodeAddress": ""
+  "nodeId": "sfu-prod-01:3000",
+  "nodeAddress": "wss://sfu.example.com/ws",
+  "recordDir": "/var/lib/mediasoup-cpp/recordings",
+  "logFile": "/var/log/mediasoup-sfu.log",
+  "pidFile": "/var/run/mediasoup-sfu.pid",
+  "wsAuthToken": "REPLACE_WITH_STRONG_TOKEN",
+  "recordingsToken": "REPLACE_WITH_STRONG_TOKEN",
+  "maxWsConnectionsPerIp": 30,
+  "maxRequestsPerIpPerWindow": 300,
+  "requestWindowSec": 60,
+  "nodaemon": false
 }

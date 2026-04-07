@@ -108,6 +108,12 @@ Open `http://<server-ip>:3000` in two browser tabs to start a video call.
 | `--announcedIp` | auto-detect | Public IP for ICE candidates |
 | `--workerBin` | ./mediasoup-worker | Path to worker binary |
 | `--recordDir` | ./recordings | Recording output directory |
+| `--env` | development | Runtime environment (`development` or `production`) |
+| `--wsAuthToken` | empty | Join authentication token |
+| `--recordingsToken` | empty | Token required for `/api/recordings` and `/recordings/*` |
+| `--maxWsConnectionsPerIp` | 0 | Max concurrent WS connections per IP (0 = disabled) |
+| `--maxRequestsPerIpPerWindow` | 0 | Max requests per IP per time window (0 = disabled) |
+| `--requestWindowSec` | 60 | Rate-limit window seconds |
 | `--nodaemon` | (flag) | Run in foreground |
 | `--redisHost` | 127.0.0.1 | Redis host (multi-node) |
 | `--nodeId` | auto | Node identifier |
@@ -214,6 +220,13 @@ Live demo Grafana: **http://47.99.237.234:3001**
 | P3 | Disk fill prediction | WeCom |
 
 Full runbook: `docs/MONITORING_RUNBOOK.md`
+
+### Deployment templates
+
+- HTTPS/WSS reverse proxy: `deploy/nginx/mediasoup-sfu.conf`
+- systemd service: `deploy/systemd/mediasoup-sfu.service`
+- logrotate: `deploy/logrotate/mediasoup-sfu`
+- 10-task implementation summary: `docs/IMPLEMENTATION_10_TASKS.md`
 
 ## Performance
 

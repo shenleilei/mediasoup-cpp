@@ -12,9 +12,22 @@ namespace mediasoup {
 
 using json = nlohmann::json;
 
+struct SecurityOptions {
+	std::string wsAuthToken;
+	std::string recordingsToken;
+	size_t maxWsConnectionsPerIp = 0;
+	size_t maxRequestsPerIpPerWindow = 0;
+	size_t requestWindowSec = 60;
+};
+
 class SignalingServer {
 public:
-	SignalingServer(int port, RoomService& roomService, const std::string& recordDir = "");
+	SignalingServer(
+		int port,
+		RoomService& roomService,
+		const std::string& recordDir = "",
+		SecurityOptions security = {}
+	);
 	~SignalingServer();
 	void run();
 	void stop();
@@ -27,6 +40,7 @@ private:
 	int port_;
 	RoomService& roomService_;
 	std::string recordDir_;
+	SecurityOptions security_;
 	bool running_ = false;
 
 	// Worker thread + task queue

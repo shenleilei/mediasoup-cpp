@@ -4,7 +4,7 @@
 
 ### 基础设施
 - [ ] 换多队列网卡 VM 或物理机（当前 virtio 单队列，80 rooms 就触发内核 softirq 瓶颈）
-- [ ] 配置 HTTPS + WSS（当前是 HTTP 明文，浏览器会限制 getUserMedia）
+- [x] 配置 HTTPS + WSS（已提供模板：`deploy/nginx/mediasoup-sfu.conf`）
   - 方案 A：Nginx 反向代理 + Let's Encrypt 证书
   - 方案 B：uWS 直接加载 TLS 证书
 - [ ] 域名绑定（替代裸 IP 访问）
@@ -25,16 +25,15 @@
 - [ ] 压测阶段记录并留档网络指标：丢包/重传/softirq/队列丢包（`ss -u -i`、`ethtool -S`、`sar -n DEV`）
 
 ### 安全
-- [ ] WebSocket 信令加认证（当前任何人都能 join 任何房间）
-  - 方案：JWT token 验证，join 时校验
-- [ ] 限制单 IP 连接数 / 请求频率（防 DDoS）
+- [x] WebSocket 信令加认证（已支持 `wsAuthToken`，join 时校验）
+- [x] 限制单 IP 连接数 / 请求频率（已支持 `maxWsConnectionsPerIp`、`maxRequestsPerIpPerWindow`）
 - [ ] DTLS 证书：当前用 mediasoup-worker 自动生成的，生产环境考虑固定证书
-- [ ] 录制文件访问控制（当前 /recordings/* 无鉴权）
-- [ ] 去掉 config.example.json 中的默认值，强制用户配置
+- [x] 录制文件访问控制（已支持 `recordingsToken`）
+- [x] 优化 config.example.json 为生产模板并补充安全配置项
 
 ### 稳定性
-- [ ] 进程守护：systemd service 文件（替代手动启动）
-- [ ] 日志轮转：logrotate 配置（/var/log/mediasoup-sfu.log）
+- [x] 进程守护：systemd service 文件（`deploy/systemd/mediasoup-sfu.service`）
+- [x] 日志轮转：logrotate 配置（`deploy/logrotate/mediasoup-sfu`）
 - [ ] 录制磁盘监控告警（当前有自动清理，但需要监控）
 - [ ] Worker 崩溃告警（当前只有日志，需要接入监控系统）
 - [ ] OOM 保护：设置 cgroup 内存限制
