@@ -2,6 +2,12 @@
 
 A pure C++17 SFU (Selective Forwarding Unit) server that replaces mediasoup's Node.js control layer while keeping the battle-tested mediasoup-worker for media processing.
 
+## Live Demo
+
+Try it now: **http://47.99.237.234:3000**
+
+Open in two browser tabs (or two devices) to start a 1-on-1 video call with real-time QoS monitoring.
+
 ## Why
 
 mediasoup is the most widely used open-source SFU, but its control layer is Node.js. This project replaces it with C++17 for:
