@@ -227,9 +227,48 @@ function renderSnapshot(stats) {
 
   let consumers = stats.consumers || {};
   let cEntries = Object.entries(consumers);
-  if (cEntries.length > 0) {
-    html += '<div style="margin:4px 0;color:#9C27B0;font-size:12px;font-weight:bold">🔊 Consumers</div>';
+
+  // Downlink (recvTransport + browser inbound-rtp)
+  let rt = stats.recvTransport;
+  const cs = stats.clientStats || {};
+  const vf = cs.videoFreeze;
+  const iv = cs.inboundVideo;
+  const ia = cs.inboundAudio;
+  const rc = cs.recv;
+  if (rt || vf || iv || cEntries.length > 0) {
+    html += '<div style="margin:4px 0;color:#FF9800;font-size:12px;font-weight:bold">⬇ Downlink</div>';
     html += '<div class="qos-grid">';
+    if (rt) {
+      html += qosItem('Recv Bitrate ⬇', fmtBitrate(rt.rtpSendBitrate));
+      html += qosItem('Packet Loss ⬇', rt.rtpPacketLossSent != null ? rt.rtpPacketLossSent : '-');
+    }
+    if (rc) {
+      html += qosItem('RTT ⬇', rc.currentRoundTripTime ? (rc.currentRoundTripTime * 1000).toFixed(0) + ' ms' : '-');
+    }
+    if (iv) {
+      html += qosItem('Video Jitter ⬇', (iv.jitter * 1000).toFixed(1) + ' ms');
+      html += qosItem('Video Lost ⬇', iv.packetsLost);
+      html += qosItem('Resolution', iv.frameWidth && iv.frameHeight ? iv.frameWidth + '×' + iv.frameHeight : '-');
+      html += qosItem('FPS', iv.framesPerSecond || '-');
+      html += qosItem('NACK ⬇', iv.nackCount);
+      html += qosItem('PLI ⬇', iv.pliCount);
+    }
+    if (ia) {
+      html += qosItem('Audio Jitter ⬇', (ia.jitter * 1000).toFixed(1) + ' ms');
+      html += qosItem('Audio Lost ⬇', ia.packetsLost);
+      const concealRate = ia.totalSamplesReceived > 0
+        ? (ia.concealedSamples / ia.totalSamplesReceived * 100).toFixed(1) + '%' : '-';
+      html += qosItem('Audio Conceal', concealRate);
+    }
+    if (vf) {
+      const freezeRate = vf.totalFramesDuration > 0
+        ? (vf.totalFreezesDuration / vf.totalFramesDuration * 100).toFixed(1) + '%' : '-';
+      html += qosItem('Freeze Rate', freezeRate);
+      html += qosItem('Freeze Count', vf.freezeCount);
+      html += qosItem('Frames Dropped', vf.framesDropped);
+      html += qosItem('JB Delay', vf.jitterBufferDelayMs != null ? vf.jitterBufferDelayMs.toFixed(0) + ' ms' : '-');
+    }
+    // Consumer scores
     for (let [cid, c] of cEntries) {
       html += qosItem(c.kind + ' score', c.score + '/10');
       html += qosItem(c.kind + ' prod score', c.producerScore + '/10');
