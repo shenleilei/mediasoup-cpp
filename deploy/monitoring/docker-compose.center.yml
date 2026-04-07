@@ -1,3 +1,5 @@
+# 部署在监控中心（1台独立机器）
+# Loki / Prometheus / Alertmanager / Grafana
 services:
   prometheus:
     image: prom/prometheus:v2.54.1
@@ -52,43 +54,6 @@ services:
     ports:
       - "3100:3100"
     restart: unless-stopped
-
-  promtail:
-    image: grafana/promtail:3.1.1
-    command: -config.file=/etc/promtail/promtail-config.yml
-    volumes:
-      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
-      - /var/log:/var/log:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - /etc/machine-id:/etc/machine-id:ro
-    depends_on:
-      - loki
-    restart: unless-stopped
-
-  node-exporter:
-    image: prom/node-exporter:v1.8.2
-    command:
-      - "--path.rootfs=/host"
-      - "--collector.processes"
-    pid: host
-    volumes:
-      - /:/host:ro,rslave
-    ports:
-      - "9100:9100"
-    restart: unless-stopped
-
-  # process-exporter: temporarily disabled (ncabatoff/process-exporter not available via mirror)
-  # process-exporter:
-  #   image: ncabatoff/process-exporter:v0.8.2
-  #   command:
-  #     - "--config.path=/config/process-exporter.yml"
-  #   pid: host
-  #   volumes:
-  #     - ./process-exporter/process-exporter.yml:/config/process-exporter.yml:ro
-  #     - /proc:/host/proc:ro
-  #   ports:
-  #     - "9256:9256"
-  #   restart: unless-stopped
 
   blackbox-exporter:
     image: prom/blackbox-exporter:v0.25.0

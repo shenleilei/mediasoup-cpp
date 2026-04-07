@@ -20,9 +20,10 @@ scrape_configs:
     static_configs:
       - targets: ["node-exporter:9100"]
 
-  - job_name: process
-    static_configs:
-      - targets: ["process-exporter:9256"]
+  # process-exporter disabled (image not available via mirror)
+  # - job_name: process
+  #   static_configs:
+  #     - targets: ["process-exporter:9256"]
 
   - job_name: blackbox-http
     metrics_path: /probe
