@@ -2,10 +2,8 @@
 #include "Worker.h"
 #include "Constants.h"
 #include <vector>
-#include <list>
 #include <memory>
 #include <mutex>
-#include <thread>
 
 namespace mediasoup {
 
@@ -43,19 +41,14 @@ public:
 
 	void close() {
 		std::vector<std::shared_ptr<Worker>> workersToClose;
-		std::list<std::thread> threadsToJoin;
 		{
 			std::lock_guard<std::mutex> lock(mutex_);
 			if (closing_) return;
 			closing_ = true;
 			lifetimeToken_.reset();
 			workersToClose.swap(workers_);
-			threadsToJoin.swap(respawnThreads_);
 		}
 		for (auto& w : workersToClose) w->close();
-		for (auto& t : threadsToJoin) {
-			if (t.joinable()) t.join();
-		}
 	}
 
 	size_t size() const { std::lock_guard<std::mutex> lock(mutex_); return workers_.size(); }
@@ -69,17 +62,13 @@ private:
 			if (closing_ || weakToken.expired()) return;
 			if (auto w = weak.lock())
 				workers_.erase(std::remove(workers_.begin(), workers_.end(), w), workers_.end());
-			respawnThreads_.emplace_back([this, weakToken]{ respawnOne(weakToken); });
+			// Respawn directly — we're on the waitThread which has nothing left to do
+			respawnOne(weakToken);
 		});
 	}
 
 	void respawnOne(const std::weak_ptr<void>& weakToken) {
-		if (weakToken.expired()) return;
-		// Small delay to let workerDied() finish cleanup
-		std::this_thread::sleep_for(std::chrono::milliseconds(kRespawnDelayMs));
-		if (weakToken.expired()) return;
-
-		std::lock_guard<std::mutex> lock(mutex_);
+		// Called with mutex_ held
 		if (closing_ || weakToken.expired()) return;
 
 		// Rate-limit: max N respawns within window
@@ -109,7 +98,6 @@ private:
 	WorkerSettings lastSettings_;
 	bool closing_ = false;
 	std::vector<std::chrono::steady_clock::time_point> respawnTimes_;
-	std::list<std::thread> respawnThreads_;
 	std::shared_ptr<void> lifetimeToken_ = std::make_shared<int>(0);
 };
 

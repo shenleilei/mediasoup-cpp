@@ -3,8 +3,6 @@
 #include "Constants.h"
 #include <string>
 #include <mutex>
-#include <thread>
-#include <atomic>
 #include <hiredis/hiredis.h>
 
 namespace mediasoup {
@@ -27,21 +25,16 @@ public:
 
 	void start() {
 		registerNode();
-		running_ = true;
-		heartbeatThread_ = std::thread([this]() {
-			while (running_) {
-				std::this_thread::sleep_for(std::chrono::seconds(kRedisHeartbeatIntervalSec));
-				if (!running_) break;
-				std::lock_guard<std::mutex> lock(mutex_);
-				if (!ensureConnected()) continue;
-				registerNode();
-			}
-		});
+	}
+
+	// Called periodically from SignalingServer timer via postWork
+	void heartbeat() {
+		std::lock_guard<std::mutex> lock(mutex_);
+		if (!ensureConnected()) return;
+		registerNode();
 	}
 
 	void stop() {
-		running_ = false;
-		if (heartbeatThread_.joinable()) heartbeatThread_.join();
 		std::lock_guard<std::mutex> lock(mutex_);
 		if (ctx_) { redisFree(ctx_); ctx_ = nullptr; }
 	}
@@ -145,8 +138,6 @@ private:
 	int redisPort_;
 	redisContext* ctx_ = nullptr;
 	std::mutex mutex_;
-	std::atomic<bool> running_{false};
-	std::thread heartbeatThread_;
 	int roomTTL_ = kRedisRoomTtlSec;
 	int nodeTTL_ = kRedisNodeTtlSec;
 	std::shared_ptr<spdlog::logger> logger_;
