@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: mediasoup-dashboards
+    orgId: 1
+    folder: mediasoup
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards
