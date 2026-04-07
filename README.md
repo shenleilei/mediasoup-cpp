@@ -169,13 +169,51 @@ Browser A ──SRTP/UDP──→ WebRtcTransport → Producer
 
 ## Operations: Monitoring & Alerting
 
-A ready-to-use monitoring stack scaffold is included at:
+Production-ready monitoring stack at `deploy/monitoring`.
 
-- `deploy/monitoring` (Prometheus, Alertmanager, Grafana, Loki/Promtail, Node Exporter, Process Exporter, Blackbox Exporter)
+### Quick Start
 
-Runbook and rollout guidance:
+```bash
+# Single-node (dev/test)
+cd deploy/monitoring && docker compose up -d
 
-- `docs/MONITORING_RUNBOOK.md`
+# Multi-node cluster
+# Monitor center (1 node):
+docker compose -f docker-compose.center.yml up -d
+# Each SFU node (N nodes):
+docker compose -f docker-compose.node.yml up -d
+```
+
+### Dashboards
+
+| Service | URL | Credentials |
+|---------|-----|-------------|
+| Grafana | `http://<server-ip>:3001` | admin / admin |
+| Prometheus | `http://<server-ip>:9090` | — |
+| Alertmanager | `http://<server-ip>:9093` | — |
+
+Live demo Grafana: **http://47.99.237.234:3001**
+
+### Components
+
+| Component | Role | Deploy |
+|-----------|------|--------|
+| Prometheus | Metric collection & threshold alerts (CPU, memory, disk, HTTP probe) | Center |
+| Loki | Log aggregation & keyword alerts (error, worker crash) | Center |
+| Alertmanager | Alert routing by severity (P1→IM+phone, P2→IM, P3→IM) | Center |
+| Grafana | Dashboards: Global Overview, Infrastructure, SLI/SLO, Business KPI | Center |
+| Promtail | Push local logs to Loki | Each SFU node |
+| Node Exporter | Expose host metrics for Prometheus | Each SFU node |
+
+### Alert Levels
+
+| Level | Alerts | Notification |
+|-------|--------|-------------|
+| P1 | HTTP down, error rate high, worker crash, cluster-wide errors | WeCom + DingTalk + phone |
+| P2 | CPU/memory/disk high, single-node errors | WeCom + DingTalk |
+| P3 | Disk fill prediction | WeCom |
+
+Full runbook: `docs/MONITORING_RUNBOOK.md`
 
 ## Performance
 
