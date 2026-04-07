@@ -1,0 +1,63 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ["alertname", "instance", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 2h
+  receiver: default-im
+  routes:
+    - matchers:
+        - severity="P1"
+      receiver: p1-im
+      continue: true
+    - matchers:
+        - severity="P1"
+      receiver: p1-phone-escalation
+    - matchers:
+        - severity="P2"
+      receiver: p2-im
+    - matchers:
+        - severity="P3"
+      receiver: p3-im
+
+inhibit_rules:
+  - source_matchers:
+      - severity="P1"
+    target_matchers:
+      - severity=~"P2|P3"
+    equal: ["instance"]
+
+receivers:
+  - name: default-im
+    webhook_configs:
+      - url: "http://localhost:18080/notify/default"
+        send_resolved: true
+
+  - name: p1-im
+    webhook_configs:
+      # WeCom / 企业微信: use your relay service to call robot webhook.
+      - url: "http://localhost:18080/notify/wecom/p1"
+        send_resolved: true
+      # DingTalk / 钉钉: use your relay service to call robot webhook.
+      - url: "http://localhost:18080/notify/dingtalk/p1"
+        send_resolved: true
+
+  - name: p2-im
+    webhook_configs:
+      - url: "http://localhost:18080/notify/wecom/p2"
+        send_resolved: true
+      - url: "http://localhost:18080/notify/dingtalk/p2"
+        send_resolved: true
+
+  - name: p3-im
+    webhook_configs:
+      - url: "http://localhost:18080/notify/wecom/p3"
+        send_resolved: true
+
+  - name: p1-phone-escalation
+    webhook_configs:
+      # Plug your phone/SMS/on-call vendor here (PagerDuty, Opsgenie, internal gateway).
+      - url: "http://localhost:18080/notify/phone/p1"
+        send_resolved: true

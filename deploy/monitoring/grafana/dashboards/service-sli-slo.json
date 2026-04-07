@@ -1,0 +1,58 @@
+{
+  "uid": "mediasoup-service-sli-slo",
+  "title": "Service SLI/SLO",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "SLO Availability (30d target: 99.9%)",
+      "gridPos": { "h": 5, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "avg_over_time(probe_success{job=\"blackbox-http\"}[30d]) * 100",
+          "legendFormat": "availability"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Error Budget Burn (placeholder)",
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "expr": "1 - avg_over_time(probe_success{job=\"blackbox-http\"}[1h])",
+          "legendFormat": "1h burn"
+        },
+        {
+          "expr": "1 - avg_over_time(probe_success{job=\"blackbox-http\"}[6h])",
+          "legendFormat": "6h burn"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Process Health",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "namedprocess_namegroup_num_procs{groupname=~\"mediasoup-sfu|mediasoup-worker\"}",
+          "legendFormat": "{{groupname}}"
+        }
+      ]
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  }
+}

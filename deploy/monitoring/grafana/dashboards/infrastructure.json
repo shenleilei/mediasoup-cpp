@@ -1,0 +1,64 @@
+{
+  "uid": "mediasoup-infrastructure",
+  "title": "Infrastructure",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "CPU Usage %",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "100 - (avg by(instance)(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Memory Usage %",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Disk Usage %",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "(1 - (node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay\"})) * 100",
+          "legendFormat": "{{instance}} {{mountpoint}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Network Receive/Transmit Bytes",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(node_network_receive_bytes_total{device!=\"lo\"}[5m])",
+          "legendFormat": "rx {{instance}} {{device}}"
+        },
+        {
+          "expr": "rate(node_network_transmit_bytes_total{device!=\"lo\"}[5m])",
+          "legendFormat": "tx {{instance}} {{device}}"
+        }
+      ]
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  }
+}
