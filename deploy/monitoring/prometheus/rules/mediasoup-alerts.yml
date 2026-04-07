@@ -59,7 +59,7 @@ groups:
           runbook: "docs/MONITORING_RUNBOOK.md"
 
       - alert: WorkerCrashSuspected
-        expr: increase(namedprocess_namegroup_oldest_start_time_seconds{groupname=~"mediasoup-worker.*"}[10m]) > 0
+        expr: changes(namedprocess_namegroup_oldest_start_time_seconds{groupname=~"mediasoup-worker.*"}[10m]) > 0
         for: 1m
         labels:
           severity: P2

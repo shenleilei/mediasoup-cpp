@@ -30,7 +30,7 @@
           "expr": "probe_duration_seconds{job=\"blackbox-http\"}",
           "legendFormat": "{{instance}}"
         }
-      }
+      ]
     },
     {
       "type": "timeseries",
