@@ -193,9 +193,6 @@ void Channel::readLoop() {
 }
 
 bool Channel::processMessage(const uint8_t* data, size_t len) {
-	flatbuffers::Verifier verifier(data, len);
-	if (!FBS::Message::VerifyMessageBuffer(verifier)) return false;
-
 	auto msg = FBS::Message::GetMessage(data);
 	if (!msg) return false;
 

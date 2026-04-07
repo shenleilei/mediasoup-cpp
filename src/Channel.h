@@ -2,7 +2,6 @@
 #include "EventEmitter.h"
 #include "Logger.h"
 #include <flatbuffers/flatbuffers.h>
-#include <flatbuffers/verifier.h>
 #include "message_generated.h"
 #include "request_generated.h"
 #include "response_generated.h"
