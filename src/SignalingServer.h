@@ -35,6 +35,7 @@ private:
 	std::condition_variable queueCv_;
 	std::queue<std::function<void()>> taskQueue_;
 	bool workerStop_ = false;
+	void* uwsLoop_ = nullptr;  // uWS::Loop*, captured for cross-thread defer()
 };
 
 } // namespace mediasoup

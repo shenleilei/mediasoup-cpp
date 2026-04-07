@@ -69,14 +69,14 @@ void SignalingServer::run() {
 	auto wsMap = std::make_shared<WsMap>();
 
 	// Capture the uWS event loop for defer() calls from worker thread
-	// (set inside .listen callback once loop is running)
-	struct us_loop_t* eventLoop = nullptr;
+	uwsLoop_ = (void*)uWS::Loop::get();
 
 	// Wire up RoomService callbacks — these may be called from the worker thread,
 	// so they must defer ws->send() back to the uWS thread.
-	roomService_.setNotify([wsMap, &eventLoop](const std::string& peerId, const json& msg) {
+	uWS::Loop* loop = uWS::Loop::get();
+	roomService_.setNotify([wsMap, loop](const std::string& peerId, const json& msg) {
 		std::string data = msg.dump();
-		uWS::Loop::get()->defer([wsMap, peerId, data = std::move(data)] {
+		loop->defer([wsMap, peerId, data = std::move(data)] {
 			std::lock_guard<std::mutex> lock(wsMap->mutex);
 			auto it = wsMap->peers.find(peerId);
 			if (it != wsMap->peers.end())
@@ -84,11 +84,11 @@ void SignalingServer::run() {
 		});
 	});
 
-	roomService_.setBroadcast([wsMap, &eventLoop](const std::string& roomId,
+	roomService_.setBroadcast([wsMap, loop](const std::string& roomId,
 		const std::string& excludePeerId, const json& msg)
 	{
 		std::string data = msg.dump();
-		uWS::Loop::get()->defer([wsMap, roomId, excludePeerId, data = std::move(data)] {
+		loop->defer([wsMap, roomId, excludePeerId, data = std::move(data)] {
 			std::lock_guard<std::mutex> lock(wsMap->mutex);
 			for (auto& [pid, ws] : wsMap->peers) {
 				if (pid == excludePeerId) continue;
@@ -113,7 +113,7 @@ void SignalingServer::run() {
 			d->roomId = "";
 		},
 
-		.message = [this, wsMap](auto* ws, std::string_view message, uWS::OpCode) {
+		.message = [this, wsMap, loop](auto* ws, std::string_view message, uWS::OpCode) {
 			// Parse on the main thread (cheap) to extract parameters
 			json req;
 			try {
@@ -154,7 +154,7 @@ void SignalingServer::run() {
 			auto alive = sd->alive;
 
 			// Dispatch to worker thread — all RoomService calls happen there
-			postWork([this, wsMap, ws, alive, method, id, data,
+			postWork([this, wsMap, ws, alive, loop, method, id, data,
 				roomId, peerId, joinRoomId, joinPeerId, joinDisplayName, joinRtpCaps]
 			{
 				RoomService::Result result;
@@ -216,7 +216,7 @@ void SignalingServer::run() {
 				std::string jRoomId = joinRoomId, jPeerId = joinPeerId;
 
 				// Defer ws->send() back to the uWS event loop thread
-				uWS::Loop::get()->defer([wsMap, ws, alive, respStr = std::move(respStr),
+				loop->defer([wsMap, ws, alive, respStr = std::move(respStr),
 					joinOk, jRoomId = std::move(jRoomId), jPeerId = std::move(jPeerId)]
 				{
 					if (!alive->load()) return;  // ws was closed, skip
