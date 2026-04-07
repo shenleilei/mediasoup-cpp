@@ -40,9 +40,7 @@ void Channel::close() {
 	if (consumerFd_ >= 0) { ::close(consumerFd_); consumerFd_ = -1; }
 
 	if (readThread_.joinable()) {
-		if (readThread_.get_id() == std::this_thread::get_id())
-			readThread_.detach();
-		else
+		if (readThread_.get_id() != std::this_thread::get_id())
 			readThread_.join();
 	}
 }

@@ -8,6 +8,7 @@
 #include <mutex>
 #include <chrono>
 #include <nlohmann/json.hpp>
+#include <spdlog/spdlog.h>
 
 namespace mediasoup {
 
@@ -115,7 +116,13 @@ public:
 		std::lock_guard<std::mutex> lock(mutex_);
 		auto [it, inserted] = rooms_.emplace(roomId, room);
 		if (!inserted) {
-			room->close();
+			try {
+				room->close();
+			} catch (const std::exception& e) {
+				spdlog::warn("createRoom race cleanup failed [roomId:{}]: {}", roomId, e.what());
+			} catch (...) {
+				spdlog::warn("createRoom race cleanup failed [roomId:{}]: unknown error", roomId);
+			}
 			return it->second;
 		}
 		return room;
