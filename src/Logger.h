@@ -9,7 +9,18 @@ namespace mediasoup {
 
 class Logger {
 public:
-	static void Init(const std::string& logFile = "") {
+	static spdlog::level::level_enum ParseLevel(const std::string& level) {
+		if (level == "trace") return spdlog::level::trace;
+		if (level == "debug") return spdlog::level::debug;
+		if (level == "info") return spdlog::level::info;
+		if (level == "warn" || level == "warning") return spdlog::level::warn;
+		if (level == "error" || level == "err") return spdlog::level::err;
+		if (level == "critical") return spdlog::level::critical;
+		if (level == "off") return spdlog::level::off;
+		return spdlog::level::info;
+	}
+
+	static void Init(const std::string& logFile = "", const std::string& level = "info") {
 		std::vector<spdlog::sink_ptr> sinks;
 		sinks.push_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
 		if (!logFile.empty()) {
@@ -18,7 +29,8 @@ public:
 		}
 		auto defaultLogger = std::make_shared<spdlog::logger>("", sinks.begin(), sinks.end());
 		defaultLogger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%n] [%^%l%$] [%s:%#] %v");
-		defaultLogger->set_level(spdlog::level::debug);
+		level_ = ParseLevel(level);
+		defaultLogger->set_level(level_);
 		spdlog::set_default_logger(defaultLogger);
 		sinks_ = sinks;
 	}
@@ -31,7 +43,7 @@ public:
 			else
 				logger = spdlog::stdout_color_mt(name);
 			logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%n] [%^%l%$] [%s:%#] %v");
-			logger->set_level(spdlog::level::debug);
+			logger->set_level(level_);
 			try { spdlog::register_logger(logger); } catch (...) {}
 		}
 		return logger;
@@ -39,6 +51,7 @@ public:
 
 private:
 	static inline std::vector<spdlog::sink_ptr> sinks_;
+	static inline spdlog::level::level_enum level_ = spdlog::level::info;
 };
 
 // Log macros with source location (file:line)

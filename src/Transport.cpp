@@ -174,13 +174,19 @@ static flatbuffers::Offset<FBS::RtpParameters::RtpMapping> buildFbsRtpMapping(
 std::shared_ptr<Producer> Transport::produce(const json& options) {
 	if (closed_) throw std::runtime_error("Transport closed");
 
-	if (!options.contains("rtpParameters") || !options.at("rtpParameters").is_object())
+	if (!options.contains("rtpParameters") || !options.at("rtpParameters").is_object()) {
+		MS_WARN(logger_, "produce validation failed [transportId:{}]: invalid rtpParameters", id_);
 		throw std::invalid_argument("invalid or missing 'rtpParameters'");
-	if (!options.contains("routerRtpCapabilities") || !options.at("routerRtpCapabilities").is_object())
+	}
+	if (!options.contains("routerRtpCapabilities") || !options.at("routerRtpCapabilities").is_object()) {
+		MS_WARN(logger_, "produce validation failed [transportId:{}]: invalid routerRtpCapabilities", id_);
 		throw std::invalid_argument("invalid or missing 'routerRtpCapabilities'");
+	}
 	std::string kind = getRequiredString(options, "kind");
-	if (kind != "audio" && kind != "video")
+	if (kind != "audio" && kind != "video") {
+		MS_WARN(logger_, "produce validation failed [transportId:{} kind:{}]", id_, kind);
 		throw std::invalid_argument("invalid 'kind': expected 'audio' or 'video'");
+	}
 	RtpParameters rtpParameters = options.at("rtpParameters").get<RtpParameters>();
 	bool paused = getOptionalBool(options, "paused", false);
 
@@ -246,19 +252,25 @@ std::shared_ptr<Producer> Transport::produce(const json& options) {
 std::shared_ptr<Consumer> Transport::consume(const json& options) {
 	if (closed_) throw std::runtime_error("Transport closed");
 
-	if (!options.contains("rtpCapabilities") || !options.at("rtpCapabilities").is_object())
+	if (!options.contains("rtpCapabilities") || !options.at("rtpCapabilities").is_object()) {
+		MS_WARN(logger_, "consume validation failed [transportId:{}]: invalid rtpCapabilities", id_);
 		throw std::invalid_argument("invalid or missing 'rtpCapabilities'");
-	if (!options.contains("consumableRtpParameters") || !options.at("consumableRtpParameters").is_object())
+	}
+	if (!options.contains("consumableRtpParameters") || !options.at("consumableRtpParameters").is_object()) {
+		MS_WARN(logger_, "consume validation failed [transportId:{}]: invalid consumableRtpParameters", id_);
 		throw std::invalid_argument("invalid or missing 'consumableRtpParameters'");
+	}
 	std::string producerId = getRequiredString(options, "producerId");
 	RtpCapabilities rtpCapabilities = options.at("rtpCapabilities").get<RtpCapabilities>();
 	RtpParameters consumableRtpParameters = options.at("consumableRtpParameters").get<RtpParameters>();
 	bool paused = getOptionalBool(options, "paused", false);
 	bool pipe = getOptionalBool(options, "pipe", false);
 	if (consumableRtpParameters.codecs.empty()) {
+		MS_WARN(logger_, "consume validation failed [transportId:{}]: empty codecs", id_);
 		throw std::invalid_argument("invalid 'consumableRtpParameters': codecs cannot be empty");
 	}
 	if (consumableRtpParameters.codecs[0].mimeType.empty()) {
+		MS_WARN(logger_, "consume validation failed [transportId:{}]: empty codecs[0].mimeType", id_);
 		throw std::invalid_argument("invalid 'consumableRtpParameters': codecs[0].mimeType cannot be empty");
 	}
 

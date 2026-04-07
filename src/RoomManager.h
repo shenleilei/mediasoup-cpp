@@ -101,14 +101,23 @@ public:
 		: workerManager_(workerManager), mediaCodecs_(mediaCodecs), listenInfos_(listenInfos) {}
 
 	std::shared_ptr<Room> createRoom(const std::string& roomId) {
-		std::lock_guard<std::mutex> lock(mutex_);
-		auto it = rooms_.find(roomId);
-		if (it != rooms_.end()) return it->second;
+		{
+			std::lock_guard<std::mutex> lock(mutex_);
+			auto it = rooms_.find(roomId);
+			if (it != rooms_.end()) return it->second;
+		}
+
 		auto worker = workerManager_.getLeastLoadedWorker();
 		if (!worker) throw std::runtime_error("no available worker");
 		auto router = worker->createRouter(mediaCodecs_);
 		auto room = std::make_shared<Room>(roomId, router);
-		rooms_[roomId] = room;
+
+		std::lock_guard<std::mutex> lock(mutex_);
+		auto [it, inserted] = rooms_.emplace(roomId, room);
+		if (!inserted) {
+			room->close();
+			return it->second;
+		}
 		return room;
 	}
 

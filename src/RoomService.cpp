@@ -22,6 +22,11 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 		if (!addr.empty()) return {false, {}, addr, ""};
 	}
 
+	if (!rtpCapabilities.is_null() && !rtpCapabilities.empty() && !rtpCapabilities.is_object()) {
+		MS_WARN(logger_, "[{} {}] join validation failed: invalid rtpCapabilities type", roomId, peerId);
+		return {false, {}, "", "invalid rtpCapabilities"};
+	}
+
 	auto room = roomManager_.createRoom(roomId);
 	auto peer = std::make_shared<Peer>();
 	peer->id = peerId;
@@ -175,6 +180,15 @@ RoomService::Result RoomService::produce(const std::string& roomId,
 	const std::string& peerId, const std::string& transportId,
 	const std::string& kind, const json& rtpParameters)
 {
+	if (kind != "audio" && kind != "video") {
+		MS_WARN(logger_, "[{} {}] produce validation failed: invalid kind '{}'", roomId, peerId, kind);
+		return {false, {}, "", "invalid kind"};
+	}
+	if (!rtpParameters.is_object()) {
+		MS_WARN(logger_, "[{} {}] produce validation failed: invalid rtpParameters type", roomId, peerId);
+		return {false, {}, "", "invalid rtpParameters"};
+	}
+
 	auto room = roomManager_.getRoom(roomId);
 	if (!room) return {false, {}, "", "room not found"};
 	auto peer = room->getPeer(peerId);
@@ -231,6 +245,11 @@ RoomService::Result RoomService::consume(const std::string& roomId,
 	const std::string& peerId, const std::string& transportId,
 	const std::string& producerId, const json& rtpCapabilities)
 {
+	if (!rtpCapabilities.is_object()) {
+		MS_WARN(logger_, "[{} {}] consume validation failed: invalid rtpCapabilities type", roomId, peerId);
+		return {false, {}, "", "invalid rtpCapabilities"};
+	}
+
 	auto room = roomManager_.getRoom(roomId);
 	if (!room) return {false, {}, "", "room not found"};
 	auto peer = room->getPeer(peerId);
@@ -383,15 +402,25 @@ void RoomService::cleanIdleRooms(int idleSeconds) {
 }
 
 void RoomService::cleanupRoomResources(const std::string& roomId) {
+	std::vector<std::shared_ptr<PeerRecorder>> recordersToStop;
 	{
 		std::lock_guard<std::mutex> lock(recorderMutex_);
 		std::string prefix = roomId + "/";
 		for (auto it = recorders_.begin(); it != recorders_.end(); ) {
 			if (it->first.compare(0, prefix.size(), prefix) == 0) {
-				if (it->second) it->second->stop();
+				if (it->second) recordersToStop.push_back(it->second);
 				recorderTransports_.erase(it->first);
 				it = recorders_.erase(it);
 			} else ++it;
+		}
+	}
+	for (auto& rec : recordersToStop) {
+		try {
+			rec->stop();
+		} catch (const std::exception& e) {
+			MS_WARN(logger_, "cleanupRoomResources recorder stop failed [room:{}]: {}", roomId, e.what());
+		} catch (...) {
+			MS_WARN(logger_, "cleanupRoomResources recorder stop failed [room:{}]: unknown error", roomId);
 		}
 	}
 	{
