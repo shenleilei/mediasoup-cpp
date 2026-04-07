@@ -1,0 +1,75 @@
+groups:
+  # 单机维度
+  - name: log-alerts-per-host
+    rules:
+      - alert: LogErrorDetected
+        expr: sum by (host) (count_over_time({job="mediasoup-sfu"} |= "error" [5m])) > 0
+        for: 0m
+        labels:
+          severity: P2
+          team: rtc
+          scope: host
+        annotations:
+          summary: "{{ $labels.host }} 日志中检测到 error"
+          description: "{{ $labels.host }} 在过去5分钟内出现了 error"
+
+      - alert: LogErrorRateHigh
+        expr: sum by (host) (count_over_time({job="mediasoup-sfu"} |= "error" [5m])) > 10
+        for: 1m
+        labels:
+          severity: P1
+          team: rtc
+          scope: host
+        annotations:
+          summary: "{{ $labels.host }} error 频率过高"
+          description: "{{ $labels.host }} 在过去5分钟内出现了 {{ $value }} 次 error"
+
+      - alert: WorkerCrashInLog
+        expr: sum by (host) (count_over_time({job="mediasoup-sfu"} |~ "worker.*(crash|killed|segfault)" [5m])) > 0
+        for: 0m
+        labels:
+          severity: P1
+          team: rtc
+          scope: host
+        annotations:
+          summary: "{{ $labels.host }} 检测到 worker 崩溃"
+          description: "{{ $labels.host }} 出现 worker crash 相关日志"
+
+  # 集群维度
+  - name: log-alerts-cluster
+    rules:
+      - alert: ClusterErrorRateHigh
+        expr: sum(count_over_time({job="mediasoup-sfu"} |= "error" [5m])) > 50
+        for: 1m
+        labels:
+          severity: P1
+          team: rtc
+          scope: cluster
+          escalation: immediate
+        annotations:
+          summary: "集群 error 总量过高"
+          description: "全集群过去5分钟共出现 {{ $value }} 次 error"
+
+      - alert: ClusterMultiNodeErrors
+        expr: count(sum by (host) (count_over_time({job="mediasoup-sfu"} |= "error" [5m])) > 0) > 2
+        for: 1m
+        labels:
+          severity: P1
+          team: rtc
+          scope: cluster
+          escalation: immediate
+        annotations:
+          summary: "集群多节点同时报错"
+          description: "过去5分钟有 {{ $value }} 台节点出现 error，疑似全局故障"
+
+      - alert: ClusterWorkerCrash
+        expr: sum(count_over_time({job="mediasoup-sfu"} |~ "worker.*(crash|killed|segfault)" [5m])) > 2
+        for: 0m
+        labels:
+          severity: P1
+          team: rtc
+          scope: cluster
+          escalation: immediate
+        annotations:
+          summary: "集群多个 worker 崩溃"
+          description: "全集群过去5分钟出现 {{ $value }} 次 worker crash"
