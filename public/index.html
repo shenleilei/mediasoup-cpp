@@ -260,6 +260,23 @@ function renderQosPanel(data) {
       html += '</div>';
     }
 
+    // Video freeze / stutter stats (from browser inbound-rtp)
+    const vf = peer.clientStats && peer.clientStats.videoFreeze;
+    if (vf) {
+      html += `<div style="margin:4px 0;color:#E91E63;font-size:12px;font-weight:bold">🧊 Video Stutter</div>`;
+      html += '<div class="qos-grid">';
+      const freezeRate = vf.totalFramesDuration > 0
+        ? (vf.totalFreezesDuration / vf.totalFramesDuration * 100).toFixed(1) + '%' : '-';
+      html += qosItem('Freeze Rate', freezeRate);
+      html += qosItem('Freeze Count', vf.freezeCount);
+      html += qosItem('Total Freeze', vf.totalFreezesDuration != null ? vf.totalFreezesDuration.toFixed(1) + 's' : '-');
+      html += qosItem('Frames Dropped', vf.framesDropped);
+      const avgJbDelay = vf.jitterBufferEmittedCount > 0
+        ? (vf.jitterBufferDelay / vf.jitterBufferEmittedCount * 1000).toFixed(0) + ' ms' : '-';
+      html += qosItem('JB Delay', avgJbDelay);
+      html += '</div>';
+    }
+
     // Consumer scores
     const consumers = peer.consumers || {};
     const consumerEntries = Object.entries(consumers);
@@ -501,6 +518,7 @@ function startClientStatsReporting() {
         const pc = recvTransport._handler._pc;
         if (pc) {
           const stats = await pc.getStats();
+          const videoFreeze = {};
           stats.forEach(r => {
             if (r.type === 'candidate-pair' && r.nominated) {
               report.recv = {
@@ -509,7 +527,18 @@ function startClientStatsReporting() {
                 bytesReceived: r.bytesReceived || 0
               };
             }
+            if (r.type === 'inbound-rtp' && r.kind === 'video') {
+              videoFreeze.freezeCount = r.freezeCount || 0;
+              videoFreeze.totalFreezesDuration = r.totalFreezesDuration || 0;
+              videoFreeze.totalFramesDuration = r.totalFramesDuration || 0;
+              videoFreeze.framesReceived = r.framesReceived || 0;
+              videoFreeze.framesDecoded = r.framesDecoded || 0;
+              videoFreeze.framesDropped = r.framesDropped || 0;
+              videoFreeze.jitterBufferDelay = r.jitterBufferDelay || 0;
+              videoFreeze.jitterBufferEmittedCount = r.jitterBufferEmittedCount || 0;
+            }
           });
+          if (Object.keys(videoFreeze).length > 0) report.videoFreeze = videoFreeze;
         }
       }
       if (Object.keys(report).length > 0) {
