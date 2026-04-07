@@ -267,13 +267,14 @@ function renderQosPanel(data) {
       html += '<div class="qos-grid">';
       const freezeRate = vf.totalFramesDuration > 0
         ? (vf.totalFreezesDuration / vf.totalFramesDuration * 100).toFixed(1) + '%' : '-';
+      const recentFreeze = vf.recentFreezeRate != null
+        ? (vf.recentFreezeRate * 100).toFixed(1) + '%' : '-';
       html += qosItem('Freeze Rate', freezeRate);
+      html += qosItem('Recent Freeze', recentFreeze);
       html += qosItem('Freeze Count', vf.freezeCount);
       html += qosItem('Total Freeze', vf.totalFreezesDuration != null ? vf.totalFreezesDuration.toFixed(1) + 's' : '-');
       html += qosItem('Frames Dropped', vf.framesDropped);
-      const avgJbDelay = vf.jitterBufferEmittedCount > 0
-        ? (vf.jitterBufferDelay / vf.jitterBufferEmittedCount * 1000).toFixed(0) + ' ms' : '-';
-      html += qosItem('JB Delay', avgJbDelay);
+      html += qosItem('JB Delay', vf.jitterBufferDelayMs != null ? vf.jitterBufferDelayMs.toFixed(0) + ' ms' : '-');
       html += '</div>';
     }
 
@@ -491,8 +492,12 @@ async function publish() {
 
 // ── Browser-side stats reporting (BWE, candidate-pair) ──
 let _clientStatsTimer = null;
+let _prevJbDelay = 0, _prevJbCount = 0;
+let _prevFreezesDuration = 0, _prevFramesDuration = 0;
 function startClientStatsReporting() {
   if (_clientStatsTimer) return;
+  _prevJbDelay = 0; _prevJbCount = 0;
+  _prevFreezesDuration = 0; _prevFramesDuration = 0;
   _clientStatsTimer = setInterval(async () => {
     if (!ws || ws.readyState !== 1) return;
     try {
@@ -534,8 +539,22 @@ function startClientStatsReporting() {
               videoFreeze.framesReceived = r.framesReceived || 0;
               videoFreeze.framesDecoded = r.framesDecoded || 0;
               videoFreeze.framesDropped = r.framesDropped || 0;
-              videoFreeze.jitterBufferDelay = r.jitterBufferDelay || 0;
-              videoFreeze.jitterBufferEmittedCount = r.jitterBufferEmittedCount || 0;
+              // Incremental JB delay (current, not cumulative average)
+              const curDelay = r.jitterBufferDelay || 0;
+              const curCount = r.jitterBufferEmittedCount || 0;
+              const dDelay = curDelay - _prevJbDelay;
+              const dCount = curCount - _prevJbCount;
+              videoFreeze.jitterBufferDelayMs = dCount > 0 ? (dDelay / dCount * 1000) : 0;
+              _prevJbDelay = curDelay;
+              _prevJbCount = curCount;
+              // Incremental freeze rate (recent interval, not cumulative)
+              const curFreeze = r.totalFreezesDuration || 0;
+              const curFrames = r.totalFramesDuration || 0;
+              const dFreeze = curFreeze - _prevFreezesDuration;
+              const dFrames = curFrames - _prevFramesDuration;
+              videoFreeze.recentFreezeRate = dFrames > 0 ? (dFreeze / dFrames) : 0;
+              _prevFreezesDuration = curFreeze;
+              _prevFramesDuration = curFrames;
             }
           });
           if (Object.keys(videoFreeze).length > 0) report.videoFreeze = videoFreeze;
