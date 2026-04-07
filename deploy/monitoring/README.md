@@ -1,6 +1,6 @@
 # Monitoring Stack Scaffold
 
-Path: `/home/runner/work/mediasoup-cpp/mediasoup-cpp/deploy/monitoring`
+Path: `deploy/monitoring` (relative to repository root)
 
 ## Includes
 
@@ -13,7 +13,7 @@ Path: `/home/runner/work/mediasoup-cpp/mediasoup-cpp/deploy/monitoring`
 ## Start
 
 ```bash
-cd /home/runner/work/mediasoup-cpp/mediasoup-cpp/deploy/monitoring
+cd deploy/monitoring
 docker compose up -d
 ```
 
@@ -27,10 +27,10 @@ docker compose up -d
 
 Edit probe targets in:
 
-- `/home/runner/work/mediasoup-cpp/mediasoup-cpp/deploy/monitoring/prometheus/prometheus.yml`
+- `deploy/monitoring/prometheus/prometheus.yml`
 
 and webhook URLs in:
 
-- `/home/runner/work/mediasoup-cpp/mediasoup-cpp/deploy/monitoring/alertmanager/alertmanager.yml`
+- `deploy/monitoring/alertmanager/alertmanager.yml`
 
 before production rollout.
