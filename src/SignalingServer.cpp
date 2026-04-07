@@ -16,13 +16,50 @@ namespace mediasoup {
 struct PerSocketData {
 	std::string peerId;
 	std::string roomId;
+	// Shared token: set to false when .close fires, checked in deferred callbacks
+	std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>>(true);
 };
 
 SignalingServer::SignalingServer(int port, RoomService& roomService, const std::string& recordDir)
 	: port_(port), roomService_(roomService), recordDir_(recordDir) {}
 
+SignalingServer::~SignalingServer() {
+	stop();
+}
+
+void SignalingServer::postWork(std::function<void()> fn) {
+	{
+		std::lock_guard<std::mutex> lock(queueMutex_);
+		taskQueue_.push(std::move(fn));
+	}
+	queueCv_.notify_one();
+}
+
+void SignalingServer::workerLoop() {
+	while (true) {
+		std::function<void()> task;
+		{
+			std::unique_lock<std::mutex> lock(queueMutex_);
+			queueCv_.wait(lock, [this]{ return workerStop_ || !taskQueue_.empty(); });
+			if (workerStop_ && taskQueue_.empty()) return;
+			task = std::move(taskQueue_.front());
+			taskQueue_.pop();
+		}
+		try {
+			task();
+		} catch (const std::exception& e) {
+			spdlog::error("worker task exception: {}", e.what());
+		} catch (...) {
+			spdlog::error("worker task unknown exception");
+		}
+	}
+}
+
 void SignalingServer::run() {
 	running_ = true;
+
+	// Start the single worker thread
+	workerThread_ = std::thread(&SignalingServer::workerLoop, this);
 
 	// peerId → ws* mapping for notify/broadcast
 	struct WsMap {
@@ -31,25 +68,35 @@ void SignalingServer::run() {
 	};
 	auto wsMap = std::make_shared<WsMap>();
 
-	// Wire up RoomService callbacks
-	roomService_.setNotify([wsMap](const std::string& peerId, const json& msg) {
-		std::lock_guard<std::mutex> lock(wsMap->mutex);
-		auto it = wsMap->peers.find(peerId);
-		if (it != wsMap->peers.end())
-			it->second->send(msg.dump(), uWS::OpCode::TEXT);
+	// Capture the uWS event loop for defer() calls from worker thread
+	// (set inside .listen callback once loop is running)
+	struct us_loop_t* eventLoop = nullptr;
+
+	// Wire up RoomService callbacks — these may be called from the worker thread,
+	// so they must defer ws->send() back to the uWS thread.
+	roomService_.setNotify([wsMap, &eventLoop](const std::string& peerId, const json& msg) {
+		std::string data = msg.dump();
+		uWS::Loop::get()->defer([wsMap, peerId, data = std::move(data)] {
+			std::lock_guard<std::mutex> lock(wsMap->mutex);
+			auto it = wsMap->peers.find(peerId);
+			if (it != wsMap->peers.end())
+				it->second->send(data, uWS::OpCode::TEXT);
+		});
 	});
 
-	roomService_.setBroadcast([wsMap](const std::string& roomId,
+	roomService_.setBroadcast([wsMap, &eventLoop](const std::string& roomId,
 		const std::string& excludePeerId, const json& msg)
 	{
 		std::string data = msg.dump();
-		std::lock_guard<std::mutex> lock(wsMap->mutex);
-		for (auto& [pid, ws] : wsMap->peers) {
-			if (pid == excludePeerId) continue;
-			auto* sd = ws->getUserData();
-			if (sd->roomId == roomId)
-				ws->send(data, uWS::OpCode::TEXT);
-		}
+		uWS::Loop::get()->defer([wsMap, roomId, excludePeerId, data = std::move(data)] {
+			std::lock_guard<std::mutex> lock(wsMap->mutex);
+			for (auto& [pid, ws] : wsMap->peers) {
+				if (pid == excludePeerId) continue;
+				auto* sd = ws->getUserData();
+				if (sd->roomId == roomId)
+					ws->send(data, uWS::OpCode::TEXT);
+			}
+		});
 	});
 
 	// GC timer
@@ -67,130 +114,152 @@ void SignalingServer::run() {
 		},
 
 		.message = [this, wsMap](auto* ws, std::string_view message, uWS::OpCode) {
+			// Parse on the main thread (cheap) to extract parameters
+			json req;
 			try {
-				auto req = json::parse(message);
-				if (!req.contains("request") || !req["request"].get<bool>()) return;
+				req = json::parse(message);
+			} catch (...) { return; }
+			if (!req.contains("request") || !req["request"].get<bool>()) return;
 
-				std::string method = req.value("method", "");
-				uint64_t id = req.value("id", 0);
-				json data = req.value("data", json::object());
-				auto* sd = ws->getUserData();
+			std::string method = req.value("method", "");
+			uint64_t id = req.value("id", 0);
+			json data = req.value("data", json::object());
+			auto* sd = ws->getUserData();
+			std::string roomId = sd->roomId;
+			std::string peerId = sd->peerId;
 
-				// Log every request with room/peer context
-				if (method != "clientStats") {
-					spdlog::debug("[{} {}] {} id={}", sd->roomId, sd->peerId, method, id);
-				}
-
-				RoomService::Result result;
-
-				if (method == "join") {
-					std::string roomId = data.value("roomId", "default");
-					std::string peerId = data.value("peerId", "");
-					std::string displayName = data.value("displayName", peerId);
-					json rtpCaps = data.value("rtpCapabilities", json::object());
-
-					result = roomService_.join(roomId, peerId, displayName, rtpCaps);
-
-					if (!result.redirect.empty()) {
-						// Redirect to correct node
-						json resp = {{"response", true}, {"id", id}, {"ok", false},
-							{"redirect", result.redirect}};
-						ws->send(resp.dump(), uWS::OpCode::TEXT);
-						return;
-					}
-
-					if (result.ok) {
-						sd->roomId = roomId;
-						sd->peerId = peerId;
-						spdlog::info("[{} {}] joined", roomId, peerId);
-						std::lock_guard<std::mutex> lock(wsMap->mutex);
-						wsMap->peers[peerId] = ws;
-					}
-
-				} else if (method == "createWebRtcTransport") {
-					result = roomService_.createTransport(sd->roomId, sd->peerId,
-						data.value("producing", false), data.value("consuming", false));
-
-				} else if (method == "connectWebRtcTransport") {
-					result = roomService_.connectTransport(sd->roomId, sd->peerId,
-						data.at("transportId").get<std::string>(),
-						data.at("dtlsParameters").get<DtlsParameters>());
-
-				} else if (method == "produce") {
-					result = roomService_.produce(sd->roomId, sd->peerId,
-						data.at("transportId").get<std::string>(),
-						data.at("kind").get<std::string>(),
-						data.at("rtpParameters"));
-
-				} else if (method == "consume") {
-					result = roomService_.consume(sd->roomId, sd->peerId,
-						data.at("transportId").get<std::string>(),
-						data.at("producerId").get<std::string>(),
-						data.at("rtpCapabilities"));
-
-				} else if (method == "pauseProducer") {
-					result = roomService_.pauseProducer(sd->roomId,
-						data.at("producerId").get<std::string>());
-
-				} else if (method == "resumeProducer") {
-					result = roomService_.resumeProducer(sd->roomId,
-						data.at("producerId").get<std::string>());
-
-				} else if (method == "restartIce") {
-					result = roomService_.restartIce(sd->roomId, sd->peerId,
-						data.at("transportId").get<std::string>());
-
-				} else if (method == "getStats") {
-					json stats = roomService_.collectPeerStats(sd->roomId,
-						data.value("peerId", sd->peerId));
-					result = {true, stats};
-
-				} else if (method == "clientStats") {
-					roomService_.setClientStats(sd->roomId, sd->peerId, data);
-					result = {true};
-
-				} else {
-					result = {false, {}, "", "unknown method: " + method};
-				}
-
-				json resp;
-				if (result.ok)
-					resp = {{"response", true}, {"id", id}, {"ok", true}, {"data", result.data}};
-				else
-					resp = {{"response", true}, {"id", id}, {"ok", false},
-						{"error", result.error}};
-				ws->send(resp.dump(), uWS::OpCode::TEXT);
-
-			} catch (const std::exception& e) {
-				auto* esd = ws->getUserData();
-				spdlog::error("[{} {}] signaling error: {}", esd->roomId, esd->peerId, e.what());
-				json resp = {{"response", true}, {"id", 0}, {"ok", false}, {"error", e.what()}};
-				ws->send(resp.dump(), uWS::OpCode::TEXT);
+			if (method != "clientStats") {
+				spdlog::debug("[{} {}] {} id={}", roomId, peerId, method, id);
 			}
+
+			// clientStats is lightweight — handle inline, no IPC
+			if (method == "clientStats") {
+				roomService_.setClientStats(roomId, peerId, data);
+				json resp = {{"response", true}, {"id", id}, {"ok", true}, {"data", json::object()}};
+				ws->send(resp.dump(), uWS::OpCode::TEXT);
+				return;
+			}
+
+			// For join, extract params now (before ws might change)
+			std::string joinRoomId, joinPeerId, joinDisplayName;
+			json joinRtpCaps;
+			if (method == "join") {
+				joinRoomId = data.value("roomId", "default");
+				joinPeerId = data.value("peerId", "");
+				joinDisplayName = data.value("displayName", joinPeerId);
+				joinRtpCaps = data.value("rtpCapabilities", json::object());
+			}
+
+			// Capture alive token to detect if ws was closed before defer runs
+			auto alive = sd->alive;
+
+			// Dispatch to worker thread — all RoomService calls happen there
+			postWork([this, wsMap, ws, alive, method, id, data,
+				roomId, peerId, joinRoomId, joinPeerId, joinDisplayName, joinRtpCaps]
+			{
+				RoomService::Result result;
+				try {
+					if (method == "join") {
+						result = roomService_.join(joinRoomId, joinPeerId, joinDisplayName, joinRtpCaps);
+					} else if (method == "createWebRtcTransport") {
+						result = roomService_.createTransport(roomId, peerId,
+							data.value("producing", false), data.value("consuming", false));
+					} else if (method == "connectWebRtcTransport") {
+						result = roomService_.connectTransport(roomId, peerId,
+							data.at("transportId").get<std::string>(),
+							data.at("dtlsParameters").get<DtlsParameters>());
+					} else if (method == "produce") {
+						result = roomService_.produce(roomId, peerId,
+							data.at("transportId").get<std::string>(),
+							data.at("kind").get<std::string>(),
+							data.at("rtpParameters"));
+					} else if (method == "consume") {
+						result = roomService_.consume(roomId, peerId,
+							data.at("transportId").get<std::string>(),
+							data.at("producerId").get<std::string>(),
+							data.at("rtpCapabilities"));
+					} else if (method == "pauseProducer") {
+						result = roomService_.pauseProducer(roomId,
+							data.at("producerId").get<std::string>());
+					} else if (method == "resumeProducer") {
+						result = roomService_.resumeProducer(roomId,
+							data.at("producerId").get<std::string>());
+					} else if (method == "restartIce") {
+						result = roomService_.restartIce(roomId, peerId,
+							data.at("transportId").get<std::string>());
+					} else if (method == "getStats") {
+						json stats = roomService_.collectPeerStats(roomId,
+							data.value("peerId", peerId));
+						result = {true, stats};
+					} else {
+						result = {false, {}, "", "unknown method: " + method};
+					}
+				} catch (const std::exception& e) {
+					spdlog::error("[{} {}] {} error: {}", roomId, peerId, method, e.what());
+					result = {false, {}, "", e.what()};
+				}
+
+				// Build response
+				json resp;
+				if (!result.redirect.empty()) {
+					resp = {{"response", true}, {"id", id}, {"ok", false},
+						{"redirect", result.redirect}};
+				} else if (result.ok) {
+					resp = {{"response", true}, {"id", id}, {"ok", true}, {"data", result.data}};
+				} else {
+					resp = {{"response", true}, {"id", id}, {"ok", false}, {"error", result.error}};
+				}
+				std::string respStr = resp.dump();
+
+				// For join success, we need to update PerSocketData on the main thread
+				bool joinOk = (method == "join" && result.ok && result.redirect.empty());
+				std::string jRoomId = joinRoomId, jPeerId = joinPeerId;
+
+				// Defer ws->send() back to the uWS event loop thread
+				uWS::Loop::get()->defer([wsMap, ws, alive, respStr = std::move(respStr),
+					joinOk, jRoomId = std::move(jRoomId), jPeerId = std::move(jPeerId)]
+				{
+					if (!alive->load()) return;  // ws was closed, skip
+					if (joinOk) {
+						auto* sd = ws->getUserData();
+						sd->roomId = jRoomId;
+						sd->peerId = jPeerId;
+						spdlog::info("[{} {}] joined", jRoomId, jPeerId);
+						std::lock_guard<std::mutex> lock(wsMap->mutex);
+						wsMap->peers[jPeerId] = ws;
+					}
+					ws->send(respStr, uWS::OpCode::TEXT);
+				});
+			});
 		},
 
 		.close = [this, wsMap](auto* ws, int, std::string_view) {
 			auto* sd = ws->getUserData();
+			sd->alive->store(false);  // Signal deferred callbacks to skip this ws
 			if (!sd->peerId.empty()) {
 				spdlog::info("[{} {}] disconnected", sd->roomId, sd->peerId);
+				std::string roomId = sd->roomId;
+				std::string peerId = sd->peerId;
 				{
 					std::lock_guard<std::mutex> lock(wsMap->mutex);
-					wsMap->peers.erase(sd->peerId);
+					wsMap->peers.erase(peerId);
 				}
-				if (!sd->roomId.empty()) {
-					try {
-						roomService_.leave(sd->roomId, sd->peerId);
-					} catch (const std::exception& e) {
-						spdlog::error("[{} {}] leave failed on disconnect: {}", sd->roomId, sd->peerId, e.what());
-					} catch (...) {
-						spdlog::error("[{} {}] leave failed on disconnect: unknown error", sd->roomId, sd->peerId);
-					}
+				if (!roomId.empty()) {
+					// Dispatch leave to worker thread (may block on Channel IPC)
+					postWork([this, roomId, peerId] {
+						try {
+							roomService_.leave(roomId, peerId);
+						} catch (const std::exception& e) {
+							spdlog::error("[{} {}] leave failed: {}", roomId, peerId, e.what());
+						} catch (...) {
+							spdlog::error("[{} {}] leave failed: unknown error", roomId, peerId);
+						}
+					});
 				}
 			}
 		}
 
 	}).get("/api/recordings", [this](auto* res, auto*) {
-		// List all recordings with structured metadata
 		if (recordDir_.empty()) {
 			res->writeHeader("Content-Type", "application/json")->end("[]");
 			return;
@@ -211,18 +280,15 @@ void SignalingServer::run() {
 			while ((rent = readdir(rdir))) {
 				std::string fname(rent->d_name);
 				if (fname.size() < 6 || fname.substr(fname.size()-5) != ".webm") continue;
-				// Parse: {peerId}_{timestamp}.webm
 				std::string base = fname.substr(0, fname.size()-5);
 				auto pos = base.rfind('_');
 				std::string peerId = (pos != std::string::npos) ? base.substr(0, pos) : base;
 				int64_t ts = 0;
 				if (pos != std::string::npos) try { ts = std::stoll(base.substr(pos+1)); } catch(...) {}
-				// File size
 				std::string fullPath = roomPath + "/" + fname;
 				struct stat fst;
 				int64_t fileSize = 0;
 				if (stat(fullPath.c_str(), &fst) == 0) fileSize = fst.st_size;
-				// Check QoS sidecar
 				bool hasQos = (stat((roomPath + "/" + base + ".qos.json").c_str(), &fst) == 0);
 				result.push_back({
 					{"roomId", roomId}, {"peerId", peerId}, {"timestamp", ts},
@@ -235,11 +301,9 @@ void SignalingServer::run() {
 		res->writeHeader("Content-Type", "application/json")->end(result.dump());
 
 	}).get("/recordings/*", [this](auto* res, auto* req) {
-		// Serve recording files (webm + qos.json)
 		if (recordDir_.empty()) { res->writeStatus("404 Not Found")->end("Not Found"); return; }
-		std::string url(req->getUrl()); // e.g. /recordings/roomId/file.webm
-		std::string relPath = url.substr(12); // strip "/recordings/"
-		// Prevent path traversal
+		std::string url(req->getUrl());
+		std::string relPath = url.substr(12);
 		if (relPath.find("..") != std::string::npos) {
 			res->writeStatus("403 Forbidden")->end("Forbidden"); return;
 		}
@@ -269,42 +333,49 @@ void SignalingServer::run() {
 		if (listenSocket) {
 			spdlog::info("SignalingServer listening on port {}", port_);
 			auto* loop = uWS::Loop::get();
-			gcTimer = us_create_timer((struct us_loop_t*)loop, 0, sizeof(RoomService*));
-			RoomService* svcPtr = &roomService_;
-			memcpy(us_timer_ext(gcTimer), &svcPtr, sizeof(RoomService*));
+
+			// GC timer — dispatch to worker thread
+			gcTimer = us_create_timer((struct us_loop_t*)loop, 0, sizeof(SignalingServer*));
+			SignalingServer* self = this;
+			memcpy(us_timer_ext(gcTimer), &self, sizeof(SignalingServer*));
 			us_timer_set(gcTimer, [](struct us_timer_t* t) {
-				RoomService* svc;
-				memcpy(&svc, us_timer_ext(t), sizeof(RoomService*));
-				svc->cleanIdleRooms(kIdleRoomTimeoutSec);
+				SignalingServer* s;
+				memcpy(&s, us_timer_ext(t), sizeof(SignalingServer*));
+				s->postWork([s] {
+					s->roomService_.cleanIdleRooms(kIdleRoomTimeoutSec);
+				});
 			}, kGcIntervalMs, kGcIntervalMs);
 
-			// Health check timer — every 2 seconds (fast worker crash detection)
-			auto* healthTimer = us_create_timer((struct us_loop_t*)loop, 0, sizeof(RoomService*));
-			memcpy(us_timer_ext(healthTimer), &svcPtr, sizeof(RoomService*));
+			// Health check timer — dispatch to worker thread
+			auto* healthTimer = us_create_timer((struct us_loop_t*)loop, 0, sizeof(SignalingServer*));
+			memcpy(us_timer_ext(healthTimer), &self, sizeof(SignalingServer*));
 			us_timer_set(healthTimer, [](struct us_timer_t* t) {
-				RoomService* svc;
-				memcpy(&svc, us_timer_ext(t), sizeof(RoomService*));
-				try { svc->checkRoomHealth(); } catch (const std::exception& e) {
-					spdlog::error("checkRoomHealth exception: {}", e.what());
-				} catch (...) {
-					spdlog::error("checkRoomHealth unknown exception");
-				}
+				SignalingServer* s;
+				memcpy(&s, us_timer_ext(t), sizeof(SignalingServer*));
+				s->postWork([s] {
+					try { s->roomService_.checkRoomHealth(); } catch (const std::exception& e) {
+						spdlog::error("checkRoomHealth exception: {}", e.what());
+					} catch (...) {
+						spdlog::error("checkRoomHealth unknown exception");
+					}
+				});
 			}, kHealthCheckIntervalMs, kHealthCheckIntervalMs);
 
-			// Stats broadcast timer — every 10 seconds
-			auto* statsTimer = us_create_timer((struct us_loop_t*)loop, 0, sizeof(RoomService*));
-			memcpy(us_timer_ext(statsTimer), &svcPtr, sizeof(RoomService*));
+			// Stats broadcast timer — dispatch to worker thread
+			auto* statsTimer = us_create_timer((struct us_loop_t*)loop, 0, sizeof(SignalingServer*));
+			memcpy(us_timer_ext(statsTimer), &self, sizeof(SignalingServer*));
 			us_timer_set(statsTimer, [](struct us_timer_t* t) {
-				RoomService* svc;
-				memcpy(&svc, us_timer_ext(t), sizeof(RoomService*));
-				try { svc->broadcastStats(); } catch (const std::exception& e) {
-					spdlog::error("broadcastStats exception: {}", e.what());
-				} catch (...) {
-					spdlog::error("broadcastStats unknown exception");
-				}
+				SignalingServer* s;
+				memcpy(&s, us_timer_ext(t), sizeof(SignalingServer*));
+				s->postWork([s] {
+					try { s->roomService_.broadcastStats(); } catch (const std::exception& e) {
+						spdlog::error("broadcastStats exception: {}", e.what());
+					} catch (...) {
+						spdlog::error("broadcastStats unknown exception");
+					}
+				});
 			}, kStatsBroadcastIntervalMs, kStatsBroadcastIntervalMs);
 
-			// Shutdown poll timer — check atomic flag every 500ms
 			struct ShutdownCtx { us_listen_socket_t* sock; };
 			auto* shutdownTimer = us_create_timer((struct us_loop_t*)loop, 0, sizeof(ShutdownCtx));
 			ShutdownCtx sctx{listenSocket};
@@ -325,6 +396,12 @@ void SignalingServer::run() {
 
 void SignalingServer::stop() {
 	running_ = false;
+	{
+		std::lock_guard<std::mutex> lock(queueMutex_);
+		workerStop_ = true;
+	}
+	queueCv_.notify_one();
+	if (workerThread_.joinable()) workerThread_.join();
 }
 
 } // namespace mediasoup
