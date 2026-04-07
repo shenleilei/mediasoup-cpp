@@ -193,10 +193,10 @@ function renderSnapshot(stats) {
   if (st && typeof st === 'object' && Object.keys(st).length) {
     html += '<div style="margin:4px 0;color:#4CAF50;font-size:12px;font-weight:bold">⬆ Uplink</div>';
     html += '<div class="qos-grid">';
-    html += qosItem('Recv Bitrate', fmtBitrate(st.rtpRecvBitrate));
+    html += qosItem('Send Bitrate ⬆', fmtBitrate(st.rtpRecvBitrate));
     const clientSend = stats.clientStats && stats.clientStats.send;
     html += qosItem('Available BW ⬆', fmtBitrate(clientSend ? clientSend.availableOutgoingBitrate : null));
-    html += qosItem('Packet Loss', st.rtpPacketLossReceived != null ? (st.rtpPacketLossReceived * 100).toFixed(1) + '%' : '-');
+    html += qosItem('Packet Loss ⬆', st.rtpPacketLossReceived != null ? (st.rtpPacketLossReceived * 100).toFixed(1) + '%' : '-');
     html += qosItem('ICE', st.iceState || '-');
     html += qosItem('DTLS', st.dtlsState || '-');
     html += '</div>';
@@ -232,6 +232,7 @@ function renderSnapshot(stats) {
     html += '<div class="qos-grid">';
     for (let [cid, c] of cEntries) {
       html += qosItem(c.kind + ' score', c.score + '/10');
+      html += qosItem(c.kind + ' prod score', c.producerScore + '/10');
     }
     html += '</div>';
   }
