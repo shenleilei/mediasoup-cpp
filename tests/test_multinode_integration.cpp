@@ -410,6 +410,10 @@ TEST_F(MultiNodeResolveTest, ResolveFallbackWithoutRedis) {
 	ASSERT_FALSE(body.empty());
 	auto j = json::parse(body);
 	EXPECT_TRUE(j.contains("wsUrl"));
+	// Without Redis, wsUrl should be empty (single-node fallback) — frontend handles this
+	std::string wsUrl = j.value("wsUrl", "");
+	EXPECT_TRUE(wsUrl.empty() || wsUrl.find("ws://") == 0 || wsUrl.find("wss://") == 0)
+		<< "wsUrl should be empty or valid ws URL, got: " << wsUrl;
 
 	// Join should work regardless of resolve outcome
 	TestWsClient ws;
