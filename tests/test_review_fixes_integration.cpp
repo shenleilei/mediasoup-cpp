@@ -679,3 +679,126 @@ TEST_F(CountryIsolationTest, UsClientRoutedToUsNode) {
 	EXPECT_TRUE(hasUS) << "US client should route to US node, got: " << response;
 	EXPECT_FALSE(hasCN) << "US client should NOT route to CN node, got: " << response;
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Redis degradation: SFU with bad Redis should still work locally
+// ═══════════════════════════════════════════════════════════════
+
+static const int DEGRADE_PORT = 18795;
+
+class RedisDegradeTest : public ::testing::Test {
+protected:
+	pid_t sfuPid_ = -1;
+	std::string testRoom_;
+
+	void SetUp() override {
+		testRoom_ = "degrade_" + std::to_string(getpid()) + "_" +
+			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+
+		// Start SFU pointing to a non-existent Redis (port 1 = unreachable)
+		std::string cmd = "./build/mediasoup-sfu --nodaemon"
+			" --port=" + std::to_string(DEGRADE_PORT) +
+			" --workers=1"
+			" --workerBin=./mediasoup-worker"
+			" --announcedIp=127.0.0.1"
+			" --listenIp=127.0.0.1"
+			" --redisHost=127.0.0.1 --redisPort=1"
+			" > /dev/null 2>&1 & echo $!";
+		FILE* fp = popen(cmd.c_str(), "r");
+		ASSERT_NE(fp, nullptr);
+		char buf[64]{};
+		fgets(buf, sizeof(buf), fp);
+		pclose(fp);
+		sfuPid_ = atoi(buf);
+		ASSERT_GT(sfuPid_, 0);
+
+		for (int i = 0; i < 50; ++i) {
+			usleep(100000);
+			int fd = socket(AF_INET, SOCK_STREAM, 0);
+			sockaddr_in addr{};
+			addr.sin_family = AF_INET;
+			addr.sin_port = htons(DEGRADE_PORT);
+			inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+			if (::connect(fd, (sockaddr*)&addr, sizeof(addr)) == 0) {
+				::close(fd);
+				usleep(200000);
+				return;
+			}
+			::close(fd);
+		}
+		FAIL() << "SFU did not start";
+	}
+
+	void TearDown() override {
+		if (sfuPid_ > 0) {
+			kill(sfuPid_, SIGKILL);
+			for (int i = 0; i < 20; ++i) {
+				usleep(50000);
+				int fd = socket(AF_INET, SOCK_STREAM, 0);
+				sockaddr_in addr{};
+				addr.sin_family = AF_INET;
+				addr.sin_port = htons(DEGRADE_PORT);
+				addr.sin_addr.s_addr = htonl(INADDR_ANY);
+				int opt = 1;
+				setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+				bool free = (bind(fd, (sockaddr*)&addr, sizeof(addr)) == 0);
+				::close(fd);
+				if (free) return;
+			}
+		}
+	}
+
+	static json rtpCaps() {
+		return {
+			{"codecs", {{
+				{"mimeType", "audio/opus"}, {"kind", "audio"},
+				{"clockRate", 48000}, {"channels", 2},
+				{"preferredPayloadType", 100}
+			}}},
+			{"headerExtensions", json::array()}
+		};
+	}
+};
+
+// /api/resolve should return a valid response even with Redis down
+TEST_F(RedisDegradeTest, ResolveWorksWithoutRedis) {
+	int fd = socket(AF_INET, SOCK_STREAM, 0);
+	sockaddr_in addr{};
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(DEGRADE_PORT);
+	inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
+
+	std::string req = "GET /api/resolve?roomId=" + testRoom_ +
+		" HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+	::send(fd, req.data(), req.size(), 0);
+
+	char buf[4096]{};
+	int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+	::close(fd);
+	ASSERT_GT(n, 0);
+
+	std::string response(buf, n);
+	EXPECT_NE(response.find("200"), std::string::npos) << "Should return 200, got: " << response;
+	EXPECT_NE(response.find("wsUrl"), std::string::npos) << "Should contain wsUrl, got: " << response;
+}
+
+// Direct join should succeed locally even with Redis down
+TEST_F(RedisDegradeTest, JoinWorksWithoutRedis) {
+	TestWsClient ws;
+	ASSERT_TRUE(ws.connect("127.0.0.1", DEGRADE_PORT));
+
+	auto resp = ws.request("join", {
+		{"roomId", testRoom_}, {"peerId", "alice"},
+		{"displayName", "alice"}, {"rtpCapabilities", rtpCaps()}
+	});
+	ASSERT_TRUE(resp.value("ok", false))
+		<< "Join should succeed locally when Redis is down, got: " << resp.dump();
+
+	// Should also be able to create transport
+	auto transport = ws.request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	EXPECT_TRUE(transport.value("ok", false))
+		<< "createTransport should work after degraded join, got: " << transport.dump();
+}
