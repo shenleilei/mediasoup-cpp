@@ -1,5 +1,6 @@
 #pragma once
 #include "Channel.h"
+#include "Constants.h"
 #include "RtpTypes.h"
 #include "EventEmitter.h"
 #include "Logger.h"
@@ -28,7 +29,7 @@ public:
 
 	std::shared_ptr<Producer> produce(const json& options);
 	std::shared_ptr<Consumer> consume(const json& options);
-	json getStats();
+	json getStats(int timeoutMs = kChannelRequestTimeoutMs);
 
 	void close();
 	void routerClosed();

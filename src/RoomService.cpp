@@ -1,5 +1,4 @@
 #include "RoomService.h"
-#include <future>
 #include <algorithm>
 #include <dirent.h>
 #include <sys/stat.h>
@@ -33,7 +32,34 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 	peer->displayName = displayName;
 	if (!rtpCapabilities.empty())
 		peer->rtpCapabilities = rtpCapabilities.get<RtpCapabilities>();
-	room->addPeer(peer);
+
+	auto oldPeer = room->replacePeer(peer);
+	bool isReconnect = false;
+	if (oldPeer) {
+		isReconnect = true;
+		// Clean up old peer's producers from router
+		for (auto& [pid, _] : oldPeer->producers)
+			room->router()->removeProducer(pid);
+		oldPeer->close();
+
+		// Clean up recorder and client stats for old session
+		std::string key = roomId + "/" + peerId;
+		std::shared_ptr<PeerRecorder> recToStop;
+		{
+			std::lock_guard<std::mutex> lock(recorderMutex_);
+			auto it = recorders_.find(key);
+			if (it != recorders_.end()) {
+				recToStop = std::move(it->second);
+				recorders_.erase(it);
+			}
+			recorderTransports_.erase(key);
+		}
+		if (recToStop) recToStop->stop();
+		{
+			std::lock_guard<std::mutex> lock(clientStatsMutex_);
+			clientStats_.erase(key);
+		}
+	}
 
 	if (registry_) registry_->refreshRoom(roomId);
 
@@ -50,7 +76,8 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 	if (broadcast_) {
 		broadcast_(roomId, peerId, {
 			{"notification", true}, {"method", "peerJoined"},
-			{"data", {{"peerId", peerId}, {"displayName", displayName}}}
+			{"data", {{"peerId", peerId}, {"displayName", displayName},
+				{"reconnect", isReconnect}}}
 		});
 	}
 
@@ -508,8 +535,6 @@ void RoomService::setClientStats(const std::string& roomId, const std::string& p
 }
 
 json RoomService::collectPeerStats(const std::string& roomId, const std::string& peerId) {
-	static constexpr auto kTimeout = std::chrono::milliseconds(kStatsTimeoutMs);
-
 	auto room = roomManager_.getRoom(roomId);
 	if (!room) return {};
 	auto peer = room->getPeer(peerId);
@@ -517,15 +542,24 @@ json RoomService::collectPeerStats(const std::string& roomId, const std::string&
 
 	json result = {{"peerId", peerId}};
 
-	auto timedGetStats = [&](auto& transport) -> json {
-		auto fut = std::async(std::launch::async, [&]{ return transport->getStats(); });
-		if (fut.wait_for(kTimeout) == std::future_status::ready) return fut.get();
-		MS_WARN(logger_, "[{} {}] getStats timeout", roomId, peerId);
-		return nullptr;
+	// Per-peer deadline: cap total stats collection time to avoid monopolizing
+	// the control thread. Individual getStats calls use kStatsTimeoutMs, but
+	// we also enforce an overall budget.
+	static constexpr int kPerPeerBudgetMs = 2000;
+	auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(kPerPeerBudgetMs);
+
+	auto budgetLeft = [&]() -> int {
+		auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+			deadline - std::chrono::steady_clock::now()).count();
+		return remaining > 0 ? static_cast<int>(remaining) : 0;
 	};
 
-	if (peer->sendTransport) {
-		try { result["sendTransport"] = timedGetStats(peer->sendTransport); }
+	auto statsTimeout = [&]() -> int {
+		return std::min(kStatsTimeoutMs, budgetLeft());
+	};
+
+	if (peer->sendTransport && budgetLeft() > 0) {
+		try { result["sendTransport"] = peer->sendTransport->getStats(statsTimeout()); }
 		catch (const std::exception& e) {
 			MS_WARN(logger_, "[{} {}] sendTransport getStats failed: {}", roomId, peerId, e.what());
 			result["sendTransport"] = nullptr;
@@ -534,8 +568,8 @@ json RoomService::collectPeerStats(const std::string& roomId, const std::string&
 			result["sendTransport"] = nullptr;
 		}
 	}
-	if (peer->recvTransport) {
-		try { result["recvTransport"] = timedGetStats(peer->recvTransport); }
+	if (peer->recvTransport && budgetLeft() > 0) {
+		try { result["recvTransport"] = peer->recvTransport->getStats(statsTimeout()); }
 		catch (const std::exception& e) {
 			MS_WARN(logger_, "[{} {}] recvTransport getStats failed: {}", roomId, peerId, e.what());
 			result["recvTransport"] = nullptr;
@@ -548,16 +582,16 @@ json RoomService::collectPeerStats(const std::string& roomId, const std::string&
 	json producers = json::object();
 	for (auto& [pid, prod] : peer->producers) {
 		json pstat;
-		try {
-			auto fut = std::async(std::launch::async, [&]{ return prod->getStats(); });
-			if (fut.wait_for(kTimeout) == std::future_status::ready)
-				pstat["stats"] = fut.get();
-			else { MS_WARN(logger_, "[{} {}] producer {} getStats timeout", roomId, peerId, pid); pstat["stats"] = nullptr; }
-		} catch (const std::exception& e) {
-			MS_WARN(logger_, "[{} {}] producer {} getStats failed: {}", roomId, peerId, pid, e.what());
-			pstat["stats"] = nullptr;
-		} catch (...) {
-			MS_WARN(logger_, "[{} {}] producer {} getStats failed: unknown error", roomId, peerId, pid);
+		if (budgetLeft() > 0) {
+			try { pstat["stats"] = prod->getStats(statsTimeout()); }
+			catch (const std::exception& e) {
+				MS_WARN(logger_, "[{} {}] producer {} getStats failed: {}", roomId, peerId, pid, e.what());
+				pstat["stats"] = nullptr;
+			} catch (...) {
+				MS_WARN(logger_, "[{} {}] producer {} getStats failed: unknown error", roomId, peerId, pid);
+				pstat["stats"] = nullptr;
+			}
+		} else {
 			pstat["stats"] = nullptr;
 		}
 		json scores = json::array();
@@ -574,22 +608,19 @@ json RoomService::collectPeerStats(const std::string& roomId, const std::string&
 		json cstat;
 		cstat["kind"] = cons->kind();
 		cstat["producerId"] = cons->producerId();
-		// Get consumer score from getStats (reliable) with notification as fallback
-		try {
-			auto fut = std::async(std::launch::async, [c = cons]{ return c->getStats(); });
-			if (fut.wait_for(kTimeout) == std::future_status::ready) {
-				auto stats = fut.get();
+		if (budgetLeft() > 0) {
+			try {
+				auto stats = cons->getStats(statsTimeout());
 				if (!stats.empty() && stats[0].contains("score"))
 					cstat["score"] = stats[0]["score"];
 				else
 					cstat["score"] = cons->currentScore().score;
-			} else {
+			} catch (...) {
 				cstat["score"] = cons->currentScore().score;
 			}
-		} catch (...) {
+		} else {
 			cstat["score"] = cons->currentScore().score;
 		}
-		// Get producerScore from the actual Producer object
 		auto prod = room->router()->getProducerById(cons->producerId());
 		if (prod && !prod->scores().empty()) {
 			cstat["producerScore"] = prod->scores().back().score;

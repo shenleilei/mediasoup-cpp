@@ -225,8 +225,15 @@ void SignalingServer::run() {
 						sd->roomId = jRoomId;
 						sd->peerId = jPeerId;
 						spdlog::info("[{} {}] joined", jRoomId, jPeerId);
-						std::lock_guard<std::mutex> lock(wsMap->mutex);
-						wsMap->peers[jPeerId] = ws;
+						decltype(ws) oldWs = nullptr;
+						{
+							std::lock_guard<std::mutex> lock(wsMap->mutex);
+							auto it = wsMap->peers.find(jPeerId);
+							if (it != wsMap->peers.end() && it->second != ws)
+								oldWs = it->second;
+							wsMap->peers[jPeerId] = ws;
+						}
+						if (oldWs) oldWs->end(4000, "replaced");
 					}
 					ws->send(respStr, uWS::OpCode::TEXT);
 				});
@@ -240,11 +247,16 @@ void SignalingServer::run() {
 				spdlog::info("[{} {}] disconnected", sd->roomId, sd->peerId);
 				std::string roomId = sd->roomId;
 				std::string peerId = sd->peerId;
+				bool erased = false;
 				{
 					std::lock_guard<std::mutex> lock(wsMap->mutex);
-					wsMap->peers.erase(peerId);
+					auto it = wsMap->peers.find(peerId);
+					if (it != wsMap->peers.end() && it->second == ws) {
+						wsMap->peers.erase(it);
+						erased = true;
+					}
 				}
-				if (!roomId.empty()) {
+				if (erased && !roomId.empty()) {
 					// Dispatch leave to worker thread (may block on Channel IPC)
 					postWork([this, roomId, peerId] {
 						try {

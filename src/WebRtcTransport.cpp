@@ -44,9 +44,20 @@ json WebRtcTransport::connect(const DtlsParameters& clientDtlsParams) {
 json WebRtcTransport::restartIce() {
 	if (closed_) throw std::runtime_error("Transport closed");
 
-	channel_->requestWait(
+	auto owned = channel_->requestWait(
 		FBS::Request::Method::TRANSPORT_RESTART_ICE,
 		FBS::Request::Body::NONE, 0, id_);
+
+	auto* response = owned.response();
+	if (response && response->body_type() == FBS::Response::Body::Transport_RestartIceResponse) {
+		auto* iceResponse = response->body_as_Transport_RestartIceResponse();
+		if (iceResponse && iceResponse->username_fragment() && iceResponse->password()) {
+			iceParameters_.usernameFragment = iceResponse->username_fragment()->str();
+			iceParameters_.password = iceResponse->password()->str();
+			iceParameters_.iceLite = iceResponse->ice_lite();
+		}
+	}
+
 	return {{"iceParameters", iceParameters_}};
 }
 

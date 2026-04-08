@@ -28,6 +28,19 @@ public:
 		touch();
 	}
 
+	// Replace peer and return old one (caller must clean up router state + close)
+	std::shared_ptr<Peer> replacePeer(std::shared_ptr<Peer> peer) {
+		std::shared_ptr<Peer> old;
+		{
+			std::lock_guard<std::mutex> lock(mutex_);
+			auto it = peers_.find(peer->id);
+			if (it != peers_.end()) old = it->second;
+			peers_[peer->id] = peer;
+			touch();
+		}
+		return old;
+	}
+
 	std::shared_ptr<Peer> getPeer(const std::string& peerId) {
 		std::lock_guard<std::mutex> lock(mutex_);
 		auto it = peers_.find(peerId);

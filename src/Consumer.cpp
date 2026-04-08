@@ -119,11 +119,11 @@ void Consumer::handleNotification(
 	}
 }
 
-json Consumer::getStats() {
+json Consumer::getStats(int timeoutMs) {
 	if (closed_) return json::array();
 
 	auto owned = channel_->requestWait(FBS::Request::Method::CONSUMER_GET_STATS,
-		FBS::Request::Body::NONE, 0, id_);
+		FBS::Request::Body::NONE, 0, id_, timeoutMs);
 	auto* response = owned.response();
 
 	json result = json::array();

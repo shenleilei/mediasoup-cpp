@@ -1,5 +1,6 @@
 #pragma once
 #include "Channel.h"
+#include "Constants.h"
 #include "RtpTypes.h"
 #include "EventEmitter.h"
 #include "Logger.h"
@@ -46,7 +47,7 @@ public:
 
 	struct Score { uint8_t score = 0; uint8_t producerScore = 0; std::vector<uint8_t> producerScores; };
 	const Score& currentScore() const { return score_; }
-	json getStats();
+	json getStats(int timeoutMs = kChannelRequestTimeoutMs);
 
 private:
 	std::string id_;
