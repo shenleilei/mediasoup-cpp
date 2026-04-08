@@ -7,7 +7,10 @@
 #include <sstream>
 #include <algorithm>
 #include <mutex>
+#include <thread>
+#include <atomic>
 #include <cmath>
+#include <unordered_map>
 #include <hiredis/hiredis.h>
 
 namespace mediasoup {
@@ -34,32 +37,35 @@ public:
 
 	void start() {
 		registerNode();
+		syncAll();
+		startSubscriber();
 	}
 
-	// Called periodically from SignalingServer timer via postWork
 	void heartbeat() {
-		std::lock_guard<std::mutex> lock(mutex_);
+		std::lock_guard<std::mutex> lock(cmdMutex_);
 		if (!ensureConnected()) return;
 		registerNode();
+		publishNodeUpdate();
 	}
 
-	// Update node load info in Redis (called from heartbeat)
 	void updateLoad(size_t rooms, size_t maxRooms) {
-		std::lock_guard<std::mutex> lock(mutex_);
+		std::lock_guard<std::mutex> lock(cmdMutex_);
 		if (!ensureConnected()) return;
-		// Format: address|rooms|maxRooms|lat|lng|isp|country
-		std::string val = nodeAddress_ + "|" + std::to_string(rooms) + "|" + std::to_string(maxRooms)
-			+ "|" + std::to_string(nodeLat_) + "|" + std::to_string(nodeLng_)
-			+ "|" + nodeIsp_ + "|" + nodeCountry_;
+		std::string val = buildNodeValue(rooms, maxRooms);
 		auto* reply = (redisReply*)redisCommand(ctx_, "SET %s %s EX %d",
 			("node:" + nodeId_).c_str(), val.c_str(), nodeTTL_);
 		if (reply) freeReplyObject(reply);
 		else handleDisconnect();
+		// Update local cache for self
+		{
+			std::lock_guard<std::mutex> cl(cacheMutex_);
+			nodeCache_[nodeId_] = parseNodeValue(val);
+		}
+		publishNodeUpdate();
 	}
 
-	// Refresh TTL for all active rooms
 	void refreshRooms(const std::vector<std::string>& roomIds) {
-		std::lock_guard<std::mutex> lock(mutex_);
+		std::lock_guard<std::mutex> lock(cmdMutex_);
 		if (!ensureConnected()) return;
 		for (auto& roomId : roomIds) {
 			auto* reply = (redisReply*)redisCommand(ctx_, "EXPIRE %s %d",
@@ -69,43 +75,61 @@ public:
 		}
 	}
 
-	// Resolve: find which node owns a room, or pick least-loaded node for new room
 	struct ResolveResult {
-		std::string wsUrl;   // target node's WS address
-		bool isNew = false;  // true if room doesn't exist yet
+		std::string wsUrl;
+		bool isNew = false;
 	};
 
 	ResolveResult resolveRoom(const std::string& roomId, const std::string& clientIp = "") {
-		std::lock_guard<std::mutex> lock(mutex_);
-		if (!ensureConnected()) return {nodeAddress_, false};
-
-		// Check if room already exists
-		auto* reply = (redisReply*)redisCommand(ctx_, "GET %s", ("room:" + roomId).c_str());
-		if (reply && reply->type == REDIS_REPLY_STRING) {
-			std::string ownerNodeId = reply->str;
-			freeReplyObject(reply);
-			auto info = parseNodeInfo(ownerNodeId);
-			if (!info.address.empty()) return {info.address, false};
-			return {nodeAddress_, true};
+		// Check local room cache first
+		{
+			std::lock_guard<std::mutex> cl(cacheMutex_);
+			auto it = roomCache_.find(roomId);
+			if (it != roomCache_.end() && !it->second.empty())
+				return {it->second, false};
 		}
-		if (reply) freeReplyObject(reply);
 
-		// Room doesn't exist — pick best node for this client
-		auto best = findBestNode(clientIp);
-		if (best.empty()) return {"", true};  // all nodes full
+		// Cache miss — check Redis
+		{
+			std::lock_guard<std::mutex> lock(cmdMutex_);
+			if (ensureConnected()) {
+				auto* reply = (redisReply*)redisCommand(ctx_, "GET %s", ("room:" + roomId).c_str());
+				if (reply && reply->type == REDIS_REPLY_STRING) {
+					std::string ownerNodeId = reply->str;
+					freeReplyObject(reply);
+					std::string addr = getCachedNodeAddress(ownerNodeId);
+					if (!addr.empty()) {
+						std::lock_guard<std::mutex> cl(cacheMutex_);
+						roomCache_[roomId] = addr;
+						return {addr, false};
+					}
+					return {nodeAddress_, true};
+				}
+				if (reply) freeReplyObject(reply);
+			}
+		}
+
+		// Room doesn't exist — pick best node from cache
+		auto best = findBestNodeCached(clientIp);
+		if (best.empty()) return {"", true};
 		return {best, true};
 	}
 
-	void stop() {
-		std::lock_guard<std::mutex> lock(mutex_);
-		if (ctx_) { redisFree(ctx_); ctx_ = nullptr; }
-	}
-
 	std::string claimRoom(const std::string& roomId, const std::string& clientIp = "") {
-		std::lock_guard<std::mutex> lock(mutex_);
+		// Check local room cache — if room already claimed, redirect
+		{
+			std::lock_guard<std::mutex> cl(cacheMutex_);
+			auto it = roomCache_.find(roomId);
+			if (it != roomCache_.end() && !it->second.empty()) {
+				if (it->second == nodeAddress_) return "";
+				return it->second;
+			}
+		}
+
+		std::lock_guard<std::mutex> lock(cmdMutex_);
 		if (!ensureConnected()) {
 			MS_WARN(logger_, "Redis unavailable, degrading to local-only for room {}", roomId);
-			return "";  // degrade: create locally
+			return "";
 		}
 
 		static const char* luaScript = R"LUA(
@@ -134,7 +158,7 @@ public:
 		if (!reply) {
 			handleDisconnect();
 			MS_WARN(logger_, "Redis EVAL failed for room {}, degrading to local-only", roomId);
-			return "";  // degrade: create locally
+			return "";
 		}
 
 		std::string result;
@@ -142,36 +166,48 @@ public:
 		freeReplyObject(reply);
 
 		if (result.empty() || result == "self") {
-			// We own this room (new or already ours).
-			// For new rooms, check if a geo-better node exists.
 			if (result.empty() && geo_ && !clientIp.empty()) {
-				std::string best = findBestNode(clientIp);
+				std::string best = findBestNodeCached(clientIp);
 				if (!best.empty() && best != nodeAddress_) {
-					// Better node exists — release our claim and redirect
 					auto* del = (redisReply*)redisCommand(ctx_, "DEL %s", roomKey.c_str());
 					if (del) freeReplyObject(del);
 					return best;
 				}
 			}
+			// Update cache + publish
+			{
+				std::lock_guard<std::mutex> cl(cacheMutex_);
+				roomCache_[roomId] = nodeAddress_;
+			}
+			publishRoomUpdate(roomId, nodeAddress_);
 			return "";
 		}
 		if (result.rfind("taken:", 0) == 0) {
 			MS_DEBUG(logger_, "Node {} is dead, taking over room {}", result.substr(6), roomId);
+			{
+				std::lock_guard<std::mutex> cl(cacheMutex_);
+				roomCache_[roomId] = nodeAddress_;
+			}
+			publishRoomUpdate(roomId, nodeAddress_);
 			return "";
 		}
 		if (result.rfind("addr:", 0) == 0) {
 			auto info = parseNodeValue(result.substr(5));
-			if (!info.address.empty()) return info.address;
+			if (!info.address.empty()) {
+				std::lock_guard<std::mutex> cl(cacheMutex_);
+				roomCache_[roomId] = info.address;
+				return info.address;
+			}
 			MS_WARN(logger_, "Owner node value unparseable for room {}, degrading to local-only", roomId);
-			return "";  // degrade: create locally
+			return "";
 		}
 
 		MS_WARN(logger_, "Unexpected claimRoom result for room {}: {}, degrading to local-only", roomId, result);
-		return "";  // degrade: create locally
+		return "";
 	}
 
 	void refreshRoom(const std::string& roomId) {
-		std::lock_guard<std::mutex> lock(mutex_);
+		std::lock_guard<std::mutex> lock(cmdMutex_);
 		if (!ensureConnected()) return;
 		auto* reply = (redisReply*)redisCommand(ctx_, "EXPIRE %s %d",
 			("room:" + roomId).c_str(), roomTTL_);
@@ -180,19 +216,34 @@ public:
 	}
 
 	void unregisterRoom(const std::string& roomId) {
-		std::lock_guard<std::mutex> lock(mutex_);
+		{
+			std::lock_guard<std::mutex> cl(cacheMutex_);
+			roomCache_.erase(roomId);
+		}
+		std::lock_guard<std::mutex> lock(cmdMutex_);
 		if (!ensureConnected()) return;
 		auto* reply = (redisReply*)redisCommand(ctx_, "DEL %s", ("room:" + roomId).c_str());
 		if (reply) freeReplyObject(reply);
 		else handleDisconnect();
+		publishRoomUpdate(roomId, "");
 	}
 
 	const std::string& nodeId() const { return nodeId_; }
 	const std::string& nodeAddress() const { return nodeAddress_; }
-
 	void setGeoRouter(GeoRouter* geo) { geo_ = geo; }
 
+	void stop() {
+		subStop_ = true;
+		{
+			std::lock_guard<std::mutex> lock(cmdMutex_);
+			if (ctx_) { redisFree(ctx_); ctx_ = nullptr; }
+		}
+		if (subThread_.joinable()) subThread_.join();
+	}
+
 private:
+	// ── Redis connection (command context) ──
+
 	bool reconnect() {
 		if (ctx_) { redisFree(ctx_); ctx_ = nullptr; }
 		struct timeval tv = {kRedisConnectTimeoutSec, 0};
@@ -203,7 +254,6 @@ private:
 			if (ctx_) { redisFree(ctx_); ctx_ = nullptr; }
 			return false;
 		}
-		MS_DEBUG(logger_, "Redis reconnected to {}:{}", redisHost_, redisPort_);
 		return true;
 	}
 
@@ -217,14 +267,12 @@ private:
 		if (ctx_) { redisFree(ctx_); ctx_ = nullptr; }
 	}
 
-	void registerNode() {
-		if (!ctx_) return;
-		std::string val = nodeAddress_ + "|0|0|" + std::to_string(nodeLat_) + "|"
-			+ std::to_string(nodeLng_) + "|" + nodeIsp_ + "|" + nodeCountry_;
-		auto* reply = (redisReply*)redisCommand(ctx_, "SET %s %s EX %d",
-			("node:" + nodeId_).c_str(), val.c_str(), nodeTTL_);
-		if (reply) freeReplyObject(reply);
-		else handleDisconnect();
+	// ── Node value format ──
+
+	std::string buildNodeValue(size_t rooms, size_t maxRooms) {
+		return nodeAddress_ + "|" + std::to_string(rooms) + "|" + std::to_string(maxRooms)
+			+ "|" + std::to_string(nodeLat_) + "|" + std::to_string(nodeLng_)
+			+ "|" + nodeIsp_ + "|" + nodeCountry_;
 	}
 
 	struct NodeInfo {
@@ -237,14 +285,12 @@ private:
 		std::string country;
 	};
 
-	// Parse "address|rooms|maxRooms|lat|lng|isp|country" format
 	NodeInfo parseNodeValue(const std::string& val) {
 		NodeInfo info;
 		std::vector<std::string> parts;
 		std::istringstream ss(val);
 		std::string token;
 		while (std::getline(ss, token, '|')) parts.push_back(token);
-
 		if (parts.empty()) return info;
 		info.address = parts[0];
 		if (parts.size() > 1) try { info.rooms = std::stoul(parts[1]); } catch (...) {}
@@ -256,47 +302,183 @@ private:
 		return info;
 	}
 
-	NodeInfo parseNodeInfo(const std::string& nid) {
-		if (!ctx_) return {};
-		auto* reply = (redisReply*)redisCommand(ctx_, "GET %s", ("node:" + nid).c_str());
-		if (!reply) { handleDisconnect(); return {}; }
-		NodeInfo info;
-		if (reply->type == REDIS_REPLY_STRING)
-			info = parseNodeValue(reply->str);
-		freeReplyObject(reply);
-		return info;
+	// ── Registration ──
+
+	void registerNode() {
+		if (!ctx_) return;
+		std::string val = buildNodeValue(0, 0);
+		auto* reply = (redisReply*)redisCommand(ctx_, "SET %s %s EX %d",
+			("node:" + nodeId_).c_str(), val.c_str(), nodeTTL_);
+		if (reply) freeReplyObject(reply);
+		else handleDisconnect();
 	}
 
-	std::string findLeastLoadedNode() {
-		return findBestNode("");
+	// ── Pub/Sub ──
+
+	static constexpr const char* kChannelNodes = "sfu:nodes";
+	static constexpr const char* kChannelRooms = "sfu:rooms";
+
+	void publishNodeUpdate() {
+		if (!ctx_) return;
+		// Message: "nodeId|nodeValue"
+		std::string msg = nodeId_ + "=" + buildNodeValue(0, 0);
+		auto* reply = (redisReply*)redisCommand(ctx_, "PUBLISH %s %s",
+			kChannelNodes, msg.c_str());
+		if (reply) freeReplyObject(reply);
 	}
 
-	// Geo-aware node selection: ISP match (China) > distance > load
-	std::string findBestNode(const std::string& clientIp) {
-		if (!ctx_) return "";
-		auto* reply = (redisReply*)redisCommand(ctx_, "KEYS node:*");
-		if (!reply || reply->type != REDIS_REPLY_ARRAY) {
+	void publishRoomUpdate(const std::string& roomId, const std::string& ownerAddr) {
+		if (!ctx_) return;
+		// Message: "roomId=ownerAddr" (empty ownerAddr = room removed)
+		std::string msg = roomId + "=" + ownerAddr;
+		auto* reply = (redisReply*)redisCommand(ctx_, "PUBLISH %s %s",
+			kChannelRooms, msg.c_str());
+		if (reply) freeReplyObject(reply);
+	}
+
+	void startSubscriber() {
+		subStop_ = false;
+		subThread_ = std::thread([this] { subscriberLoop(); });
+	}
+
+	void subscriberLoop() {
+		while (!subStop_) {
+			// Create a dedicated connection for subscribe (blocking)
+			struct timeval tv = {kRedisConnectTimeoutSec, 0};
+			redisContext* sub = redisConnectWithTimeout(redisHost_.c_str(), redisPort_, tv);
+			if (!sub || sub->err) {
+				if (sub) redisFree(sub);
+				MS_WARN(logger_, "Subscriber connect failed, retrying in 2s");
+				for (int i = 0; i < 20 && !subStop_; i++)
+					std::this_thread::sleep_for(std::chrono::milliseconds(100));
+				continue;
+			}
+
+			// Set read timeout so we can check subStop_ periodically
+			struct timeval rtv = {2, 0};
+			redisSetTimeout(sub, rtv);
+
+			auto* reply = (redisReply*)redisCommand(sub, "SUBSCRIBE %s %s",
+				kChannelNodes, kChannelRooms);
 			if (reply) freeReplyObject(reply);
-			return "";
-		}
+			else { redisFree(sub); continue; }
 
-		// Collect all candidate nodes
+			MS_DEBUG(logger_, "Subscriber connected");
+
+			// On (re)connect, do a full sync to catch anything missed
+			syncAll();
+
+			while (!subStop_) {
+				redisReply* msg = nullptr;
+				int rc = redisGetReply(sub, (void**)&msg);
+				if (rc != REDIS_OK || !msg) {
+					if (sub->err == REDIS_ERR_IO || sub->err == REDIS_ERR_EOF) break;
+					continue; // timeout, retry
+				}
+
+				if (msg->type == REDIS_REPLY_ARRAY && msg->elements >= 3) {
+					std::string type = msg->element[0]->str;
+					if (type == "message") {
+						std::string channel = msg->element[1]->str;
+						std::string data = msg->element[2]->str;
+						handlePubSubMessage(channel, data);
+					}
+				}
+				freeReplyObject(msg);
+			}
+
+			redisFree(sub);
+			if (!subStop_) MS_WARN(logger_, "Subscriber disconnected, reconnecting...");
+		}
+	}
+
+	void handlePubSubMessage(const std::string& channel, const std::string& data) {
+		auto eq = data.find('=');
+		if (eq == std::string::npos) return;
+		std::string key = data.substr(0, eq);
+		std::string val = data.substr(eq + 1);
+
+		std::lock_guard<std::mutex> cl(cacheMutex_);
+		if (channel == kChannelNodes) {
+			if (val.empty())
+				nodeCache_.erase(key);
+			else
+				nodeCache_[key] = parseNodeValue(val);
+		} else if (channel == kChannelRooms) {
+			if (val.empty())
+				roomCache_.erase(key);
+			else
+				roomCache_[key] = val;
+		}
+	}
+
+	// ── Full sync (on startup and reconnect) ──
+
+	void syncAll() {
+		std::lock_guard<std::mutex> lock(cmdMutex_);
+		if (!ensureConnected()) return;
+
+		// Sync nodes
+		auto* reply = (redisReply*)redisCommand(ctx_, "KEYS node:*");
+		if (reply && reply->type == REDIS_REPLY_ARRAY) {
+			std::lock_guard<std::mutex> cl(cacheMutex_);
+			nodeCache_.clear();
+			for (size_t i = 0; i < reply->elements; i++) {
+				std::string key = reply->element[i]->str;
+				std::string nid = key.substr(5); // strip "node:"
+				auto* vr = (redisReply*)redisCommand(ctx_, "GET %s", key.c_str());
+				if (vr && vr->type == REDIS_REPLY_STRING)
+					nodeCache_[nid] = parseNodeValue(vr->str);
+				if (vr) freeReplyObject(vr);
+			}
+			MS_DEBUG(logger_, "Synced {} nodes", nodeCache_.size());
+		}
+		if (reply) freeReplyObject(reply);
+
+		// Sync rooms
+		reply = (redisReply*)redisCommand(ctx_, "KEYS room:*");
+		if (reply && reply->type == REDIS_REPLY_ARRAY) {
+			std::lock_guard<std::mutex> cl(cacheMutex_);
+			roomCache_.clear();
+			for (size_t i = 0; i < reply->elements; i++) {
+				std::string key = reply->element[i]->str;
+				std::string rid = key.substr(5); // strip "room:"
+				auto* vr = (redisReply*)redisCommand(ctx_, "GET %s", key.c_str());
+				if (vr && vr->type == REDIS_REPLY_STRING) {
+					std::string ownerNid = vr->str;
+					// Resolve owner address from node cache
+					auto nit = nodeCache_.find(ownerNid);
+					if (nit != nodeCache_.end())
+						roomCache_[rid] = nit->second.address;
+				}
+				if (vr) freeReplyObject(vr);
+			}
+			MS_DEBUG(logger_, "Synced {} rooms", roomCache_.size());
+		}
+		if (reply) freeReplyObject(reply);
+	}
+
+	// ── Cache-based lookups ──
+
+	std::string getCachedNodeAddress(const std::string& nid) {
+		std::lock_guard<std::mutex> cl(cacheMutex_);
+		auto it = nodeCache_.find(nid);
+		if (it != nodeCache_.end()) return it->second.address;
+		return "";
+	}
+
+	std::string findBestNodeCached(const std::string& clientIp) {
+		std::lock_guard<std::mutex> cl(cacheMutex_);
+
 		struct Candidate { std::string address; size_t rooms; double score; };
 		std::vector<Candidate> candidates;
 
 		GeoInfo clientGeo;
 		if (geo_ && !clientIp.empty()) clientGeo = geo_->lookup(clientIp);
 
-		for (size_t i = 0; i < reply->elements; i++) {
-			std::string key = reply->element[i]->str;
-			auto* vr = (redisReply*)redisCommand(ctx_, "GET %s", key.c_str());
-			if (!vr || vr->type != REDIS_REPLY_STRING) { if (vr) freeReplyObject(vr); continue; }
-			auto info = parseNodeValue(vr->str);
-			freeReplyObject(vr);
+		for (auto& [nid, info] : nodeCache_) {
 			if (info.address.empty()) continue;
 			if (info.maxRooms > 0 && info.rooms >= info.maxRooms) continue;
-
-			// Country isolation: skip nodes in different countries
 			if (countryIsolation_ && clientGeo.valid && !clientGeo.country.empty()
 				&& !info.country.empty() && info.country != clientGeo.country) continue;
 
@@ -304,23 +486,19 @@ private:
 			if (clientGeo.valid && (info.lat != 0 || info.lng != 0)) {
 				s = geo_->score(clientGeo, info.lat, info.lng, info.isp);
 			} else if (clientGeo.valid) {
-				// Node has no geo info — deprioritize by giving max score
 				s = 99999.0;
 			}
 			candidates.push_back({info.address, info.rooms, s});
 		}
-		freeReplyObject(reply);
 
 		if (candidates.empty()) return "";
 
 		if (clientGeo.valid) {
-			// Sort by geo score first, then by load as tiebreaker
 			std::sort(candidates.begin(), candidates.end(), [](auto& a, auto& b) {
-				if (std::abs(a.score - b.score) > 100.0) return a.score < b.score; // >100km difference matters
+				if (std::abs(a.score - b.score) > 100.0) return a.score < b.score;
 				return a.rooms < b.rooms;
 			});
 		} else {
-			// No geo info — pure load balancing
 			std::sort(candidates.begin(), candidates.end(), [](auto& a, auto& b) {
 				return a.rooms < b.rooms;
 			});
@@ -329,9 +507,7 @@ private:
 		return candidates.front().address;
 	}
 
-	std::string getNodeAddress(const std::string& nid) {
-		return parseNodeInfo(nid).address;
-	}
+	// ── Member fields ──
 
 	std::string nodeId_;
 	std::string nodeAddress_;
@@ -342,8 +518,20 @@ private:
 	bool countryIsolation_ = false;
 	std::string redisHost_;
 	int redisPort_;
+
+	// Command connection (for SET/GET/EVAL)
 	redisContext* ctx_ = nullptr;
-	std::mutex mutex_;
+	std::mutex cmdMutex_;
+
+	// Local cache
+	std::unordered_map<std::string, NodeInfo> nodeCache_;
+	std::unordered_map<std::string, std::string> roomCache_; // roomId → ownerAddress
+	std::mutex cacheMutex_;
+
+	// Subscriber thread
+	std::thread subThread_;
+	std::atomic<bool> subStop_{false};
+
 	int roomTTL_ = kRedisRoomTtlSec;
 	int nodeTTL_ = kRedisNodeTtlSec;
 	GeoRouter* geo_ = nullptr;
