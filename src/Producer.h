@@ -1,5 +1,6 @@
 #pragma once
 #include "Channel.h"
+#include "Constants.h"
 #include "RtpTypes.h"
 #include "EventEmitter.h"
 #include "Logger.h"
@@ -34,7 +35,7 @@ public:
 	void transportClosed();
 	void handleNotification(FBS::Notification::Event event,
 		const FBS::Notification::Notification* notification);
-	json getStats();
+	json getStats(int timeoutMs = kChannelRequestTimeoutMs);
 
 	json toJson() const {
 		return {{"id", id_}, {"kind", kind_}, {"type", type_}, {"paused", paused_}};

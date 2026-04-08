@@ -342,11 +342,11 @@ std::shared_ptr<Consumer> Transport::consume(const json& options) {
 	return consumer;
 }
 
-json Transport::getStats() {
+json Transport::getStats(int timeoutMs) {
 	if (closed_) return json::object();
 
 	auto owned = channel_->requestWait(FBS::Request::Method::TRANSPORT_GET_STATS,
-		FBS::Request::Body::NONE, 0, id_);
+		FBS::Request::Body::NONE, 0, id_, timeoutMs);
 	auto* response = owned.response();
 
 	json result;

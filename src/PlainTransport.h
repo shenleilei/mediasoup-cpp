@@ -24,12 +24,10 @@ public:
 			flatbuffers::Optional<uint16_t>(port),
 			flatbuffers::Optional<uint16_t>(), 0);
 
-		auto future = channel_->request(
+		auto owned = channel_->requestWait(
 			FBS::Request::Method::PLAINTRANSPORT_CONNECT,
 			FBS::Request::Body::PlainTransport_ConnectRequest,
 			reqOff.Union(), id_);
-
-		auto owned = future.get();
 		auto* response = owned.response();
 
 		if (response && response->body_type() == FBS::Response::Body::PlainTransport_ConnectResponse) {

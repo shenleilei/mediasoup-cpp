@@ -77,11 +77,11 @@ void Producer::handleNotification(
 	}
 }
 
-json Producer::getStats() {
+json Producer::getStats(int timeoutMs) {
 	if (closed_) return json::array();
 
 	auto owned = channel_->requestWait(FBS::Request::Method::PRODUCER_GET_STATS,
-		FBS::Request::Body::NONE, 0, id_);
+		FBS::Request::Body::NONE, 0, id_, timeoutMs);
 	auto* response = owned.response();
 
 	json result = json::array();

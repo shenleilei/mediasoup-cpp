@@ -75,7 +75,7 @@ public:
 			// Room exists — return owner's address
 			auto info = parseNodeInfo(ownerNodeId);
 			if (!info.address.empty()) return {info.address, false};
-			// Owner dead, return self
+			// Owner node key missing — node is dead or expired, route to self
 			return {nodeAddress_, true};
 		}
 		if (reply) freeReplyObject(reply);
@@ -94,31 +94,51 @@ public:
 		std::lock_guard<std::mutex> lock(mutex_);
 		if (!ensureConnected()) throw std::runtime_error("Redis not connected");
 
-		std::string key = "room:" + roomId;
-		auto* reply = (redisReply*)redisCommand(ctx_, "SET %s %s NX EX %d",
-			key.c_str(), nodeId_.c_str(), roomTTL_);
-		if (reply && reply->type == REDIS_REPLY_STATUS) {
-			freeReplyObject(reply);
-			return "";
-		}
-		if (reply) freeReplyObject(reply);
+		static const char* luaScript = R"LUA(
+			local ok = redis.call('SET', KEYS[1], ARGV[1], 'NX', 'EX', ARGV[2])
+			if ok then return '' end
+			local owner = redis.call('GET', KEYS[1])
+			if not owner then return '' end
+			if owner == ARGV[1] then return 'self' end
+			local node = redis.call('GET', ARGV[3] .. owner)
+			if not node then
+				redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+				return 'taken:' .. owner
+			end
+			return 'addr:' .. node
+		)LUA";
 
-		reply = (redisReply*)redisCommand(ctx_, "GET %s", key.c_str());
-		if (!reply) { handleDisconnect(); throw std::runtime_error("Redis GET failed"); }
-		std::string owner = (reply->type == REDIS_REPLY_STRING) ? reply->str : "";
+		std::string roomKey = "room:" + roomId;
+		std::string nodePrefix = "node:";
+		std::string ttlStr = std::to_string(roomTTL_);
+
+		auto* reply = (redisReply*)redisCommand(ctx_,
+			"EVAL %s 1 %s %s %s %s",
+			luaScript, roomKey.c_str(),
+			nodeId_.c_str(), ttlStr.c_str(), nodePrefix.c_str());
+
+		if (!reply) { handleDisconnect(); throw std::runtime_error("Redis EVAL failed"); }
+
+		std::string result;
+		if (reply->type == REDIS_REPLY_STRING) result = reply->str;
 		freeReplyObject(reply);
 
-		if (owner == nodeId_) return "";
-
-		std::string addr = getNodeAddress(owner);
-		if (addr.empty()) {
-			MS_DEBUG(logger_, "Node {} is dead, taking over room {}", owner, roomId);
-			reply = (redisReply*)redisCommand(ctx_, "SET %s %s EX %d",
-				key.c_str(), nodeId_.c_str(), roomTTL_);
-			if (reply) freeReplyObject(reply);
+		if (result.empty() || result == "self") return "";
+		if (result.rfind("taken:", 0) == 0) {
+			MS_DEBUG(logger_, "Node {} is dead, taking over room {}", result.substr(6), roomId);
 			return "";
 		}
-		return addr;
+		if (result.rfind("addr:", 0) == 0) {
+			// Lua returned the node value directly — parse address from it
+			auto info = parseNodeValue(result.substr(5));
+			if (!info.address.empty()) return info.address;
+			MS_WARN(logger_, "Owner node value unparseable for room {}: {}", roomId, result.substr(5));
+			throw std::runtime_error("cannot parse room owner address");
+		}
+
+		// Unexpected result
+		MS_WARN(logger_, "Unexpected claimRoom result for room {}: {}", roomId, result);
+		throw std::runtime_error("unexpected claimRoom result");
 	}
 
 	void refreshRoom(const std::string& roomId) {
