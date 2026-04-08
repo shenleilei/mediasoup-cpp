@@ -22,7 +22,8 @@ using json = nlohmann::json;
 
 class RoomService {
 public:
-	using NotifyFn = std::function<void(const std::string&, const json&)>;
+	// NotifyFn(roomId, peerId, msg)
+	using NotifyFn = std::function<void(const std::string&, const std::string&, const json&)>;
 	using BroadcastFn = std::function<void(const std::string&, const std::string&, const json&)>;
 
 	RoomService(RoomManager& roomManager, RoomRegistry* registry,

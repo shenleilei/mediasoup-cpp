@@ -424,7 +424,7 @@ void Transport::close() {
 	try {
 		channel_->request(FBS::Request::Method::ROUTER_CLOSE_TRANSPORT,
 			FBS::Request::Body::Router_CloseTransportRequest,
-			reqOff.Union(), routerId_).get();
+			reqOff.Union(), routerId_);
 	} catch (const std::exception& e) {
 		spdlog::warn("Transport::close() request failed [id:{}]: {}", id_, e.what());
 	} catch (...) {

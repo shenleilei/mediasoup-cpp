@@ -60,7 +60,7 @@ void Consumer::close() {
 	try {
 		channel_->request(FBS::Request::Method::TRANSPORT_CLOSE_CONSUMER,
 			FBS::Request::Body::Transport_CloseConsumerRequest,
-			reqOff.Union(), transportId_).get();
+			reqOff.Union(), transportId_);
 	} catch (const std::exception& e) {
 		spdlog::warn("Consumer::close() request failed [id:{}]: {}", id_, e.what());
 	} catch (...) {
