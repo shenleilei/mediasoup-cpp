@@ -6,6 +6,7 @@
 #include <mutex>
 #include <atomic>
 #include <thread>
+#include <algorithm>
 #include <dirent.h>
 #include <sys/stat.h>
 
@@ -23,30 +24,66 @@ struct PerSocketData {
 
 static std::atomic<uint64_t> g_nextSessionId{1};
 
-SignalingServer::SignalingServer(int port, RoomService& roomService, const std::string& recordDir)
-	: port_(port), roomService_(roomService), recordDir_(recordDir) {}
+SignalingServer::SignalingServer(int port, RoomService& roomService, const std::string& recordDir,
+	size_t signalingWorkers)
+	: port_(port), roomService_(roomService), recordDir_(recordDir)
+{
+	signalingWorkers_ = std::max<size_t>(1, signalingWorkers);
+}
 
 SignalingServer::~SignalingServer() {
 	stop();
 }
 
-void SignalingServer::postWork(std::function<void()> fn) {
-	{
-		std::lock_guard<std::mutex> lock(queueMutex_);
-		taskQueue_.push(std::move(fn));
-	}
-	queueCv_.notify_one();
+void SignalingServer::startWorkerQueues(size_t queueCount) {
+	workerQueues_.clear();
+	workerQueues_.reserve(queueCount);
+	for (size_t i = 0; i < queueCount; ++i)
+		workerQueues_.emplace_back(std::make_unique<WorkerQueue>());
+	for (size_t i = 0; i < workerQueues_.size(); ++i)
+		workerQueues_[i]->thread = std::thread(&SignalingServer::workerLoop, this, i);
 }
 
-void SignalingServer::workerLoop() {
+void SignalingServer::stopWorkerQueues() {
+	for (auto& q : workerQueues_) {
+		{
+			std::lock_guard<std::mutex> lock(q->mutex);
+			q->stop = true;
+		}
+		q->cv.notify_one();
+	}
+	for (auto& q : workerQueues_) {
+		if (q->thread.joinable()) q->thread.join();
+	}
+}
+
+size_t SignalingServer::pickQueueIndex(const std::string& roomId) const {
+	if (workerQueues_.empty() || roomId.empty()) return 0;
+	return std::hash<std::string>{}(roomId) % workerQueues_.size();
+}
+
+void SignalingServer::postWork(std::function<void()> fn, const std::string& roomId) {
+	if (workerQueues_.empty()) return;
+	size_t idx = pickQueueIndex(roomId);
+	auto& q = workerQueues_[idx];
+	{
+		std::lock_guard<std::mutex> lock(q->mutex);
+		if (q->stop) return;
+		q->tasks.push(std::move(fn));
+	}
+	q->cv.notify_one();
+}
+
+void SignalingServer::workerLoop(size_t queueIndex) {
+	auto& q = workerQueues_[queueIndex];
 	while (true) {
 		std::function<void()> task;
 		{
-			std::unique_lock<std::mutex> lock(queueMutex_);
-			queueCv_.wait(lock, [this]{ return workerStop_ || !taskQueue_.empty(); });
-			if (workerStop_ && taskQueue_.empty()) return;
-			task = std::move(taskQueue_.front());
-			taskQueue_.pop();
+			std::unique_lock<std::mutex> lock(q->mutex);
+			q->cv.wait(lock, [&q]{ return q->stop || !q->tasks.empty(); });
+			if (q->stop && q->tasks.empty()) return;
+			task = std::move(q->tasks.front());
+			q->tasks.pop();
 		}
 		try {
 			task();
@@ -61,8 +98,8 @@ void SignalingServer::workerLoop() {
 void SignalingServer::run() {
 	running_ = true;
 
-	// Start the single worker thread
-	workerThread_ = std::thread(&SignalingServer::workerLoop, this);
+	// Start one or more signaling worker queues.
+	startWorkerQueues(signalingWorkers_);
 
 	// peerId → ws* mapping for notify/broadcast
 	struct WsMap {
@@ -168,6 +205,8 @@ void SignalingServer::run() {
 			auto alive = sd->alive;
 
 			// Dispatch to worker thread — all RoomService calls happen there
+			std::string dispatchRoomId = (method == "join" ? joinRoomId : roomId);
+
 			postWork([this, wsMap, ws, alive, loop, method, id, data,
 				roomId, peerId, sessionId, joinRoomId, joinPeerId, joinDisplayName, joinRtpCaps, joinClientIp]
 			{
@@ -263,7 +302,7 @@ void SignalingServer::run() {
 					}
 					ws->send(respStr, uWS::OpCode::TEXT);
 				});
-			});
+			}, dispatchRoomId);
 		},
 
 		.close = [this, wsMap](auto* ws, int, std::string_view) {
@@ -292,7 +331,7 @@ void SignalingServer::run() {
 						} catch (...) {
 							spdlog::error("[{} {}] leave failed: unknown error", roomId, peerId);
 						}
-					});
+					}, roomId);
 				}
 			}
 		}
@@ -473,12 +512,7 @@ void SignalingServer::run() {
 
 void SignalingServer::stop() {
 	running_ = false;
-	{
-		std::lock_guard<std::mutex> lock(queueMutex_);
-		workerStop_ = true;
-	}
-	queueCv_.notify_one();
-	if (workerThread_.joinable()) workerThread_.join();
+	stopWorkerQueues();
 }
 
 } // namespace mediasoup
