@@ -103,7 +103,10 @@ public:
 
 	std::string claimRoom(const std::string& roomId, const std::string& clientIp = "") {
 		std::lock_guard<std::mutex> lock(mutex_);
-		if (!ensureConnected()) throw std::runtime_error("Redis not connected");
+		if (!ensureConnected()) {
+			MS_WARN(logger_, "Redis unavailable, degrading to local-only for room {}", roomId);
+			return "";  // degrade: create locally
+		}
 
 		static const char* luaScript = R"LUA(
 			local ok = redis.call('SET', KEYS[1], ARGV[1], 'NX', 'EX', ARGV[2])
@@ -128,7 +131,11 @@ public:
 			luaScript, roomKey.c_str(),
 			nodeId_.c_str(), ttlStr.c_str(), nodePrefix.c_str());
 
-		if (!reply) { handleDisconnect(); throw std::runtime_error("Redis EVAL failed"); }
+		if (!reply) {
+			handleDisconnect();
+			MS_WARN(logger_, "Redis EVAL failed for room {}, degrading to local-only", roomId);
+			return "";  // degrade: create locally
+		}
 
 		std::string result;
 		if (reply->type == REDIS_REPLY_STRING) result = reply->str;
@@ -155,12 +162,12 @@ public:
 		if (result.rfind("addr:", 0) == 0) {
 			auto info = parseNodeValue(result.substr(5));
 			if (!info.address.empty()) return info.address;
-			MS_WARN(logger_, "Owner node value unparseable for room {}: {}", roomId, result.substr(5));
-			throw std::runtime_error("cannot parse room owner address");
+			MS_WARN(logger_, "Owner node value unparseable for room {}, degrading to local-only", roomId);
+			return "";  // degrade: create locally
 		}
 
-		MS_WARN(logger_, "Unexpected claimRoom result for room {}: {}", roomId, result);
-		throw std::runtime_error("unexpected claimRoom result");
+		MS_WARN(logger_, "Unexpected claimRoom result for room {}: {}, degrading to local-only", roomId, result);
+		return "";  // degrade: create locally
 	}
 
 	void refreshRoom(const std::string& roomId) {

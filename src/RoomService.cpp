@@ -17,8 +17,12 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 	const std::string& displayName, const json& rtpCapabilities, const std::string& clientIp)
 {
 	if (registry_) {
-		std::string addr = registry_->claimRoom(roomId, clientIp);
-		if (!addr.empty()) return {false, {}, addr, ""};
+		try {
+			std::string addr = registry_->claimRoom(roomId, clientIp);
+			if (!addr.empty()) return {false, {}, addr, ""};
+		} catch (const std::exception& e) {
+			MS_WARN(logger_, "[{} {}] claimRoom failed ({}), degrading to local", roomId, peerId, e.what());
+		}
 	}
 
 	if (!rtpCapabilities.is_null() && !rtpCapabilities.empty() && !rtpCapabilities.is_object()) {
@@ -653,10 +657,15 @@ void RoomService::heartbeatRegistry() {
 
 json RoomService::resolveRoom(const std::string& roomId, const std::string& clientIp) {
 	if (!registry_) return {{"wsUrl", ""}, {"isNew", true}};
-	auto result = registry_->resolveRoom(roomId, clientIp);
-	if (result.isNew && result.wsUrl.empty())
-		return {{"error", "no available nodes"}, {"wsUrl", ""}, {"isNew", true}};
-	return {{"wsUrl", result.wsUrl}, {"isNew", result.isNew}};
+	try {
+		auto result = registry_->resolveRoom(roomId, clientIp);
+		if (result.isNew && result.wsUrl.empty())
+			return {{"error", "no available nodes"}, {"wsUrl", ""}, {"isNew", true}};
+		return {{"wsUrl", result.wsUrl}, {"isNew", result.isNew}};
+	} catch (const std::exception& e) {
+		MS_WARN(logger_, "resolveRoom failed ({}), degrading to local", e.what());
+		return {{"wsUrl", ""}, {"isNew", true}};
+	}
 }
 
 json RoomService::getNodeLoad() const {
