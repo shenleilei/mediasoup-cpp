@@ -150,6 +150,9 @@ int main(int argc, char* argv[]) {
 		else if (arg == "--nodaemon")           noDaemon = true;
 	}
 
+	signalingWorkers = std::max(1, signalingWorkers);
+	if (signalingWorkers > 4) signalingWorkers = 4;
+
 	// Daemonize unless --nodaemon
 	if (!noDaemon) {
 		daemonize(logFile, pidFile);
@@ -299,5 +302,3 @@ int main(int argc, char* argv[]) {
 	spdlog::info("Shutdown complete");
 	return 0;
 }
-	signalingWorkers = std::max(1, signalingWorkers);
-	if (signalingWorkers > 4) signalingWorkers = 4;

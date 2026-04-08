@@ -90,6 +90,7 @@ cat > config.json << EOF
 {
   "port": 3000,
   "workers": 0,
+  "signalingWorkers": 1,
   "workerBin": "./mediasoup-worker",
   "listenIp": "0.0.0.0",
   "announcedIp": "",
