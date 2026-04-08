@@ -72,7 +72,7 @@ int main(int argc, char* argv[]) {
 	double nodeLat = 0, nodeLng = 0;
 	std::string nodeIsp;
 	std::string nodeCountry;
-	bool countryIsolation = false;
+	bool countryIsolation = true;
 	std::string geoDbPath = "./ip2region.xdb";
 	bool noDaemon = false;
 	std::string logFile = "/var/log/mediasoup-sfu.log";
@@ -137,6 +137,7 @@ int main(int argc, char* argv[]) {
 		else if (arg.find("--isp=") == 0)          nodeIsp = arg.substr(6);
 		else if (arg.find("--country=") == 0)      nodeCountry = arg.substr(10);
 		else if (arg == "--countryIsolation")       countryIsolation = true;
+		else if (arg == "--noCountryIsolation")     countryIsolation = false;
 		else if (arg.find("--geoDb=") == 0)        geoDbPath = arg.substr(8);
 		else if (arg.find("--logFile=") == 0)  logFile = arg.substr(10);
 		else if (arg.find("--pidFile=") == 0)  pidFile = arg.substr(10);
