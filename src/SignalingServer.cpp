@@ -13,15 +13,17 @@ extern std::atomic<bool> g_shutdown;
 
 namespace mediasoup {
 
+static constexpr uint64_t kInvalidSessionId = 0;
+
 struct PerSocketData {
 	std::string peerId;
 	std::string roomId;
-	uint64_t sessionId = 0;  // Monotonic session token to detect stale requests
+	uint64_t sessionId = kInvalidSessionId;  // Monotonic session token to detect stale requests
 	// Shared token: set to false when .close fires, checked in deferred callbacks
 	std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>>(true);
 };
 
-static std::atomic<uint64_t> g_nextSessionId{1};
+static std::atomic<uint64_t> g_nextSessionId{1}; // Session IDs start at 1.
 
 SignalingServer::SignalingServer(int port,
 	std::vector<std::unique_ptr<WorkerThread>>& workerThreads,
@@ -166,7 +168,7 @@ void SignalingServer::run() {
 
 			// clientStats is lightweight — validate on main thread and post to room worker
 			if (method == "clientStats") {
-				if (roomId.empty() || peerId.empty() || sessionId == 0) {
+				if (roomId.empty() || peerId.empty() || sessionId == kInvalidSessionId) {
 					rejectedClientStats_.fetch_add(1, std::memory_order_relaxed);
 					json resp = {{"response", true}, {"id", id}, {"ok", false},
 						{"error", "clientStats requires joined session"}};
