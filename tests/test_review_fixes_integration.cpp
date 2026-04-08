@@ -276,3 +276,32 @@ TEST_F(ReviewFixIntegration, ProduceTriggersRecordingWithoutHang) {
 	EXPECT_TRUE(resp.value("ok", false)) << "produce failed: " << resp.dump();
 	EXPECT_LT(elapsed, 7000) << "produce+autoRecord took too long, possible PlainTransport hang";
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Geo-aware resolve: /api/resolve accepts clientIp
+// ═══════════════════════════════════════════════════════════════
+
+TEST_F(ReviewFixIntegration, ResolveAcceptsClientIp) {
+	// Single-node mode: resolve should return this node regardless of clientIp
+	// but the endpoint should accept the parameter without error
+	int fd = socket(AF_INET, SOCK_STREAM, 0);
+	sockaddr_in addr{};
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(SFU_PORT);
+	inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
+
+	std::string req = "GET /api/resolve?roomId=geo_test&clientIp=36.110.147.0 HTTP/1.1\r\n"
+		"Host: 127.0.0.1\r\n\r\n";
+	::send(fd, req.data(), req.size(), 0);
+
+	char buf[4096]{};
+	int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+	::close(fd);
+	ASSERT_GT(n, 0);
+
+	std::string response(buf, n);
+	// Should get 200 with JSON containing wsUrl
+	EXPECT_NE(response.find("200"), std::string::npos) << response;
+	EXPECT_NE(response.find("wsUrl"), std::string::npos) << response;
+}
