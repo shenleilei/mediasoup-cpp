@@ -98,7 +98,7 @@ public:
 		if (ctx_) { redisFree(ctx_); ctx_ = nullptr; }
 	}
 
-	std::string claimRoom(const std::string& roomId) {
+	std::string claimRoom(const std::string& roomId, const std::string& clientIp = "") {
 		std::lock_guard<std::mutex> lock(mutex_);
 		if (!ensureConnected()) throw std::runtime_error("Redis not connected");
 
@@ -131,20 +131,31 @@ public:
 		if (reply->type == REDIS_REPLY_STRING) result = reply->str;
 		freeReplyObject(reply);
 
-		if (result.empty() || result == "self") return "";
+		if (result.empty() || result == "self") {
+			// We own this room (new or already ours).
+			// For new rooms, check if a geo-better node exists.
+			if (result.empty() && geo_ && !clientIp.empty()) {
+				std::string best = findBestNode(clientIp);
+				if (!best.empty() && best != nodeAddress_) {
+					// Better node exists — release our claim and redirect
+					auto* del = (redisReply*)redisCommand(ctx_, "DEL %s", roomKey.c_str());
+					if (del) freeReplyObject(del);
+					return best;
+				}
+			}
+			return "";
+		}
 		if (result.rfind("taken:", 0) == 0) {
 			MS_DEBUG(logger_, "Node {} is dead, taking over room {}", result.substr(6), roomId);
 			return "";
 		}
 		if (result.rfind("addr:", 0) == 0) {
-			// Lua returned the node value directly — parse address from it
 			auto info = parseNodeValue(result.substr(5));
 			if (!info.address.empty()) return info.address;
 			MS_WARN(logger_, "Owner node value unparseable for room {}: {}", roomId, result.substr(5));
 			throw std::runtime_error("cannot parse room owner address");
 		}
 
-		// Unexpected result
 		MS_WARN(logger_, "Unexpected claimRoom result for room {}: {}", roomId, result);
 		throw std::runtime_error("unexpected claimRoom result");
 	}

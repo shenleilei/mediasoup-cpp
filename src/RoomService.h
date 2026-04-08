@@ -39,7 +39,8 @@ public:
 	};
 
 	Result join(const std::string& roomId, const std::string& peerId,
-		const std::string& displayName, const json& rtpCapabilities);
+		const std::string& displayName, const json& rtpCapabilities,
+		const std::string& clientIp = "");
 	Result leave(const std::string& roomId, const std::string& peerId);
 	Result createTransport(const std::string& roomId, const std::string& peerId,
 		bool producing, bool consuming);

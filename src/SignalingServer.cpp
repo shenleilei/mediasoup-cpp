@@ -141,13 +141,14 @@ void SignalingServer::run() {
 			}
 
 			// For join, extract params now (before ws might change)
-			std::string joinRoomId, joinPeerId, joinDisplayName;
+			std::string joinRoomId, joinPeerId, joinDisplayName, joinClientIp;
 			json joinRtpCaps;
 			if (method == "join") {
 				joinRoomId = data.value("roomId", "default");
 				joinPeerId = data.value("peerId", "");
 				joinDisplayName = data.value("displayName", joinPeerId);
 				joinRtpCaps = data.value("rtpCapabilities", json::object());
+				joinClientIp = std::string(ws->getRemoteAddressAsText());
 			}
 
 			// Capture alive token to detect if ws was closed before defer runs
@@ -155,12 +156,12 @@ void SignalingServer::run() {
 
 			// Dispatch to worker thread — all RoomService calls happen there
 			postWork([this, wsMap, ws, alive, loop, method, id, data,
-				roomId, peerId, joinRoomId, joinPeerId, joinDisplayName, joinRtpCaps]
+				roomId, peerId, joinRoomId, joinPeerId, joinDisplayName, joinRtpCaps, joinClientIp]
 			{
 				RoomService::Result result;
 				try {
 					if (method == "join") {
-						result = roomService_.join(joinRoomId, joinPeerId, joinDisplayName, joinRtpCaps);
+						result = roomService_.join(joinRoomId, joinPeerId, joinDisplayName, joinRtpCaps, joinClientIp);
 					} else if (method == "createWebRtcTransport") {
 						result = roomService_.createTransport(roomId, peerId,
 							data.value("producing", false), data.value("consuming", false));

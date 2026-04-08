@@ -14,10 +14,10 @@ RoomService::RoomService(RoomManager& roomManager, RoomRegistry* registry,
 // ── join / leave ──
 
 RoomService::Result RoomService::join(const std::string& roomId, const std::string& peerId,
-	const std::string& displayName, const json& rtpCapabilities)
+	const std::string& displayName, const json& rtpCapabilities, const std::string& clientIp)
 {
 	if (registry_) {
-		std::string addr = registry_->claimRoom(roomId);
+		std::string addr = registry_->claimRoom(roomId, clientIp);
 		if (!addr.empty()) return {false, {}, addr, ""};
 	}
 
