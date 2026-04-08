@@ -205,7 +205,7 @@ void SignalingServer::run() {
 			auto alive = sd->alive;
 
 			// Dispatch to worker thread — all RoomService calls happen there
-			std::string dispatchRoomId = (method == "join" ? joinRoomId : roomId);
+			std::string routingRoomId = (method == "join" ? joinRoomId : roomId);
 
 			postWork([this, wsMap, ws, alive, loop, method, id, data,
 				roomId, peerId, sessionId, joinRoomId, joinPeerId, joinDisplayName, joinRtpCaps, joinClientIp]
@@ -302,7 +302,7 @@ void SignalingServer::run() {
 					}
 					ws->send(respStr, uWS::OpCode::TEXT);
 				});
-			}, dispatchRoomId);
+			}, routingRoomId);
 		},
 
 		.close = [this, wsMap](auto* ws, int, std::string_view) {
