@@ -11,6 +11,7 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <atomic>
 
 namespace mediasoup {
 
@@ -35,7 +36,8 @@ private:
 	// Pick the WorkerThread for a given roomId.
 	// If the room is already assigned, returns that thread.
 	// Otherwise, assigns to least-loaded thread.
-	WorkerThread* getWorkerThread(const std::string& roomId);
+	WorkerThread* getWorkerThread(const std::string& roomId, bool assignIfMissing);
+	WorkerThread* pickLeastLoadedWorkerThread() const;
 
 	// Assign a specific roomId to a WorkerThread (called from main thread).
 	void assignRoom(const std::string& roomId, WorkerThread* wt);
@@ -51,6 +53,9 @@ private:
 
 	// Room → WorkerThread dispatch table (only accessed from main uWS thread, no lock needed)
 	std::unordered_map<std::string, WorkerThread*> roomDispatch_;
+
+	std::atomic<uint64_t> staleRequestDrops_{0};
+	std::atomic<uint64_t> rejectedClientStats_{0};
 };
 
 } // namespace mediasoup

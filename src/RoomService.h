@@ -25,12 +25,15 @@ public:
 	// NotifyFn(roomId, peerId, msg)
 	using NotifyFn = std::function<void(const std::string&, const std::string&, const json&)>;
 	using BroadcastFn = std::function<void(const std::string&, const std::string&, const json&)>;
+	// RoomLifecycleFn(roomId, created): created=true when room is created, false when destroyed.
+	using RoomLifecycleFn = std::function<void(const std::string&, bool)>;
 
 	RoomService(RoomManager& roomManager, RoomRegistry* registry,
 		const std::string& recordDir = "");
 
 	void setNotify(NotifyFn fn) { notify_ = std::move(fn); }
 	void setBroadcast(BroadcastFn fn) { broadcast_ = std::move(fn); }
+	void setRoomLifecycle(RoomLifecycleFn fn) { roomLifecycle_ = std::move(fn); }
 
 	struct Result {
 		bool ok = true;
@@ -81,6 +84,7 @@ private:
 	std::string recordDir_;
 	NotifyFn notify_;
 	BroadcastFn broadcast_;
+	RoomLifecycleFn roomLifecycle_;
 	std::shared_ptr<spdlog::logger> logger_;
 
 	std::mutex recorderMutex_;
