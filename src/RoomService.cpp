@@ -654,6 +654,8 @@ void RoomService::heartbeatRegistry() {
 json RoomService::resolveRoom(const std::string& roomId, const std::string& clientIp) {
 	if (!registry_) return {{"wsUrl", ""}, {"isNew", true}};
 	auto result = registry_->resolveRoom(roomId, clientIp);
+	if (result.isNew && result.wsUrl.empty())
+		return {{"error", "no available nodes"}, {"wsUrl", ""}, {"isNew", true}};
 	return {{"wsUrl", result.wsUrl}, {"isNew", result.isNew}};
 }
 
