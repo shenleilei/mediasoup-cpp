@@ -93,7 +93,7 @@ void Channel::notify(
 	sendBytes(sendBuf.data(), sendBuf.size());
 }
 
-std::future<Channel::OwnedResponse> Channel::request(
+Channel::RequestResult Channel::requestWithId(
 	FBS::Request::Method method,
 	FBS::Request::Body bodyType,
 	flatbuffers::Offset<void> bodyOffset,
@@ -138,9 +138,10 @@ std::future<Channel::OwnedResponse> Channel::request(
 	}
 
 	auto future = sent->promise.get_future();
+	uint32_t reqId = sent->id;
 	sendBytes(sendBuf.data(), sendBuf.size());
 
-	return future;
+	return {std::move(future), reqId};
 }
 
 void Channel::readLoop() {
