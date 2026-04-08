@@ -34,11 +34,13 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 		if (maxRooms > 0 && roomManager_.roomCount() >= maxRooms) {
 			MS_WARN(logger_, "[{} {}] local node at capacity ({}/{})", roomId, peerId,
 				roomManager_.roomCount(), maxRooms);
-			// Try to redirect to another node with capacity
 			if (registry_) {
 				try {
-					// Release our claim if we just made one
 					registry_->unregisterRoom(roomId);
+					// Try to find another node with capacity
+					auto resolved = registry_->resolveRoom(roomId, clientIp);
+					if (!resolved.wsUrl.empty() && resolved.wsUrl != registry_->nodeAddress())
+						return {false, {}, resolved.wsUrl, ""};
 				} catch (...) {}
 			}
 			return {false, {}, "", "no available capacity"};

@@ -158,7 +158,10 @@ void SignalingServer::run() {
 				joinPeerId = data.value("peerId", "");
 				joinDisplayName = data.value("displayName", joinPeerId);
 				joinRtpCaps = data.value("rtpCapabilities", json::object());
-				joinClientIp = std::string(ws->getRemoteAddressAsText());
+				// Client IP: prefer explicit field (for proxy scenarios), fallback to remote address
+				joinClientIp = data.value("clientIp", "");
+				if (joinClientIp.empty())
+					joinClientIp = std::string(ws->getRemoteAddressAsText());
 			}
 
 			// Capture alive token to detect if ws was closed before defer runs

@@ -129,8 +129,7 @@ public:
 						roomCache_[roomId] = addr;
 						return {addr, false};
 					}
-					// Owner node truly gone — treat as new room
-					return {nodeAddress_, true};
+					// Owner node truly gone — pick best available node, not just self
 				}
 				if (reply) freeReplyObject(reply);
 			}

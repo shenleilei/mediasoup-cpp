@@ -47,11 +47,25 @@ public:
 		}
 	};
 
-	std::future<OwnedResponse> request(
+	struct RequestResult {
+		std::future<OwnedResponse> future;
+		uint32_t requestId = 0;
+	};
+
+	RequestResult requestWithId(
 		FBS::Request::Method method,
 		FBS::Request::Body bodyType = FBS::Request::Body::NONE,
 		flatbuffers::Offset<void> bodyOffset = 0,
 		const std::string& handlerId = "");
+
+	std::future<OwnedResponse> request(
+		FBS::Request::Method method,
+		FBS::Request::Body bodyType = FBS::Request::Body::NONE,
+		flatbuffers::Offset<void> bodyOffset = 0,
+		const std::string& handlerId = "")
+	{
+		return requestWithId(method, bodyType, bodyOffset, handlerId).future;
+	}
 
 	// Convenience: request + timed wait. Throws on timeout.
 	OwnedResponse requestWait(
@@ -61,27 +75,21 @@ public:
 		const std::string& handlerId = "",
 		int timeoutMs = 5000)
 	{
-		auto fut = request(method, bodyType, bodyOffset, handlerId);
+		auto [fut, reqId] = requestWithId(method, bodyType, bodyOffset, handlerId);
 		if (fut.wait_for(std::chrono::milliseconds(timeoutMs)) != std::future_status::ready) {
-			// Clean up the pending entry to prevent accumulation
-			cleanupTimedOutRequest(method, handlerId);
+			// Precise cleanup by request ID
+			{
+				std::lock_guard<std::mutex> lock(sentsMutex_);
+				auto it = sents_.find(reqId);
+				if (it != sents_.end()) {
+					it->second->promise.set_exception(
+						std::make_exception_ptr(std::runtime_error("timeout")));
+					sents_.erase(it);
+				}
+			}
 			throw std::runtime_error("Channel request timeout (" + std::to_string(timeoutMs) + "ms)");
 		}
 		return fut.get();
-	}
-
-	void cleanupTimedOutRequest(FBS::Request::Method method, const std::string& handlerId) {
-		std::lock_guard<std::mutex> lock(sentsMutex_);
-		for (auto it = sents_.begin(); it != sents_.end(); ++it) {
-			if (it->second->method == FBS::Request::EnumNameMethod(method)) {
-				spdlog::warn("Channel request timeout, removing pending [method:{} handler:{}]",
-					it->second->method, handlerId);
-				it->second->promise.set_exception(
-					std::make_exception_ptr(std::runtime_error("timeout")));
-				sents_.erase(it);
-				return;
-			}
-		}
 	}
 
 	void notify(
