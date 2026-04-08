@@ -96,9 +96,11 @@ if(BUILD_TESTS)
         ${FLATBUFFERS_INCLUDE}
         ${JSON_INCLUDE}
         ${GENERATED_INCLUDE}
+        ${IP2REGION_DIR}
     )
-    target_link_libraries(mediasoup_tests PRIVATE gtest gtest_main mediasoup_lib)
-    add_test(NAME mediasoup_tests COMMAND mediasoup_tests)
+    target_link_libraries(mediasoup_tests PRIVATE gtest gtest_main mediasoup_lib ip2region)
+    add_test(NAME mediasoup_tests COMMAND mediasoup_tests
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
     # Integration (black-box) tests - requires built mediasoup-sfu + mediasoup-worker
     add_executable(mediasoup_integration_tests tests/test_integration.cpp)
