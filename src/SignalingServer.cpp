@@ -34,12 +34,7 @@ SignalingServer::~SignalingServer() {
 	stop();
 }
 
-WorkerThread* SignalingServer::getWorkerThread(const std::string& roomId) {
-	// Check dispatch table first
-	auto it = roomDispatch_.find(roomId);
-	if (it != roomDispatch_.end()) return it->second;
-
-	// Assign to least-loaded WorkerThread
+WorkerThread* SignalingServer::pickLeastLoadedWorkerThread() const {
 	WorkerThread* best = nullptr;
 	size_t minLoad = SIZE_MAX;
 	for (auto& wt : workerThreads_) {
@@ -49,9 +44,17 @@ WorkerThread* SignalingServer::getWorkerThread(const std::string& roomId) {
 			best = wt.get();
 		}
 	}
-	if (best) {
-		roomDispatch_[roomId] = best;
-	}
+	return best;
+}
+
+WorkerThread* SignalingServer::getWorkerThread(const std::string& roomId, bool assignIfMissing) {
+	// Check dispatch table first
+	auto it = roomDispatch_.find(roomId);
+	if (it != roomDispatch_.end()) return it->second;
+
+	if (!assignIfMissing) return nullptr;
+	WorkerThread* best = pickLeastLoadedWorkerThread();
+	if (best) roomDispatch_[roomId] = best;
 	return best;
 }
 
@@ -82,6 +85,7 @@ void SignalingServer::run() {
 
 	// Wire up RoomService callbacks on each WorkerThread
 	for (auto& wt : workerThreads_) {
+		WorkerThread* wtRaw = wt.get();
 		wt->setNotify([wsMap, loop](const std::string& roomId, const std::string& peerId, const json& msg) {
 			std::string data = msg.dump();
 			std::string mapKey = WsMap::key(roomId, peerId);
@@ -105,6 +109,16 @@ void SignalingServer::run() {
 					auto* sd = ws->getUserData();
 					if (sd->roomId == roomId)
 						ws->send(data, uWS::OpCode::TEXT);
+				}
+			});
+		});
+
+		wt->setRoomLifecycle([this, loop, wtRaw](const std::string& roomId, bool created) {
+			if (created) return;
+			loop->defer([this, roomId, wtRaw] {
+				auto it = roomDispatch_.find(roomId);
+				if (it != roomDispatch_.end() && it->second == wtRaw) {
+					roomDispatch_.erase(it);
 				}
 			});
 		});
@@ -150,14 +164,41 @@ void SignalingServer::run() {
 				spdlog::debug("[{} {}] {} id={}", roomId, peerId, method, id);
 			}
 
-			// clientStats is lightweight — handle inline, no IPC
+			// clientStats is lightweight — validate on main thread and post to room worker
 			if (method == "clientStats") {
-				auto* wt = getWorkerThread(roomId);
-				if (wt && wt->roomService()) {
-					wt->post([wt, roomId, peerId, data] {
-						wt->roomService()->setClientStats(roomId, peerId, data);
-					});
+				if (roomId.empty() || peerId.empty() || sessionId == 0) {
+					rejectedClientStats_.fetch_add(1, std::memory_order_relaxed);
+					json resp = {{"response", true}, {"id", id}, {"ok", false},
+						{"error", "clientStats requires joined session"}};
+					ws->send(resp.dump(), uWS::OpCode::TEXT);
+					return;
 				}
+				bool validSession = false;
+				{
+					std::lock_guard<std::mutex> lock(wsMap->mutex);
+					auto mapKey = WsMap::key(roomId, peerId);
+					auto it = wsMap->peers.find(mapKey);
+					validSession = (it != wsMap->peers.end() && it->second == ws &&
+						it->second->getUserData()->sessionId == sessionId);
+				}
+				if (!validSession) {
+					staleRequestDrops_.fetch_add(1, std::memory_order_relaxed);
+					json resp = {{"response", true}, {"id", id}, {"ok", false},
+						{"error", "stale session"}};
+					ws->send(resp.dump(), uWS::OpCode::TEXT);
+					return;
+				}
+				auto* wt = getWorkerThread(roomId, false);
+				if (!wt || !wt->roomService()) {
+					rejectedClientStats_.fetch_add(1, std::memory_order_relaxed);
+					json resp = {{"response", true}, {"id", id}, {"ok", false},
+						{"error", "room not assigned"}};
+					ws->send(resp.dump(), uWS::OpCode::TEXT);
+					return;
+				}
+				wt->post([wt, roomId, peerId, data] {
+					wt->roomService()->setClientStats(roomId, peerId, data);
+				});
 				json resp = {{"response", true}, {"id", id}, {"ok", true}, {"data", json::object()}};
 				ws->send(resp.dump(), uWS::OpCode::TEXT);
 				return;
@@ -181,10 +222,16 @@ void SignalingServer::run() {
 
 			// Determine target WorkerThread
 			std::string targetRoomId = (method == "join") ? joinRoomId : roomId;
-			auto* wt = getWorkerThread(targetRoomId);
+			WorkerThread* wt = nullptr;
+			if (method == "join") {
+				wt = getWorkerThread(targetRoomId, false);
+				if (!wt) wt = pickLeastLoadedWorkerThread();
+			} else {
+				wt = getWorkerThread(targetRoomId, false);
+			}
 			if (!wt) {
 				json resp = {{"response", true}, {"id", id}, {"ok", false},
-					{"error", "no available worker thread"}};
+					{"error", method == "join" ? "no available worker thread" : "room not assigned"}};
 				ws->send(resp.dump(), uWS::OpCode::TEXT);
 				return;
 			}
@@ -202,8 +249,10 @@ void SignalingServer::run() {
 					std::lock_guard<std::mutex> lock(wsMap->mutex);
 					auto mapKey = WsMap::key(roomId, peerId);
 					auto it = wsMap->peers.find(mapKey);
-					if (it == wsMap->peers.end() || it->second->getUserData()->sessionId != sessionId)
+					if (it == wsMap->peers.end() || it->second->getUserData()->sessionId != sessionId) {
+						staleRequestDrops_.fetch_add(1, std::memory_order_relaxed);
 						return; // stale request from replaced connection
+					}
 				}
 
 				RoomService::Result result;
@@ -266,7 +315,7 @@ void SignalingServer::run() {
 				std::string jRoomId = joinRoomId, jPeerId = joinPeerId;
 
 				// Defer ws->send() back to the uWS event loop thread
-				loop->defer([wsMap, ws, alive, respStr = std::move(respStr),
+				loop->defer([this, wt, wsMap, ws, alive, respStr = std::move(respStr),
 					joinOk, jRoomId = std::move(jRoomId), jPeerId = std::move(jPeerId)]
 				{
 					if (!alive->load()) return;
@@ -284,6 +333,7 @@ void SignalingServer::run() {
 								oldWs = it->second;
 							wsMap->peers[mapKey] = ws;
 						}
+						assignRoom(jRoomId, wt);
 						spdlog::info("[{} {}] joined (session:{})", jRoomId, jPeerId, sd->sessionId);
 						if (oldWs) oldWs->end(4000, "replaced");
 					}
@@ -310,7 +360,7 @@ void SignalingServer::run() {
 					}
 				}
 				if (erased && !roomId.empty()) {
-					auto* wt = getWorkerThread(roomId);
+					auto* wt = getWorkerThread(roomId, false);
 					if (wt) {
 						wt->post([wt, roomId, peerId] {
 							try {
@@ -367,14 +417,32 @@ void SignalingServer::run() {
 		// Aggregate load from all WorkerThreads
 		size_t totalRooms = 0;
 		size_t totalWorkers = 0;
+		json workerQueues = json::array();
 		for (auto& wt : workerThreads_) {
 			totalRooms += wt->roomCount();
 			totalWorkers += wt->workerCount();
+			workerQueues.push_back({
+				{"threadId", wt->id()},
+				{"roomCount", wt->roomCount()},
+				{"workerCount", wt->workerCount()},
+				{"queueDepth", wt->queueDepth()},
+				{"queuePeakDepth", wt->queuePeakDepth()},
+				{"avgTaskWaitUs", wt->avgTaskWaitUs()}
+			});
+		}
+		json roomOwnership = json::object();
+		for (auto& [roomId, wt] : roomDispatch_) {
+			roomOwnership[roomId] = wt ? wt->id() : -1;
 		}
 		json load = {
 			{"rooms", totalRooms},
 			{"workers", totalWorkers},
-			{"workerThreads", workerThreads_.size()}
+			{"workerThreads", workerThreads_.size()},
+			{"dispatchRooms", roomDispatch_.size()},
+			{"staleRequestDrops", staleRequestDrops_.load(std::memory_order_relaxed)},
+			{"rejectedClientStats", rejectedClientStats_.load(std::memory_order_relaxed)},
+			{"workerQueueStats", workerQueues},
+			{"roomOwnership", roomOwnership}
 		};
 		res->writeHeader("Content-Type", "application/json")
 			->writeHeader("Access-Control-Allow-Origin", "*")

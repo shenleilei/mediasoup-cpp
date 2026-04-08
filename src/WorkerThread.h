@@ -11,6 +11,8 @@
 #include <functional>
 #include <unordered_map>
 #include <atomic>
+#include <chrono>
+#include <algorithm>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <sys/timerfd.h>
@@ -152,7 +154,15 @@ public:
 	void post(std::function<void()> task) {
 		{
 			std::lock_guard<std::mutex> lock(queueMutex_);
-			taskQueue_.push(std::move(task));
+			taskQueue_.push(QueuedTask{
+				std::move(task),
+				std::chrono::steady_clock::now()
+			});
+			auto depth = queueDepth_.fetch_add(1, std::memory_order_relaxed) + 1;
+			size_t peak = queuePeakDepth_.load(std::memory_order_relaxed);
+			while (depth > peak &&
+				!queuePeakDepth_.compare_exchange_weak(
+					peak, depth, std::memory_order_relaxed, std::memory_order_relaxed)) {}
 		}
 		uint64_t val = 1;
 		::write(eventFd_, &val, sizeof(val));
@@ -182,11 +192,27 @@ public:
 	/// Set notification callbacks (call before start()).
 	void setNotify(RoomService::NotifyFn fn) { notifyFn_ = std::move(fn); }
 	void setBroadcast(RoomService::BroadcastFn fn) { broadcastFn_ = std::move(fn); }
+	void setRoomLifecycle(RoomService::RoomLifecycleFn fn) { roomLifecycleFn_ = std::move(fn); }
 
 	/// Called by RoomService to update room count (from within WorkerThread).
 	void updateRoomCount() {
 		if (roomManager_)
 			roomCount_.store(roomManager_->roomCount(), std::memory_order_relaxed);
+	}
+
+	size_t queueDepth() const {
+		return queueDepth_.load(std::memory_order_relaxed);
+	}
+
+	size_t queuePeakDepth() const {
+		return queuePeakDepth_.load(std::memory_order_relaxed);
+	}
+
+	double avgTaskWaitUs() const {
+		auto samples = taskWaitSamples_.load(std::memory_order_relaxed);
+		if (samples == 0) return 0.0;
+		auto total = taskWaitUsTotal_.load(std::memory_order_relaxed);
+		return static_cast<double>(total) / static_cast<double>(samples);
 	}
 
 private:
@@ -235,6 +261,7 @@ private:
 
 		if (notifyFn_) roomService_->setNotify(notifyFn_);
 		if (broadcastFn_) roomService_->setBroadcast(broadcastFn_);
+		if (roomLifecycleFn_) roomService_->setRoomLifecycle(roomLifecycleFn_);
 	}
 
 	void loop() {
@@ -287,21 +314,27 @@ private:
 
 	void processTaskQueue() {
 		// Drain all tasks
-		std::queue<std::function<void()>> tasks;
+		std::queue<QueuedTask> tasks;
 		{
 			std::lock_guard<std::mutex> lock(queueMutex_);
 			tasks.swap(taskQueue_);
 		}
 		while (!tasks.empty()) {
-			auto& task = tasks.front();
+			auto task = std::move(tasks.front());
+			auto waitUs = std::chrono::duration_cast<std::chrono::microseconds>(
+				std::chrono::steady_clock::now() - task.enqueueAt).count();
+			taskWaitUsTotal_.fetch_add(static_cast<uint64_t>(std::max<int64_t>(0, waitUs)),
+				std::memory_order_relaxed);
+			taskWaitSamples_.fetch_add(1, std::memory_order_relaxed);
 			try {
-				task();
+				task.fn();
 			} catch (const std::exception& e) {
 				MS_ERROR(logger_, "WorkerThread {} task exception: {}", id_, e.what());
 			} catch (...) {
 				MS_ERROR(logger_, "WorkerThread {} task unknown exception", id_);
 			}
 			tasks.pop();
+			queueDepth_.fetch_sub(1, std::memory_order_relaxed);
 		}
 		updateRoomCount();
 	}
@@ -377,8 +410,12 @@ private:
 	std::atomic<bool> stopping_{false};
 
 	// Task queue (accessed from main thread + WorkerThread)
+	struct QueuedTask {
+		std::function<void()> fn;
+		std::chrono::steady_clock::time_point enqueueAt;
+	};
 	std::mutex queueMutex_;
-	std::queue<std::function<void()>> taskQueue_;
+	std::queue<QueuedTask> taskQueue_;
 
 	// Owned resources (only accessed from WorkerThread)
 	std::vector<std::shared_ptr<Worker>> workers_;
@@ -390,10 +427,15 @@ private:
 	// Thread-safe counters (atomic, read from main thread)
 	std::atomic<size_t> roomCount_{0};
 	std::atomic<size_t> workerCount_{0};
+	std::atomic<size_t> queueDepth_{0};
+	std::atomic<size_t> queuePeakDepth_{0};
+	std::atomic<uint64_t> taskWaitUsTotal_{0};
+	std::atomic<uint64_t> taskWaitSamples_{0};
 
 	// Callbacks
 	RoomService::NotifyFn notifyFn_;
 	RoomService::BroadcastFn broadcastFn_;
+	RoomService::RoomLifecycleFn roomLifecycleFn_;
 
 	std::shared_ptr<spdlog::logger> logger_;
 };
