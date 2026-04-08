@@ -45,7 +45,7 @@ public:
 		std::lock_guard<std::mutex> lock(cmdMutex_);
 		if (!ensureConnected()) return;
 		registerNode();
-		publishNodeUpdate();
+		// Don't publish here — updateLoad() will publish actual values right after
 	}
 
 	void updateLoad(size_t rooms, size_t maxRooms) {
@@ -332,9 +332,15 @@ private:
 
 	void registerNode() {
 		if (!ctx_) return;
-		std::string val = buildNodeValue(0, 0);
-		auto* reply = (redisReply*)redisCommand(ctx_, "SET %s %s EX %d",
-			("node:" + nodeId_).c_str(), val.c_str(), nodeTTL_);
+		std::string key = "node:" + nodeId_;
+		// Try EXPIRE first (preserve existing value). If key doesn't exist, SET with initial value.
+		auto* reply = (redisReply*)redisCommand(ctx_, "EXPIRE %s %d", key.c_str(), nodeTTL_);
+		if (reply && reply->type == REDIS_REPLY_INTEGER && reply->integer == 0) {
+			// Key doesn't exist — first registration
+			freeReplyObject(reply);
+			std::string val = buildNodeValue(0, 0);
+			reply = (redisReply*)redisCommand(ctx_, "SET %s %s EX %d", key.c_str(), val.c_str(), nodeTTL_);
+		}
 		if (reply) freeReplyObject(reply);
 		else handleDisconnect();
 	}

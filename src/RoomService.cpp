@@ -16,6 +16,17 @@ RoomService::RoomService(RoomManager& roomManager, RoomRegistry* registry,
 RoomService::Result RoomService::join(const std::string& roomId, const std::string& peerId,
 	const std::string& displayName, const json& rtpCapabilities, const std::string& clientIp)
 {
+	// Check local capacity before claiming — avoid "ghost" room keys in Redis
+	auto existingRoom = roomManager_.getRoom(roomId);
+	if (!existingRoom) {
+		size_t maxRooms = roomManager_.workerManager().maxTotalRouters();
+		if (maxRooms > 0 && roomManager_.roomCount() >= maxRooms) {
+			MS_WARN(logger_, "[{} {}] local node at capacity ({}/{})", roomId, peerId,
+				roomManager_.roomCount(), maxRooms);
+			return {false, {}, "", "no available capacity"};
+		}
+	}
+
 	if (registry_) {
 		try {
 			std::string addr = registry_->claimRoom(roomId, clientIp);
@@ -28,17 +39,6 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 	if (!rtpCapabilities.is_null() && !rtpCapabilities.empty() && !rtpCapabilities.is_object()) {
 		MS_WARN(logger_, "[{} {}] join validation failed: invalid rtpCapabilities type", roomId, peerId);
 		return {false, {}, "", "invalid rtpCapabilities"};
-	}
-
-	// Check local capacity before creating room
-	auto existingRoom = roomManager_.getRoom(roomId);
-	if (!existingRoom) {
-		size_t maxRooms = roomManager_.workerManager().maxTotalRouters();
-		if (maxRooms > 0 && roomManager_.roomCount() >= maxRooms) {
-			MS_WARN(logger_, "[{} {}] local node at capacity ({}/{})", roomId, peerId,
-				roomManager_.roomCount(), maxRooms);
-			return {false, {}, "", "no available capacity"};
-		}
 	}
 
 	auto room = roomManager_.createRoom(roomId);
