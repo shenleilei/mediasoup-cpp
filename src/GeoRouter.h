@@ -118,13 +118,31 @@ public:
 	{
 		double dist = haversine(client.lat, client.lng, nodeLat, nodeLng);
 
-		if (isChina(client) && !nodeIsp.empty() && !client.isp.empty()) {
-			bool ispMatch = (client.isp == nodeIsp);
-			// ISP mismatch adds a 1000km penalty (roughly the cost of cross-ISP routing)
-			if (!ispMatch) dist += 1000.0;
+		if (isChina(client) && !client.isp.empty() && client.isp != "0") {
+			// Cloud providers have multi-line BGP — treat as ISP-neutral
+			bool clientIsCloud = isCloudIsp(client.isp);
+			bool nodeIsCloud = isCloudIsp(nodeIsp);
+			// Only penalize when both sides are traditional ISPs and they differ
+			if (!clientIsCloud && !nodeIsCloud &&
+				!client.isp.empty() && !nodeIsp.empty() && client.isp != nodeIsp) {
+				dist += 1000.0;
+			}
 		}
 
 		return dist;
+	}
+
+	static bool isCloudIsp(const std::string& isp) {
+		// Major cloud/CDN providers with multi-line BGP access
+		static const char* clouds[] = {
+			"阿里", "腾讯", "华为", "百度", "京东", "字节",
+			"网宿", "白山", "七牛", "又拍", "金山",
+			"天翼云", "移动云", "联通云", "鹏博士",
+			nullptr
+		};
+		for (auto* c = clouds; *c; ++c)
+			if (isp.find(*c) != std::string::npos) return true;
+		return false;
 	}
 
 	// Haversine distance in km
@@ -189,6 +207,11 @@ private:
 		c["佛山"] = {23.02, 113.12};
 		c["珠海"] = {22.27, 113.58};
 		c["温州"] = {28.00, 120.67};
+		c["湖州"] = {30.87, 120.09};
+		c["嘉兴"] = {30.77, 120.76};
+		c["绍兴"] = {30.00, 120.58};
+		c["金华"] = {29.08, 119.65};
+		c["台州"] = {28.66, 121.42};
 		// 省份 (fallback when city is "0")
 		c["广东"] = {23.13, 113.26};
 		c["浙江"] = {30.27, 120.15};
