@@ -462,7 +462,7 @@ void SignalingServer::run() {
 			std::string roomPath = recordDir_ + "/" + ent->d_name;
 			struct stat st;
 			if (stat(roomPath.c_str(), &st) != 0 || !S_ISDIR(st.st_mode)) continue;
-			std::string rId(ent->d_name);
+			std::string roomId(ent->d_name);
 			DIR* rdir = opendir(roomPath.c_str());
 			if (!rdir) continue;
 			struct dirent* rent;
@@ -480,7 +480,7 @@ void SignalingServer::run() {
 				if (stat(fullPath.c_str(), &fst) == 0) fileSize = fst.st_size;
 				bool hasQos = (stat((roomPath + "/" + base + ".qos.json").c_str(), &fst) == 0);
 				result.push_back({
-					{"roomId", rId}, {"peerId", peerId}, {"timestamp", ts},
+					{"roomId", roomId}, {"peerId", peerId}, {"timestamp", ts},
 					{"file", fname}, {"size", fileSize}, {"hasQos", hasQos}
 				});
 			}
