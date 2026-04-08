@@ -303,22 +303,29 @@ private:
 		// 欧洲
 		c["London"]={51.51,-0.13}; c["Frankfurt am Main"]={50.11,8.68}; c["Frankfurt"]={50.11,8.68};
 		c["Paris"]={48.86,2.35}; c["Amsterdam"]={52.37,4.90}; c["Dublin"]={53.35,-6.26};
-		c["Stockholm"]={59.33,18.07}; c["Milan"]={45.46,9.19}; c["Madrid"]={40.42,-3.70};
+		c["Stockholm"]={59.33,18.07}; c["Milan"]={45.46,9.19}; c["Milano"]={45.46,9.19};
+		c["Madrid"]={40.42,-3.70};
 		c["Warsaw"]={52.23,21.01}; c["Zurich"]={47.37,8.54}; c["Hesse"]={50.11,8.68};
+		c["Leinster"]={53.35,-6.26}; c["Île-de-France"]={48.86,2.35};
 		// 北美
 		c["Virginia"]={38.95,-77.45}; c["Ashburn"]={39.04,-77.49};
 		c["San Jose"]={37.34,-121.89}; c["San Francisco"]={37.77,-122.42};
 		c["Los Angeles"]={34.05,-118.24}; c["Seattle"]={47.61,-122.33};
 		c["Chicago"]={41.88,-87.63}; c["Dallas"]={32.78,-96.80};
 		c["New York"]={40.71,-74.01}; c["Toronto"]={43.65,-79.38};
-		c["Montreal"]={45.50,-73.57}; c["Pittsburgh"]={40.44,-79.99};
+		c["Montreal"]={45.50,-73.57}; c["Montréal"]={45.50,-73.57}; c["Quebec"]={45.50,-73.57};
+		c["Pittsburgh"]={40.44,-79.99};
 		c["Pennsylvania"]={40.44,-79.99}; c["California"]={37.39,-122.08};
 		c["Oregon"]={45.52,-122.68}; c["Ohio"]={39.96,-82.99};
+		c["Washington"]={47.61,-122.33}; c["Colorado"]={39.74,-104.99};
+		c["Columbus"]={39.96,-82.99}; c["Boardman"]={45.84,-119.70};
+		c["Palo Alto"]={37.44,-122.14};
 		// 南美
 		c["São Paulo"]={-23.55,-46.63}; c["Sao Paulo"]={-23.55,-46.63};
 		c["Buenos Aires"]={-34.60,-58.38};
 		// 中东
 		c["Dubai"]={25.20,55.27}; c["Bahrain"]={26.07,50.56};
+		c["Southern Governorate"]={26.07,50.56}; c["Manama"]={26.22,50.59};
 		// 非洲
 		c["Cape Town"]={-33.93,18.42}; c["Johannesburg"]={-26.20,28.05};
 		// 州/省级 fallback (ip2region 有时只返回省/州不返回城市)
