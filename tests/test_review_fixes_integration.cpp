@@ -1028,3 +1028,151 @@ TEST_F(CacheTest, DirectJoinRedirectsViaCachedRoom) {
 			<< "Should redirect to node A, got: " << redirect;
 	}
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Full node can still redirect to existing rooms on other nodes
+// ═══════════════════════════════════════════════════════════════
+
+static const int FULL_PORT_A = 18798;
+static const int FULL_PORT_B = 18799;
+
+class FullNodeRedirectTest : public ::testing::Test {
+protected:
+	pid_t pidA_ = -1, pidB_ = -1;
+	std::string testRoom_;
+
+	static pid_t startSfu(int port, int maxRouters = 0) {
+		std::string cmd = "./build/mediasoup-sfu --nodaemon"
+			" --port=" + std::to_string(port) +
+			" --workers=1"
+			" --workerBin=./mediasoup-worker"
+			" --announcedIp=127.0.0.1"
+			" --listenIp=127.0.0.1"
+			" --noCountryIsolation";
+		if (maxRouters > 0)
+			cmd += " --maxRoutersPerWorker=" + std::to_string(maxRouters);
+		cmd += " > /dev/null 2>&1 & echo $!";
+		FILE* fp = popen(cmd.c_str(), "r");
+		if (!fp) return -1;
+		char buf[64]{};
+		fgets(buf, sizeof(buf), fp);
+		pclose(fp);
+		return atoi(buf);
+	}
+
+	static bool waitForPort(int port, int timeoutMs = 5000) {
+		for (int i = 0; i < timeoutMs / 100; ++i) {
+			usleep(100000);
+			int fd = socket(AF_INET, SOCK_STREAM, 0);
+			sockaddr_in addr{};
+			addr.sin_family = AF_INET;
+			addr.sin_port = htons(port);
+			inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+			if (::connect(fd, (sockaddr*)&addr, sizeof(addr)) == 0) {
+				::close(fd);
+				usleep(200000);
+				return true;
+			}
+			::close(fd);
+		}
+		return false;
+	}
+
+	static void killAndWaitPort(pid_t pid, int port) {
+		if (pid <= 0) return;
+		kill(pid, SIGKILL);
+		for (int i = 0; i < 20; ++i) {
+			usleep(50000);
+			int fd = socket(AF_INET, SOCK_STREAM, 0);
+			sockaddr_in addr{};
+			addr.sin_family = AF_INET;
+			addr.sin_port = htons(port);
+			addr.sin_addr.s_addr = htonl(INADDR_ANY);
+			int opt = 1;
+			setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+			bool free = (bind(fd, (sockaddr*)&addr, sizeof(addr)) == 0);
+			::close(fd);
+			if (free) return;
+		}
+	}
+
+	static json rtpCaps() {
+		return {
+			{"codecs", {{
+				{"mimeType", "audio/opus"}, {"kind", "audio"},
+				{"clockRate", 48000}, {"channels", 2},
+				{"preferredPayloadType", 100}
+			}}},
+			{"headerExtensions", json::array()}
+		};
+	}
+
+	void SetUp() override {
+		testRoom_ = "full_" + std::to_string(getpid()) + "_" +
+			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+		{
+			redisContext* ctx = redisConnect("127.0.0.1", 6379);
+			if (ctx && !ctx->err) {
+				auto* r = (redisReply*)redisCommand(ctx, "KEYS node:*");
+				if (r && r->type == REDIS_REPLY_ARRAY)
+					for (size_t i = 0; i < r->elements; i++)
+						redisCommand(ctx, "DEL %s", r->element[i]->str);
+				if (r) freeReplyObject(r);
+				redisFree(ctx);
+			}
+		}
+		// Node A: normal capacity
+		pidA_ = startSfu(FULL_PORT_A);
+		// Node B: maxRoutersPerWorker=1 (will be full after 1 room)
+		pidB_ = startSfu(FULL_PORT_B, 1);
+		ASSERT_GT(pidA_, 0);
+		ASSERT_GT(pidB_, 0);
+		ASSERT_TRUE(waitForPort(FULL_PORT_A));
+		ASSERT_TRUE(waitForPort(FULL_PORT_B));
+		usleep(2000000);
+	}
+
+	void TearDown() override {
+		killAndWaitPort(pidA_, FULL_PORT_A);
+		killAndWaitPort(pidB_, FULL_PORT_B);
+	}
+};
+
+TEST_F(FullNodeRedirectTest, FullNodeRedirectsToExistingRoom) {
+	// Create a room on node A
+	TestWsClient alice;
+	ASSERT_TRUE(alice.connect("127.0.0.1", FULL_PORT_A));
+	auto aliceJoin = alice.request("join", {
+		{"roomId", testRoom_}, {"peerId", "alice"},
+		{"displayName", "alice"}, {"rtpCapabilities", rtpCaps()}
+	});
+	ASSERT_TRUE(aliceJoin.value("ok", false)) << aliceJoin.dump();
+	usleep(500000);
+
+	// Fill node B with a different room so it's at capacity
+	TestWsClient filler;
+	ASSERT_TRUE(filler.connect("127.0.0.1", FULL_PORT_B));
+	auto fillerJoin = filler.request("join", {
+		{"roomId", testRoom_ + "_filler"}, {"peerId", "filler"},
+		{"displayName", "filler"}, {"rtpCapabilities", rtpCaps()}
+	});
+	// filler may succeed or redirect — either way node B should be full now
+	usleep(500000);
+
+	// Bob tries to join alice's room on full node B → should redirect to node A
+	TestWsClient bob;
+	ASSERT_TRUE(bob.connect("127.0.0.1", FULL_PORT_B));
+	auto bobJoin = bob.request("join", {
+		{"roomId", testRoom_}, {"peerId", "bob"},
+		{"displayName", "bob"}, {"rtpCapabilities", rtpCaps()}
+	});
+
+	// Must redirect to node A (room exists there), not reject with "no capacity"
+	EXPECT_TRUE(bobJoin.contains("redirect"))
+		<< "Full node should redirect to existing room, not reject. Got: " << bobJoin.dump();
+	if (bobJoin.contains("redirect")) {
+		EXPECT_NE(bobJoin["redirect"].get<std::string>().find(std::to_string(FULL_PORT_A)),
+			std::string::npos)
+			<< "Should redirect to node A, got: " << bobJoin["redirect"].get<std::string>();
+	}
+}
