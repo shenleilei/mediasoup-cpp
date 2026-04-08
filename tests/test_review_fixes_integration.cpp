@@ -380,16 +380,20 @@ protected:
 		testRoom_ = "geo_" + std::to_string(getpid()) + "_" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 
-		// Clean stale room entries for our test room prefix from Redis
+		// Clean stale room and node entries from Redis
 		{
 			redisContext* ctx = redisConnect("127.0.0.1", 6379);
 			if (ctx && !ctx->err) {
 				auto* r = (redisReply*)redisCommand(ctx, "KEYS room:geo_*");
-				if (r && r->type == REDIS_REPLY_ARRAY) {
+				if (r && r->type == REDIS_REPLY_ARRAY)
 					for (size_t i = 0; i < r->elements; i++)
 						redisCommand(ctx, "DEL %s", r->element[i]->str);
-					freeReplyObject(r);
-				}
+				if (r) freeReplyObject(r);
+				r = (redisReply*)redisCommand(ctx, "KEYS node:*");
+				if (r && r->type == REDIS_REPLY_ARRAY)
+					for (size_t i = 0; i < r->elements; i++)
+						redisCommand(ctx, "DEL %s", r->element[i]->str);
+				if (r) freeReplyObject(r);
 				redisFree(ctx);
 			}
 		}

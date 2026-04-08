@@ -350,15 +350,6 @@ private:
 	static constexpr const char* kChannelNodes = "sfu:nodes";
 	static constexpr const char* kChannelRooms = "sfu:rooms";
 
-	void publishNodeUpdate() {
-		if (!ctx_) return;
-		// Message: "nodeId|nodeValue"
-		std::string msg = nodeId_ + "=" + buildNodeValue(0, 0);
-		auto* reply = (redisReply*)redisCommand(ctx_, "PUBLISH %s %s",
-			kChannelNodes, msg.c_str());
-		if (reply) freeReplyObject(reply);
-	}
-
 	void publishRoomUpdate(const std::string& roomId, const std::string& ownerAddr) {
 		if (!ctx_) return;
 		// Message: "roomId=ownerAddr" (empty ownerAddr = room removed)
