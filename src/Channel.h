@@ -63,11 +63,25 @@ public:
 	{
 		auto fut = request(method, bodyType, bodyOffset, handlerId);
 		if (fut.wait_for(std::chrono::milliseconds(timeoutMs)) != std::future_status::ready) {
-			spdlog::error("Channel request timeout [method:{} handler:{} timeout:{}ms]",
-				FBS::Request::EnumNameMethod(method), handlerId, timeoutMs);
+			// Clean up the pending entry to prevent accumulation
+			cleanupTimedOutRequest(method, handlerId);
 			throw std::runtime_error("Channel request timeout (" + std::to_string(timeoutMs) + "ms)");
 		}
 		return fut.get();
+	}
+
+	void cleanupTimedOutRequest(FBS::Request::Method method, const std::string& handlerId) {
+		std::lock_guard<std::mutex> lock(sentsMutex_);
+		for (auto it = sents_.begin(); it != sents_.end(); ++it) {
+			if (it->second->method == FBS::Request::EnumNameMethod(method)) {
+				spdlog::warn("Channel request timeout, removing pending [method:{} handler:{}]",
+					it->second->method, handlerId);
+				it->second->promise.set_exception(
+					std::make_exception_ptr(std::runtime_error("timeout")));
+				sents_.erase(it);
+				return;
+			}
+		}
 	}
 
 	void notify(

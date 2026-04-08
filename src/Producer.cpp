@@ -35,7 +35,8 @@ void Producer::close() {
 	try {
 		channel_->request(FBS::Request::Method::TRANSPORT_CLOSE_PRODUCER,
 			FBS::Request::Body::Transport_CloseProducerRequest,
-			reqOff.Union(), transportId_).get();
+			reqOff.Union(), transportId_);
+		// Fire-and-forget: don't .get() — avoids blocking control thread if worker is slow
 	} catch (const std::exception& e) {
 		spdlog::warn("Producer::close() request failed [id:{}]: {}", id_, e.what());
 	} catch (...) {

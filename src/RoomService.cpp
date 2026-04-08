@@ -272,7 +272,7 @@ RoomService::Result RoomService::produce(const std::string& roomId,
 			other->consumers[consumer->id()] = consumer;
 
 			if (notify_) {
-				notify_(other->id, {
+				notify_(roomId, other->id, {
 					{"notification", true}, {"method", "newConsumer"},
 					{"data", {
 						{"peerId", peerId}, {"producerId", producer->id()},

@@ -16,9 +16,12 @@ namespace mediasoup {
 struct PerSocketData {
 	std::string peerId;
 	std::string roomId;
+	uint64_t sessionId = 0;  // Monotonic session token to detect stale requests
 	// Shared token: set to false when .close fires, checked in deferred callbacks
 	std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>>(true);
 };
+
+static std::atomic<uint64_t> g_nextSessionId{1};
 
 SignalingServer::SignalingServer(int port, RoomService& roomService, const std::string& recordDir)
 	: port_(port), roomService_(roomService), recordDir_(recordDir) {}
@@ -64,7 +67,11 @@ void SignalingServer::run() {
 	// peerId → ws* mapping for notify/broadcast
 	struct WsMap {
 		std::mutex mutex;
+		// Key: "roomId/peerId" — isolates peers across rooms
 		std::unordered_map<std::string, uWS::WebSocket<false, true, PerSocketData>*> peers;
+		static std::string key(const std::string& roomId, const std::string& peerId) {
+			return roomId + "/" + peerId;
+		}
 	};
 	auto wsMap = std::make_shared<WsMap>();
 
@@ -74,11 +81,12 @@ void SignalingServer::run() {
 	// Wire up RoomService callbacks — these may be called from the worker thread,
 	// so they must defer ws->send() back to the uWS thread.
 	uWS::Loop* loop = uWS::Loop::get();
-	roomService_.setNotify([wsMap, loop](const std::string& peerId, const json& msg) {
+	roomService_.setNotify([wsMap, loop](const std::string& roomId, const std::string& peerId, const json& msg) {
 		std::string data = msg.dump();
-		loop->defer([wsMap, peerId, data = std::move(data)] {
+		std::string mapKey = WsMap::key(roomId, peerId);
+		loop->defer([wsMap, mapKey, data = std::move(data)] {
 			std::lock_guard<std::mutex> lock(wsMap->mutex);
-			auto it = wsMap->peers.find(peerId);
+			auto it = wsMap->peers.find(mapKey);
 			if (it != wsMap->peers.end())
 				it->second->send(data, uWS::OpCode::TEXT);
 		});
@@ -88,10 +96,11 @@ void SignalingServer::run() {
 		const std::string& excludePeerId, const json& msg)
 	{
 		std::string data = msg.dump();
-		loop->defer([wsMap, roomId, excludePeerId, data = std::move(data)] {
+		std::string excludeKey = excludePeerId.empty() ? "" : WsMap::key(roomId, excludePeerId);
+		loop->defer([wsMap, roomId, excludeKey, data = std::move(data)] {
 			std::lock_guard<std::mutex> lock(wsMap->mutex);
-			for (auto& [pid, ws] : wsMap->peers) {
-				if (pid == excludePeerId) continue;
+			for (auto& [mapKey, ws] : wsMap->peers) {
+				if (mapKey == excludeKey) continue;
 				auto* sd = ws->getUserData();
 				if (sd->roomId == roomId)
 					ws->send(data, uWS::OpCode::TEXT);
@@ -127,6 +136,7 @@ void SignalingServer::run() {
 			auto* sd = ws->getUserData();
 			std::string roomId = sd->roomId;
 			std::string peerId = sd->peerId;
+			uint64_t sessionId = sd->sessionId;
 
 			if (method != "clientStats") {
 				spdlog::debug("[{} {}] {} id={}", roomId, peerId, method, id);
@@ -156,8 +166,18 @@ void SignalingServer::run() {
 
 			// Dispatch to worker thread — all RoomService calls happen there
 			postWork([this, wsMap, ws, alive, loop, method, id, data,
-				roomId, peerId, joinRoomId, joinPeerId, joinDisplayName, joinRtpCaps, joinClientIp]
+				roomId, peerId, sessionId, joinRoomId, joinPeerId, joinDisplayName, joinRtpCaps, joinClientIp]
 			{
+				// For non-join requests, verify this socket's session is still current.
+				// Prevents stale requests from a replaced connection from affecting the new session.
+				if (method != "join" && !roomId.empty()) {
+					std::lock_guard<std::mutex> lock(wsMap->mutex);
+					auto mapKey = WsMap::key(roomId, peerId);
+					auto it = wsMap->peers.find(mapKey);
+					if (it == wsMap->peers.end() || it->second->getUserData()->sessionId != sessionId)
+						return; // stale request from replaced connection
+				}
+
 				RoomService::Result result;
 				try {
 					if (method == "join") {
@@ -220,19 +240,21 @@ void SignalingServer::run() {
 				loop->defer([wsMap, ws, alive, respStr = std::move(respStr),
 					joinOk, jRoomId = std::move(jRoomId), jPeerId = std::move(jPeerId)]
 				{
-					if (!alive->load()) return;  // ws was closed, skip
+					if (!alive->load()) return;
 					if (joinOk) {
 						auto* sd = ws->getUserData();
 						sd->roomId = jRoomId;
 						sd->peerId = jPeerId;
-						spdlog::info("[{} {}] joined", jRoomId, jPeerId);
+						sd->sessionId = g_nextSessionId++;
+						spdlog::info("[{} {}] joined (session:{})", jRoomId, jPeerId, sd->sessionId);
+						std::string mapKey = WsMap::key(jRoomId, jPeerId);
 						decltype(ws) oldWs = nullptr;
 						{
 							std::lock_guard<std::mutex> lock(wsMap->mutex);
-							auto it = wsMap->peers.find(jPeerId);
+							auto it = wsMap->peers.find(mapKey);
 							if (it != wsMap->peers.end() && it->second != ws)
 								oldWs = it->second;
-							wsMap->peers[jPeerId] = ws;
+							wsMap->peers[mapKey] = ws;
 						}
 						if (oldWs) oldWs->end(4000, "replaced");
 					}
@@ -243,22 +265,22 @@ void SignalingServer::run() {
 
 		.close = [this, wsMap](auto* ws, int, std::string_view) {
 			auto* sd = ws->getUserData();
-			sd->alive->store(false);  // Signal deferred callbacks to skip this ws
+			sd->alive->store(false);
 			if (!sd->peerId.empty()) {
 				spdlog::info("[{} {}] disconnected", sd->roomId, sd->peerId);
 				std::string roomId = sd->roomId;
 				std::string peerId = sd->peerId;
+				std::string mapKey = WsMap::key(roomId, peerId);
 				bool erased = false;
 				{
 					std::lock_guard<std::mutex> lock(wsMap->mutex);
-					auto it = wsMap->peers.find(peerId);
+					auto it = wsMap->peers.find(mapKey);
 					if (it != wsMap->peers.end() && it->second == ws) {
 						wsMap->peers.erase(it);
 						erased = true;
 					}
 				}
 				if (erased && !roomId.empty()) {
-					// Dispatch leave to worker thread (may block on Channel IPC)
 					postWork([this, roomId, peerId] {
 						try {
 							roomService_.leave(roomId, peerId);
