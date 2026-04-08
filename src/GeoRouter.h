@@ -73,7 +73,7 @@ public:
 			return info;
 		}
 
-		// Parse "国家|区域|省|市|运营商"
+		// Parse "国家|省|市|运营商|国家代码"
 		std::string val(region.value);
 		xdb_region_buffer_free(&region);
 
