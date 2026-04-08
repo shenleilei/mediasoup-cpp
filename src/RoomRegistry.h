@@ -89,7 +89,8 @@ public:
 
 		// Room doesn't exist — pick best node for this client
 		auto best = findBestNode(clientIp);
-		return {best.empty() ? nodeAddress_ : best, true};
+		if (best.empty()) return {"", true};  // all nodes full
+		return {best, true};
 	}
 
 	void stop() {
