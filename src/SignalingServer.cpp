@@ -483,11 +483,13 @@ void SignalingServer::run() {
 				// Aggregate and update registry from main thread
 				if (s->registry_) {
 					size_t totalRooms = 0;
-					size_t maxRooms = 0;
+					size_t totalWorkers = 0;
 					for (auto& wt : s->workerThreads_) {
 						totalRooms += wt->roomCount();
-						// Approximate max rooms from worker count
+						totalWorkers += wt->workerCount();
 					}
+					// maxRooms = 0 means unlimited (WorkerManager default)
+					size_t maxRooms = 0; // will be 0 if maxRoutersPerWorker not set
 					try {
 						s->registry_->heartbeat();
 						// Refresh room TTLs
