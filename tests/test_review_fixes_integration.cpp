@@ -579,7 +579,58 @@ protected:
 	}
 };
 
-// Chinese client should only be routed to CN node, not US node
+// Chinese client asking US node should be routed to CN node, not US
+TEST_F(CountryIsolationTest, ChinaClientOnUsNodeRoutedToChinaNode) {
+	// Connect to US node, but with Chinese IP
+	int fd = socket(AF_INET, SOCK_STREAM, 0);
+	sockaddr_in addr{};
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(ISO_PORT_US);  // ask US node
+	inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
+
+	std::string req = "GET /api/resolve?roomId=" + testRoom_ +
+		"&clientIp=36.110.147.0 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+	::send(fd, req.data(), req.size(), 0);
+
+	char buf[4096]{};
+	int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+	::close(fd);
+	ASSERT_GT(n, 0);
+
+	std::string response(buf, n);
+	bool hasCN = response.find(std::to_string(ISO_PORT_CN)) != std::string::npos;
+	bool hasUS = response.find(std::to_string(ISO_PORT_US)) != std::string::npos;
+	EXPECT_TRUE(hasCN) << "CN client on US node should be redirected to CN node, got: " << response;
+	EXPECT_FALSE(hasUS) << "CN client should NOT stay on US node, got: " << response;
+}
+
+// US client asking CN node should be routed to US node, not CN
+TEST_F(CountryIsolationTest, UsClientOnCnNodeRoutedToUsNode) {
+	int fd = socket(AF_INET, SOCK_STREAM, 0);
+	sockaddr_in addr{};
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(ISO_PORT_CN);  // ask CN node
+	inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
+
+	std::string req = "GET /api/resolve?roomId=" + testRoom_ + "_us2" +
+		"&clientIp=8.8.8.8 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+	::send(fd, req.data(), req.size(), 0);
+
+	char buf[4096]{};
+	int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+	::close(fd);
+	ASSERT_GT(n, 0);
+
+	std::string response(buf, n);
+	bool hasUS = response.find(std::to_string(ISO_PORT_US)) != std::string::npos;
+	bool hasCN = response.find(std::to_string(ISO_PORT_CN)) != std::string::npos;
+	EXPECT_TRUE(hasUS) << "US client on CN node should be redirected to US node, got: " << response;
+	EXPECT_FALSE(hasCN) << "US client should NOT stay on CN node, got: " << response;
+}
+
+// Chinese client should be routed to CN node when asking CN node (baseline)
 TEST_F(CountryIsolationTest, ChinaClientRoutedToChinaNode) {
 	int fd = socket(AF_INET, SOCK_STREAM, 0);
 	sockaddr_in addr{};
