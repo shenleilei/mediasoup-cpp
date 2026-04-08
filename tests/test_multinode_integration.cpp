@@ -384,3 +384,85 @@ TEST_F(MultiNodeResolveTest, ResolveAndDirectConnect) {
 	alice.close();
 	bob.close();
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Test 9: Resolve failure (no Redis) — join still works on current node
+// ═══════════════════════════════════════════════════════════════
+TEST_F(MultiNodeResolveTest, ResolveFallbackWithoutRedis) {
+	// Start SFU without Redis (use bogus redis host so registry fails)
+	std::string cmd = "./build/mediasoup-sfu --nodaemon"
+		" --port=18782 --workers=1 --workerBin=./mediasoup-worker"
+		" --announcedIp=127.0.0.1 --listenIp=127.0.0.1"
+		" --redisHost=192.0.2.1 --redisPort=6379"
+		" > /dev/null 2>&1 & echo $!";
+	FILE* fp = popen(cmd.c_str(), "r");
+	char buf[64]{};
+	fgets(buf, sizeof(buf), fp);
+	pclose(fp);
+	pid_t pid = atoi(buf);
+	ASSERT_GT(pid, 0);
+	nodes_.push_back({18782, pid, 0});
+	ASSERT_TRUE(waitForPort(18782));
+	usleep(500000);
+
+	// /api/resolve should still return something (fallback to self)
+	std::string body = httpGet(HOST, 18782, "/api/resolve?roomId=" + roomName("nredis"));
+	ASSERT_FALSE(body.empty());
+	auto j = json::parse(body);
+	EXPECT_TRUE(j.contains("wsUrl"));
+
+	// Join should work regardless of resolve outcome
+	TestWsClient ws;
+	ASSERT_TRUE(ws.connect(HOST, 18782));
+	auto resp = ws.request("join", {
+		{"roomId", roomName("nredis")}, {"peerId", "p1"},
+		{"displayName", "p1"}, {"rtpCapabilities", makeRtpCaps()}
+	});
+	ASSERT_TRUE(resp.value("ok", false)) << "Join must succeed even without Redis";
+	ws.close();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Test 10: Full resolve→connect→communicate flow across two nodes
+// ═══════════════════════════════════════════════════════════════
+TEST_F(MultiNodeResolveTest, ResolveAndCommunicateCrossNode) {
+	startNodes({{18780, 0}, {18781, 0}});
+	std::string room = roomName("cross_comm");
+
+	// Alice joins on SFU-A
+	TestWsClient alice;
+	ASSERT_TRUE(alice.connect(HOST, 18780));
+	auto aliceResp = alice.request("join", {
+		{"roomId", room}, {"peerId", "alice"},
+		{"displayName", "alice"}, {"rtpCapabilities", makeRtpCaps()}
+	});
+	ASSERT_TRUE(aliceResp.value("ok", false));
+
+	// Bob resolves from SFU-B, gets SFU-A
+	std::string body = httpGet(HOST, 18781, "/api/resolve?roomId=" + room);
+	auto resolved = json::parse(body);
+	ASSERT_FALSE(resolved["isNew"].get<bool>());
+	std::string wsUrl = resolved["wsUrl"].get<std::string>();
+	ASSERT_NE(wsUrl.find("18780"), std::string::npos);
+
+	// Bob connects to resolved node (SFU-A) and joins
+	TestWsClient bob;
+	ASSERT_TRUE(bob.connect(HOST, 18780));
+	auto bobResp = bob.request("join", {
+		{"roomId", room}, {"peerId", "bob"},
+		{"displayName", "bob"}, {"rtpCapabilities", makeRtpCaps()}
+	});
+	ASSERT_TRUE(bobResp.value("ok", false));
+
+	// Alice receives peerJoined
+	auto notif = alice.waitNotification("peerJoined", 3000);
+	ASSERT_FALSE(notif.empty());
+	EXPECT_EQ(notif["data"]["peerId"], "bob");
+
+	// Bob creates recvTransport — verifies full signaling works on resolved node
+	auto tResp = bob.request("createWebRtcTransport", {{"producing", false}, {"consuming", true}});
+	ASSERT_TRUE(tResp.contains("id")) << "Transport creation must work on resolved node";
+
+	alice.close();
+	bob.close();
+}
