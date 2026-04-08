@@ -61,7 +61,12 @@ public:
 			std::lock_guard<std::mutex> cl(cacheMutex_);
 			nodeCache_[nodeId_] = parseNodeValue(val);
 		}
-		publishNodeUpdate();
+		// Publish actual load, not zeros
+		if (ctx_) {
+			std::string msg = nodeId_ + "=" + val;
+			auto* pr = (redisReply*)redisCommand(ctx_, "PUBLISH %s %s", kChannelNodes, msg.c_str());
+			if (pr) freeReplyObject(pr);
+		}
 	}
 
 	void refreshRooms(const std::vector<std::string>& roomIds) {
@@ -81,7 +86,7 @@ public:
 	};
 
 	ResolveResult resolveRoom(const std::string& roomId, const std::string& clientIp = "") {
-		// Check local room cache first
+		// Check local room cache first (no lock ordering issue — cacheMutex_ only)
 		{
 			std::lock_guard<std::mutex> cl(cacheMutex_);
 			auto it = roomCache_.find(roomId);
@@ -89,7 +94,7 @@ public:
 				return {it->second, false};
 		}
 
-		// Cache miss — check Redis
+		// Cache miss — check Redis. Lock order: cmdMutex_ first, cacheMutex_ inside.
 		{
 			std::lock_guard<std::mutex> lock(cmdMutex_);
 			if (ensureConnected()) {
@@ -97,7 +102,12 @@ public:
 				if (reply && reply->type == REDIS_REPLY_STRING) {
 					std::string ownerNodeId = reply->str;
 					freeReplyObject(reply);
-					std::string addr = getCachedNodeAddress(ownerNodeId);
+					std::string addr;
+					{
+						std::lock_guard<std::mutex> cl(cacheMutex_);
+						auto nit = nodeCache_.find(ownerNodeId);
+						if (nit != nodeCache_.end()) addr = nit->second.address;
+					}
 					if (!addr.empty()) {
 						std::lock_guard<std::mutex> cl(cacheMutex_);
 						roomCache_[roomId] = addr;
@@ -116,7 +126,7 @@ public:
 	}
 
 	std::string claimRoom(const std::string& roomId, const std::string& clientIp = "") {
-		// Check local room cache — if room already claimed, redirect
+		// Check local room cache first (read-only, quick check)
 		{
 			std::lock_guard<std::mutex> cl(cacheMutex_);
 			auto it = roomCache_.find(roomId);
@@ -126,6 +136,7 @@ public:
 			}
 		}
 
+		// Cache miss — go to Redis. Lock order: cmdMutex_ first, cacheMutex_ inside.
 		std::lock_guard<std::mutex> lock(cmdMutex_);
 		if (!ensureConnected()) {
 			MS_WARN(logger_, "Redis unavailable, degrading to local-only for room {}", roomId);
@@ -459,13 +470,6 @@ private:
 	}
 
 	// ── Cache-based lookups ──
-
-	std::string getCachedNodeAddress(const std::string& nid) {
-		std::lock_guard<std::mutex> cl(cacheMutex_);
-		auto it = nodeCache_.find(nid);
-		if (it != nodeCache_.end()) return it->second.address;
-		return "";
-	}
 
 	std::string findBestNodeCached(const std::string& clientIp) {
 		std::lock_guard<std::mutex> cl(cacheMutex_);
