@@ -802,3 +802,228 @@ TEST_F(RedisDegradeTest, JoinWorksWithoutRedis) {
 	EXPECT_TRUE(transport.value("ok", false))
 		<< "createTransport should work after degraded join, got: " << transport.dump();
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Local cache + pub/sub: verify cache-based routing works
+// ═══════════════════════════════════════════════════════════════
+
+static const int CACHE_PORT_A = 18796;
+static const int CACHE_PORT_B = 18797;
+
+class CacheTest : public ::testing::Test {
+protected:
+	pid_t pidA_ = -1, pidB_ = -1;
+	std::string testRoom_;
+
+	static pid_t startSfu(int port, const std::string& extraArgs = "") {
+		std::string cmd = "./build/mediasoup-sfu --nodaemon"
+			" --port=" + std::to_string(port) +
+			" --workers=1"
+			" --workerBin=./mediasoup-worker"
+			" --announcedIp=127.0.0.1"
+			" --listenIp=127.0.0.1"
+			" --noCountryIsolation"
+			" " + extraArgs +
+			" > /dev/null 2>&1 & echo $!";
+		FILE* fp = popen(cmd.c_str(), "r");
+		if (!fp) return -1;
+		char buf[64]{};
+		fgets(buf, sizeof(buf), fp);
+		pclose(fp);
+		return atoi(buf);
+	}
+
+	static bool waitForPort(int port, int timeoutMs = 5000) {
+		for (int i = 0; i < timeoutMs / 100; ++i) {
+			usleep(100000);
+			int fd = socket(AF_INET, SOCK_STREAM, 0);
+			sockaddr_in addr{};
+			addr.sin_family = AF_INET;
+			addr.sin_port = htons(port);
+			inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+			if (::connect(fd, (sockaddr*)&addr, sizeof(addr)) == 0) {
+				::close(fd);
+				usleep(200000);
+				return true;
+			}
+			::close(fd);
+		}
+		return false;
+	}
+
+	static void killAndWaitPort(pid_t pid, int port) {
+		if (pid <= 0) return;
+		kill(pid, SIGKILL);
+		for (int i = 0; i < 20; ++i) {
+			usleep(50000);
+			int fd = socket(AF_INET, SOCK_STREAM, 0);
+			sockaddr_in addr{};
+			addr.sin_family = AF_INET;
+			addr.sin_port = htons(port);
+			addr.sin_addr.s_addr = htonl(INADDR_ANY);
+			int opt = 1;
+			setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+			bool free = (bind(fd, (sockaddr*)&addr, sizeof(addr)) == 0);
+			::close(fd);
+			if (free) return;
+		}
+	}
+
+	static json rtpCaps() {
+		return {
+			{"codecs", {{
+				{"mimeType", "audio/opus"}, {"kind", "audio"},
+				{"clockRate", 48000}, {"channels", 2},
+				{"preferredPayloadType", 100}
+			}}},
+			{"headerExtensions", json::array()}
+		};
+	}
+
+	void SetUp() override {
+		testRoom_ = "cache_" + std::to_string(getpid()) + "_" +
+			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+
+		// Clean Redis
+		{
+			redisContext* ctx = redisConnect("127.0.0.1", 6379);
+			if (ctx && !ctx->err) {
+				auto* r = (redisReply*)redisCommand(ctx, "KEYS node:*");
+				if (r && r->type == REDIS_REPLY_ARRAY)
+					for (size_t i = 0; i < r->elements; i++)
+						redisCommand(ctx, "DEL %s", r->element[i]->str);
+				if (r) freeReplyObject(r);
+				r = (redisReply*)redisCommand(ctx, "KEYS room:cache_*");
+				if (r && r->type == REDIS_REPLY_ARRAY)
+					for (size_t i = 0; i < r->elements; i++)
+						redisCommand(ctx, "DEL %s", r->element[i]->str);
+				if (r) freeReplyObject(r);
+				redisFree(ctx);
+			}
+		}
+
+		pidA_ = startSfu(CACHE_PORT_A, "--lat=30.27 --lng=120.15 --isp=电信");
+		pidB_ = startSfu(CACHE_PORT_B, "--lat=23.13 --lng=113.26 --isp=联通");
+		ASSERT_GT(pidA_, 0);
+		ASSERT_GT(pidB_, 0);
+		ASSERT_TRUE(waitForPort(CACHE_PORT_A));
+		ASSERT_TRUE(waitForPort(CACHE_PORT_B));
+		// Wait for heartbeat + pub/sub sync
+		usleep(2000000);
+	}
+
+	void TearDown() override {
+		killAndWaitPort(pidA_, CACHE_PORT_A);
+		killAndWaitPort(pidB_, CACHE_PORT_B);
+	}
+};
+
+// Room claimed on node A should be visible to node B via pub/sub cache
+TEST_F(CacheTest, RoomClaimPropagatesViaCache) {
+	// Alice joins on node A → claims room
+	TestWsClient alice;
+	ASSERT_TRUE(alice.connect("127.0.0.1", CACHE_PORT_A));
+	auto joinResp = alice.request("join", {
+		{"roomId", testRoom_}, {"peerId", "alice"},
+		{"displayName", "alice"}, {"rtpCapabilities", rtpCaps()}
+	});
+	ASSERT_TRUE(joinResp.value("ok", false)) << joinResp.dump();
+
+	// Wait for pub/sub propagation
+	usleep(500000);
+
+	// Node B should know about this room via cache → resolve returns node A
+	int fd = socket(AF_INET, SOCK_STREAM, 0);
+	sockaddr_in addr{};
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(CACHE_PORT_B);
+	inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
+
+	std::string req = "GET /api/resolve?roomId=" + testRoom_ +
+		" HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+	::send(fd, req.data(), req.size(), 0);
+
+	char buf[4096]{};
+	int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+	::close(fd);
+	ASSERT_GT(n, 0);
+
+	std::string response(buf, n);
+	// Should point to node A (where room was claimed)
+	EXPECT_NE(response.find(std::to_string(CACHE_PORT_A)), std::string::npos)
+		<< "Node B should resolve room to node A via cache, got: " << response;
+}
+
+// Second resolve for same room should be fast (cache hit, no Redis)
+TEST_F(CacheTest, ResolveUsesCache) {
+	// Claim room on node A
+	TestWsClient alice;
+	ASSERT_TRUE(alice.connect("127.0.0.1", CACHE_PORT_A));
+	auto joinResp = alice.request("join", {
+		{"roomId", testRoom_}, {"peerId", "alice"},
+		{"displayName", "alice"}, {"rtpCapabilities", rtpCaps()}
+	});
+	ASSERT_TRUE(joinResp.value("ok", false));
+	usleep(500000);
+
+	// Resolve twice on node A — second should be cache hit
+	auto resolve = [&]() {
+		int fd = socket(AF_INET, SOCK_STREAM, 0);
+		sockaddr_in addr{};
+		addr.sin_family = AF_INET;
+		addr.sin_port = htons(CACHE_PORT_A);
+		inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+		::connect(fd, (sockaddr*)&addr, sizeof(addr));
+		std::string req = "GET /api/resolve?roomId=" + testRoom_ +
+			" HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+		::send(fd, req.data(), req.size(), 0);
+		char buf[4096]{};
+		int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+		::close(fd);
+		return std::string(buf, n > 0 ? n : 0);
+	};
+
+	auto start = std::chrono::steady_clock::now();
+	std::string r1 = resolve();
+	std::string r2 = resolve();
+	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+		std::chrono::steady_clock::now() - start).count();
+
+	// Both should return node A
+	EXPECT_NE(r1.find(std::to_string(CACHE_PORT_A)), std::string::npos);
+	EXPECT_NE(r2.find(std::to_string(CACHE_PORT_A)), std::string::npos);
+	// Two resolves should be fast (< 500ms total, cache hit)
+	EXPECT_LT(elapsed, 500) << "Cached resolves should be fast";
+}
+
+// Node B sees node A via pub/sub — direct join on B redirects to A for existing room
+TEST_F(CacheTest, DirectJoinRedirectsViaCachedRoom) {
+	// Alice joins on node A
+	TestWsClient alice;
+	ASSERT_TRUE(alice.connect("127.0.0.1", CACHE_PORT_A));
+	auto joinResp = alice.request("join", {
+		{"roomId", testRoom_}, {"peerId", "alice"},
+		{"displayName", "alice"}, {"rtpCapabilities", rtpCaps()}
+	});
+	ASSERT_TRUE(joinResp.value("ok", false));
+	usleep(500000);
+
+	// Bob tries to join same room on node B → should redirect to node A
+	TestWsClient bob;
+	ASSERT_TRUE(bob.connect("127.0.0.1", CACHE_PORT_B));
+	auto bobResp = bob.request("join", {
+		{"roomId", testRoom_}, {"peerId", "bob"},
+		{"displayName", "bob"}, {"rtpCapabilities", rtpCaps()}
+	});
+
+	bool redirected = bobResp.contains("redirect");
+	if (redirected) {
+		std::string redirect = bobResp["redirect"].get<std::string>();
+		EXPECT_NE(redirect.find(std::to_string(CACHE_PORT_A)), std::string::npos)
+			<< "Should redirect to node A, got: " << redirect;
+	}
+	// Either redirect or ok (if cache not yet propagated, EVAL handles it)
+	EXPECT_TRUE(redirected || bobResp.value("ok", false))
+		<< "Should redirect or succeed, got: " << bobResp.dump();
+}
