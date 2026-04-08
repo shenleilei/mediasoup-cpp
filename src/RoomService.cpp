@@ -30,6 +30,17 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 		return {false, {}, "", "invalid rtpCapabilities"};
 	}
 
+	// Check local capacity before creating room
+	auto existingRoom = roomManager_.getRoom(roomId);
+	if (!existingRoom) {
+		size_t maxRooms = roomManager_.workerManager().maxTotalRouters();
+		if (maxRooms > 0 && roomManager_.roomCount() >= maxRooms) {
+			MS_WARN(logger_, "[{} {}] local node at capacity ({}/{})", roomId, peerId,
+				roomManager_.roomCount(), maxRooms);
+			return {false, {}, "", "no available capacity"};
+		}
+	}
+
 	auto room = roomManager_.createRoom(roomId);
 	auto peer = std::make_shared<Peer>();
 	peer->id = peerId;
