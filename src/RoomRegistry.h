@@ -45,7 +45,9 @@ public:
 		std::lock_guard<std::mutex> lock(cmdMutex_);
 		if (!ensureConnected()) return;
 		registerNode();
-		// Don't publish here — updateLoad() will publish actual values right after
+		// Periodically refresh cache to evict entries for dead nodes
+		// whose Redis keys have expired (TTL-based cleanup)
+		syncAllUnlocked();
 	}
 
 	void updateLoad(size_t rooms, size_t maxRooms) {
@@ -193,11 +195,14 @@ public:
 
 		if (result.empty() || result == "self") {
 			if (result.empty() && geo_ && !clientIp.empty()) {
-				std::string best = findBestNodeCached(clientIp);
-				if (!best.empty() && best != nodeAddress_) {
-					auto* del = (redisReply*)redisCommand(ctx_, "DEL %s", roomKey.c_str());
-					if (del) freeReplyObject(del);
-					return best;
+				auto clientGeo = geo_->lookup(clientIp);
+				if (clientGeo.valid && clientGeo.lat != 0) {
+					std::string best = findBestNodeCached(clientIp);
+					if (!best.empty() && best != nodeAddress_) {
+						auto* del = (redisReply*)redisCommand(ctx_, "DEL %s", roomKey.c_str());
+						if (del) freeReplyObject(del);
+						return best;
+					}
 				}
 			}
 			// Update cache + publish
@@ -260,8 +265,17 @@ public:
 
 	void stop() {
 		subStop_ = true;
+		// Unregister this node from Redis before shutting down
 		{
 			std::lock_guard<std::mutex> lock(cmdMutex_);
+			if (ctx_ && !ctx_->err) {
+				auto* reply = (redisReply*)redisCommand(ctx_, "DEL %s", ("node:" + nodeId_).c_str());
+				if (reply) freeReplyObject(reply);
+				// Publish node removal so other nodes evict from cache
+				std::string msg = nodeId_ + "=";
+				reply = (redisReply*)redisCommand(ctx_, "PUBLISH %s %s", kChannelNodes, msg.c_str());
+				if (reply) freeReplyObject(reply);
+			}
 			if (ctx_) { redisFree(ctx_); ctx_ = nullptr; }
 		}
 		if (subThread_.joinable()) subThread_.join();
@@ -439,6 +453,11 @@ private:
 
 	void syncAll() {
 		std::lock_guard<std::mutex> lock(cmdMutex_);
+		syncAllUnlocked();
+	}
+
+	// Must be called with cmdMutex_ held
+	void syncAllUnlocked() {
 		if (!ensureConnected()) return;
 
 		// Sync nodes
