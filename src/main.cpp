@@ -4,6 +4,7 @@
 #include "RoomRegistry.h"
 #include "RoomService.h"
 #include "SignalingServer.h"
+#include "GeoRouter.h"
 #include <nlohmann/json.hpp>
 #include <csignal>
 #include <atomic>
@@ -68,6 +69,9 @@ int main(int argc, char* argv[]) {
 	std::string nodeAddress;
 	std::string recordDir = "./recordings";
 	int maxRoutersPerWorker = 0;
+	double nodeLat = 0, nodeLng = 0;
+	std::string nodeIsp;
+	std::string geoDbPath = "./ip2region.xdb";
 	bool noDaemon = false;
 	std::string logFile = "/var/log/mediasoup-sfu.log";
 	std::string pidFile = "/var/run/mediasoup-sfu.pid";
@@ -95,6 +99,10 @@ int main(int argc, char* argv[]) {
 				if (cfg.contains("nodeAddress"))    nodeAddress = cfg["nodeAddress"].get<std::string>();
 				if (cfg.contains("recordDir"))      recordDir = cfg["recordDir"].get<std::string>();
 				if (cfg.contains("maxRoutersPerWorker")) maxRoutersPerWorker = cfg["maxRoutersPerWorker"].get<int>();
+				if (cfg.contains("lat"))            nodeLat = cfg["lat"].get<double>();
+				if (cfg.contains("lng"))            nodeLng = cfg["lng"].get<double>();
+				if (cfg.contains("isp"))            nodeIsp = cfg["isp"].get<std::string>();
+				if (cfg.contains("geoDb"))          geoDbPath = cfg["geoDb"].get<std::string>();
 				if (cfg.contains("logFile"))        logFile = cfg["logFile"].get<std::string>();
 				if (cfg.contains("pidFile"))        pidFile = cfg["pidFile"].get<std::string>();
 				if (cfg.contains("logLevel"))       logLevel = cfg["logLevel"].get<std::string>();
@@ -120,6 +128,10 @@ int main(int argc, char* argv[]) {
 		else if (arg.find("--nodeAddress=") == 0) nodeAddress = arg.substr(14);
 		else if (arg.find("--recordDir=") == 0) recordDir = arg.substr(12);
 		else if (arg.find("--maxRoutersPerWorker=") == 0) maxRoutersPerWorker = std::stoi(arg.substr(22));
+		else if (arg.find("--lat=") == 0)          nodeLat = std::stod(arg.substr(6));
+		else if (arg.find("--lng=") == 0)          nodeLng = std::stod(arg.substr(6));
+		else if (arg.find("--isp=") == 0)          nodeIsp = arg.substr(6);
+		else if (arg.find("--geoDb=") == 0)        geoDbPath = arg.substr(8);
 		else if (arg.find("--logFile=") == 0)  logFile = arg.substr(10);
 		else if (arg.find("--pidFile=") == 0)  pidFile = arg.substr(10);
 		else if (arg.find("--logLevel=") == 0) logLevel = arg.substr(11);
@@ -220,13 +232,37 @@ int main(int argc, char* argv[]) {
 	if (maxRoutersPerWorker > 0)
 		workerManager.setMaxRoutersPerWorker(static_cast<size_t>(maxRoutersPerWorker));
 
+	// GeoRouter for IP-based node selection
+	std::unique_ptr<GeoRouter> geoRouter;
+	geoRouter = std::make_unique<GeoRouter>();
+	if (geoRouter->init(geoDbPath)) {
+		spdlog::info("GeoRouter initialized from {}", geoDbPath);
+		// Auto-detect node geo from its own IP if lat/lng not set
+		if (nodeLat == 0 && nodeLng == 0 && !announcedIp.empty()) {
+			auto info = geoRouter->lookup(announcedIp);
+			if (info.valid) {
+				nodeLat = info.lat;
+				nodeLng = info.lng;
+				if (nodeIsp.empty()) nodeIsp = info.isp;
+				spdlog::info("Auto-detected node geo: {}/{} lat={} lng={} isp={}",
+					info.province, info.city, nodeLat, nodeLng, nodeIsp);
+			}
+		}
+	} else {
+		spdlog::warn("GeoRouter init failed ({}), geo-routing disabled", geoDbPath);
+		geoRouter.reset();
+	}
+
 	// Redis room registry
 	std::unique_ptr<RoomRegistry> registry;
 	try {
-		registry = std::make_unique<RoomRegistry>(redisHost, redisPort, nodeId, nodeAddress);
+		registry = std::make_unique<RoomRegistry>(redisHost, redisPort, nodeId, nodeAddress,
+			nodeLat, nodeLng, nodeIsp);
+		if (geoRouter) registry->setGeoRouter(geoRouter.get());
 		registry->start();
 		g_registry = registry.get();
-		spdlog::info("RoomRegistry started [nodeId:{} addr:{}]", nodeId, nodeAddress);
+		spdlog::info("RoomRegistry started [nodeId:{} addr:{} lat:{} lng:{} isp:{}]",
+			nodeId, nodeAddress, nodeLat, nodeLng, nodeIsp);
 	} catch (const std::exception& e) {
 		spdlog::warn("Redis not available ({}), running in single-node mode", e.what());
 	}

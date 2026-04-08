@@ -1,8 +1,13 @@
 #pragma once
 #include "Logger.h"
 #include "Constants.h"
+#include "GeoRouter.h"
 #include <string>
+#include <vector>
+#include <sstream>
+#include <algorithm>
 #include <mutex>
+#include <cmath>
 #include <hiredis/hiredis.h>
 
 namespace mediasoup {
@@ -10,8 +15,10 @@ namespace mediasoup {
 class RoomRegistry {
 public:
 	RoomRegistry(const std::string& redisHost, int redisPort,
-		const std::string& nodeId, const std::string& nodeAddress)
+		const std::string& nodeId, const std::string& nodeAddress,
+		double nodeLat = 0, double nodeLng = 0, const std::string& nodeIsp = "")
 		: nodeId_(nodeId), nodeAddress_(nodeAddress)
+		, nodeLat_(nodeLat), nodeLng_(nodeLng), nodeIsp_(nodeIsp)
 		, redisHost_(redisHost), redisPort_(redisPort)
 		, logger_(Logger::Get("RoomRegistry"))
 	{
@@ -38,7 +45,9 @@ public:
 	void updateLoad(size_t rooms, size_t maxRooms) {
 		std::lock_guard<std::mutex> lock(mutex_);
 		if (!ensureConnected()) return;
-		std::string val = nodeAddress_ + "|" + std::to_string(rooms) + "|" + std::to_string(maxRooms);
+		// Format: address|rooms|maxRooms|lat|lng|isp
+		std::string val = nodeAddress_ + "|" + std::to_string(rooms) + "|" + std::to_string(maxRooms)
+			+ "|" + std::to_string(nodeLat_) + "|" + std::to_string(nodeLng_) + "|" + nodeIsp_;
 		auto* reply = (redisReply*)redisCommand(ctx_, "SET %s %s EX %d",
 			("node:" + nodeId_).c_str(), val.c_str(), nodeTTL_);
 		if (reply) freeReplyObject(reply);
@@ -63,7 +72,7 @@ public:
 		bool isNew = false;  // true if room doesn't exist yet
 	};
 
-	ResolveResult resolveRoom(const std::string& roomId) {
+	ResolveResult resolveRoom(const std::string& roomId, const std::string& clientIp = "") {
 		std::lock_guard<std::mutex> lock(mutex_);
 		if (!ensureConnected()) return {nodeAddress_, false};
 
@@ -72,16 +81,14 @@ public:
 		if (reply && reply->type == REDIS_REPLY_STRING) {
 			std::string ownerNodeId = reply->str;
 			freeReplyObject(reply);
-			// Room exists — return owner's address
 			auto info = parseNodeInfo(ownerNodeId);
 			if (!info.address.empty()) return {info.address, false};
-			// Owner node key missing — node is dead or expired, route to self
 			return {nodeAddress_, true};
 		}
 		if (reply) freeReplyObject(reply);
 
-		// Room doesn't exist — pick least-loaded node
-		auto best = findLeastLoadedNode();
+		// Room doesn't exist — pick best node for this client
+		auto best = findBestNode(clientIp);
 		return {best.empty() ? nodeAddress_ : best, true};
 	}
 
@@ -161,6 +168,8 @@ public:
 	const std::string& nodeId() const { return nodeId_; }
 	const std::string& nodeAddress() const { return nodeAddress_; }
 
+	void setGeoRouter(GeoRouter* geo) { geo_ = geo; }
+
 private:
 	bool reconnect() {
 		if (ctx_) { redisFree(ctx_); ctx_ = nullptr; }
@@ -188,8 +197,8 @@ private:
 
 	void registerNode() {
 		if (!ctx_) return;
-		// Store address with placeholder load (updated by updateLoad)
-		std::string val = nodeAddress_ + "|0|0";
+		std::string val = nodeAddress_ + "|0|0|" + std::to_string(nodeLat_) + "|"
+			+ std::to_string(nodeLng_) + "|" + nodeIsp_;
 		auto* reply = (redisReply*)redisCommand(ctx_, "SET %s %s EX %d",
 			("node:" + nodeId_).c_str(), val.c_str(), nodeTTL_);
 		if (reply) freeReplyObject(reply);
@@ -200,22 +209,26 @@ private:
 		std::string address;
 		size_t rooms = 0;
 		size_t maxRooms = 0;
+		double lat = 0;
+		double lng = 0;
+		std::string isp;
 	};
 
-	// Parse "address|rooms|maxRooms" format; falls back to plain address for compatibility
+	// Parse "address|rooms|maxRooms|lat|lng|isp" format
 	NodeInfo parseNodeValue(const std::string& val) {
 		NodeInfo info;
-		auto p1 = val.find('|');
-		if (p1 == std::string::npos) {
-			info.address = val;
-			return info;
-		}
-		info.address = val.substr(0, p1);
-		auto p2 = val.find('|', p1 + 1);
-		if (p2 != std::string::npos) {
-			try { info.rooms = std::stoul(val.substr(p1 + 1, p2 - p1 - 1)); } catch (...) {}
-			try { info.maxRooms = std::stoul(val.substr(p2 + 1)); } catch (...) {}
-		}
+		std::vector<std::string> parts;
+		std::istringstream ss(val);
+		std::string token;
+		while (std::getline(ss, token, '|')) parts.push_back(token);
+
+		if (parts.empty()) return info;
+		info.address = parts[0];
+		if (parts.size() > 1) try { info.rooms = std::stoul(parts[1]); } catch (...) {}
+		if (parts.size() > 2) try { info.maxRooms = std::stoul(parts[2]); } catch (...) {}
+		if (parts.size() > 3) try { info.lat = std::stod(parts[3]); } catch (...) {}
+		if (parts.size() > 4) try { info.lng = std::stod(parts[4]); } catch (...) {}
+		if (parts.size() > 5) info.isp = parts[5];
 		return info;
 	}
 
@@ -231,14 +244,25 @@ private:
 	}
 
 	std::string findLeastLoadedNode() {
+		return findBestNode("");
+	}
+
+	// Geo-aware node selection: ISP match (China) > distance > load
+	std::string findBestNode(const std::string& clientIp) {
 		if (!ctx_) return "";
 		auto* reply = (redisReply*)redisCommand(ctx_, "KEYS node:*");
 		if (!reply || reply->type != REDIS_REPLY_ARRAY) {
 			if (reply) freeReplyObject(reply);
 			return "";
 		}
-		std::string bestAddr;
-		size_t bestLoad = SIZE_MAX;
+
+		// Collect all candidate nodes
+		struct Candidate { std::string address; size_t rooms; double score; };
+		std::vector<Candidate> candidates;
+
+		GeoInfo clientGeo;
+		if (geo_ && !clientIp.empty()) clientGeo = geo_->lookup(clientIp);
+
 		for (size_t i = 0; i < reply->elements; i++) {
 			std::string key = reply->element[i]->str;
 			auto* vr = (redisReply*)redisCommand(ctx_, "GET %s", key.c_str());
@@ -246,15 +270,32 @@ private:
 			auto info = parseNodeValue(vr->str);
 			freeReplyObject(vr);
 			if (info.address.empty()) continue;
-			// Skip nodes at capacity
 			if (info.maxRooms > 0 && info.rooms >= info.maxRooms) continue;
-			if (info.rooms < bestLoad) {
-				bestLoad = info.rooms;
-				bestAddr = info.address;
+
+			double s = 0;
+			if (clientGeo.valid && (info.lat != 0 || info.lng != 0)) {
+				s = geo_->score(clientGeo, info.lat, info.lng, info.isp);
 			}
+			candidates.push_back({info.address, info.rooms, s});
 		}
 		freeReplyObject(reply);
-		return bestAddr;
+
+		if (candidates.empty()) return "";
+
+		if (clientGeo.valid) {
+			// Sort by geo score first, then by load as tiebreaker
+			std::sort(candidates.begin(), candidates.end(), [](auto& a, auto& b) {
+				if (std::abs(a.score - b.score) > 100.0) return a.score < b.score; // >100km difference matters
+				return a.rooms < b.rooms;
+			});
+		} else {
+			// No geo info — pure load balancing
+			std::sort(candidates.begin(), candidates.end(), [](auto& a, auto& b) {
+				return a.rooms < b.rooms;
+			});
+		}
+
+		return candidates.front().address;
 	}
 
 	std::string getNodeAddress(const std::string& nid) {
@@ -263,12 +304,16 @@ private:
 
 	std::string nodeId_;
 	std::string nodeAddress_;
+	double nodeLat_;
+	double nodeLng_;
+	std::string nodeIsp_;
 	std::string redisHost_;
 	int redisPort_;
 	redisContext* ctx_ = nullptr;
 	std::mutex mutex_;
 	int roomTTL_ = kRedisRoomTtlSec;
 	int nodeTTL_ = kRedisNodeTtlSec;
+	GeoRouter* geo_ = nullptr;
 	std::shared_ptr<spdlog::logger> logger_;
 };
 

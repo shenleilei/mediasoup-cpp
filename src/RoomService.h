@@ -65,7 +65,7 @@ public:
 	void heartbeatRegistry();
 
 	// Multi-node: resolve room location
-	json resolveRoom(const std::string& roomId);
+	json resolveRoom(const std::string& roomId, const std::string& clientIp = "");
 	// Multi-node: get node load info
 	json getNodeLoad() const;
 

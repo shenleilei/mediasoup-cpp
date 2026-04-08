@@ -51,6 +51,11 @@ target_include_directories(mediasoup_lib PUBLIC
 
 target_link_libraries(mediasoup_lib PUBLIC spdlog::spdlog uSockets pthread avformat avcodec avutil)
 
+# ── Third-party: ip2region (C library) ──
+set(IP2REGION_DIR ${CMAKE_SOURCE_DIR}/third_party/ip2region/binding/c)
+add_library(ip2region STATIC ${IP2REGION_DIR}/xdb_searcher.c ${IP2REGION_DIR}/xdb_util.c)
+target_include_directories(ip2region PUBLIC ${IP2REGION_DIR})
+
 # ── Main executable ──
 add_executable(mediasoup-sfu
     src/main.cpp
@@ -66,9 +71,10 @@ target_include_directories(mediasoup-sfu PRIVATE
     ${UWS_INCLUDE}
     ${USOCKETS_DIR}/src
     /usr/include/ffmpeg
+    ${IP2REGION_DIR}
 )
 
-target_link_libraries(mediasoup-sfu PRIVATE mediasoup_lib z hiredis avformat avcodec avutil)
+target_link_libraries(mediasoup-sfu PRIVATE mediasoup_lib ip2region z hiredis avformat avcodec avutil)
 
 # ── Tests ──
 option(BUILD_TESTS "Build unit tests" ON)

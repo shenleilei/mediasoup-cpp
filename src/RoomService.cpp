@@ -651,9 +651,9 @@ void RoomService::heartbeatRegistry() {
 	registry_->updateLoad(roomManager_.roomCount(), roomManager_.workerManager().maxTotalRouters());
 }
 
-json RoomService::resolveRoom(const std::string& roomId) {
+json RoomService::resolveRoom(const std::string& roomId, const std::string& clientIp) {
 	if (!registry_) return {{"wsUrl", ""}, {"isNew", true}};
-	auto result = registry_->resolveRoom(roomId);
+	auto result = registry_->resolveRoom(roomId, clientIp);
 	return {{"wsUrl", result.wsUrl}, {"isNew", result.isNew}};
 }
 

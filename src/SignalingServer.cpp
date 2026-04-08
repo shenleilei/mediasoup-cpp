@@ -278,7 +278,17 @@ void SignalingServer::run() {
 				->end(R"({"error":"roomId required"})");
 			return;
 		}
-		auto result = roomService_.resolveRoom(roomId);
+		// Get client IP: prefer query param, then X-Forwarded-For, then remote address
+		std::string clientIp(req->getQuery("clientIp"));
+		if (clientIp.empty()) {
+			std::string xff(req->getHeader("x-forwarded-for"));
+			if (!xff.empty()) {
+				auto comma = xff.find(',');
+				clientIp = (comma != std::string::npos) ? xff.substr(0, comma) : xff;
+			}
+		}
+		if (clientIp.empty()) clientIp = std::string(res->getRemoteAddressAsText());
+		auto result = roomService_.resolveRoom(roomId, clientIp);
 		res->writeHeader("Content-Type", "application/json")
 			->writeHeader("Access-Control-Allow-Origin", "*")
 			->end(result.dump());
