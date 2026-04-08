@@ -1,5 +1,6 @@
 #pragma once
 #include "RoomService.h"
+#include "WorkerThread.h"
 #include <nlohmann/json.hpp>
 #include <string>
 #include <queue>
@@ -7,6 +8,9 @@
 #include <condition_variable>
 #include <thread>
 #include <functional>
+#include <vector>
+#include <memory>
+#include <unordered_map>
 
 namespace mediasoup {
 
@@ -14,28 +18,39 @@ using json = nlohmann::json;
 
 class SignalingServer {
 public:
-	SignalingServer(int port, RoomService& roomService, const std::string& recordDir = "");
+	/// Construct with WorkerThread pool (new architecture).
+	/// @param port           WebSocket listening port
+	/// @param workerThreads  Pool of WorkerThreads (each owns Workers + Rooms)
+	/// @param registry       Shared RoomRegistry (nullable)
+	/// @param recordDir      Recording directory
+	SignalingServer(int port,
+		std::vector<std::unique_ptr<WorkerThread>>& workerThreads,
+		RoomRegistry* registry,
+		const std::string& recordDir = "");
 	~SignalingServer();
 	void run();
 	void stop();
 
 private:
-	// Single worker thread that executes RoomService calls off the uWS thread
-	void workerLoop();
-	void postWork(std::function<void()> fn);
+	// Pick the WorkerThread for a given roomId.
+	// If the room is already assigned, returns that thread.
+	// Otherwise, assigns to least-loaded thread.
+	WorkerThread* getWorkerThread(const std::string& roomId);
+
+	// Assign a specific roomId to a WorkerThread (called from main thread).
+	void assignRoom(const std::string& roomId, WorkerThread* wt);
+
+	// Remove room assignment (called when room is cleaned up).
+	void unassignRoom(const std::string& roomId);
 
 	int port_;
-	RoomService& roomService_;
+	std::vector<std::unique_ptr<WorkerThread>>& workerThreads_;
+	RoomRegistry* registry_;
 	std::string recordDir_;
 	bool running_ = false;
 
-	// Worker thread + task queue
-	std::thread workerThread_;
-	std::mutex queueMutex_;
-	std::condition_variable queueCv_;
-	std::queue<std::function<void()>> taskQueue_;
-	bool workerStop_ = false;
-	void* uwsLoop_ = nullptr;  // uWS::Loop*, captured for cross-thread defer()
+	// Room → WorkerThread dispatch table (only accessed from main uWS thread, no lock needed)
+	std::unordered_map<std::string, WorkerThread*> roomDispatch_;
 };
 
 } // namespace mediasoup
