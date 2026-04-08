@@ -7,5 +7,11 @@
   "redisHost": "127.0.0.1",
   "redisPort": 6379,
   "nodeId": "",
-  "nodeAddress": ""
+  "nodeAddress": "",
+  "lat": 0,
+  "lng": 0,
+  "isp": "",
+  "country": "",
+  "countryIsolation": true,
+  "geoDb": "./ip2region.xdb"
 }

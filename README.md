@@ -32,17 +32,19 @@ Browser A ──WebSocket──→ SignalingServer (uWS, non-blocking)
                               │
                          RoomService (business logic)
                               │
-                         Router → Transport → Producer/Consumer
-                              │
-                         Channel (pipe + FlatBuffers)
-                              │
-                    ──────────┼────────── process boundary
-                              │
-                    mediasoup-worker (prebuilt v3.14.16)
-                              │
-                         RTP forwarding (SRTP, NACK, BWE, Simulcast)
-                              │
-Browser B ←──SRTP/UDP────────┘
+                    ┌─────────┼──────────┐
+                    ▼         ▼          ▼
+              GeoRouter   RoomRegistry  Router → Transport → Producer/Consumer
+             (ip2region)  (Redis+cache)       │
+                              │          Channel (pipe + FlatBuffers)
+                              │               │
+                    Redis ◄───┘     ──────────┼────────── process boundary
+                    (pub/sub +                │
+                     room claim)    mediasoup-worker (prebuilt v3.14.16)
+                                              │
+                                         RTP forwarding
+                                              │
+Browser B ←──SRTP/UDP────────────────────────┘
 ```
 
 ## Features
@@ -51,7 +53,9 @@ Browser B ←──SRTP/UDP────────┘
 - **Non-blocking signaling** — all Channel IPC calls run on a dedicated worker thread; the uWS event loop never blocks
 - **H264/VP8 recording** — RTP depacketization, frame reassembly, FFmpeg muxer to WebM, with synchronized QoS timeline
 - **QoS monitoring** — real-time stats panel (bitrate, jitter, RTT, packet loss, score) with 3-second refresh, verified against tcpdump
-- **Multi-node routing** — Redis-based room registry with dead-node takeover and automatic redirect
+- **Multi-node routing** — Redis-based room registry with dead-node takeover, automatic redirect, local cache + pub/sub sync
+- **Geo-aware routing** — ip2region IP geolocation, ISP-aware scoring (same ISP > cloud BGP > cross-ISP), country isolation, 339 city coordinates
+- **Redis resilience** — local cache serves requests when Redis is down, pub/sub for real-time sync, graceful degradation to single-node mode
 - **Worker crash recovery** — automatic respawn with rate limiting, client notification within 2 seconds
 - **Daemon mode** — fork + setsid, structured logging, PID file, auto public IP detection
 
@@ -111,6 +115,13 @@ Open `http://<server-ip>:3000` in two browser tabs to start a video call.
 | `--nodaemon` | (flag) | Run in foreground |
 | `--redisHost` | 127.0.0.1 | Redis host (multi-node) |
 | `--nodeId` | auto | Node identifier |
+| `--lat` | auto-detect | Node latitude for geo routing |
+| `--lng` | auto-detect | Node longitude for geo routing |
+| `--isp` | auto-detect | Node ISP (e.g. 电信, 联通, 阿里) |
+| `--country` | auto-detect | Node country (e.g. 中国, United States) |
+| `--countryIsolation` | on | Only route clients to same-country nodes |
+| `--noCountryIsolation` | (flag) | Disable country isolation |
+| `--geoDb` | ./ip2region.xdb | Path to ip2region database file |
 
 ## Thread Model
 
@@ -153,15 +164,16 @@ Browser A ──SRTP/UDP──→ WebRtcTransport → Producer
 ## Testing
 
 ```bash
-# Unit tests (98 tests)
+# Unit tests (143 tests)
 ./build/mediasoup_tests
 
 # Integration tests (requires built mediasoup-sfu + worker)
-./build/mediasoup_integration_tests        # 14 tests
+./build/mediasoup_integration_tests            # 17 tests
+./build/mediasoup_review_fix_tests             # 17 tests (code review fixes + geo routing + cache)
 ./build/mediasoup_stability_integration_tests  # 10 tests
-./build/mediasoup_qos_integration_tests    # 15 tests
-./build/mediasoup_e2e_tests                # 3 tests
-./build/mediasoup_topology_tests           # 6 tests
+./build/mediasoup_qos_integration_tests        # 15 tests
+./build/mediasoup_e2e_tests                    # 3 tests
+./build/mediasoup_topology_tests               # 6 tests
 
 # Worker load benchmark
 ./build/mediasoup_bench
@@ -239,7 +251,8 @@ src/
 ├── SignalingServer.h/cpp # WebSocket + HTTP + worker thread
 ├── RoomService.h/cpp     # Business logic (join/leave/produce/consume/QoS/recording)
 ├── RoomManager.h         # Room/Peer lifecycle, idle GC
-├── RoomRegistry.h        # Redis multi-node routing
+├── RoomRegistry.h        # Redis multi-node routing + local cache + pub/sub
+├── GeoRouter.h           # IP geolocation (ip2region) + ISP-aware scoring
 ├── WorkerManager.h       # Worker pool, load balancing, crash recovery
 ├── Channel.h/cpp         # Pipe IPC (FlatBuffers, request/response/notification)
 ├── Worker.h/cpp          # fork+exec worker process management
@@ -266,6 +279,77 @@ public/
 └── playback.html         # Recording playback with QoS timeline
 ```
 
+## Geo-Aware Node Routing
+
+When deploying across multiple regions, the SFU automatically routes clients to the nearest node based on IP geolocation and ISP matching.
+
+### How It Works
+
+1. Client connects (WebSocket or `/api/resolve`)
+2. Server extracts client IP (from connection, `X-Forwarded-For`, or `clientIp` param)
+3. ip2region looks up: country, province, city, ISP, coordinates
+4. Scoring: each candidate node gets a score = geographic distance, with cross-ISP penalty
+
+### Scoring Rules (China)
+
+| Scenario | Score |
+|----------|-------|
+| Same ISP, nearby | distance (km) |
+| Cloud ISP (阿里/腾讯/华为), nearby | distance (km), no penalty |
+| Cross-ISP, nearby | max(distance, 50km) × 2.0 |
+| Same ISP, far | distance (km) |
+| Cross-ISP, far | max(distance, 50km) × 2.0 |
+
+Overseas: pure geographic distance, no ISP penalty.
+
+Nodes within 100km score difference are considered equal; tiebreaker is load (room count).
+
+### Country Isolation
+
+Enabled by default. Clients are only routed to nodes in the same country:
+- Chinese IP → Chinese nodes only
+- US IP → US nodes only
+
+Disable with `--noCountryIsolation` or `"countryIsolation": false` in config.
+
+### Multi-Region Example
+
+```bash
+# Hangzhou node (China Telecom)
+./mediasoup-sfu --lat=30.27 --lng=120.15 --isp=电信 --country=中国
+
+# Guangzhou node (China Mobile)
+./mediasoup-sfu --lat=23.13 --lng=113.26 --isp=移动 --country=中国
+
+# US West node
+./mediasoup-sfu --lat=37.39 --lng=-122.08 --country="United States"
+```
+
+Geo info auto-detects from the node's public IP if not configured.
+
+### Redis Architecture
+
+```
+                    ┌─── pub/sub: sfu:nodes, sfu:rooms ───┐
+                    │                                       │
+              SFU Node A                              SFU Node B
+              (Hangzhou)                              (Guangzhou)
+            ┌──────────┐                            ┌──────────┐
+            │nodeCache_ │◄── subscribe ──── Redis ──── subscribe ──►│nodeCache_ │
+            │roomCache_ │    (shared)                              │roomCache_ │
+            └──────────┘                            └──────────┘
+                 │                                       │
+            resolveRoom()                           resolveRoom()
+            findBestNode()                          findBestNode()
+            (local cache,                           (local cache,
+             zero Redis)                             zero Redis)
+```
+
+- **Reads**: local cache (zero Redis round-trips)
+- **Writes**: Redis EVAL for atomic room claim + PUBLISH to sync caches
+- **Sync**: subscriber thread + full sync on startup/reconnect
+- **Degradation**: Redis down → local cache continues, new rooms created locally
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
@@ -278,3 +362,4 @@ MIT — see [LICENSE](LICENSE).
 - [nlohmann/json](https://github.com/nlohmann/json) — JSON for C++
 - [spdlog](https://github.com/gabime/spdlog) — logging
 - [FFmpeg](https://ffmpeg.org/) — recording muxer
+- [ip2region](https://github.com/lionsoul2014/ip2region) — offline IP geolocation
