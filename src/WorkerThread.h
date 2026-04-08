@@ -253,17 +253,17 @@ private:
 				if (fd == eventFd_) {
 					// Task queue wakeup — drain eventfd and process tasks
 					uint64_t val;
-					::read(eventFd_, &val, sizeof(val));
+					(void)::read(eventFd_, &val, sizeof(val));
 					processTaskQueue();
 				} else if (fd == healthTimerFd_) {
 					// Health check timer fired
 					uint64_t expirations;
-					::read(healthTimerFd_, &expirations, sizeof(expirations));
+					(void)::read(healthTimerFd_, &expirations, sizeof(expirations));
 					onHealthCheck();
 				} else if (fd == gcTimerFd_) {
 					// GC timer fired
 					uint64_t expirations;
-					::read(gcTimerFd_, &expirations, sizeof(expirations));
+					(void)::read(gcTimerFd_, &expirations, sizeof(expirations));
 					onGcTimer();
 				} else {
 					// Channel data from a Worker process

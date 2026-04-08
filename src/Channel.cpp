@@ -221,7 +221,7 @@ Channel::OwnedResponse Channel::requestWait(
 		struct pollfd pfd{};
 		pfd.fd = consumerFd_;
 		pfd.events = POLLIN;
-		int waitMs = std::min<int>(static_cast<int>(remaining.count()), 100);
+		int waitMs = std::max(0, std::min<int>(static_cast<int>(remaining.count()), 100));
 		::poll(&pfd, 1, waitMs);
 	}
 }
