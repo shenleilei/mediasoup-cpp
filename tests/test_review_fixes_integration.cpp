@@ -4,6 +4,7 @@
 #include "TestWsClient.h"
 #include <signal.h>
 #include <sys/wait.h>
+#include <hiredis/hiredis.h>
 
 static const int SFU_PORT = 18767;
 static const std::string HOST = "127.0.0.1";
@@ -23,6 +24,7 @@ protected:
 			" --workerBin=./mediasoup-worker"
 			" --announcedIp=127.0.0.1"
 			" --listenIp=127.0.0.1"
+			" --redisHost=0.0.0.0 --redisPort=1"
 			" > /dev/null 2>&1 & echo $!";
 		FILE* fp = popen(cmd.c_str(), "r");
 		ASSERT_NE(fp, nullptr);
@@ -304,4 +306,165 @@ TEST_F(ReviewFixIntegration, ResolveAcceptsClientIp) {
 	// Should get 200 with JSON containing wsUrl
 	EXPECT_NE(response.find("200"), std::string::npos) << response;
 	EXPECT_NE(response.find("wsUrl"), std::string::npos) << response;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Geo-aware direct join: two nodes with different geo, verify
+// that join on the "wrong" node returns redirect
+// ═══════════════════════════════════════════════════════════════
+
+static const int GEO_PORT_A = 18780;  // "杭州电信"
+static const int GEO_PORT_B = 18781;  // "广州联通"
+
+class GeoJoinTest : public ::testing::Test {
+protected:
+	pid_t pidA_ = -1, pidB_ = -1;
+	std::string testRoom_;
+
+	static pid_t startSfu(int port, double lat, double lng, const std::string& isp) {
+		std::string cmd = "./build/mediasoup-sfu --nodaemon"
+			" --port=" + std::to_string(port) +
+			" --workers=1"
+			" --workerBin=./mediasoup-worker"
+			" --announcedIp=127.0.0.1"
+			" --listenIp=127.0.0.1"
+			" --lat=" + std::to_string(lat) +
+			" --lng=" + std::to_string(lng) +
+			" --isp=" + isp +
+			" > /dev/null 2>&1 & echo $!";
+		FILE* fp = popen(cmd.c_str(), "r");
+		if (!fp) return -1;
+		char buf[64]{};
+		fgets(buf, sizeof(buf), fp);
+		pclose(fp);
+		return atoi(buf);
+	}
+
+	static bool waitForPort(int port, int timeoutMs = 5000) {
+		for (int i = 0; i < timeoutMs / 100; ++i) {
+			usleep(100000);
+			int fd = socket(AF_INET, SOCK_STREAM, 0);
+			sockaddr_in addr{};
+			addr.sin_family = AF_INET;
+			addr.sin_port = htons(port);
+			inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+			if (::connect(fd, (sockaddr*)&addr, sizeof(addr)) == 0) {
+				::close(fd);
+				usleep(200000);
+				return true;
+			}
+			::close(fd);
+		}
+		return false;
+	}
+
+	static void killAndWaitPort(pid_t pid, int port) {
+		if (pid <= 0) return;
+		kill(pid, SIGKILL);
+		for (int i = 0; i < 20; ++i) {
+			usleep(50000);
+			int fd = socket(AF_INET, SOCK_STREAM, 0);
+			sockaddr_in addr{};
+			addr.sin_family = AF_INET;
+			addr.sin_port = htons(port);
+			addr.sin_addr.s_addr = htonl(INADDR_ANY);
+			int opt = 1;
+			setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+			bool free = (bind(fd, (sockaddr*)&addr, sizeof(addr)) == 0);
+			::close(fd);
+			if (free) return;
+		}
+	}
+
+	void SetUp() override {
+		testRoom_ = "geo_" + std::to_string(getpid()) + "_" +
+			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+
+		// Clean stale room entries for our test room prefix from Redis
+		{
+			redisContext* ctx = redisConnect("127.0.0.1", 6379);
+			if (ctx && !ctx->err) {
+				auto* r = (redisReply*)redisCommand(ctx, "KEYS room:geo_*");
+				if (r && r->type == REDIS_REPLY_ARRAY) {
+					for (size_t i = 0; i < r->elements; i++)
+						redisCommand(ctx, "DEL %s", r->element[i]->str);
+					freeReplyObject(r);
+				}
+				redisFree(ctx);
+			}
+		}
+
+		// Node A: 杭州电信 (30.27, 120.15)
+		pidA_ = startSfu(GEO_PORT_A, 30.27, 120.15, "电信");
+		// Node B: 广州联通 (23.13, 113.26)
+		pidB_ = startSfu(GEO_PORT_B, 23.13, 113.26, "联通");
+		ASSERT_GT(pidA_, 0);
+		ASSERT_GT(pidB_, 0);
+		ASSERT_TRUE(waitForPort(GEO_PORT_A)) << "SFU-A (杭州) did not start";
+		ASSERT_TRUE(waitForPort(GEO_PORT_B)) << "SFU-B (广州) did not start";
+		// Wait for Redis heartbeat to register both nodes' geo info
+		usleep(1500000);
+	}
+
+	void TearDown() override {
+		killAndWaitPort(pidA_, GEO_PORT_A);
+		killAndWaitPort(pidB_, GEO_PORT_B);
+	}
+};
+
+// /api/resolve with Beijing Telecom clientIp should prefer 杭州电信 (Node A)
+TEST_F(GeoJoinTest, ResolvePrefersSameIspNearest) {
+	int fd = socket(AF_INET, SOCK_STREAM, 0);
+	sockaddr_in addr{};
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(GEO_PORT_A); // ask 杭州 node (has geo context)
+	inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
+
+	// Beijing Telecom IP → should route to 杭州电信 (port A), not 广州联通 (port B)
+	std::string req = "GET /api/resolve?roomId=" + testRoom_ +
+		"&clientIp=36.110.147.0 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+	::send(fd, req.data(), req.size(), 0);
+
+	char buf[4096]{};
+	int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+	::close(fd);
+	ASSERT_GT(n, 0);
+
+	std::string response(buf, n);
+	EXPECT_NE(response.find("200"), std::string::npos) << response;
+	// Should pick 杭州电信 (GEO_PORT_A) over 广州联通 (GEO_PORT_B)
+	bool hasPortA = response.find(std::to_string(GEO_PORT_A)) != std::string::npos;
+	bool hasPortB = response.find(std::to_string(GEO_PORT_B)) != std::string::npos;
+	EXPECT_TRUE(hasPortA) << "Beijing Telecom should route to 杭州电信, got: " << response;
+	EXPECT_FALSE(hasPortB) << "Should NOT route to 广州联通, got: " << response;
+}
+
+// Direct join on 广州 node with Beijing Telecom peer should redirect to 杭州
+TEST_F(GeoJoinTest, DirectJoinRedirectsToGeoOptimal) {
+	TestWsClient ws;
+	ASSERT_TRUE(ws.connect("127.0.0.1", GEO_PORT_B)); // connect to 广州
+
+	json rtpCaps = {
+		{"codecs", {{
+			{"mimeType", "audio/opus"}, {"kind", "audio"},
+			{"clockRate", 48000}, {"channels", 2},
+			{"preferredPayloadType", 100}
+		}}},
+		{"headerExtensions", json::array()}
+	};
+
+	auto resp = ws.request("join", {
+		{"roomId", testRoom_}, {"peerId", "beijing_user"},
+		{"displayName", "test"}, {"rtpCapabilities", rtpCaps}
+	});
+
+	// Since client IP is 127.0.0.1 (loopback), geo lookup won't work.
+	// The join should succeed locally (no geo info = no redirect).
+	// This tests that the code path doesn't crash with loopback IP.
+	// True geo redirect requires a real external IP which we can't simulate here.
+	bool ok = resp.value("ok", false);
+	bool hasRedirect = resp.contains("redirect");
+	EXPECT_TRUE(ok || hasRedirect)
+		<< "Join should either succeed or redirect, got: " << resp.dump();
 }

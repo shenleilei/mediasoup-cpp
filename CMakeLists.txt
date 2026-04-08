@@ -176,7 +176,7 @@ if(BUILD_TESTS)
         ${CMAKE_SOURCE_DIR}/src
         ${JSON_INCLUDE}
     )
-    target_link_libraries(mediasoup_review_fix_tests PRIVATE gtest gtest_main pthread)
+    target_link_libraries(mediasoup_review_fix_tests PRIVATE gtest gtest_main pthread hiredis)
     add_test(NAME mediasoup_review_fix_tests COMMAND mediasoup_review_fix_tests
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
