@@ -122,10 +122,10 @@ public:
 			// Cloud providers have multi-line BGP — treat as ISP-neutral
 			bool clientIsCloud = isCloudIsp(client.isp);
 			bool nodeIsCloud = isCloudIsp(nodeIsp);
-			// Only penalize when both sides are traditional ISPs and they differ
+			// Cross-ISP penalty scales with distance (1.5x multiplier)
 			if (!clientIsCloud && !nodeIsCloud &&
 				!client.isp.empty() && !nodeIsp.empty() && client.isp != nodeIsp) {
-				dist += 1000.0;
+				dist *= 1.5;
 			}
 		}
 
