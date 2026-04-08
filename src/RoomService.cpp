@@ -16,23 +16,32 @@ RoomService::RoomService(RoomManager& roomManager, RoomRegistry* registry,
 RoomService::Result RoomService::join(const std::string& roomId, const std::string& peerId,
 	const std::string& displayName, const json& rtpCapabilities, const std::string& clientIp)
 {
-	// Check local capacity before claiming — avoid "ghost" room keys in Redis
-	auto existingRoom = roomManager_.getRoom(roomId);
-	if (!existingRoom) {
-		size_t maxRooms = roomManager_.workerManager().maxTotalRouters();
-		if (maxRooms > 0 && roomManager_.roomCount() >= maxRooms) {
-			MS_WARN(logger_, "[{} {}] local node at capacity ({}/{})", roomId, peerId,
-				roomManager_.roomCount(), maxRooms);
-			return {false, {}, "", "no available capacity"};
-		}
-	}
-
+	// Let claimRoom handle redirect first — even if we're full, the room
+	// may already exist on another node and we should redirect there.
 	if (registry_) {
 		try {
 			std::string addr = registry_->claimRoom(roomId, clientIp);
 			if (!addr.empty()) return {false, {}, addr, ""};
 		} catch (const std::exception& e) {
 			MS_WARN(logger_, "[{} {}] claimRoom failed ({}), degrading to local", roomId, peerId, e.what());
+		}
+	}
+
+	// Check local capacity only for NEW rooms (not already on this node)
+	auto existingRoom = roomManager_.getRoom(roomId);
+	if (!existingRoom) {
+		size_t maxRooms = roomManager_.workerManager().maxTotalRouters();
+		if (maxRooms > 0 && roomManager_.roomCount() >= maxRooms) {
+			MS_WARN(logger_, "[{} {}] local node at capacity ({}/{})", roomId, peerId,
+				roomManager_.roomCount(), maxRooms);
+			// Try to redirect to another node with capacity
+			if (registry_) {
+				try {
+					// Release our claim if we just made one
+					registry_->unregisterRoom(roomId);
+				} catch (...) {}
+			}
+			return {false, {}, "", "no available capacity"};
 		}
 	}
 

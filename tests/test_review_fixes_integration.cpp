@@ -445,7 +445,7 @@ TEST_F(GeoJoinTest, ResolvePrefersSameIspNearest) {
 }
 
 // Direct join on 广州 node with Beijing Telecom peer should redirect to 杭州
-TEST_F(GeoJoinTest, DirectJoinRedirectsToGeoOptimal) {
+TEST_F(GeoJoinTest, DirectJoinWithLoopbackIpSucceedsLocally) {
 	TestWsClient ws;
 	ASSERT_TRUE(ws.connect("127.0.0.1", GEO_PORT_B)); // connect to 广州
 
@@ -459,18 +459,15 @@ TEST_F(GeoJoinTest, DirectJoinRedirectsToGeoOptimal) {
 	};
 
 	auto resp = ws.request("join", {
-		{"roomId", testRoom_}, {"peerId", "beijing_user"},
+		{"roomId", testRoom_ + "_direct"}, {"peerId", "loopback_user"},
 		{"displayName", "test"}, {"rtpCapabilities", rtpCaps}
 	});
 
-	// Since client IP is 127.0.0.1 (loopback), geo lookup won't work.
-	// The join should succeed locally (no geo info = no redirect).
-	// This tests that the code path doesn't crash with loopback IP.
-	// True geo redirect requires a real external IP which we can't simulate here.
-	bool ok = resp.value("ok", false);
-	bool hasRedirect = resp.contains("redirect");
-	EXPECT_TRUE(ok || hasRedirect)
-		<< "Join should either succeed or redirect, got: " << resp.dump();
+	// Loopback IP has no valid geo → no geo redirect → must succeed locally
+	EXPECT_TRUE(resp.value("ok", false))
+		<< "Loopback IP should join locally without redirect, got: " << resp.dump();
+	EXPECT_FALSE(resp.contains("redirect"))
+		<< "Loopback IP should NOT trigger geo redirect, got: " << resp.dump();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1022,12 +1019,12 @@ TEST_F(CacheTest, DirectJoinRedirectsViaCachedRoom) {
 	});
 
 	bool redirected = bobResp.contains("redirect");
+	// Room is on node A, so join on node B MUST redirect (via cache or EVAL)
+	EXPECT_TRUE(redirected)
+		<< "Join on wrong node should redirect, got: " << bobResp.dump();
 	if (redirected) {
 		std::string redirect = bobResp["redirect"].get<std::string>();
 		EXPECT_NE(redirect.find(std::to_string(CACHE_PORT_A)), std::string::npos)
 			<< "Should redirect to node A, got: " << redirect;
 	}
-	// Either redirect or ok (if cache not yet propagated, EVAL handles it)
-	EXPECT_TRUE(redirected || bobResp.value("ok", false))
-		<< "Should redirect or succeed, got: " << bobResp.dump();
 }

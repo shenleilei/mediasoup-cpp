@@ -58,7 +58,8 @@ int main(int argc, char* argv[]) {
 	signal(SIGTERM, signalHandler);
 
 	// Defaults
-	int numWorkers = std::max(1u, std::thread::hardware_concurrency() - 2);
+	int numWorkers = static_cast<int>(std::thread::hardware_concurrency());
+	numWorkers = std::max(1, numWorkers - 2);
 	int signalingPort = 3000;
 	std::string listenIp = "0.0.0.0";
 	std::string announcedIp;
