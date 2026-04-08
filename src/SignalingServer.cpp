@@ -259,6 +259,24 @@ void SignalingServer::run() {
 			}
 		}
 
+	}).get("/api/resolve", [this](auto* res, auto* req) {
+		std::string roomId(req->getQuery("roomId"));
+		if (roomId.empty()) {
+			res->writeStatus("400 Bad Request")->writeHeader("Content-Type", "application/json")
+				->end(R"({"error":"roomId required"})");
+			return;
+		}
+		auto result = roomService_.resolveRoom(roomId);
+		res->writeHeader("Content-Type", "application/json")
+			->writeHeader("Access-Control-Allow-Origin", "*")
+			->end(result.dump());
+
+	}).get("/api/node-load", [this](auto* res, auto*) {
+		auto load = roomService_.getNodeLoad();
+		res->writeHeader("Content-Type", "application/json")
+			->writeHeader("Access-Control-Allow-Origin", "*")
+			->end(load.dump());
+
 	}).get("/api/recordings", [this](auto* res, auto*) {
 		if (recordDir_.empty()) {
 			res->writeHeader("Content-Type", "application/json")->end("[]");

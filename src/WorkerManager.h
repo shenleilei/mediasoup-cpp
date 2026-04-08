@@ -24,6 +24,9 @@ public:
 		return worker;
 	}
 
+	void setMaxRoutersPerWorker(size_t max) { maxRoutersPerWorker_ = max; }
+	size_t maxRoutersPerWorker() const { return maxRoutersPerWorker_; }
+
 	std::shared_ptr<Worker> getLeastLoadedWorker() const {
 		std::lock_guard<std::mutex> lock(mutex_);
 		if (workers_.empty()) return nullptr;
@@ -31,12 +34,31 @@ public:
 		size_t minLoad = SIZE_MAX;
 		for (auto& w : workers_) {
 			if (w->closed()) continue;
-			if (w->routerCount() < minLoad) {
-				minLoad = w->routerCount();
+			size_t load = w->routerCount();
+			if (maxRoutersPerWorker_ > 0 && load >= maxRoutersPerWorker_) continue;
+			if (load < minLoad) {
+				minLoad = load;
 				best = w;
 			}
 		}
 		return best;
+	}
+
+	size_t totalRouterCount() const {
+		std::lock_guard<std::mutex> lock(mutex_);
+		size_t total = 0;
+		for (auto& w : workers_)
+			if (!w->closed()) total += w->routerCount();
+		return total;
+	}
+
+	size_t maxTotalRouters() const {
+		std::lock_guard<std::mutex> lock(mutex_);
+		if (maxRoutersPerWorker_ == 0) return 0; // unlimited
+		size_t count = 0;
+		for (auto& w : workers_)
+			if (!w->closed()) ++count;
+		return count * maxRoutersPerWorker_;
 	}
 
 	void close() {
@@ -112,6 +134,7 @@ private:
 	std::vector<std::shared_ptr<Worker>> workers_;
 	WorkerSettings lastSettings_;
 	bool closing_ = false;
+	size_t maxRoutersPerWorker_ = 0;
 	std::vector<std::chrono::steady_clock::time_point> respawnTimes_;
 	std::shared_ptr<void> lifetimeToken_ = std::make_shared<int>(0);
 };

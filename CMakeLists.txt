@@ -82,6 +82,7 @@ if(BUILD_TESTS)
     list(FILTER TEST_SOURCES EXCLUDE REGEX "test_e2e_pubsub\\.cpp$")
     list(FILTER TEST_SOURCES EXCLUDE REGEX "test_qos_integration\\.cpp$")
     list(FILTER TEST_SOURCES EXCLUDE REGEX "test_stability_integration\\.cpp$")
+    list(FILTER TEST_SOURCES EXCLUDE REGEX "test_multinode_integration\\.cpp$")
     add_executable(mediasoup_tests ${TEST_SOURCES})
     target_include_directories(mediasoup_tests PRIVATE
         ${CMAKE_SOURCE_DIR}/src
@@ -146,6 +147,17 @@ if(BUILD_TESTS)
     )
     target_link_libraries(mediasoup_stability_integration_tests PRIVATE gtest gtest_main pthread)
     add_test(NAME mediasoup_stability_integration_tests COMMAND mediasoup_stability_integration_tests
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+    # Multi-node integration tests (requires Redis + mediasoup-worker)
+    add_executable(mediasoup_multinode_tests tests/test_multinode_integration.cpp)
+    target_include_directories(mediasoup_multinode_tests PRIVATE
+        ${CMAKE_SOURCE_DIR}/tests
+        ${CMAKE_SOURCE_DIR}/src
+        ${JSON_INCLUDE}
+    )
+    target_link_libraries(mediasoup_multinode_tests PRIVATE gtest gtest_main pthread hiredis)
+    add_test(NAME mediasoup_multinode_tests COMMAND mediasoup_multinode_tests
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
     # Worker load benchmark (not a test, standalone binary)
