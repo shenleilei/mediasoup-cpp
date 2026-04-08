@@ -119,13 +119,13 @@ public:
 		double dist = haversine(client.lat, client.lng, nodeLat, nodeLng);
 
 		if (isChina(client) && !client.isp.empty() && client.isp != "0") {
-			// Cloud providers have multi-line BGP — treat as ISP-neutral
 			bool clientIsCloud = isCloudIsp(client.isp);
 			bool nodeIsCloud = isCloudIsp(nodeIsp);
-			// Cross-ISP penalty scales with distance (1.5x multiplier)
 			if (!clientIsCloud && !nodeIsCloud &&
 				!client.isp.empty() && !nodeIsp.empty() && client.isp != nodeIsp) {
-				dist *= 1.5;
+				// Cross-ISP: apply 1.5x multiplier with a 50km floor
+				// so same-city cross-ISP still has a small penalty
+				dist = std::max(dist, 50.0) * 1.5;
 			}
 		}
 
