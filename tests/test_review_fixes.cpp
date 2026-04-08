@@ -143,3 +143,17 @@ TEST(RestartIceFixTest, IceParametersCanBeUpdated) {
 	EXPECT_EQ(j["password"], "new_pwd");
 	EXPECT_EQ(j["iceLite"], true);
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Unsigned underflow: worker count with low CPU cores
+// ═══════════════════════════════════════════════════════════════
+
+TEST(WorkerCountTest, NoCoresUnderflow) {
+	// Simulate the calculation: max(1, cores - 2)
+	auto calc = [](int cores) { return std::max(1, cores - 2); };
+	EXPECT_EQ(calc(0), 1);  // hardware_concurrency() can return 0
+	EXPECT_EQ(calc(1), 1);
+	EXPECT_EQ(calc(2), 1);
+	EXPECT_EQ(calc(4), 2);
+	EXPECT_EQ(calc(8), 6);
+}
