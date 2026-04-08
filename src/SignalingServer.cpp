@@ -248,17 +248,17 @@ void SignalingServer::run() {
 						auto* sd = ws->getUserData();
 						sd->roomId = jRoomId;
 						sd->peerId = jPeerId;
-						sd->sessionId = g_nextSessionId++;
-						spdlog::info("[{} {}] joined (session:{})", jRoomId, jPeerId, sd->sessionId);
 						std::string mapKey = WsMap::key(jRoomId, jPeerId);
 						decltype(ws) oldWs = nullptr;
 						{
 							std::lock_guard<std::mutex> lock(wsMap->mutex);
+							sd->sessionId = g_nextSessionId++;  // inside mutex for happens-before
 							auto it = wsMap->peers.find(mapKey);
 							if (it != wsMap->peers.end() && it->second != ws)
 								oldWs = it->second;
 							wsMap->peers[mapKey] = ws;
 						}
+						spdlog::info("[{} {}] joined (session:{})", jRoomId, jPeerId, sd->sessionId);
 						if (oldWs) oldWs->end(4000, "replaced");
 					}
 					ws->send(respStr, uWS::OpCode::TEXT);
