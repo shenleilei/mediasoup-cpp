@@ -45,9 +45,8 @@ public:
 		std::lock_guard<std::mutex> lock(cmdMutex_);
 		if (!ensureConnected()) return;
 		registerNode();
-		// Periodically refresh cache to evict entries for dead nodes
-		// whose Redis keys have expired (TTL-based cleanup)
-		syncAllUnlocked();
+		// Cache refresh handled by pub/sub + syncAll on subscriber reconnect.
+		// No full scan here — too expensive for steady-state.
 	}
 
 	void updateLoad(size_t rooms, size_t maxRooms) {
@@ -194,15 +193,14 @@ public:
 		freeReplyObject(reply);
 
 		if (result.empty() || result == "self") {
-			if (result.empty() && geo_ && !clientIp.empty()) {
-				auto clientGeo = geo_->lookup(clientIp);
-				if (clientGeo.valid && clientGeo.lat != 0) {
-					std::string best = findBestNodeCached(clientIp);
-					if (!best.empty() && best != nodeAddress_) {
-						auto* del = (redisReply*)redisCommand(ctx_, "DEL %s", roomKey.c_str());
-						if (del) freeReplyObject(del);
-						return best;
-					}
+			// New room claimed by us. Check if another node is better
+			// (geo-optimal or less loaded).
+			if (result.empty()) {
+				std::string best = findBestNodeCached(clientIp);
+				if (!best.empty() && best != nodeAddress_) {
+					auto* del = (redisReply*)redisCommand(ctx_, "DEL %s", roomKey.c_str());
+					if (del) freeReplyObject(del);
+					return best;
 				}
 			}
 			// Update cache + publish
@@ -437,10 +435,22 @@ private:
 
 		std::lock_guard<std::mutex> cl(cacheMutex_);
 		if (channel == kChannelNodes) {
-			if (val.empty())
-				nodeCache_.erase(key);
-			else
+			if (val.empty()) {
+				// Node removed — also evict all rooms owned by this node
+				auto it = nodeCache_.find(key);
+				if (it != nodeCache_.end()) {
+					std::string deadAddr = it->second.address;
+					nodeCache_.erase(it);
+					if (!deadAddr.empty()) {
+						for (auto rit = roomCache_.begin(); rit != roomCache_.end(); ) {
+							if (rit->second == deadAddr) rit = roomCache_.erase(rit);
+							else ++rit;
+						}
+					}
+				}
+			} else {
 				nodeCache_[key] = parseNodeValue(val);
+			}
 		} else if (channel == kChannelRooms) {
 			if (val.empty())
 				roomCache_.erase(key);
@@ -534,8 +544,13 @@ private:
 				return a.rooms < b.rooms;
 			});
 		} else {
-			std::sort(candidates.begin(), candidates.end(), [](auto& a, auto& b) {
-				return a.rooms < b.rooms;
+			// No geo — sort by load. Stable tiebreaker: prefer self to avoid redirect churn.
+			auto self = nodeAddress_;
+			std::sort(candidates.begin(), candidates.end(), [&self](auto& a, auto& b) {
+				if (a.rooms != b.rooms) return a.rooms < b.rooms;
+				if (a.address == self) return true;
+				if (b.address == self) return false;
+				return a.address < b.address;
 			});
 		}
 
