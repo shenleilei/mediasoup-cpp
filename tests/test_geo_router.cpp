@@ -101,8 +101,8 @@ TEST_F(GeoRouterTest, CrossIspMultiplier) {
 	auto bj = geo_.lookup("36.110.147.0"); // 北京电信
 	double dist = GeoRouter::haversine(bj.lat, bj.lng, 30.27, 120.15);
 	double score = geo_.score(bj, 30.27, 120.15, "联通");
-	// max(dist, 50) * 1.5
-	EXPECT_NEAR(score, std::max(dist, 50.0) * 1.5, 1.0);
+	// max(dist, 50) * 2.0
+	EXPECT_NEAR(score, std::max(dist, 50.0) * 2.0, 1.0);
 }
 
 TEST_F(GeoRouterTest, CloudIspNoPenalty) {
@@ -115,7 +115,7 @@ TEST_F(GeoRouterTest, CloudIspNoPenalty) {
 TEST_F(GeoRouterTest, SameCityCrossIspHasFloor) {
 	auto bj = geo_.lookup("36.110.147.0"); // 北京电信
 	double score = geo_.score(bj, 39.90, 116.40, "联通"); // same city, diff ISP
-	EXPECT_NEAR(score, 75, 5); // max(~0, 50) * 1.5 = 75
+	EXPECT_NEAR(score, 100, 5); // max(~0, 50) * 2.0 = 100
 	EXPECT_GT(score, 0); // must not be zero
 }
 

@@ -123,9 +123,10 @@ public:
 			bool nodeIsCloud = isCloudIsp(nodeIsp);
 			if (!clientIsCloud && !nodeIsCloud &&
 				!client.isp.empty() && !nodeIsp.empty() && client.isp != nodeIsp) {
-				// Cross-ISP: apply 1.5x multiplier with a 50km floor
-				// so same-city cross-ISP still has a small penalty
-				dist = std::max(dist, 50.0) * 1.5;
+				// Cross-ISP: BGP routing may detour through distant exchange points,
+				// causing 2-4x actual latency vs same-ISP. Use 2x multiplier with
+				// 50km floor so same-city cross-ISP still has a small penalty.
+				dist = std::max(dist, 50.0) * 2.0;
 			}
 		}
 
