@@ -102,17 +102,32 @@ public:
 				if (reply && reply->type == REDIS_REPLY_STRING) {
 					std::string ownerNodeId = reply->str;
 					freeReplyObject(reply);
+					// Try local cache first for node address
 					std::string addr;
 					{
 						std::lock_guard<std::mutex> cl(cacheMutex_);
 						auto nit = nodeCache_.find(ownerNodeId);
 						if (nit != nodeCache_.end()) addr = nit->second.address;
 					}
+					// Cache miss for node — fall back to Redis GET
+					if (addr.empty()) {
+						auto* nr = (redisReply*)redisCommand(ctx_, "GET %s", ("node:" + ownerNodeId).c_str());
+						if (nr && nr->type == REDIS_REPLY_STRING) {
+							auto info = parseNodeValue(nr->str);
+							addr = info.address;
+							if (!addr.empty()) {
+								std::lock_guard<std::mutex> cl(cacheMutex_);
+								nodeCache_[ownerNodeId] = info;
+							}
+						}
+						if (nr) freeReplyObject(nr);
+					}
 					if (!addr.empty()) {
 						std::lock_guard<std::mutex> cl(cacheMutex_);
 						roomCache_[roomId] = addr;
 						return {addr, false};
 					}
+					// Owner node truly gone — treat as new room
 					return {nodeAddress_, true};
 				}
 				if (reply) freeReplyObject(reply);
