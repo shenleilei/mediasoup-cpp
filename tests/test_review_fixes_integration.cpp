@@ -468,3 +468,163 @@ TEST_F(GeoJoinTest, DirectJoinRedirectsToGeoOptimal) {
 	EXPECT_TRUE(ok || hasRedirect)
 		<< "Join should either succeed or redirect, got: " << resp.dump();
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Country isolation: CN client should not be routed to US node
+// ═══════════════════════════════════════════════════════════════
+
+static const int ISO_PORT_CN = 18790;  // 中国节点
+static const int ISO_PORT_US = 18791;  // 美国节点
+
+class CountryIsolationTest : public ::testing::Test {
+protected:
+	pid_t pidCN_ = -1, pidUS_ = -1;
+	std::string testRoom_;
+
+	static pid_t startSfu(int port, double lat, double lng,
+		const std::string& isp, const std::string& country, bool isolation)
+	{
+		std::string cmd = "./build/mediasoup-sfu --nodaemon"
+			" --port=" + std::to_string(port) +
+			" --workers=1"
+			" --workerBin=./mediasoup-worker"
+			" --announcedIp=127.0.0.1"
+			" --listenIp=127.0.0.1"
+			" --lat=" + std::to_string(lat) +
+			" --lng=" + std::to_string(lng) +
+			" --isp=" + isp +
+			" '--country=" + country + "'" +
+			(isolation ? " --countryIsolation" : " --noCountryIsolation") +
+			" > /dev/null 2>&1 & echo $!";
+		FILE* fp = popen(cmd.c_str(), "r");
+		if (!fp) return -1;
+		char buf[64]{};
+		fgets(buf, sizeof(buf), fp);
+		pclose(fp);
+		return atoi(buf);
+	}
+
+	static bool waitForPort(int port, int timeoutMs = 5000) {
+		for (int i = 0; i < timeoutMs / 100; ++i) {
+			usleep(100000);
+			int fd = socket(AF_INET, SOCK_STREAM, 0);
+			sockaddr_in addr{};
+			addr.sin_family = AF_INET;
+			addr.sin_port = htons(port);
+			inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+			if (::connect(fd, (sockaddr*)&addr, sizeof(addr)) == 0) {
+				::close(fd);
+				usleep(200000);
+				return true;
+			}
+			::close(fd);
+		}
+		return false;
+	}
+
+	static void killAndWaitPort(pid_t pid, int port) {
+		if (pid <= 0) return;
+		kill(pid, SIGKILL);
+		for (int i = 0; i < 20; ++i) {
+			usleep(50000);
+			int fd = socket(AF_INET, SOCK_STREAM, 0);
+			sockaddr_in addr{};
+			addr.sin_family = AF_INET;
+			addr.sin_port = htons(port);
+			addr.sin_addr.s_addr = htonl(INADDR_ANY);
+			int opt = 1;
+			setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+			bool free = (bind(fd, (sockaddr*)&addr, sizeof(addr)) == 0);
+			::close(fd);
+			if (free) return;
+		}
+	}
+
+	void SetUp() override {
+		testRoom_ = "iso_" + std::to_string(getpid()) + "_" +
+			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+
+		// Clean stale room and node entries from other geo tests
+		{
+			redisContext* ctx = redisConnect("127.0.0.1", 6379);
+			if (ctx && !ctx->err) {
+				auto* r = (redisReply*)redisCommand(ctx, "KEYS room:iso_*");
+				if (r && r->type == REDIS_REPLY_ARRAY) {
+					for (size_t i = 0; i < r->elements; i++)
+						redisCommand(ctx, "DEL %s", r->element[i]->str);
+					freeReplyObject(r);
+				}
+				r = (redisReply*)redisCommand(ctx, "KEYS node:*");
+				if (r && r->type == REDIS_REPLY_ARRAY) {
+					for (size_t i = 0; i < r->elements; i++)
+						redisCommand(ctx, "DEL %s", r->element[i]->str);
+					freeReplyObject(r);
+				}
+				redisFree(ctx);
+			}
+		}
+
+		pidCN_ = startSfu(ISO_PORT_CN, 30.27, 120.15, "电信", "中国", true);
+		pidUS_ = startSfu(ISO_PORT_US, 37.39, -122.08, "Amazon", "United States", true);
+		ASSERT_GT(pidCN_, 0);
+		ASSERT_GT(pidUS_, 0);
+		ASSERT_TRUE(waitForPort(ISO_PORT_CN)) << "CN node did not start";
+		ASSERT_TRUE(waitForPort(ISO_PORT_US)) << "US node did not start";
+		usleep(1500000); // wait for Redis heartbeat
+	}
+
+	void TearDown() override {
+		killAndWaitPort(pidCN_, ISO_PORT_CN);
+		killAndWaitPort(pidUS_, ISO_PORT_US);
+	}
+};
+
+// Chinese client should only be routed to CN node, not US node
+TEST_F(CountryIsolationTest, ChinaClientRoutedToChinaNode) {
+	int fd = socket(AF_INET, SOCK_STREAM, 0);
+	sockaddr_in addr{};
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(ISO_PORT_CN);
+	inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
+
+	std::string req = "GET /api/resolve?roomId=" + testRoom_ +
+		"&clientIp=36.110.147.0 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+	::send(fd, req.data(), req.size(), 0);
+
+	char buf[4096]{};
+	int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+	::close(fd);
+	ASSERT_GT(n, 0);
+
+	std::string response(buf, n);
+	bool hasCN = response.find(std::to_string(ISO_PORT_CN)) != std::string::npos;
+	bool hasUS = response.find(std::to_string(ISO_PORT_US)) != std::string::npos;
+	EXPECT_TRUE(hasCN) << "CN client should route to CN node, got: " << response;
+	EXPECT_FALSE(hasUS) << "CN client should NOT route to US node, got: " << response;
+}
+
+// US client should only be routed to US node, not CN node
+TEST_F(CountryIsolationTest, UsClientRoutedToUsNode) {
+	int fd = socket(AF_INET, SOCK_STREAM, 0);
+	sockaddr_in addr{};
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(ISO_PORT_US);
+	inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
+
+	std::string req = "GET /api/resolve?roomId=" + testRoom_ + "_us" +
+		"&clientIp=8.8.8.8 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+	::send(fd, req.data(), req.size(), 0);
+
+	char buf[4096]{};
+	int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+	::close(fd);
+	ASSERT_GT(n, 0);
+
+	std::string response(buf, n);
+	bool hasUS = response.find(std::to_string(ISO_PORT_US)) != std::string::npos;
+	bool hasCN = response.find(std::to_string(ISO_PORT_CN)) != std::string::npos;
+	EXPECT_TRUE(hasUS) << "US client should route to US node, got: " << response;
+	EXPECT_FALSE(hasCN) << "US client should NOT route to CN node, got: " << response;
+}
