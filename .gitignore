@@ -33,3 +33,4 @@ log/
 recordings/
 *.pid
 config.json
+third_party/ip2region
