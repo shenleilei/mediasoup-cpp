@@ -159,6 +159,8 @@ public:
 
 	size_t roomCount() const { std::lock_guard<std::mutex> lock(mutex_); return rooms_.size(); }
 	const std::vector<json>& listenInfos() const { return listenInfos_; }
+	WorkerManager& workerManager() { return workerManager_; }
+	const WorkerManager& workerManager() const { return workerManager_; }
 
 	std::vector<std::string> getRoomIds() const {
 		std::lock_guard<std::mutex> lock(mutex_);

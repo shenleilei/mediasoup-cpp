@@ -64,6 +64,11 @@ public:
 	void broadcastStats();
 	void heartbeatRegistry();
 
+	// Multi-node: resolve room location
+	json resolveRoom(const std::string& roomId);
+	// Multi-node: get node load info
+	json getNodeLoad() const;
+
 private:
 	void autoRecord(const std::string& roomId, const std::string& peerId,
 		std::shared_ptr<Room> room, std::shared_ptr<Producer> producer);

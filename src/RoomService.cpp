@@ -610,7 +610,27 @@ json RoomService::collectPeerStats(const std::string& roomId, const std::string&
 }
 
 void RoomService::heartbeatRegistry() {
-	if (registry_) registry_->heartbeat();
+	if (!registry_) return;
+	registry_->heartbeat();
+	// Refresh TTL for all active rooms
+	auto roomIds = roomManager_.getRoomIds();
+	if (!roomIds.empty())
+		registry_->refreshRooms(roomIds);
+	// Update node load info
+	registry_->updateLoad(roomManager_.roomCount(), roomManager_.workerManager().maxTotalRouters());
+}
+
+json RoomService::resolveRoom(const std::string& roomId) {
+	if (!registry_) return {{"wsUrl", ""}, {"isNew", true}};
+	auto result = registry_->resolveRoom(roomId);
+	return {{"wsUrl", result.wsUrl}, {"isNew", result.isNew}};
+}
+
+json RoomService::getNodeLoad() const {
+	return {
+		{"rooms", roomManager_.roomCount()},
+		{"maxRooms", roomManager_.workerManager().maxTotalRouters()}
+	};
 }
 
 void RoomService::broadcastStats() {

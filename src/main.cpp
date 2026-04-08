@@ -67,6 +67,7 @@ int main(int argc, char* argv[]) {
 	std::string nodeId;
 	std::string nodeAddress;
 	std::string recordDir = "./recordings";
+	int maxRoutersPerWorker = 0;
 	bool noDaemon = false;
 	std::string logFile = "/var/log/mediasoup-sfu.log";
 	std::string pidFile = "/var/run/mediasoup-sfu.pid";
@@ -93,6 +94,7 @@ int main(int argc, char* argv[]) {
 				if (cfg.contains("nodeId"))         nodeId = cfg["nodeId"].get<std::string>();
 				if (cfg.contains("nodeAddress"))    nodeAddress = cfg["nodeAddress"].get<std::string>();
 				if (cfg.contains("recordDir"))      recordDir = cfg["recordDir"].get<std::string>();
+				if (cfg.contains("maxRoutersPerWorker")) maxRoutersPerWorker = cfg["maxRoutersPerWorker"].get<int>();
 				if (cfg.contains("logFile"))        logFile = cfg["logFile"].get<std::string>();
 				if (cfg.contains("pidFile"))        pidFile = cfg["pidFile"].get<std::string>();
 				if (cfg.contains("logLevel"))       logLevel = cfg["logLevel"].get<std::string>();
@@ -117,6 +119,7 @@ int main(int argc, char* argv[]) {
 		else if (arg.find("--nodeId=") == 0)    nodeId = arg.substr(9);
 		else if (arg.find("--nodeAddress=") == 0) nodeAddress = arg.substr(14);
 		else if (arg.find("--recordDir=") == 0) recordDir = arg.substr(12);
+		else if (arg.find("--maxRoutersPerWorker=") == 0) maxRoutersPerWorker = std::stoi(arg.substr(22));
 		else if (arg.find("--logFile=") == 0)  logFile = arg.substr(10);
 		else if (arg.find("--pidFile=") == 0)  pidFile = arg.substr(10);
 		else if (arg.find("--logLevel=") == 0) logLevel = arg.substr(11);
@@ -214,6 +217,8 @@ int main(int argc, char* argv[]) {
 		spdlog::error("No workers created, exiting");
 		return 1;
 	}
+	if (maxRoutersPerWorker > 0)
+		workerManager.setMaxRoutersPerWorker(static_cast<size_t>(maxRoutersPerWorker));
 
 	// Redis room registry
 	std::unique_ptr<RoomRegistry> registry;

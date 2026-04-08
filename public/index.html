@@ -376,7 +376,23 @@ async function join() {
   currentPeerId = peerId;
 
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const wsUrl = `${proto}://${location.hostname}:${location.port||3000}/ws`;
+  let wsUrl = `${proto}://${location.hostname}:${location.port||3000}/ws`;
+
+  // Resolve room location — connect directly to the correct node
+  try {
+    const res = await fetch(`/api/resolve?roomId=${encodeURIComponent(roomId)}`);
+    if (res.ok) {
+      const info = await res.json();
+      if (info.wsUrl) {
+        const target = new URL(info.wsUrl);
+        const targetWs = `${proto}://${target.hostname}:${target.port||3000}/ws`;
+        if (targetWs !== wsUrl) {
+          log('Room is on node ' + info.wsUrl + ', connecting there');
+          wsUrl = targetWs;
+        }
+      }
+    }
+  } catch(e) { /* resolve failed, fall back to current node */ }
 
   log('Connecting...');
   try {
