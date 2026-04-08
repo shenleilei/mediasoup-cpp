@@ -16,9 +16,11 @@ class RoomRegistry {
 public:
 	RoomRegistry(const std::string& redisHost, int redisPort,
 		const std::string& nodeId, const std::string& nodeAddress,
-		double nodeLat = 0, double nodeLng = 0, const std::string& nodeIsp = "")
+		double nodeLat = 0, double nodeLng = 0, const std::string& nodeIsp = "",
+		const std::string& nodeCountry = "", bool countryIsolation = false)
 		: nodeId_(nodeId), nodeAddress_(nodeAddress)
 		, nodeLat_(nodeLat), nodeLng_(nodeLng), nodeIsp_(nodeIsp)
+		, nodeCountry_(nodeCountry), countryIsolation_(countryIsolation)
 		, redisHost_(redisHost), redisPort_(redisPort)
 		, logger_(Logger::Get("RoomRegistry"))
 	{
@@ -45,9 +47,10 @@ public:
 	void updateLoad(size_t rooms, size_t maxRooms) {
 		std::lock_guard<std::mutex> lock(mutex_);
 		if (!ensureConnected()) return;
-		// Format: address|rooms|maxRooms|lat|lng|isp
+		// Format: address|rooms|maxRooms|lat|lng|isp|country
 		std::string val = nodeAddress_ + "|" + std::to_string(rooms) + "|" + std::to_string(maxRooms)
-			+ "|" + std::to_string(nodeLat_) + "|" + std::to_string(nodeLng_) + "|" + nodeIsp_;
+			+ "|" + std::to_string(nodeLat_) + "|" + std::to_string(nodeLng_)
+			+ "|" + nodeIsp_ + "|" + nodeCountry_;
 		auto* reply = (redisReply*)redisCommand(ctx_, "SET %s %s EX %d",
 			("node:" + nodeId_).c_str(), val.c_str(), nodeTTL_);
 		if (reply) freeReplyObject(reply);
@@ -210,7 +213,7 @@ private:
 	void registerNode() {
 		if (!ctx_) return;
 		std::string val = nodeAddress_ + "|0|0|" + std::to_string(nodeLat_) + "|"
-			+ std::to_string(nodeLng_) + "|" + nodeIsp_;
+			+ std::to_string(nodeLng_) + "|" + nodeIsp_ + "|" + nodeCountry_;
 		auto* reply = (redisReply*)redisCommand(ctx_, "SET %s %s EX %d",
 			("node:" + nodeId_).c_str(), val.c_str(), nodeTTL_);
 		if (reply) freeReplyObject(reply);
@@ -224,9 +227,10 @@ private:
 		double lat = 0;
 		double lng = 0;
 		std::string isp;
+		std::string country;
 	};
 
-	// Parse "address|rooms|maxRooms|lat|lng|isp" format
+	// Parse "address|rooms|maxRooms|lat|lng|isp|country" format
 	NodeInfo parseNodeValue(const std::string& val) {
 		NodeInfo info;
 		std::vector<std::string> parts;
@@ -241,6 +245,7 @@ private:
 		if (parts.size() > 3) try { info.lat = std::stod(parts[3]); } catch (...) {}
 		if (parts.size() > 4) try { info.lng = std::stod(parts[4]); } catch (...) {}
 		if (parts.size() > 5) info.isp = parts[5];
+		if (parts.size() > 6) info.country = parts[6];
 		return info;
 	}
 
@@ -284,6 +289,10 @@ private:
 			if (info.address.empty()) continue;
 			if (info.maxRooms > 0 && info.rooms >= info.maxRooms) continue;
 
+			// Country isolation: skip nodes in different countries
+			if (countryIsolation_ && clientGeo.valid && !clientGeo.country.empty()
+				&& !info.country.empty() && info.country != clientGeo.country) continue;
+
 			double s = 0;
 			if (clientGeo.valid && (info.lat != 0 || info.lng != 0)) {
 				s = geo_->score(clientGeo, info.lat, info.lng, info.isp);
@@ -322,6 +331,8 @@ private:
 	double nodeLat_;
 	double nodeLng_;
 	std::string nodeIsp_;
+	std::string nodeCountry_;
+	bool countryIsolation_ = false;
 	std::string redisHost_;
 	int redisPort_;
 	redisContext* ctx_ = nullptr;
