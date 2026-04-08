@@ -45,8 +45,9 @@ public:
 		std::lock_guard<std::mutex> lock(cmdMutex_);
 		if (!ensureConnected()) return;
 		registerNode();
-		// Cache refresh handled by pub/sub + syncAll on subscriber reconnect.
-		// No full scan here — too expensive for steady-state.
+		// Lightweight stale-node eviction: check if cached nodes still exist in Redis.
+		// Much cheaper than full syncAll (no KEYS room:*, no room GET).
+		evictDeadNodes();
 	}
 
 	void updateLoad(size_t rooms, size_t maxRooms) {
@@ -464,6 +465,38 @@ private:
 	void syncAll() {
 		std::lock_guard<std::mutex> lock(cmdMutex_);
 		syncAllUnlocked();
+	}
+
+	// Lightweight: check each cached node still exists in Redis. Evict dead ones + their rooms.
+	// Must be called with cmdMutex_ held.
+	void evictDeadNodes() {
+		if (!ctx_) return;
+		std::vector<std::string> deadNodeIds;
+		{
+			std::lock_guard<std::mutex> cl(cacheMutex_);
+			for (auto& [nid, info] : nodeCache_) {
+				if (nid == nodeId_) continue; // skip self
+				auto* reply = (redisReply*)redisCommand(ctx_, "EXISTS %s", ("node:" + nid).c_str());
+				bool alive = reply && reply->type == REDIS_REPLY_INTEGER && reply->integer == 1;
+				if (reply) freeReplyObject(reply);
+				else { handleDisconnect(); return; }
+				if (!alive) deadNodeIds.push_back(nid);
+			}
+			for (auto& nid : deadNodeIds) {
+				auto it = nodeCache_.find(nid);
+				if (it != nodeCache_.end()) {
+					std::string deadAddr = it->second.address;
+					nodeCache_.erase(it);
+					if (!deadAddr.empty()) {
+						for (auto rit = roomCache_.begin(); rit != roomCache_.end(); )
+							if (rit->second == deadAddr) rit = roomCache_.erase(rit);
+							else ++rit;
+					}
+				}
+			}
+		}
+		if (!deadNodeIds.empty())
+			MS_DEBUG(logger_, "Evicted {} dead nodes from cache", deadNodeIds.size());
 	}
 
 	// Must be called with cmdMutex_ held

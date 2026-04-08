@@ -380,10 +380,9 @@ protected:
 		testRoom_ = "geo_" + std::to_string(getpid()) + "_" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 
-		// Kill any stale SFU processes on our test ports
-		system(("fuser -k " + std::to_string(GEO_PORT_A) + "/tcp 2>/dev/null").c_str());
-		system(("fuser -k " + std::to_string(GEO_PORT_B) + "/tcp 2>/dev/null").c_str());
-		usleep(500000);
+		// Kill ALL stale test SFU processes to prevent Redis pollution
+		system("pkill -9 -f 'mediasoup-sfu.*--port=18' 2>/dev/null");
+		usleep(1000000);
 
 		// Clean stale room and node entries from Redis
 		{
