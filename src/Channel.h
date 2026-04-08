@@ -20,7 +20,10 @@ namespace mediasoup {
 
 class Channel {
 public:
+	// Original constructor — threaded mode (creates readThread, backward compat)
 	Channel(int producerFd, int consumerFd, int pid);
+	// New constructor — explicit threading control
+	Channel(int producerFd, int consumerFd, int pid, bool threaded);
 	~Channel();
 
 	void close();
@@ -68,29 +71,14 @@ public:
 	}
 
 	// Convenience: request + timed wait. Throws on timeout.
+	// In threaded mode: waits on future (readThread fills it).
+	// In non-threaded mode: pumps the consumer fd via poll()+processAvailableData().
 	OwnedResponse requestWait(
 		FBS::Request::Method method,
 		FBS::Request::Body bodyType = FBS::Request::Body::NONE,
 		flatbuffers::Offset<void> bodyOffset = 0,
 		const std::string& handlerId = "",
-		int timeoutMs = 5000)
-	{
-		auto [fut, reqId] = requestWithId(method, bodyType, bodyOffset, handlerId);
-		if (fut.wait_for(std::chrono::milliseconds(timeoutMs)) != std::future_status::ready) {
-			// Precise cleanup by request ID
-			{
-				std::lock_guard<std::mutex> lock(sentsMutex_);
-				auto it = sents_.find(reqId);
-				if (it != sents_.end()) {
-					it->second->promise.set_exception(
-						std::make_exception_ptr(std::runtime_error("timeout")));
-					sents_.erase(it);
-				}
-			}
-			throw std::runtime_error("Channel request timeout (" + std::to_string(timeoutMs) + "ms)");
-		}
-		return fut.get();
-	}
+		int timeoutMs = 5000);
 
 	void notify(
 		FBS::Notification::Event event,
@@ -100,7 +88,19 @@ public:
 
 	EventEmitter& emitter() { return emitter_; }
 
+	// ── Non-threaded mode API ──
+
+	bool isThreaded() const { return threaded_; }
+
+	// Expose consumer fd for epoll registration (non-threaded mode)
+	int consumerFd() const { return consumerFd_; }
+
+	// Read and process available data from the consumer fd (non-blocking).
+	// Returns true if the fd is still open; false if EOF (worker died).
+	bool processAvailableData();
+
 private:
+	void init(int producerFd, int consumerFd, int pid, bool threaded);
 	void readLoop();
 	bool processMessage(const uint8_t* data, size_t len);
 	void processNotification(const uint8_t* data, size_t len,
@@ -111,6 +111,7 @@ private:
 	int producerFd_;
 	int consumerFd_;
 	int pid_;
+	bool threaded_ = true;
 	std::atomic<bool> closed_{false};
 
 	flatbuffers::FlatBufferBuilder builder_{1024};
@@ -126,6 +127,7 @@ private:
 	std::unordered_map<uint32_t, std::shared_ptr<PendingSent>> sents_;
 	std::mutex sentsMutex_;
 
+	std::vector<uint8_t> recvBuf_;  // Shared receive buffer (for both modes)
 	std::thread readThread_;
 	EventEmitter emitter_;
 	std::shared_ptr<spdlog::logger> logger_;
