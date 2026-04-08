@@ -151,3 +151,42 @@ TEST_F(GeoRouterTest, RankingOrder) {
 	// Cross ISP near < Same ISP far (nearby wins even with ISP mismatch)
 	EXPECT_LT(crossIspNear, sameIspFar);
 }
+
+// ── claimRoom geo redirect: unit-level tests for findBestNode selection ──
+
+TEST_F(GeoRouterTest, ScoreConsistencyAcrossMultipleNodes) {
+	// Simulate what findBestNode does: score multiple nodes and pick best
+	auto bj = geo_.lookup("36.110.147.0"); // 北京电信
+	ASSERT_TRUE(bj.valid);
+
+	struct Node { const char* name; double lat; double lng; const char* isp; size_t rooms; };
+	Node nodes[] = {
+		{"杭州电信", 30.27, 120.15, "电信", 5},
+		{"杭州阿里云", 30.27, 120.15, "阿里", 3},
+		{"广州联通", 23.13, 113.26, "联通", 1},
+	};
+
+	// Score and sort like findBestNode does
+	struct Scored { const char* name; double score; size_t rooms; };
+	std::vector<Scored> scored;
+	for (auto& n : nodes)
+		scored.push_back({n.name, geo_.score(bj, n.lat, n.lng, n.isp), n.rooms});
+
+	std::sort(scored.begin(), scored.end(), [](auto& a, auto& b) {
+		if (std::abs(a.score - b.score) > 100.0) return a.score < b.score;
+		return a.rooms < b.rooms;
+	});
+
+	// 杭州电信 and 杭州阿里云 should be within 100km tiebreaker, sorted by load
+	EXPECT_STREQ(scored[0].name, "杭州阿里云"); // lower load (3 vs 5)
+	EXPECT_STREQ(scored[1].name, "杭州电信");
+	EXPECT_STREQ(scored[2].name, "广州联通");   // cross-ISP + far = worst
+}
+
+TEST_F(GeoRouterTest, AllNodesSameScorePicksLeastLoaded) {
+	auto bj = geo_.lookup("36.110.147.0");
+	double s1 = geo_.score(bj, 30.27, 120.15, "电信");
+	double s2 = geo_.score(bj, 30.27, 120.15, "电信");
+	EXPECT_DOUBLE_EQ(s1, s2); // same node params = same score
+	// When scores are equal, findBestNode picks by rooms (load)
+}

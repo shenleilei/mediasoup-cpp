@@ -287,6 +287,9 @@ private:
 			double s = 0;
 			if (clientGeo.valid && (info.lat != 0 || info.lng != 0)) {
 				s = geo_->score(clientGeo, info.lat, info.lng, info.isp);
+			} else if (clientGeo.valid) {
+				// Node has no geo info — deprioritize by giving max score
+				s = 99999.0;
 			}
 			candidates.push_back({info.address, info.rooms, s});
 		}
