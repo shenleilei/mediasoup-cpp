@@ -90,6 +90,7 @@ cat > config.json << EOF
 {
   "port": 3000,
   "workers": 0,
+  "signalingWorkers": 1,
   "workerBin": "./mediasoup-worker",
   "listenIp": "0.0.0.0",
   "announcedIp": "",
@@ -108,6 +109,7 @@ Open `http://<server-ip>:3000` in two browser tabs to start a video call.
 |--------|---------|-------------|
 | `--port` | 3000 | Signaling + HTTP port |
 | `--workers` | CPU count | Number of mediasoup-worker processes |
+| `--signalingWorkers` | 1 (max 4) | Signaling control worker threads (room-hash sharded) |
 | `--listenIp` | 0.0.0.0 | WebRTC listen IP |
 | `--announcedIp` | auto-detect | Public IP for ICE candidates |
 | `--workerBin` | ./mediasoup-worker | Path to worker binary |
@@ -128,7 +130,7 @@ Open `http://<server-ip>:3000` in two browser tabs to start a video call.
 | Thread | Count | Role |
 |--------|-------|------|
 | uWS main | 1 | Event loop: WebSocket, HTTP, timers (never blocks) |
-| Signaling worker | 1 | Serial execution of RoomService methods + Channel IPC |
+| Signaling worker | 1 by default (up to 4) | Room-hash sharded task queues; same room always serialized on one queue |
 | Channel reader | ×N workers | Reads pipe responses/notifications from worker |
 | Worker waiter | ×N workers | waitpid(), respawns on crash |
 | Recorder | ×M peers | UDP recv → RTP depacketize → FFmpeg mux |

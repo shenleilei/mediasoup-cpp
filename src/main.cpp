@@ -12,6 +12,7 @@
 #include <thread>
 #include <array>
 #include <cstdio>
+#include <algorithm>
 #include <sys/stat.h>
 
 using namespace mediasoup;
@@ -70,6 +71,7 @@ int main(int argc, char* argv[]) {
 	std::string nodeAddress;
 	std::string recordDir = "./recordings";
 	int maxRoutersPerWorker = 0;
+	int signalingWorkers = 1;
 	double nodeLat = 0, nodeLng = 0;
 	std::string nodeIsp;
 	std::string nodeCountry;
@@ -102,6 +104,7 @@ int main(int argc, char* argv[]) {
 				if (cfg.contains("nodeAddress"))    nodeAddress = cfg["nodeAddress"].get<std::string>();
 				if (cfg.contains("recordDir"))      recordDir = cfg["recordDir"].get<std::string>();
 				if (cfg.contains("maxRoutersPerWorker")) maxRoutersPerWorker = cfg["maxRoutersPerWorker"].get<int>();
+				if (cfg.contains("signalingWorkers")) signalingWorkers = cfg["signalingWorkers"].get<int>();
 				if (cfg.contains("lat"))            nodeLat = cfg["lat"].get<double>();
 				if (cfg.contains("lng"))            nodeLng = cfg["lng"].get<double>();
 				if (cfg.contains("isp"))            nodeIsp = cfg["isp"].get<std::string>();
@@ -133,6 +136,7 @@ int main(int argc, char* argv[]) {
 		else if (arg.find("--nodeAddress=") == 0) nodeAddress = arg.substr(14);
 		else if (arg.find("--recordDir=") == 0) recordDir = arg.substr(12);
 		else if (arg.find("--maxRoutersPerWorker=") == 0) maxRoutersPerWorker = std::stoi(arg.substr(22));
+		else if (arg.find("--signalingWorkers=") == 0) signalingWorkers = std::stoi(arg.substr(19));
 		else if (arg.find("--lat=") == 0)          nodeLat = std::stod(arg.substr(6));
 		else if (arg.find("--lng=") == 0)          nodeLng = std::stod(arg.substr(6));
 		else if (arg.find("--isp=") == 0)          nodeIsp = arg.substr(6);
@@ -145,6 +149,9 @@ int main(int argc, char* argv[]) {
 		else if (arg.find("--logLevel=") == 0) logLevel = arg.substr(11);
 		else if (arg == "--nodaemon")           noDaemon = true;
 	}
+
+	signalingWorkers = std::max(1, signalingWorkers);
+	if (signalingWorkers > 4) signalingWorkers = 4;
 
 	// Daemonize unless --nodaemon
 	if (!noDaemon) {
@@ -279,7 +286,9 @@ int main(int argc, char* argv[]) {
 	// Assemble
 	RoomManager roomManager(workerManager, mediaCodecs, listenInfos);
 	RoomService roomService(roomManager, registry.get(), recordDir);
-	SignalingServer server(signalingPort, roomService, recordDir);
+	spdlog::info("Signaling workers: {}", signalingWorkers);
+	SignalingServer server(signalingPort, roomService, recordDir,
+		static_cast<size_t>(signalingWorkers));
 
 	spdlog::info("mediasoup-cpp SFU ready - {} workers, signaling on port {}, nodeId={}",
 		workerManager.size(), signalingPort, nodeId);
