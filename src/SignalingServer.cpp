@@ -475,7 +475,7 @@ void SignalingServer::run() {
 					promise->set_exception(std::current_exception());
 				}
 			});
-			RoomRegistry::ResolveResult result;
+			RoomRegistry::ResolveResult result{"", true};
 			if (fut.wait_for(std::chrono::milliseconds(kResolveTimeoutMs)) == std::future_status::ready) {
 				try {
 					result = fut.get();
