@@ -12,6 +12,10 @@
 #include <cstdio>
 #include <cmath>
 #include <sys/stat.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
 
 using namespace mediasoup;
 using json = nlohmann::json;
@@ -194,7 +198,30 @@ int main(int argc, char* argv[]) {
 	}
 	if (nodeAddress.empty()) {
 		std::string ip = announcedIp.empty() ? listenIp : announcedIp;
-		if (ip == "0.0.0.0") ip = "127.0.0.1";
+		if (ip == "0.0.0.0") {
+			// Try to find a non-loopback interface IP via UDP connect trick
+			int sock = socket(AF_INET, SOCK_DGRAM, 0);
+			if (sock >= 0) {
+				sockaddr_in target{};
+				target.sin_family = AF_INET;
+				target.sin_port = htons(53);
+				inet_pton(AF_INET, "8.8.8.8", &target.sin_addr);
+				if (::connect(sock, (sockaddr*)&target, sizeof(target)) == 0) {
+					sockaddr_in local{};
+					socklen_t len = sizeof(local);
+					if (getsockname(sock, (sockaddr*)&local, &len) == 0) {
+						char buf[INET_ADDRSTRLEN]{};
+						inet_ntop(AF_INET, &local.sin_addr, buf, sizeof(buf));
+						if (std::string(buf) != "0.0.0.0") ip = buf;
+					}
+				}
+				::close(sock);
+			}
+			if (ip == "0.0.0.0") {
+				ip = "127.0.0.1";
+				spdlog::warn("Could not determine local IP, nodeAddress will use 127.0.0.1 — multi-node routing will not work");
+			}
+		}
 		nodeAddress = "ws://" + ip + ":" + std::to_string(signalingPort) + "/ws";
 	}
 
