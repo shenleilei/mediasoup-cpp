@@ -6,16 +6,44 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <cstring>
+#include <chrono>
+#include <optional>
 #include <nlohmann/json.hpp>
 
 namespace mediasoup {
 
 static const char* MEDIASOUP_VERSION = "3.14.0";
+static constexpr int kTerminateGraceMs = 500;
+static constexpr int kWorkerDeathReapTimeoutMs = 100;
 
+namespace {
+std::optional<int> waitChildWithTimeout(pid_t pid, int timeoutMs)
+{
+	if (pid <= 0) return 0;
+	int status = 0;
+	auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+	while (std::chrono::steady_clock::now() < deadline) {
+		pid_t r = ::waitpid(pid, &status, WNOHANG);
+		if (r == pid) return std::optional<int>(status);
+		if (r < 0 && errno == ECHILD) return std::optional<int>(status);
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
+	return std::nullopt;
+}
+} // namespace
+
+// Original constructor — threaded mode (backward compat)
 Worker::Worker(const WorkerSettings& settings)
 	: logger_(Logger::Get("Worker"))
 {
-	spawn(settings);
+	spawn(settings, /*threaded=*/true);
+}
+
+// New constructor with explicit threading control
+Worker::Worker(const WorkerSettings& settings, bool threaded)
+	: threaded_(threaded), logger_(Logger::Get("Worker"))
+{
+	spawn(settings, threaded);
 }
 
 Worker::~Worker() {
@@ -31,7 +59,7 @@ Worker::~Worker() {
 	}
 }
 
-void Worker::spawn(const WorkerSettings& settings) {
+void Worker::spawn(const WorkerSettings& settings, bool threaded) {
 	std::string workerBin = settings.workerBin;
 	if (workerBin.empty()) {
 		// Try common locations
@@ -103,9 +131,9 @@ void Worker::spawn(const WorkerSettings& settings) {
 	int parentWriteFd = producerPipe[1]; // parent writes to child's fd 3
 	int parentReadFd = consumerPipe[0];  // parent reads from child's fd 4
 
-	channel_ = std::make_unique<Channel>(parentWriteFd, parentReadFd, pid_);
+	channel_ = std::make_unique<Channel>(parentWriteFd, parentReadFd, pid_, threaded);
 
-	MS_DEBUG(logger_, "worker spawned [pid:{}]", pid_);
+	MS_DEBUG(logger_, "worker spawned [pid:{}] threaded={}", pid_, threaded);
 
 	// Listen for WORKER_RUNNING notification
 	channel_->emitter().once(std::to_string(pid_), [this](const std::vector<std::any>& args) {
@@ -128,14 +156,16 @@ void Worker::spawn(const WorkerSettings& settings) {
 		}
 	});
 
-	// Wait thread for child exit
-	waitThread_ = std::thread([this]() {
-		int status;
-		::waitpid(pid_, &status, 0);
-		if (!closed_) {
-			workerDied("worker process exited with status " + std::to_string(status));
-		}
-	});
+	if (threaded) {
+		// Wait thread for child exit (threaded mode only)
+		waitThread_ = std::thread([this]() {
+			int status;
+			::waitpid(pid_, &status, 0);
+			if (!closed_) {
+				workerDied("worker process exited with status " + std::to_string(status));
+			}
+		});
+	}
 }
 
 void Worker::close() {
@@ -173,6 +203,16 @@ void Worker::close() {
 	else if (waitThread_.joinable())
 		waitThread_.detach();
 
+	// In non-threaded mode, wait/reap child to avoid zombie
+	if (!threaded_ && pid_ > 0) {
+		auto status = waitChildWithTimeout(pid_, kTerminateGraceMs);
+		if (!status.has_value()) {
+			int forcedStatus = 0;
+			::kill(pid_, SIGKILL);
+			(void)::waitpid(pid_, &forcedStatus, 0);
+		}
+	}
+
 	emitter_.emit("close");
 }
 
@@ -192,6 +232,18 @@ void Worker::workerDied(const std::string& reason) {
 	// when the Worker shared_ptr is released.
 
 	emitter_.emit("died", {std::any(reason)});
+}
+
+bool Worker::processChannelData() {
+	if (!channel_ || closed_) return false;
+	return channel_->processAvailableData();
+}
+
+void Worker::handleWorkerDeath() {
+	if (closed_) return;
+
+	int status = waitChildWithTimeout(pid_, kWorkerDeathReapTimeoutMs).value_or(0);
+	workerDied("worker process exited with status " + std::to_string(status));
 }
 
 std::shared_ptr<Router> Worker::createRouter(
