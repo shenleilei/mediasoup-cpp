@@ -5,6 +5,7 @@
 #include "Constants.h"
 #include <future>
 #include <chrono>
+#include <unistd.h>
 
 using namespace mediasoup;
 
@@ -156,4 +157,26 @@ TEST(WorkerCountTest, NoCoresUnderflow) {
 	EXPECT_EQ(calc(2), 1);
 	EXPECT_EQ(calc(4), 2);
 	EXPECT_EQ(calc(8), 6);
+}
+
+TEST(ChannelThreadSafetyFixTest, ProcessAvailableDataRejectedInThreadedMode) {
+	int producerPipe[2];
+	int consumerPipe[2];
+	ASSERT_EQ(::pipe(producerPipe), 0);
+	ASSERT_EQ(::pipe(consumerPipe), 0);
+
+	{
+		Channel ch(
+			/*producerFd=*/producerPipe[1],
+			/*consumerFd=*/consumerPipe[0],
+			/*pid=*/12345,
+			/*threaded=*/true);
+		// Defensive guard: threaded mode must not allow direct pump API.
+		EXPECT_FALSE(ch.processAvailableData());
+	}
+
+	::close(producerPipe[0]);
+	::close(producerPipe[1]);
+	::close(consumerPipe[0]);
+	::close(consumerPipe[1]);
 }

@@ -24,6 +24,13 @@ public:
 		return worker;
 	}
 
+	// Add a pre-created Worker (e.g., from WorkerThread with non-threaded mode).
+	// Does NOT install the died handler (WorkerThread handles death itself).
+	void addExistingWorker(std::shared_ptr<Worker> worker) {
+		std::lock_guard<std::mutex> lock(mutex_);
+		workers_.push_back(std::move(worker));
+	}
+
 	void setMaxRoutersPerWorker(size_t max) { maxRoutersPerWorker_ = max; }
 	size_t maxRoutersPerWorker() const { return maxRoutersPerWorker_; }
 

@@ -1,5 +1,7 @@
 #include "Channel.h"
 #include <unistd.h>
+#include <fcntl.h>
+#include <poll.h>
 #include <cstring>
 #include <stdexcept>
 #include <algorithm>
@@ -8,12 +10,36 @@ namespace mediasoup {
 
 static constexpr uint32_t MESSAGE_MAX_LEN = 4194308;
 static constexpr size_t RECV_BUFFER_MAX_LEN = 16 * 1024 * 1024;
+static constexpr int kPollTimeoutSliceMs = 100;
+static constexpr size_t kReadChunkSize = 65536;
 
+// Original constructor — threaded mode (backward compat)
 Channel::Channel(int producerFd, int consumerFd, int pid)
-	: producerFd_(producerFd), consumerFd_(consumerFd), pid_(pid)
-	, logger_(Logger::Get("Channel"))
 {
-	readThread_ = std::thread(&Channel::readLoop, this);
+	init(producerFd, consumerFd, pid, /*threaded=*/true);
+}
+
+// New constructor with explicit threading control
+Channel::Channel(int producerFd, int consumerFd, int pid, bool threaded)
+{
+	init(producerFd, consumerFd, pid, threaded);
+}
+
+void Channel::init(int producerFd, int consumerFd, int pid, bool threaded) {
+	producerFd_ = producerFd;
+	consumerFd_ = consumerFd;
+	pid_ = pid;
+	threaded_ = threaded;
+	logger_ = Logger::Get("Channel");
+
+	if (threaded_) {
+		readThread_ = std::thread(&Channel::readLoop, this);
+	} else {
+		// Non-threaded mode: set consumer fd to non-blocking
+		int flags = ::fcntl(consumerFd_, F_GETFL, 0);
+		if (flags >= 0)
+			::fcntl(consumerFd_, F_SETFL, flags | O_NONBLOCK);
+	}
 }
 
 Channel::~Channel() {
@@ -144,9 +170,137 @@ Channel::RequestResult Channel::requestWithId(
 	return {std::move(future), reqId};
 }
 
+// requestWait: works in both threaded and non-threaded modes
+Channel::OwnedResponse Channel::requestWait(
+	FBS::Request::Method method,
+	FBS::Request::Body bodyType,
+	flatbuffers::Offset<void> bodyOffset,
+	const std::string& handlerId,
+	int timeoutMs)
+{
+	auto [fut, reqId] = requestWithId(method, bodyType, bodyOffset, handlerId);
+
+	if (threaded_) {
+		// Threaded mode: readThread is pumping the fd, just wait on the future
+		if (fut.wait_for(std::chrono::milliseconds(timeoutMs)) != std::future_status::ready) {
+			std::lock_guard<std::mutex> lock(sentsMutex_);
+			auto it = sents_.find(reqId);
+			if (it != sents_.end()) {
+				it->second->promise.set_exception(
+					std::make_exception_ptr(std::runtime_error("timeout")));
+				sents_.erase(it);
+			}
+			throw std::runtime_error("Channel request timeout (" + std::to_string(timeoutMs) + "ms)");
+		}
+		return fut.get();
+	}
+
+	// Non-threaded mode: we must pump the consumer fd ourselves
+	auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+	while (true) {
+		// Process any data already buffered or available
+		processAvailableData();
+
+		// Check if response arrived
+		if (fut.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
+			return fut.get();
+
+		// Check timeout
+		auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+			deadline - std::chrono::steady_clock::now());
+		if (remaining.count() <= 0) {
+			std::lock_guard<std::mutex> lock(sentsMutex_);
+			auto it = sents_.find(reqId);
+			if (it != sents_.end()) {
+				it->second->promise.set_exception(
+					std::make_exception_ptr(std::runtime_error("timeout")));
+				sents_.erase(it);
+			}
+			throw std::runtime_error("Channel request timeout (" + std::to_string(timeoutMs) + "ms)");
+		}
+
+		// Wait for data on the fd
+		struct pollfd pfd{};
+		pfd.fd = consumerFd_;
+		pfd.events = POLLIN;
+		// Slice poll wait to keep request timeout checks responsive.
+		int waitMs = std::max(0, std::min<int>(static_cast<int>(remaining.count()), kPollTimeoutSliceMs));
+		::poll(&pfd, 1, waitMs);
+	}
+}
+
+// Non-blocking read from consumer fd. Processes all complete messages.
+// Returns true if fd is still open, false on EOF (worker died).
+bool Channel::processAvailableData() {
+	if (closed_ || consumerFd_ < 0) return false;
+	if (threaded_) {
+		MS_WARN(logger_, "processAvailableData called in threaded mode [pid:{}], rejecting", pid_);
+		return false;
+	}
+
+	uint8_t tmp[kReadChunkSize];
+	while (true) {
+		ssize_t n = ::read(consumerFd_, tmp, sizeof(tmp));
+		if (n > 0) {
+			recvBuf_.insert(recvBuf_.end(), tmp, tmp + static_cast<size_t>(n));
+			if (recvBuf_.size() > RECV_BUFFER_MAX_LEN) {
+				MS_WARN(logger_,
+					"recv buffer exceeded limit [pid:{} size:{} limit:{}], closing channel",
+					pid_, recvBuf_.size(), RECV_BUFFER_MAX_LEN);
+				close();
+				return false;
+			}
+			continue;
+		}
+
+		if (n == 0) {
+			// EOF — worker process closed its end
+			if (!closed_) MS_DEBUG(logger_, "consumer fd EOF [pid:{}]", pid_);
+			return false;
+		}
+
+		// n < 0
+		if (errno == EAGAIN || errno == EWOULDBLOCK) {
+			break; // No more data available right now
+		}
+		// Real error
+		if (!closed_) MS_DEBUG(logger_, "consumer fd read error: {}", strerror(errno));
+		return false;
+	}
+
+	// Process complete messages from recvBuf_
+	size_t offset = 0;
+	while (offset + 4 <= recvBuf_.size()) {
+		uint32_t msgLen;
+		std::memcpy(&msgLen, recvBuf_.data() + offset, 4);
+		if (msgLen == 0 || msgLen > MESSAGE_MAX_LEN) {
+			MS_WARN(logger_,
+				"invalid frame length [pid:{} msgLen:{} max:{}], closing channel",
+				pid_, msgLen, MESSAGE_MAX_LEN);
+			close();
+			return false;
+		}
+		if (offset + 4 + msgLen > recvBuf_.size()) break;
+
+		if (!processMessage(recvBuf_.data() + offset + 4, msgLen)) {
+			MS_WARN(logger_, "invalid FlatBuffers message [pid:{} len:{}], closing channel", pid_, msgLen);
+			close();
+			return false;
+		}
+		offset += 4 + msgLen;
+	}
+
+	if (offset > 0) {
+		recvBuf_.erase(recvBuf_.begin(), recvBuf_.begin() + static_cast<ptrdiff_t>(offset));
+	}
+
+	return true;
+}
+
 void Channel::readLoop() {
+	// Threaded mode: blocking read loop (original behavior)
 	std::vector<uint8_t> recvBuf;
-	uint8_t tmp[65536];
+	uint8_t tmp[kReadChunkSize];
 
 	while (!closed_) {
 		ssize_t n = ::read(consumerFd_, tmp, sizeof(tmp));
@@ -155,7 +309,7 @@ void Channel::readLoop() {
 			break;
 		}
 
-		recvBuf.insert(recvBuf.end(), tmp, tmp + n);
+		recvBuf.insert(recvBuf.end(), tmp, tmp + static_cast<size_t>(n));
 		if (recvBuf.size() > RECV_BUFFER_MAX_LEN) {
 			MS_WARN(logger_,
 				"recv buffer exceeded limit [pid:{} size:{} limit:{}], closing channel",
@@ -188,7 +342,7 @@ void Channel::readLoop() {
 		}
 
 		if (offset > 0) {
-			recvBuf.erase(recvBuf.begin(), recvBuf.begin() + offset);
+			recvBuf.erase(recvBuf.begin(), recvBuf.begin() + static_cast<ptrdiff_t>(offset));
 		}
 	}
 }

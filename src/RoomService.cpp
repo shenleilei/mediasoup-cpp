@@ -52,7 +52,11 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 		return {false, {}, "", "invalid rtpCapabilities"};
 	}
 
+	bool roomCreated = (existingRoom == nullptr);
 	auto room = roomManager_.createRoom(roomId);
+	if (roomCreated && roomLifecycle_) {
+		roomLifecycle_(roomId, true);
+	}
 	auto peer = std::make_shared<Peer>();
 	peer->id = peerId;
 	peer->displayName = displayName;
@@ -156,6 +160,7 @@ RoomService::Result RoomService::leave(const std::string& roomId, const std::str
 	if (room->empty()) {
 		if (registry_) registry_->unregisterRoom(roomId);
 		roomManager_.removeRoom(roomId);
+		if (roomLifecycle_) roomLifecycle_(roomId, false);
 	}
 	return {true, {}};
 }
@@ -441,6 +446,7 @@ void RoomService::checkRoomHealth() {
 		cleanupRoomResources(roomId);
 		if (registry_) registry_->unregisterRoom(roomId);
 		roomManager_.removeRoom(roomId);
+		if (roomLifecycle_) roomLifecycle_(roomId, false);
 	}
 }
 
@@ -450,8 +456,19 @@ void RoomService::cleanIdleRooms(int idleSeconds) {
 		cleanupRoomResources(id);
 		if (registry_) registry_->unregisterRoom(id);
 		roomManager_.removeRoom(id);
+		if (roomLifecycle_) roomLifecycle_(id, false);
 	}
 	cleanOldRecordings();
+}
+
+void RoomService::closeAllRooms() {
+	auto roomIds = roomManager_.getRoomIds();
+	for (auto& roomId : roomIds) {
+		cleanupRoomResources(roomId);
+		if (registry_) registry_->unregisterRoom(roomId);
+		roomManager_.removeRoom(roomId);
+		if (roomLifecycle_) roomLifecycle_(roomId, false);
+	}
 }
 
 void RoomService::cleanupRoomResources(const std::string& roomId) {
