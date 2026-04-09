@@ -524,17 +524,37 @@ private:
 		MS_DEBUG(logger_, "Evicted {} dead nodes from cache", deadNodeIds.size());
 	}
 
+	// SCAN-based key discovery (non-blocking alternative to KEYS).
+	// Must be called with cmdMutex_ held.
+	std::vector<std::string> scanKeys(const char* pattern) {
+		std::vector<std::string> keys;
+		std::string cursor = "0";
+		do {
+			auto* r = (redisReply*)redisCommand(ctx_, "SCAN %s MATCH %s COUNT 100",
+				cursor.c_str(), pattern);
+			if (!r || r->type != REDIS_REPLY_ARRAY || r->elements != 2) {
+				if (r) freeReplyObject(r);
+				break;
+			}
+			cursor = r->element[0]->str;
+			auto* arr = r->element[1];
+			for (size_t i = 0; i < arr->elements; i++)
+				keys.push_back(arr->element[i]->str);
+			freeReplyObject(r);
+		} while (cursor != "0");
+		return keys;
+	}
+
 	// Sync only node cache from Redis (lightweight, no room sync).
 	// Must be called with cmdMutex_ held.
 	void syncNodesUnlocked() {
 		if (!ensureConnected()) return;
 		std::unordered_map<std::string, NodeInfo> tmpNodes;
-		auto* nkeys = (redisReply*)redisCommand(ctx_, "KEYS node:*");
-		if (nkeys && nkeys->type == REDIS_REPLY_ARRAY && nkeys->elements > 0) {
+		auto nodeKeys = scanKeys("node:*");
+		if (!nodeKeys.empty()) {
 			std::vector<std::string> nids;
 			std::string mget = "MGET";
-			for (size_t i = 0; i < nkeys->elements; i++) {
-				std::string key = nkeys->element[i]->str;
+			for (auto& key : nodeKeys) {
 				nids.push_back(key.substr(5));
 				mget += " " + key;
 			}
@@ -546,7 +566,6 @@ private:
 			}
 			if (mr) freeReplyObject(mr);
 		}
-		if (nkeys) freeReplyObject(nkeys);
 		if (!tmpNodes.empty()) {
 			std::lock_guard<std::mutex> cl(cacheMutex_);
 			for (auto& [nid, info] : tmpNodes)
@@ -558,14 +577,13 @@ private:
 	void syncAllUnlocked() {
 		if (!ensureConnected()) return;
 
-		// Step 1: fetch all node data via KEYS + MGET (no cacheMutex_)
+		// Step 1: fetch all node data via SCAN + MGET (no cacheMutex_)
 		std::unordered_map<std::string, NodeInfo> tmpNodes;
-		auto* nkeys = (redisReply*)redisCommand(ctx_, "KEYS node:*");
-		if (nkeys && nkeys->type == REDIS_REPLY_ARRAY && nkeys->elements > 0) {
+		auto nodeKeys = scanKeys("node:*");
+		if (!nodeKeys.empty()) {
 			std::vector<std::string> nids;
 			std::string mget = "MGET";
-			for (size_t i = 0; i < nkeys->elements; i++) {
-				std::string key = nkeys->element[i]->str;
+			for (auto& key : nodeKeys) {
 				nids.push_back(key.substr(5));
 				mget += " " + key;
 			}
@@ -577,16 +595,14 @@ private:
 			}
 			if (mr) freeReplyObject(mr);
 		}
-		if (nkeys) freeReplyObject(nkeys);
 
-		// Step 2: fetch all room data via KEYS + MGET (no cacheMutex_)
+		// Step 2: fetch all room data via SCAN + MGET (no cacheMutex_)
 		std::unordered_map<std::string, std::string> tmpRooms;
-		auto* rkeys = (redisReply*)redisCommand(ctx_, "KEYS room:*");
-		if (rkeys && rkeys->type == REDIS_REPLY_ARRAY && rkeys->elements > 0) {
+		auto roomKeys = scanKeys("room:*");
+		if (!roomKeys.empty()) {
 			std::vector<std::string> rids;
 			std::string mget = "MGET";
-			for (size_t i = 0; i < rkeys->elements; i++) {
-				std::string key = rkeys->element[i]->str;
+			for (auto& key : roomKeys) {
 				rids.push_back(key.substr(5));
 				mget += " " + key;
 			}
@@ -602,7 +618,6 @@ private:
 			}
 			if (mr) freeReplyObject(mr);
 		}
-		if (rkeys) freeReplyObject(rkeys);
 
 		// Step 3: swap caches (under cacheMutex_, pure memory)
 		{
