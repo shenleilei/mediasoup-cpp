@@ -56,50 +56,56 @@ public:
 		, numWorkersTarget_(numWorkers)
 		, logger_(Logger::Get("WorkerThread"))
 	{
-		epollFd_ = ::epoll_create1(0);
-		if (epollFd_ < 0)
-			throw std::runtime_error("epoll_create1 failed: " + std::string(strerror(errno)));
+		try {
+			epollFd_ = ::epoll_create1(0);
+			if (epollFd_ < 0)
+				throw std::runtime_error("epoll_create1 failed: " + std::string(strerror(errno)));
 
-		eventFd_ = ::eventfd(0, EFD_NONBLOCK);
-		if (eventFd_ < 0) {
-			::close(epollFd_);
-			throw std::runtime_error("eventfd failed: " + std::string(strerror(errno)));
-		}
+			eventFd_ = ::eventfd(0, EFD_NONBLOCK);
+			if (eventFd_ < 0)
+				throw std::runtime_error("eventfd failed: " + std::string(strerror(errno)));
 
-		// Register eventfd in epoll (for task queue wakeup)
-		struct epoll_event ev{};
-		ev.events = EPOLLIN;
-		ev.data.fd = eventFd_;
-		::epoll_ctl(epollFd_, EPOLL_CTL_ADD, eventFd_, &ev);
+			// Register eventfd in epoll (for task queue wakeup)
+			struct epoll_event ev{};
+			ev.events = EPOLLIN;
+			ev.data.fd = eventFd_;
+			::epoll_ctl(epollFd_, EPOLL_CTL_ADD, eventFd_, &ev);
 
-		// Create health check timer (timerfd)
-		healthTimerFd_ = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
-		if (healthTimerFd_ >= 0) {
-			struct itimerspec its{};
-			its.it_interval.tv_sec = kHealthCheckIntervalMs / 1000;
-			its.it_interval.tv_nsec = (kHealthCheckIntervalMs % 1000) * 1000000L;
-			its.it_value = its.it_interval;
-			::timerfd_settime(healthTimerFd_, 0, &its, nullptr);
+			// Create health check timer (timerfd)
+			healthTimerFd_ = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+			if (healthTimerFd_ >= 0) {
+				struct itimerspec its{};
+				its.it_interval.tv_sec = kHealthCheckIntervalMs / 1000;
+				its.it_interval.tv_nsec = (kHealthCheckIntervalMs % 1000) * 1000000L;
+				its.it_value = its.it_interval;
+				::timerfd_settime(healthTimerFd_, 0, &its, nullptr);
 
-			struct epoll_event tev{};
-			tev.events = EPOLLIN;
-			tev.data.fd = healthTimerFd_;
-			::epoll_ctl(epollFd_, EPOLL_CTL_ADD, healthTimerFd_, &tev);
-		}
+				struct epoll_event tev{};
+				tev.events = EPOLLIN;
+				tev.data.fd = healthTimerFd_;
+				::epoll_ctl(epollFd_, EPOLL_CTL_ADD, healthTimerFd_, &tev);
+			}
 
-		// Create GC timer (idle room cleanup)
-		gcTimerFd_ = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
-		if (gcTimerFd_ >= 0) {
-			struct itimerspec its{};
-			its.it_interval.tv_sec = kGcIntervalMs / 1000;
-			its.it_interval.tv_nsec = (kGcIntervalMs % 1000) * 1000000L;
-			its.it_value = its.it_interval;
-			::timerfd_settime(gcTimerFd_, 0, &its, nullptr);
+			// Create GC timer (idle room cleanup)
+			gcTimerFd_ = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+			if (gcTimerFd_ >= 0) {
+				struct itimerspec its{};
+				its.it_interval.tv_sec = kGcIntervalMs / 1000;
+				its.it_interval.tv_nsec = (kGcIntervalMs % 1000) * 1000000L;
+				its.it_value = its.it_interval;
+				::timerfd_settime(gcTimerFd_, 0, &its, nullptr);
 
-			struct epoll_event tev{};
-			tev.events = EPOLLIN;
-			tev.data.fd = gcTimerFd_;
-			::epoll_ctl(epollFd_, EPOLL_CTL_ADD, gcTimerFd_, &tev);
+				struct epoll_event tev{};
+				tev.events = EPOLLIN;
+				tev.data.fd = gcTimerFd_;
+				::epoll_ctl(epollFd_, EPOLL_CTL_ADD, gcTimerFd_, &tev);
+			}
+		} catch (...) {
+			if (healthTimerFd_ >= 0) { ::close(healthTimerFd_); healthTimerFd_ = -1; }
+			if (gcTimerFd_ >= 0) { ::close(gcTimerFd_); gcTimerFd_ = -1; }
+			if (eventFd_ >= 0) { ::close(eventFd_); eventFd_ = -1; }
+			if (epollFd_ >= 0) { ::close(epollFd_); epollFd_ = -1; }
+			throw;
 		}
 	}
 
@@ -142,11 +148,9 @@ public:
 
 		// Close all rooms via RoomService
 		if (roomService_) {
-			for (auto& id : roomManager_->getRoomIds()) {
-				try {
-					roomService_->leave(id, ""); // cleanup
-				} catch (...) {}
-			}
+			try {
+				roomService_->closeAllRooms();
+			} catch (...) {}
 		}
 	}
 
@@ -213,6 +217,11 @@ public:
 		if (samples == 0) return 0.0;
 		auto total = taskWaitUsTotal_.load(std::memory_order_relaxed);
 		return static_cast<double>(total) / static_cast<double>(samples);
+	}
+
+	size_t maxRoomsCapacity() const {
+		if (maxRoutersPerWorker_ == 0) return 0;
+		return workerCount() * maxRoutersPerWorker_;
 	}
 
 private:

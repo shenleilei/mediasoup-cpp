@@ -11,6 +11,7 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <atomic>
 
 namespace mediasoup {
@@ -44,6 +45,9 @@ private:
 
 	// Remove room assignment (called when room is cleaned up).
 	void unassignRoom(const std::string& roomId);
+	void startRegistryWorker();
+	void stopRegistryWorker();
+	void enqueueRegistryTask(std::function<void()> task);
 
 	int port_;
 	std::vector<std::unique_ptr<WorkerThread>>& workerThreads_;
@@ -53,6 +57,14 @@ private:
 
 	// Room → WorkerThread dispatch table (only accessed from main uWS thread, no lock needed)
 	std::unordered_map<std::string, WorkerThread*> roomDispatch_;
+	std::mutex destroyedRoomsMutex_;
+	std::unordered_set<std::string> destroyedRooms_;
+
+	std::mutex registryTaskMutex_;
+	std::condition_variable registryTaskCv_;
+	std::queue<std::function<void()>> registryTasks_;
+	std::thread registryThread_;
+	std::atomic<bool> stopRegistryThread_{false};
 
 	std::atomic<uint64_t> staleRequestDrops_{0};
 	std::atomic<uint64_t> rejectedClientStats_{0};

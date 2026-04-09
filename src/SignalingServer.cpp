@@ -6,6 +6,7 @@
 #include <mutex>
 #include <atomic>
 #include <thread>
+#include <future>
 #include <dirent.h>
 #include <sys/stat.h>
 
@@ -14,6 +15,7 @@ extern std::atomic<bool> g_shutdown;
 namespace mediasoup {
 
 static constexpr uint64_t kInvalidSessionId = 0;
+static constexpr int kResolveTimeoutMs = 50;
 
 struct PerSocketData {
 	std::string peerId;
@@ -62,14 +64,66 @@ WorkerThread* SignalingServer::getWorkerThread(const std::string& roomId, bool a
 
 void SignalingServer::assignRoom(const std::string& roomId, WorkerThread* wt) {
 	roomDispatch_[roomId] = wt;
+	std::lock_guard<std::mutex> lock(destroyedRoomsMutex_);
+	destroyedRooms_.erase(roomId);
 }
 
 void SignalingServer::unassignRoom(const std::string& roomId) {
 	roomDispatch_.erase(roomId);
 }
 
+void SignalingServer::startRegistryWorker() {
+	if (!registry_ || registryThread_.joinable()) return;
+	stopRegistryThread_.store(false, std::memory_order_relaxed);
+	registryThread_ = std::thread([this] {
+		while (!stopRegistryThread_.load(std::memory_order_relaxed)) {
+			std::function<void()> task;
+			{
+				std::unique_lock<std::mutex> lock(registryTaskMutex_);
+				registryTaskCv_.wait(lock, [this] {
+					return stopRegistryThread_.load(std::memory_order_relaxed) || !registryTasks_.empty();
+				});
+				if (stopRegistryThread_.load(std::memory_order_relaxed) && registryTasks_.empty())
+					return;
+				task = std::move(registryTasks_.front());
+				registryTasks_.pop();
+			}
+			try {
+				task();
+			} catch (const std::exception& e) {
+				spdlog::error("registry background task failed: {}", e.what());
+			} catch (...) {
+				spdlog::error("registry background task failed: unknown error");
+			}
+		}
+	});
+}
+
+void SignalingServer::stopRegistryWorker() {
+	stopRegistryThread_.store(true, std::memory_order_relaxed);
+	registryTaskCv_.notify_all();
+	if (registryThread_.joinable()) {
+		registryThread_.join();
+	}
+	{
+		std::lock_guard<std::mutex> lock(registryTaskMutex_);
+		std::queue<std::function<void()>> empty;
+		registryTasks_.swap(empty);
+	}
+}
+
+void SignalingServer::enqueueRegistryTask(std::function<void()> task) {
+	if (!registry_) return;
+	{
+		std::lock_guard<std::mutex> lock(registryTaskMutex_);
+		registryTasks_.push(std::move(task));
+	}
+	registryTaskCv_.notify_one();
+}
+
 void SignalingServer::run() {
 	running_ = true;
+	startRegistryWorker();
 
 	// peerId → ws* mapping for notify/broadcast
 	struct WsMap {
@@ -116,7 +170,15 @@ void SignalingServer::run() {
 		});
 
 		wt->setRoomLifecycle([this, loop, wtRaw](const std::string& roomId, bool created) {
-			if (created) return;
+			if (created) {
+				std::lock_guard<std::mutex> lock(destroyedRoomsMutex_);
+				destroyedRooms_.erase(roomId);
+				return;
+			}
+			{
+				std::lock_guard<std::mutex> lock(destroyedRoomsMutex_);
+				destroyedRooms_.insert(roomId);
+			}
 			loop->defer([this, roomId, wtRaw] {
 				auto it = roomDispatch_.find(roomId);
 				if (it != roomDispatch_.end() && it->second == wtRaw) {
@@ -226,7 +288,12 @@ void SignalingServer::run() {
 			std::string targetRoomId = (method == "join") ? joinRoomId : roomId;
 			WorkerThread* wt = nullptr;
 			if (method == "join") {
-				wt = getWorkerThread(targetRoomId, false);
+				bool destroyed = false;
+				{
+					std::lock_guard<std::mutex> lock(destroyedRoomsMutex_);
+					destroyed = (destroyedRooms_.find(targetRoomId) != destroyedRooms_.end());
+				}
+				wt = destroyed ? nullptr : getWorkerThread(targetRoomId, false);
 				if (!wt) wt = pickLeastLoadedWorkerThread();
 			} else {
 				wt = getWorkerThread(targetRoomId, false);
@@ -399,7 +466,25 @@ void SignalingServer::run() {
 
 		// resolveRoom is thread-safe on RoomRegistry
 		if (registry_) {
-			auto result = registry_->resolveRoom(roomId, clientIp);
+			auto promise = std::make_shared<std::promise<RoomRegistry::ResolveResult>>();
+			auto fut = promise->get_future();
+			enqueueRegistryTask([this, roomId, clientIp, promise]() {
+				try {
+					promise->set_value(registry_->resolveRoom(roomId, clientIp));
+				} catch (...) {
+					promise->set_exception(std::current_exception());
+				}
+			});
+			RoomRegistry::ResolveResult result;
+			if (fut.wait_for(std::chrono::milliseconds(kResolveTimeoutMs)) == std::future_status::ready) {
+				try {
+					result = fut.get();
+				} catch (const std::exception& e) {
+					spdlog::warn("resolveRoom failed: {}", e.what());
+				} catch (...) {
+					spdlog::warn("resolveRoom failed: unknown error");
+				}
+			}
 			json j;
 			if (!result.wsUrl.empty()) {
 				j = {{"wsUrl", result.wsUrl}, {"isNew", result.isNew}};
@@ -419,10 +504,12 @@ void SignalingServer::run() {
 		// Aggregate load from all WorkerThreads
 		size_t totalRooms = 0;
 		size_t totalWorkers = 0;
+		size_t totalMaxRooms = 0;
 		json workerQueues = json::array();
 		for (auto& wt : workerThreads_) {
 			totalRooms += wt->roomCount();
 			totalWorkers += wt->workerCount();
+			totalMaxRooms += wt->maxRoomsCapacity();
 			workerQueues.push_back({
 				{"threadId", wt->id()},
 				{"roomCount", wt->roomCount()},
@@ -438,6 +525,7 @@ void SignalingServer::run() {
 		}
 		json load = {
 			{"rooms", totalRooms},
+			{"maxRooms", totalMaxRooms},
 			{"workers", totalWorkers},
 			{"workerThreads", workerThreads_.size()},
 			{"dispatchRooms", roomDispatch_.size()},
@@ -550,28 +638,28 @@ void SignalingServer::run() {
 			us_timer_set(redisTimer, [](struct us_timer_t* t) {
 				SignalingServer* s;
 				memcpy(&s, us_timer_ext(t), sizeof(SignalingServer*));
-				// Aggregate and update registry from main thread
+				// Aggregate in main thread, execute redis I/O in registry worker thread.
 				if (s->registry_) {
 					size_t totalRooms = 0;
-					size_t totalWorkers = 0;
+					size_t maxRooms = 0;
 					for (auto& wt : s->workerThreads_) {
 						totalRooms += wt->roomCount();
-						totalWorkers += wt->workerCount();
+						maxRooms += wt->maxRoomsCapacity();
 					}
-					// maxRooms = 0 means unlimited (WorkerManager default)
-					size_t maxRooms = 0; // will be 0 if maxRoutersPerWorker not set
-					try {
-						s->registry_->heartbeat();
-						// Refresh room TTLs
-						std::vector<std::string> allRoomIds;
-						for (auto& [rid, _] : s->roomDispatch_)
-							allRoomIds.push_back(rid);
-						if (!allRoomIds.empty())
-							s->registry_->refreshRooms(allRoomIds);
-						s->registry_->updateLoad(totalRooms, maxRooms);
-					} catch (const std::exception& e) {
-						spdlog::error("registry heartbeat failed: {}", e.what());
-					}
+					std::vector<std::string> allRoomIds;
+					allRoomIds.reserve(s->roomDispatch_.size());
+					for (auto& [rid, _] : s->roomDispatch_)
+						allRoomIds.push_back(rid);
+					s->enqueueRegistryTask([s, totalRooms, maxRooms, allRoomIds = std::move(allRoomIds)]() mutable {
+						try {
+							s->registry_->heartbeat();
+							if (!allRoomIds.empty())
+								s->registry_->refreshRooms(allRoomIds);
+							s->registry_->updateLoad(totalRooms, maxRooms);
+						} catch (const std::exception& e) {
+							spdlog::error("registry heartbeat failed: {}", e.what());
+						}
+					});
 				}
 			}, kRedisHeartbeatIntervalSec * 1000, kRedisHeartbeatIntervalSec * 1000);
 
@@ -592,10 +680,13 @@ void SignalingServer::run() {
 			spdlog::error("SignalingServer failed to listen on port {}", port_);
 		}
 	}).run();
+
+	stopRegistryWorker();
 }
 
 void SignalingServer::stop() {
 	running_ = false;
+	stopRegistryWorker();
 	// WorkerThreads are stopped by main.cpp
 }
 

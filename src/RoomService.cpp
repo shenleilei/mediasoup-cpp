@@ -461,6 +461,16 @@ void RoomService::cleanIdleRooms(int idleSeconds) {
 	cleanOldRecordings();
 }
 
+void RoomService::closeAllRooms() {
+	auto roomIds = roomManager_.getRoomIds();
+	for (auto& roomId : roomIds) {
+		cleanupRoomResources(roomId);
+		if (registry_) registry_->unregisterRoom(roomId);
+		roomManager_.removeRoom(roomId);
+		if (roomLifecycle_) roomLifecycle_(roomId, false);
+	}
+}
+
 void RoomService::cleanupRoomResources(const std::string& roomId) {
 	std::vector<std::shared_ptr<PeerRecorder>> recordersToStop;
 	{
