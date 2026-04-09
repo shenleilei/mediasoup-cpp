@@ -5,6 +5,38 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <hiredis/hiredis.h>
+#include <poll.h>
+
+// Recv a full HTTP response (headers + body) with timeout.
+static std::string recvHttp(int fd, int timeoutMs = 3000) {
+	std::string data;
+	char buf[4096];
+	auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+	while (std::chrono::steady_clock::now() < deadline) {
+		int remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+			deadline - std::chrono::steady_clock::now()).count();
+		if (remaining <= 0) break;
+		struct pollfd pfd{fd, POLLIN, 0};
+		int pr = poll(&pfd, 1, remaining);
+		if (pr <= 0) break;
+		int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+		if (n <= 0) break;
+		data.append(buf, n);
+		// Check if we have full HTTP response
+		auto hdrEnd = data.find("\r\n\r\n");
+		if (hdrEnd != std::string::npos) {
+			auto cl = data.find("Content-Length:");
+			if (cl != std::string::npos && cl < hdrEnd) {
+				size_t bodyExpected = std::stoul(data.substr(cl + 15));
+				if (data.size() >= hdrEnd + 4 + bodyExpected) break;
+			} else {
+				// No Content-Length, assume complete after headers + some body
+				break;
+			}
+		}
+	}
+	return data;
+}
 
 static const int SFU_PORT = 18767;
 static const std::string HOST = "127.0.0.1";
@@ -185,6 +217,36 @@ TEST_F(ReviewFixIntegration, ReconnectSamePeerIdDoesNotKickNew) {
 		<< "New alice session should still work: " << resp.dump();
 }
 
+// Verify stale requests from old connection are rejected even without waiting
+TEST_F(ReviewFixIntegration, ReconnectStaleRequestRejectedImmediately) {
+	auto alice = joinRoom(testRoom_, "alice");
+
+	// Alice creates a transport on the old session
+	auto t1 = alice.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(t1.value("ok", false));
+
+	// Alice "reconnects" with same peerId — do NOT wait for defer/kick
+	auto alice2 = joinRoom(testRoom_, "alice");
+
+	// Immediately fire a request on the OLD connection (race window)
+	auto staleResp = alice.ws->request("createWebRtcTransport", {
+		{"producing", false}, {"consuming", true}
+	}, 2000);
+
+	// Should fail: either timeout (ws already closed) or rejected by sessionId check
+	EXPECT_FALSE(staleResp.value("ok", false))
+		<< "Stale request on old session should be rejected: " << staleResp.dump();
+
+	// New session must still work
+	auto freshResp = alice2.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	EXPECT_TRUE(freshResp.value("ok", false))
+		<< "New session should still work: " << freshResp.dump();
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Fix 3: restartIce returns fresh ICE parameters
 // ═══════════════════════════════════════════════════════════════
@@ -297,12 +359,10 @@ TEST_F(ReviewFixIntegration, ResolveAcceptsClientIp) {
 		"Host: 127.0.0.1\r\n\r\n";
 	::send(fd, req.data(), req.size(), 0);
 
-	char buf[4096]{};
-	int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+	std::string response = recvHttp(fd);
 	::close(fd);
-	ASSERT_GT(n, 0);
+	ASSERT_FALSE(response.empty());
 
-	std::string response(buf, n);
 	// Should get 200 with JSON containing wsUrl
 	EXPECT_NE(response.find("200"), std::string::npos) << response;
 	EXPECT_NE(response.find("wsUrl"), std::string::npos) << response;
@@ -434,14 +494,11 @@ TEST_F(GeoJoinTest, ResolvePrefersSameIspNearest) {
 		"&clientIp=36.110.147.0 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
 	::send(fd, req.data(), req.size(), 0);
 
-	char buf[4096]{};
-	int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+	std::string response = recvHttp(fd);
 	::close(fd);
-	ASSERT_GT(n, 0);
+	ASSERT_FALSE(response.empty());
 
-	std::string response(buf, n);
 	EXPECT_NE(response.find("200"), std::string::npos) << response;
-	// Should pick 杭州电信 (GEO_PORT_A) over 广州联通 (GEO_PORT_B)
 	bool hasPortA = response.find(std::to_string(GEO_PORT_A)) != std::string::npos;
 	bool hasPortB = response.find(std::to_string(GEO_PORT_B)) != std::string::npos;
 	EXPECT_TRUE(hasPortA) << "Beijing Telecom should route to 杭州电信, got: " << response;
@@ -598,12 +655,10 @@ TEST_F(CountryIsolationTest, ChinaClientOnUsNodeRoutedToChinaNode) {
 		"&clientIp=36.110.147.0 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
 	::send(fd, req.data(), req.size(), 0);
 
-	char buf[4096]{};
-	int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+	std::string response = recvHttp(fd);
 	::close(fd);
-	ASSERT_GT(n, 0);
+	ASSERT_FALSE(response.empty());
 
-	std::string response(buf, n);
 	bool hasCN = response.find(std::to_string(ISO_PORT_CN)) != std::string::npos;
 	bool hasUS = response.find(std::to_string(ISO_PORT_US)) != std::string::npos;
 	EXPECT_TRUE(hasCN) << "CN client on US node should be redirected to CN node, got: " << response;
@@ -623,12 +678,10 @@ TEST_F(CountryIsolationTest, UsClientOnCnNodeRoutedToUsNode) {
 		"&clientIp=8.8.8.8 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
 	::send(fd, req.data(), req.size(), 0);
 
-	char buf[4096]{};
-	int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+	std::string response = recvHttp(fd);
 	::close(fd);
-	ASSERT_GT(n, 0);
+	ASSERT_FALSE(response.empty());
 
-	std::string response(buf, n);
 	bool hasUS = response.find(std::to_string(ISO_PORT_US)) != std::string::npos;
 	bool hasCN = response.find(std::to_string(ISO_PORT_CN)) != std::string::npos;
 	EXPECT_TRUE(hasUS) << "US client on CN node should be redirected to US node, got: " << response;
@@ -648,12 +701,10 @@ TEST_F(CountryIsolationTest, ChinaClientRoutedToChinaNode) {
 		"&clientIp=36.110.147.0 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
 	::send(fd, req.data(), req.size(), 0);
 
-	char buf[4096]{};
-	int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+	std::string response = recvHttp(fd);
 	::close(fd);
-	ASSERT_GT(n, 0);
+	ASSERT_FALSE(response.empty());
 
-	std::string response(buf, n);
 	bool hasCN = response.find(std::to_string(ISO_PORT_CN)) != std::string::npos;
 	bool hasUS = response.find(std::to_string(ISO_PORT_US)) != std::string::npos;
 	EXPECT_TRUE(hasCN) << "CN client should route to CN node, got: " << response;
@@ -673,12 +724,10 @@ TEST_F(CountryIsolationTest, UsClientRoutedToUsNode) {
 		"&clientIp=8.8.8.8 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
 	::send(fd, req.data(), req.size(), 0);
 
-	char buf[4096]{};
-	int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+	std::string response = recvHttp(fd);
 	::close(fd);
-	ASSERT_GT(n, 0);
+	ASSERT_FALSE(response.empty());
 
-	std::string response(buf, n);
 	bool hasUS = response.find(std::to_string(ISO_PORT_US)) != std::string::npos;
 	bool hasCN = response.find(std::to_string(ISO_PORT_CN)) != std::string::npos;
 	EXPECT_TRUE(hasUS) << "US client should route to US node, got: " << response;
@@ -778,12 +827,10 @@ TEST_F(RedisDegradeTest, ResolveWorksWithoutRedis) {
 		" HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
 	::send(fd, req.data(), req.size(), 0);
 
-	char buf[4096]{};
-	int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+	std::string response = recvHttp(fd);
 	::close(fd);
-	ASSERT_GT(n, 0);
+	ASSERT_FALSE(response.empty());
 
-	std::string response(buf, n);
 	EXPECT_NE(response.find("200"), std::string::npos) << "Should return 200, got: " << response;
 	EXPECT_NE(response.find("wsUrl"), std::string::npos) << "Should contain wsUrl, got: " << response;
 }
@@ -949,12 +996,10 @@ TEST_F(CacheTest, RoomClaimPropagatesViaCache) {
 		" HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
 	::send(fd, req.data(), req.size(), 0);
 
-	char buf[4096]{};
-	int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+	std::string response = recvHttp(fd);
 	::close(fd);
-	ASSERT_GT(n, 0);
+	ASSERT_FALSE(response.empty());
 
-	std::string response(buf, n);
 	// Should point to node A (where room was claimed)
 	EXPECT_NE(response.find(std::to_string(CACHE_PORT_A)), std::string::npos)
 		<< "Node B should resolve room to node A via cache, got: " << response;
@@ -983,10 +1028,9 @@ TEST_F(CacheTest, ResolveUsesCache) {
 		std::string req = "GET /api/resolve?roomId=" + testRoom_ +
 			" HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
 		::send(fd, req.data(), req.size(), 0);
-		char buf[4096]{};
-		int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+		std::string result = recvHttp(fd);
 		::close(fd);
-		return std::string(buf, n > 0 ? n : 0);
+		return result;
 	};
 
 	auto start = std::chrono::steady_clock::now();

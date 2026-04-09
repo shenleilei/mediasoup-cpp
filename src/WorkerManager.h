@@ -31,6 +31,11 @@ public:
 		workers_.push_back(std::move(worker));
 	}
 
+	void removeWorker(const std::shared_ptr<Worker>& worker) {
+		std::lock_guard<std::mutex> lock(mutex_);
+		workers_.erase(std::remove(workers_.begin(), workers_.end(), worker), workers_.end());
+	}
+
 	void setMaxRoutersPerWorker(size_t max) { maxRoutersPerWorker_ = max; }
 	size_t maxRoutersPerWorker() const { return maxRoutersPerWorker_; }
 

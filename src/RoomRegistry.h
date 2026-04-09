@@ -407,8 +407,11 @@ private:
 				redisReply* msg = nullptr;
 				int rc = redisGetReply(sub, (void**)&msg);
 				if (rc != REDIS_OK || !msg) {
+					if (sub->err == REDIS_ERR_IO &&
+						(errno == EAGAIN || errno == EWOULDBLOCK))
+						continue; // read timeout, not a real disconnect
 					if (sub->err == REDIS_ERR_IO || sub->err == REDIS_ERR_EOF) break;
-					continue; // timeout, retry
+					continue;
 				}
 
 				if (msg->type == REDIS_REPLY_ARRAY && msg->elements >= 3) {
@@ -470,17 +473,35 @@ private:
 	// Must be called with cmdMutex_ held.
 	void evictDeadNodes() {
 		if (!ctx_) return;
-		std::vector<std::string> deadNodeIds;
+
+		// Step 1: copy node IDs (under cacheMutex_)
+		std::vector<std::string> nodeIds;
 		{
 			std::lock_guard<std::mutex> cl(cacheMutex_);
-			for (auto& [nid, info] : nodeCache_) {
-				if (nid == nodeId_) continue; // skip self
-				auto* reply = (redisReply*)redisCommand(ctx_, "EXISTS %s", ("node:" + nid).c_str());
-				bool alive = reply && reply->type == REDIS_REPLY_INTEGER && reply->integer == 1;
-				if (reply) freeReplyObject(reply);
-				else { handleDisconnect(); return; }
-				if (!alive) deadNodeIds.push_back(nid);
+			for (auto& [nid, _] : nodeCache_)
+				if (nid != nodeId_) nodeIds.push_back(nid);
+		}
+		if (nodeIds.empty()) return;
+
+		// Step 2: pipeline EXISTS — one round-trip (no cacheMutex_)
+		for (auto& nid : nodeIds)
+			redisAppendCommand(ctx_, "EXISTS %s", ("node:" + nid).c_str());
+
+		std::vector<std::string> deadNodeIds;
+		for (auto& nid : nodeIds) {
+			redisReply* r = nullptr;
+			if (redisGetReply(ctx_, (void**)&r) != REDIS_OK || !r) {
+				handleDisconnect(); return;
 			}
+			if (!(r->type == REDIS_REPLY_INTEGER && r->integer == 1))
+				deadNodeIds.push_back(nid);
+			freeReplyObject(r);
+		}
+		if (deadNodeIds.empty()) return;
+
+		// Step 3: evict (under cacheMutex_, pure memory)
+		{
+			std::lock_guard<std::mutex> cl(cacheMutex_);
 			for (auto& nid : deadNodeIds) {
 				auto it = nodeCache_.find(nid);
 				if (it != nodeCache_.end()) {
@@ -494,52 +515,66 @@ private:
 				}
 			}
 		}
-		if (!deadNodeIds.empty())
-			MS_DEBUG(logger_, "Evicted {} dead nodes from cache", deadNodeIds.size());
+		MS_DEBUG(logger_, "Evicted {} dead nodes from cache", deadNodeIds.size());
 	}
 
 	// Must be called with cmdMutex_ held
 	void syncAllUnlocked() {
 		if (!ensureConnected()) return;
 
-		// Sync nodes
-		auto* reply = (redisReply*)redisCommand(ctx_, "KEYS node:*");
-		if (reply && reply->type == REDIS_REPLY_ARRAY) {
-			std::lock_guard<std::mutex> cl(cacheMutex_);
-			nodeCache_.clear();
-			for (size_t i = 0; i < reply->elements; i++) {
-				std::string key = reply->element[i]->str;
-				std::string nid = key.substr(5); // strip "node:"
-				auto* vr = (redisReply*)redisCommand(ctx_, "GET %s", key.c_str());
-				if (vr && vr->type == REDIS_REPLY_STRING)
-					nodeCache_[nid] = parseNodeValue(vr->str);
-				if (vr) freeReplyObject(vr);
+		// Step 1: fetch all node data via KEYS + MGET (no cacheMutex_)
+		std::unordered_map<std::string, NodeInfo> tmpNodes;
+		auto* nkeys = (redisReply*)redisCommand(ctx_, "KEYS node:*");
+		if (nkeys && nkeys->type == REDIS_REPLY_ARRAY && nkeys->elements > 0) {
+			std::vector<std::string> nids;
+			std::string mget = "MGET";
+			for (size_t i = 0; i < nkeys->elements; i++) {
+				std::string key = nkeys->element[i]->str;
+				nids.push_back(key.substr(5));
+				mget += " " + key;
 			}
-			MS_DEBUG(logger_, "Synced {} nodes", nodeCache_.size());
+			auto* mr = (redisReply*)redisCommand(ctx_, mget.c_str());
+			if (mr && mr->type == REDIS_REPLY_ARRAY) {
+				for (size_t i = 0; i < mr->elements && i < nids.size(); i++)
+					if (mr->element[i]->type == REDIS_REPLY_STRING)
+						tmpNodes[nids[i]] = parseNodeValue(mr->element[i]->str);
+			}
+			if (mr) freeReplyObject(mr);
 		}
-		if (reply) freeReplyObject(reply);
+		if (nkeys) freeReplyObject(nkeys);
 
-		// Sync rooms
-		reply = (redisReply*)redisCommand(ctx_, "KEYS room:*");
-		if (reply && reply->type == REDIS_REPLY_ARRAY) {
-			std::lock_guard<std::mutex> cl(cacheMutex_);
-			roomCache_.clear();
-			for (size_t i = 0; i < reply->elements; i++) {
-				std::string key = reply->element[i]->str;
-				std::string rid = key.substr(5); // strip "room:"
-				auto* vr = (redisReply*)redisCommand(ctx_, "GET %s", key.c_str());
-				if (vr && vr->type == REDIS_REPLY_STRING) {
-					std::string ownerNid = vr->str;
-					// Resolve owner address from node cache
-					auto nit = nodeCache_.find(ownerNid);
-					if (nit != nodeCache_.end())
-						roomCache_[rid] = nit->second.address;
-				}
-				if (vr) freeReplyObject(vr);
+		// Step 2: fetch all room data via KEYS + MGET (no cacheMutex_)
+		std::unordered_map<std::string, std::string> tmpRooms;
+		auto* rkeys = (redisReply*)redisCommand(ctx_, "KEYS room:*");
+		if (rkeys && rkeys->type == REDIS_REPLY_ARRAY && rkeys->elements > 0) {
+			std::vector<std::string> rids;
+			std::string mget = "MGET";
+			for (size_t i = 0; i < rkeys->elements; i++) {
+				std::string key = rkeys->element[i]->str;
+				rids.push_back(key.substr(5));
+				mget += " " + key;
 			}
-			MS_DEBUG(logger_, "Synced {} rooms", roomCache_.size());
+			auto* mr = (redisReply*)redisCommand(ctx_, mget.c_str());
+			if (mr && mr->type == REDIS_REPLY_ARRAY) {
+				for (size_t i = 0; i < mr->elements && i < rids.size(); i++)
+					if (mr->element[i]->type == REDIS_REPLY_STRING) {
+						std::string ownerNid = mr->element[i]->str;
+						auto nit = tmpNodes.find(ownerNid);
+						if (nit != tmpNodes.end())
+							tmpRooms[rids[i]] = nit->second.address;
+					}
+			}
+			if (mr) freeReplyObject(mr);
 		}
-		if (reply) freeReplyObject(reply);
+		if (rkeys) freeReplyObject(rkeys);
+
+		// Step 3: swap caches (under cacheMutex_, pure memory)
+		{
+			std::lock_guard<std::mutex> cl(cacheMutex_);
+			nodeCache_ = std::move(tmpNodes);
+			roomCache_ = std::move(tmpRooms);
+		}
+		MS_DEBUG(logger_, "Synced {} nodes, {} rooms", nodeCache_.size(), roomCache_.size());
 	}
 
 	// ── Cache-based lookups ──

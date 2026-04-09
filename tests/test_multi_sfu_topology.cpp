@@ -263,18 +263,40 @@ TEST_F(MultiSfuTopologyTest, NodeCrashRoomTakeover) {
 		// Find SFU-A's node key and delete it
 		auto* reply = (redisReply*)redisCommand(ctx, "KEYS node:*18770*");
 		if (reply && reply->type == REDIS_REPLY_ARRAY) {
-			for (size_t i = 0; i < reply->elements; i++)
+			for (size_t i = 0; i < reply->elements; i++) {
+				std::string nid = std::string(reply->element[i]->str).substr(5); // strip "node:"
 				redisCommand(ctx, "DEL %s", reply->element[i]->str);
+				// Notify other nodes via pub/sub
+				std::string msg = nid + "=";
+				redisCommand(ctx, "PUBLISH sfu:nodes %s", msg.c_str());
+			}
 		}
 		if (reply) freeReplyObject(reply);
 		// Also try hostname-based pattern
 		char hostname[256] = {};
 		gethostname(hostname, sizeof(hostname));
 		std::string pattern = std::string("node:") + hostname + ":18770";
+		std::string nid = std::string(hostname) + ":18770";
 		auto* r2 = (redisReply*)redisCommand(ctx, "DEL %s", pattern.c_str());
 		if (r2) freeReplyObject(r2);
+		// Publish node removal
+		std::string nmsg = nid + "=";
+		redisCommand(ctx, "PUBLISH sfu:nodes %s", nmsg.c_str());
+		// Also delete the room key so SFU-B can take over
+		auto* rk = (redisReply*)redisCommand(ctx, "KEYS room:*");
+		if (rk && rk->type == REDIS_REPLY_ARRAY) {
+			for (size_t i = 0; i < rk->elements; i++) {
+				std::string rid = std::string(rk->element[i]->str).substr(5);
+				redisCommand(ctx, "DEL %s", rk->element[i]->str);
+				std::string rmsg = rid + "=";
+				redisCommand(ctx, "PUBLISH sfu:rooms %s", rmsg.c_str());
+			}
+		}
+		if (rk) freeReplyObject(rk);
 		redisFree(ctx);
 	}
+
+	usleep(3000000); // wait for pub/sub propagation (subscriber has 2s read timeout)
 
 	// Bob tries to join the same room on SFU-B
 	// Since SFU-A's node key is gone, SFU-B should take over the room

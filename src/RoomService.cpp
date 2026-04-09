@@ -91,7 +91,11 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 		}
 	}
 
-	if (registry_) registry_->refreshRoom(roomId);
+	if (registry_) {
+		auto* reg = registry_;
+		std::string rid = roomId;
+		postRegistryTask([reg, rid] { reg->refreshRoom(rid); });
+	}
 
 	json existingProducers = json::array();
 	for (auto& other : room->getOtherPeers(peerId)) {
@@ -158,7 +162,11 @@ RoomService::Result RoomService::leave(const std::string& roomId, const std::str
 	}
 
 	if (room->empty()) {
-		if (registry_) registry_->unregisterRoom(roomId);
+		if (registry_) {
+			auto* reg = registry_;
+			std::string rid = roomId;
+			postRegistryTask([reg, rid] { reg->unregisterRoom(rid); });
+		}
 		roomManager_.removeRoom(roomId);
 		if (roomLifecycle_) roomLifecycle_(roomId, false);
 	}
@@ -444,7 +452,11 @@ void RoomService::checkRoomHealth() {
 		}
 
 		cleanupRoomResources(roomId);
-		if (registry_) registry_->unregisterRoom(roomId);
+		if (registry_) {
+			auto* reg = registry_;
+			std::string rid = roomId;
+			postRegistryTask([reg, rid] { reg->unregisterRoom(rid); });
+		}
 		roomManager_.removeRoom(roomId);
 		if (roomLifecycle_) roomLifecycle_(roomId, false);
 	}
@@ -454,7 +466,11 @@ void RoomService::cleanIdleRooms(int idleSeconds) {
 	for (auto& id : roomManager_.getIdleRooms(idleSeconds)) {
 		MS_DEBUG(logger_, "GC idle room: {}", id);
 		cleanupRoomResources(id);
-		if (registry_) registry_->unregisterRoom(id);
+		if (registry_) {
+			auto* reg = registry_;
+			std::string rid = id;
+			postRegistryTask([reg, rid] { reg->unregisterRoom(rid); });
+		}
 		roomManager_.removeRoom(id);
 		if (roomLifecycle_) roomLifecycle_(id, false);
 	}
@@ -465,7 +481,11 @@ void RoomService::closeAllRooms() {
 	auto roomIds = roomManager_.getRoomIds();
 	for (auto& roomId : roomIds) {
 		cleanupRoomResources(roomId);
-		if (registry_) registry_->unregisterRoom(roomId);
+		if (registry_) {
+			auto* reg = registry_;
+			std::string rid = roomId;
+			postRegistryTask([reg, rid] { reg->unregisterRoom(rid); });
+		}
 		roomManager_.removeRoom(roomId);
 		if (roomLifecycle_) roomLifecycle_(roomId, false);
 	}
@@ -714,6 +734,10 @@ json RoomService::getNodeLoad() const {
 	};
 }
 
+// TODO(P1): For large-room scenarios (50+ peers per WorkerThread), split broadcastStats
+// into per-room tasks via wt->post() so join/produce/leave can interleave. Current design
+// serializes all rooms×peers in one task, which is fine for 1v1/small meetings but would
+// starve control requests at scale.
 void RoomService::broadcastStats() {
 	auto roomIds = roomManager_.getRoomIds();
 	if (roomIds.empty()) return;

@@ -136,7 +136,8 @@ private:
 		}
 		frame.insert(frame.end(), mask, mask + 4);
 		for (size_t i = 0; i < len; ++i) frame.push_back(text[i] ^ mask[i % 4]);
-		::send(fd_, frame.data(), frame.size(), 0);
+		auto sent = ::send(fd_, frame.data(), frame.size(), 0);
+		(void)sent;
 	}
 
 	void readLoop() {

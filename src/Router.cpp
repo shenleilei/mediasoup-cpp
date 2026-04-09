@@ -272,9 +272,9 @@ void Router::close() {
 	auto reqOff = FBS::Worker::CreateCloseRouterRequest(builder, idOff);
 
 	try {
-		channel_->request(FBS::Request::Method::WORKER_CLOSE_ROUTER,
+		channel_->requestWait(FBS::Request::Method::WORKER_CLOSE_ROUTER,
 			FBS::Request::Body::Worker_CloseRouterRequest,
-			reqOff.Union()).get();
+			reqOff.Union());
 	} catch (const std::exception& e) {
 		MS_WARN(logger_, "Router::close() request failed [id:{}]: {}", id_, e.what());
 	} catch (...) {

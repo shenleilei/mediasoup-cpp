@@ -13,6 +13,7 @@
 #include <atomic>
 #include <chrono>
 #include <algorithm>
+#include <deque>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <sys/timerfd.h>
@@ -122,11 +123,22 @@ public:
 		thread_ = std::thread([this] {
 			try {
 				createWorkers();
+				ready_.store(true, std::memory_order_release);
+				ready_cv_.notify_all();
 				loop();
 			} catch (const std::exception& e) {
 				MS_ERROR(logger_, "WorkerThread {} fatal: {}", id_, e.what());
+				ready_.store(true, std::memory_order_release);
+				ready_cv_.notify_all();
 			}
 		});
+	}
+
+	/// Wait until createWorkers() has finished (max 5s).
+	bool waitReady(int timeoutMs = 5000) {
+		std::unique_lock<std::mutex> lock(ready_mu_);
+		return ready_cv_.wait_for(lock, std::chrono::milliseconds(timeoutMs),
+			[this] { return ready_.load(std::memory_order_acquire); });
 	}
 
 	/// Stop the event loop and join the thread.
@@ -197,6 +209,7 @@ public:
 	void setNotify(RoomService::NotifyFn fn) { notifyFn_ = std::move(fn); }
 	void setBroadcast(RoomService::BroadcastFn fn) { broadcastFn_ = std::move(fn); }
 	void setRoomLifecycle(RoomService::RoomLifecycleFn fn) { roomLifecycleFn_ = std::move(fn); }
+	void setRegistryTask(RoomService::RegistryTaskFn fn) { registryTaskFn_ = std::move(fn); }
 
 	/// Called by RoomService to update room count (from within WorkerThread).
 	void updateRoomCount() {
@@ -269,6 +282,7 @@ private:
 		if (notifyFn_) roomService_->setNotify(notifyFn_);
 		if (broadcastFn_) roomService_->setBroadcast(broadcastFn_);
 		if (roomLifecycleFn_) roomService_->setRoomLifecycle(roomLifecycleFn_);
+		if (registryTaskFn_) roomService_->setRegistryTask(registryTaskFn_);
 	}
 
 	void loop() {
@@ -370,10 +384,26 @@ private:
 		MS_ERROR(logger_, "WorkerThread {} worker died [pid:{}], attempting respawn",
 			id_, worker->pid());
 
+		// Remove dead worker from WorkerManager before removing from local list
+		workerManager_->removeWorker(worker);
+
 		// Remove from workers list
 		workers_.erase(
 			std::remove(workers_.begin(), workers_.end(), worker),
 			workers_.end());
+
+		// Rate-limit respawns: max 3 within 10 seconds
+		auto now = std::chrono::steady_clock::now();
+		respawnTimes_.push_back(now);
+		while (!respawnTimes_.empty() &&
+			   (now - respawnTimes_.front()) > std::chrono::seconds(10))
+			respawnTimes_.pop_front();
+		if (respawnTimes_.size() > 3) {
+			MS_ERROR(logger_, "WorkerThread {} respawn rate exceeded ({}x in 10s), giving up",
+				id_, respawnTimes_.size());
+			workerCount_.store(workers_.size(), std::memory_order_relaxed);
+			return;
+		}
 
 		// Try to respawn
 		try {
@@ -390,7 +420,6 @@ private:
 			}
 
 			workerManager_->addExistingWorker(newWorker);
-			workerCount_.store(workers_.size(), std::memory_order_relaxed);
 			MS_WARN(logger_, "WorkerThread {} respawned worker [pid:{}]", id_, newWorker->pid());
 		} catch (const std::exception& e) {
 			MS_ERROR(logger_, "WorkerThread {} failed to respawn worker: {}", id_, e.what());
@@ -414,6 +443,9 @@ private:
 	int healthTimerFd_ = -1;
 	int gcTimerFd_ = -1;
 	std::thread thread_;
+	std::atomic<bool> ready_{false};
+	std::mutex ready_mu_;
+	std::condition_variable ready_cv_;
 	std::atomic<bool> stopping_{false};
 
 	// Task queue (accessed from main thread + WorkerThread)
@@ -426,6 +458,7 @@ private:
 
 	// Owned resources (only accessed from WorkerThread)
 	std::vector<std::shared_ptr<Worker>> workers_;
+	std::deque<std::chrono::steady_clock::time_point> respawnTimes_;
 	std::unordered_map<int, std::shared_ptr<Worker>> fdToWorker_; // consumer fd → Worker
 	std::unique_ptr<WorkerManager> workerManager_;
 	std::unique_ptr<RoomManager> roomManager_;
@@ -443,6 +476,7 @@ private:
 	RoomService::NotifyFn notifyFn_;
 	RoomService::BroadcastFn broadcastFn_;
 	RoomService::RoomLifecycleFn roomLifecycleFn_;
+	RoomService::RegistryTaskFn registryTaskFn_;
 
 	std::shared_ptr<spdlog::logger> logger_;
 };
