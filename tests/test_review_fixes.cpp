@@ -73,6 +73,24 @@ TEST_F(DuplicatePeerTest, RepeatedReplacementWorks) {
 	EXPECT_EQ(room->peerCount(), 1u);
 }
 
+TEST_F(DuplicatePeerTest, ReplacePeerDoesNotCreateDuplicateMembership) {
+	room->addPeer(makePeer("bob"));
+	auto firstAlice = room->replacePeer(makePeer("alice"));
+	EXPECT_EQ(firstAlice, nullptr);
+	EXPECT_EQ(room->peerCount(), 2u);
+
+	for (int i = 0; i < 5; ++i) {
+		auto old = room->replacePeer(makePeer("alice"));
+		ASSERT_NE(old, nullptr);
+		old->close();
+	}
+
+	EXPECT_EQ(room->peerCount(), 2u);
+	auto othersOfBob = room->getOtherPeers("bob");
+	ASSERT_EQ(othersOfBob.size(), 1u);
+	EXPECT_EQ(othersOfBob[0]->id, "alice");
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Fix 4: collectPeerStats no longer uses std::async
 //   Verify the old pseudo-timeout pattern is gone by checking

@@ -241,6 +241,52 @@ TEST_F(ReviewFixIntegration, StatsDoNotBlockJoin) {
 	EXPECT_LT(elapsed, 3000) << "Join took too long — stats may be blocking control plane";
 }
 
+TEST_F(ReviewFixIntegration, PeerJoinedBroadcastIsRoomScopedAndExcludesSelf) {
+	std::string roomA = testRoom_ + "_A";
+	std::string roomB = testRoom_ + "_B";
+
+	auto alice = joinRoom(roomA, "alice");
+	auto bob = joinRoom(roomB, "bob");
+	alice.ws->drainNotifications();
+	bob.ws->drainNotifications();
+
+	auto charlie = joinRoom(roomA, "charlie");
+	usleep(200000);
+
+	auto aliceJoin = alice.ws->waitNotification("peerJoined", 3000);
+	ASSERT_FALSE(aliceJoin.empty()) << "same-room peer should receive peerJoined";
+	ASSERT_TRUE(aliceJoin.contains("data"));
+	EXPECT_EQ(aliceJoin["data"].value("peerId", ""), "charlie");
+
+	auto bobJoin = bob.ws->waitNotification("peerJoined", 700);
+	EXPECT_TRUE(bobJoin.empty()) << "other-room peer must not receive peerJoined";
+
+	auto charlieJoin = charlie.ws->waitNotification("peerJoined", 700);
+	EXPECT_TRUE(charlieJoin.empty()) << "joining peer must be excluded from own peerJoined";
+}
+
+TEST_F(ReviewFixIntegration, PeerLeftBroadcastIsRoomScoped) {
+	std::string roomA = testRoom_ + "_A";
+	std::string roomB = testRoom_ + "_B";
+
+	auto alice = joinRoom(roomA, "alice");
+	auto charlie = joinRoom(roomA, "charlie");
+	auto bob = joinRoom(roomB, "bob");
+	alice.ws->drainNotifications();
+	bob.ws->drainNotifications();
+
+	charlie.ws->close();
+	usleep(200000);
+
+	auto aliceLeft = alice.ws->waitNotification("peerLeft", 3000);
+	ASSERT_FALSE(aliceLeft.empty()) << "same-room peer should receive peerLeft";
+	ASSERT_TRUE(aliceLeft.contains("data"));
+	EXPECT_EQ(aliceLeft["data"].value("peerId", ""), "charlie");
+
+	auto bobLeft = bob.ws->waitNotification("peerLeft", 700);
+	EXPECT_TRUE(bobLeft.empty()) << "other-room peer must not receive peerLeft";
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Fix 5: PlainTransport connect timeout (indirect)
 //   We can't easily trigger a PlainTransport timeout in black-box,
