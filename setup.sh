@@ -8,7 +8,7 @@ echo "=== mediasoup-cpp setup ==="
 
 # 1. Check system dependencies
 echo "[1/5] Checking system dependencies..."
-for cmd in cmake g++ pkg-config; do
+for cmd in cmake g++ pkg-config curl tar; do
   if ! command -v $cmd &>/dev/null; then
     echo "ERROR: $cmd not found. Install build essentials first."
     echo "  Ubuntu/Debian: apt install build-essential cmake pkg-config libssl-dev zlib1g-dev"
@@ -16,6 +16,18 @@ for cmd in cmake g++ pkg-config; do
     exit 1
   fi
 done
+
+missing_pkgs=()
+for pkg in libavformat libavcodec libavutil hiredis openssl zlib; do
+  if ! pkg-config --exists "$pkg" 2>/dev/null; then
+    missing_pkgs+=("$pkg")
+  fi
+done
+
+if [ ${#missing_pkgs[@]} -gt 0 ]; then
+  echo "WARNING: missing pkg-config libs: ${missing_pkgs[*]}"
+  echo "  Build may fail until required dev packages are installed."
+fi
 echo "  OK"
 
 # 2. Init git submodules (if cloned from git)
@@ -29,6 +41,14 @@ else
   [ -d "third_party/uWebSockets/.git" ] || git clone --depth 1 --recurse-submodules https://github.com/uNetworking/uWebSockets.git third_party/uWebSockets
   [ -d "third_party/nlohmann_json/.git" ] || git clone --depth 1 https://github.com/nlohmann/json.git third_party/nlohmann_json
   [ -d "third_party/spdlog/.git" ] || git clone --depth 1 https://github.com/gabime/spdlog.git third_party/spdlog
+fi
+
+if [ ! -f "third_party/ip2region/binding/c/xdb_api.h" ] || \
+   [ ! -f "third_party/ip2region/binding/c/xdb_searcher.c" ] || \
+   [ ! -f "third_party/ip2region/binding/c/xdb_util.c" ]; then
+  echo "ERROR: bundled ip2region C binding files are missing."
+  echo "  Expected under third_party/ip2region/binding/c/"
+  exit 1
 fi
 echo "  OK"
 

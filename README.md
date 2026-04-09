@@ -401,6 +401,7 @@ Recorder responsibilities include:
 - zlib
 - FFmpeg (`libavformat`, `libavcodec`, `libavutil`)
 - hiredis if you want Redis-backed multi-node support
+- `curl` and `tar` (used by `setup.sh` to fetch and unpack `mediasoup-worker`)
 
 ### Build
 
@@ -534,6 +535,31 @@ The regression-heavy suites currently cover:
 - Redis degrade mode
 - cache propagation
 - full-node redirect behavior
+
+### Quick Quality Gate
+
+For local verification before review:
+
+```bash
+# configure + build
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+
+# fast baseline (unit)
+./build/mediasoup_tests --gtest_filter='-QosAccuracyTest.*:QosRecordingAccuracyTest.*'
+
+# full baseline
+./build/mediasoup_tests
+```
+
+### Troubleshooting
+
+- `Cannot find source file ... third_party/ip2region/binding/c/xdb_searcher.c`  
+  Ensure you are on the latest branch and the bundled `third_party/ip2region` directory exists.
+- `Could NOT find ... avformat/avcodec/avutil`  
+  Install FFmpeg development packages (for example `libavformat-dev libavcodec-dev libavutil-dev` on Debian/Ubuntu).
+- `hiredis not found` or link errors for Redis symbols  
+  Install the hiredis development package (`libhiredis-dev`).
 
 ## Monitoring
 
