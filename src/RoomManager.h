@@ -6,6 +6,7 @@
 #include <memory>
 #include <unordered_map>
 #include <mutex>
+#include <future>
 #include <chrono>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -115,30 +116,55 @@ public:
 		: workerManager_(workerManager), mediaCodecs_(mediaCodecs), listenInfos_(listenInfos) {}
 
 	std::shared_ptr<Room> createRoom(const std::string& roomId) {
+		std::shared_ptr<PendingRoomCreation> pending;
+		bool creator = false;
 		{
 			std::lock_guard<std::mutex> lock(mutex_);
 			auto it = rooms_.find(roomId);
 			if (it != rooms_.end()) return it->second;
-		}
-
-		auto worker = workerManager_.getLeastLoadedWorker();
-		if (!worker) throw std::runtime_error("no available worker");
-		auto router = worker->createRouter(mediaCodecs_);
-		auto room = std::make_shared<Room>(roomId, router);
-
-		std::lock_guard<std::mutex> lock(mutex_);
-		auto [it, inserted] = rooms_.emplace(roomId, room);
-		if (!inserted) {
-			try {
-				room->close();
-			} catch (const std::exception& e) {
-				spdlog::warn("createRoom race cleanup failed [roomId:{}]: {}", roomId, e.what());
-			} catch (...) {
-				spdlog::warn("createRoom race cleanup failed [roomId:{}]: unknown error", roomId);
+			auto pit = pendingRooms_.find(roomId);
+			if (pit != pendingRooms_.end()) {
+				pending = pit->second;
+			} else {
+				pending = std::make_shared<PendingRoomCreation>();
+				pendingRooms_[roomId] = pending;
+				creator = true;
 			}
-			return it->second;
 		}
-		return room;
+		if (!creator) return pending->future.get();
+
+		try {
+			auto worker = workerManager_.getLeastLoadedWorker();
+			if (!worker) throw std::runtime_error("no available worker");
+			auto router = worker->createRouter(mediaCodecs_);
+			auto room = std::make_shared<Room>(roomId, router);
+
+			{
+				std::lock_guard<std::mutex> lock(mutex_);
+				auto [it, inserted] = rooms_.emplace(roomId, room);
+				pendingRooms_.erase(roomId);
+				if (!inserted) {
+					try {
+						room->close();
+					} catch (const std::exception& e) {
+						spdlog::warn("createRoom duplicate cleanup failed [roomId:{}]: {}", roomId, e.what());
+					} catch (...) {
+						spdlog::warn("createRoom duplicate cleanup failed [roomId:{}]: unknown error", roomId);
+					}
+					pending->promise.set_value(it->second);
+					return it->second;
+				}
+			}
+			pending->promise.set_value(room);
+			return room;
+		} catch (...) {
+			{
+				std::lock_guard<std::mutex> lock(mutex_);
+				pendingRooms_.erase(roomId);
+			}
+			pending->promise.set_exception(std::current_exception());
+			throw;
+		}
 	}
 
 	std::shared_ptr<Room> getRoom(const std::string& roomId) {
@@ -183,10 +209,19 @@ public:
 	}
 
 private:
+	struct PendingRoomCreation {
+		PendingRoomCreation()
+			: future(promise.get_future().share()) {}
+
+		std::promise<std::shared_ptr<Room>> promise;
+		std::shared_future<std::shared_ptr<Room>> future;
+	};
+
 	WorkerManager& workerManager_;
 	std::vector<json> mediaCodecs_;
 	std::vector<json> listenInfos_;
 	std::unordered_map<std::string, std::shared_ptr<Room>> rooms_;
+	std::unordered_map<std::string, std::shared_ptr<PendingRoomCreation>> pendingRooms_;
 	mutable std::mutex mutex_;
 };
 

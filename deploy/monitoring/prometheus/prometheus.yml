@@ -41,7 +41,22 @@ scrape_configs:
       - target_label: __address__
         replacement: blackbox-exporter:9115
 
-  # Optional: if your SFU exports /metrics, enable this block.
-  # - job_name: mediasoup-sfu
-  #   static_configs:
-  #     - targets: ["host.docker.internal:3000"]
+  - job_name: blackbox-sfu-health
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://host.docker.internal:3000/healthz
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  - job_name: mediasoup-sfu
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:3000"]

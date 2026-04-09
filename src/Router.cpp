@@ -51,50 +51,49 @@ std::shared_ptr<WebRtcTransport> Router::createWebRtcTransport(
 	if (closed_) throw std::runtime_error("Router closed");
 
 	std::string transportId = utils::generateUUIDv4();
-	auto& builder = channel_->bufferBuilder();
-
-	std::vector<flatbuffers::Offset<FBS::Transport::ListenInfo>> fbListenInfos;
-	for (auto& li : options.listenInfos) {
-		std::string ip = li.value("ip", "0.0.0.0");
-		std::string announcedAddress = li.value("announcedAddress", "");
-		std::string protocol = li.value("protocol", "udp");
-		uint16_t port = li.value("port", 0);
-
-		auto portRange = FBS::Transport::CreatePortRange(builder, uint16_t(0), uint16_t(0));
-		auto flags = FBS::Transport::CreateSocketFlags(builder, false, false);
-
-		fbListenInfos.push_back(FBS::Transport::CreateListenInfo(
-			builder,
-			protocol == "tcp" ? FBS::Transport::Protocol::TCP : FBS::Transport::Protocol::UDP,
-			builder.CreateString(ip),
-			announcedAddress.empty() ? 0 : builder.CreateString(announcedAddress),
-			port, portRange, flags, 0, 0));
-	}
-
-	auto listenIndividualOff = FBS::WebRtcTransport::CreateListenIndividual(
-		builder, builder.CreateVector(fbListenInfos));
-
-	auto numSctpStreams = FBS::SctpParameters::CreateNumSctpStreams(builder, 1024, 1024);
-	auto baseOptions = FBS::Transport::CreateOptions(
-		builder, false, flatbuffers::Optional<uint32_t>(),
-		flatbuffers::Optional<uint32_t>(options.initialAvailableOutgoingBitrate),
-		options.enableSctp, numSctpStreams, 262144, 262144, true);
-
-	auto webRtcOptions = FBS::WebRtcTransport::CreateWebRtcTransportOptions(
-		builder, baseOptions,
-		FBS::WebRtcTransport::Listen::ListenIndividual, listenIndividualOff.Union(),
-		options.enableUdp, options.enableTcp,
-		options.preferUdp, options.preferTcp,
-		options.iceConsentTimeout);
-
-	auto transportIdOff = builder.CreateString(transportId);
-	auto reqOff = FBS::Router::CreateCreateWebRtcTransportRequest(
-		builder, transportIdOff, webRtcOptions);
-
-	auto owned = channel_->requestWait(
+	auto owned = channel_->requestBuildWait(
 		FBS::Request::Method::ROUTER_CREATE_WEBRTCTRANSPORT,
 		FBS::Request::Body::Router_CreateWebRtcTransportRequest,
-		reqOff.Union(), id_);
+		[transportId, options](flatbuffers::FlatBufferBuilder& builder) {
+			std::vector<flatbuffers::Offset<FBS::Transport::ListenInfo>> fbListenInfos;
+			for (auto& li : options.listenInfos) {
+				std::string ip = li.value("ip", "0.0.0.0");
+				std::string announcedAddress = li.value("announcedAddress", "");
+				std::string protocol = li.value("protocol", "udp");
+				uint16_t port = li.value("port", 0);
+
+				auto portRange = FBS::Transport::CreatePortRange(builder, uint16_t(0), uint16_t(0));
+				auto flags = FBS::Transport::CreateSocketFlags(builder, false, false);
+
+				fbListenInfos.push_back(FBS::Transport::CreateListenInfo(
+					builder,
+					protocol == "tcp" ? FBS::Transport::Protocol::TCP : FBS::Transport::Protocol::UDP,
+					builder.CreateString(ip),
+					announcedAddress.empty() ? 0 : builder.CreateString(announcedAddress),
+					port, portRange, flags, 0, 0));
+			}
+
+			auto listenIndividualOff = FBS::WebRtcTransport::CreateListenIndividual(
+				builder, builder.CreateVector(fbListenInfos));
+
+			auto numSctpStreams = FBS::SctpParameters::CreateNumSctpStreams(builder, 1024, 1024);
+			auto baseOptions = FBS::Transport::CreateOptions(
+				builder, false, flatbuffers::Optional<uint32_t>(),
+				flatbuffers::Optional<uint32_t>(options.initialAvailableOutgoingBitrate),
+				options.enableSctp, numSctpStreams, 262144, 262144, true);
+
+			auto webRtcOptions = FBS::WebRtcTransport::CreateWebRtcTransportOptions(
+				builder, baseOptions,
+				FBS::WebRtcTransport::Listen::ListenIndividual, listenIndividualOff.Union(),
+				options.enableUdp, options.enableTcp,
+				options.preferUdp, options.preferTcp,
+				options.iceConsentTimeout);
+
+			auto transportIdOff = builder.CreateString(transportId);
+			auto reqOff = FBS::Router::CreateCreateWebRtcTransportRequest(
+				builder, transportIdOff, webRtcOptions);
+			return reqOff.Union();
+		}, id_);
 	auto* response = owned.response();
 
 	IceParameters iceParams;
@@ -179,39 +178,37 @@ std::shared_ptr<PlainTransport> Router::createPlainTransport(
 	}
 
 	std::string transportId = utils::generateUUIDv4();
-	auto& builder = channel_->bufferBuilder();
-
-	// Use first listenInfo
-	auto& li = options.listenInfos[0];
-	std::string ip = li.value("ip", "127.0.0.1");
-	std::string announcedAddress = li.value("announcedAddress", "");
-	uint16_t port = li.value("port", 0);
-
-	auto portRange = FBS::Transport::CreatePortRange(builder, uint16_t(0), uint16_t(0));
-	auto flags = FBS::Transport::CreateSocketFlags(builder, false, false);
-	auto listenInfo = FBS::Transport::CreateListenInfo(
-		builder, FBS::Transport::Protocol::UDP,
-		builder.CreateString(ip),
-		announcedAddress.empty() ? 0 : builder.CreateString(announcedAddress),
-		port, portRange, flags, 0, 0);
-
-	auto numSctpStreams = FBS::SctpParameters::CreateNumSctpStreams(builder, 1024, 1024);
-	auto baseOptions = FBS::Transport::CreateOptions(
-		builder, false, flatbuffers::Optional<uint32_t>(),
-		flatbuffers::Optional<uint32_t>(), false, numSctpStreams, 262144, 262144, true);
-
-	auto plainOptions = FBS::PlainTransport::CreatePlainTransportOptions(
-		builder, baseOptions, listenInfo, 0,
-		options.rtcpMux, options.comedia, false);
-
-	auto transportIdOff = builder.CreateString(transportId);
-	auto reqOff = FBS::Router::CreateCreatePlainTransportRequest(
-		builder, transportIdOff, plainOptions);
-
-	auto owned = channel_->requestWait(
+	auto owned = channel_->requestBuildWait(
 		FBS::Request::Method::ROUTER_CREATE_PLAINTRANSPORT,
 		FBS::Request::Body::Router_CreatePlainTransportRequest,
-		reqOff.Union(), id_);
+		[transportId, options](flatbuffers::FlatBufferBuilder& builder) {
+			auto& li = options.listenInfos[0];
+			std::string ip = li.value("ip", "127.0.0.1");
+			std::string announcedAddress = li.value("announcedAddress", "");
+			uint16_t port = li.value("port", 0);
+
+			auto portRange = FBS::Transport::CreatePortRange(builder, uint16_t(0), uint16_t(0));
+			auto flags = FBS::Transport::CreateSocketFlags(builder, false, false);
+			auto listenInfo = FBS::Transport::CreateListenInfo(
+				builder, FBS::Transport::Protocol::UDP,
+				builder.CreateString(ip),
+				announcedAddress.empty() ? 0 : builder.CreateString(announcedAddress),
+				port, portRange, flags, 0, 0);
+
+			auto numSctpStreams = FBS::SctpParameters::CreateNumSctpStreams(builder, 1024, 1024);
+			auto baseOptions = FBS::Transport::CreateOptions(
+				builder, false, flatbuffers::Optional<uint32_t>(),
+				flatbuffers::Optional<uint32_t>(), false, numSctpStreams, 262144, 262144, true);
+
+			auto plainOptions = FBS::PlainTransport::CreatePlainTransportOptions(
+				builder, baseOptions, listenInfo, 0,
+				options.rtcpMux, options.comedia, false);
+
+			auto transportIdOff = builder.CreateString(transportId);
+			auto reqOff = FBS::Router::CreateCreatePlainTransportRequest(
+				builder, transportIdOff, plainOptions);
+			return reqOff.Union();
+		}, id_);
 	auto* response = owned.response();
 
 	TransportTuple tuple;
@@ -267,14 +264,14 @@ void Router::close() {
 	transports_.clear();
 	producers_.clear();
 
-	auto& builder = channel_->bufferBuilder();
-	auto idOff = builder.CreateString(id_);
-	auto reqOff = FBS::Worker::CreateCloseRouterRequest(builder, idOff);
-
 	try {
-		channel_->requestWait(FBS::Request::Method::WORKER_CLOSE_ROUTER,
+		channel_->requestBuildWait(FBS::Request::Method::WORKER_CLOSE_ROUTER,
 			FBS::Request::Body::Worker_CloseRouterRequest,
-			reqOff.Union());
+			[this](flatbuffers::FlatBufferBuilder& builder) {
+				auto idOff = builder.CreateString(id_);
+				auto reqOff = FBS::Worker::CreateCloseRouterRequest(builder, idOff);
+				return reqOff.Union();
+			});
 	} catch (const std::exception& e) {
 		MS_WARN(logger_, "Router::close() request failed [id:{}]: {}", id_, e.what());
 	} catch (...) {

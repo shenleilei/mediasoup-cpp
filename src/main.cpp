@@ -11,8 +11,10 @@
 #include <array>
 #include <cstdio>
 #include <cmath>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -21,6 +23,7 @@ using namespace mediasoup;
 using json = nlohmann::json;
 
 static RoomRegistry* g_registry = nullptr;
+static int g_daemonStartupFd = -1;
 
 std::atomic<bool> g_shutdown{false};
 
@@ -28,17 +31,42 @@ void signalHandler(int sig) {
 	g_shutdown = true;
 }
 
-static bool daemonize(const std::string& logFile, const std::string& pidFile) {
+static void notifyDaemonStartup(bool ok) {
+	if (g_daemonStartupFd < 0) return;
+	char status = ok ? '1' : '0';
+	(void)::write(g_daemonStartupFd, &status, 1);
+	::close(g_daemonStartupFd);
+	g_daemonStartupFd = -1;
+}
+
+static int daemonize(const std::string& logFile, const std::string& pidFile) {
+	int startupPipe[2];
+	if (pipe(startupPipe) != 0) return -1;
+	(void)fcntl(startupPipe[0], F_SETFD, FD_CLOEXEC);
+	(void)fcntl(startupPipe[1], F_SETFD, FD_CLOEXEC);
+
 	pid_t pid = fork();
-	if (pid < 0) return false;
-	if (pid > 0) {
-		// Parent: write PID file and exit
-		if (!pidFile.empty()) {
-			std::ofstream pf(pidFile);
-			if (pf.is_open()) { pf << pid; pf.close(); }
-		}
-		_exit(0);
+	if (pid < 0) {
+		::close(startupPipe[0]);
+		::close(startupPipe[1]);
+		return -1;
 	}
+	if (pid > 0) {
+		::close(startupPipe[1]);
+		char status = 0;
+		ssize_t n = ::read(startupPipe[0], &status, 1);
+		::close(startupPipe[0]);
+		if (n == 1 && status == '1') {
+			if (!pidFile.empty()) {
+				std::ofstream pf(pidFile);
+				if (pf.is_open()) { pf << pid; pf.close(); }
+			}
+			_exit(0);
+		}
+		(void)waitpid(pid, nullptr, 0);
+		_exit(1);
+	}
+	::close(startupPipe[0]);
 	// Child: new session
 	setsid();
 	// Redirect stdout/stderr to log file
@@ -52,7 +80,7 @@ static bool daemonize(const std::string& logFile, const std::string& pidFile) {
 	}
 	// Close stdin
 	close(STDIN_FILENO);
-	return true;
+	return startupPipe[1];
 }
 
 int main(int argc, char* argv[]) {
@@ -154,11 +182,18 @@ int main(int argc, char* argv[]) {
 
 	// Daemonize unless --nodaemon
 	if (!noDaemon) {
-		daemonize(logFile, pidFile);
+		g_daemonStartupFd = daemonize(logFile, pidFile);
+		if (g_daemonStartupFd < 0) return 1;
 	}
 
 	Logger::Init(noDaemon ? "" : logFile, logLevel);
 	spdlog::info("mediasoup-cpp SFU starting (new architecture: WorkerThread pool)...");
+
+	auto failExit = [&pidFile]() {
+		notifyDaemonStartup(false);
+		if (!pidFile.empty()) std::remove(pidFile.c_str());
+		return 1;
+	};
 
 	// Auto-detect public IP if announcedIp not set
 	if (announcedIp.empty()) {
@@ -207,7 +242,7 @@ int main(int argc, char* argv[]) {
 		}
 		if (!valid) {
 			spdlog::error("Invalid nodeId '{}' (allowed: [A-Za-z0-9_-.:]{{1,128}})", nodeId);
-			return 1;
+			return failExit();
 		}
 	}
 	if (nodeAddress.empty()) {
@@ -326,7 +361,7 @@ int main(int argc, char* argv[]) {
 
 	if (workerThreads.empty()) {
 		spdlog::error("No WorkerThreads created, exiting");
-		return 1;
+		return failExit();
 	}
 
 	// Assemble and run
@@ -335,7 +370,9 @@ int main(int argc, char* argv[]) {
 	spdlog::info("mediasoup-cpp SFU ready - {} WorkerThreads, {} total workers, signaling on port {}, nodeId={}",
 		workerThreads.size(), numWorkers, signalingPort, nodeId);
 
-	server.run();
+	bool runOk = server.run([](bool ok) {
+		notifyDaemonStartup(ok);
+	});
 
 	// Graceful shutdown (reached when g_shutdown causes uWS loop to stop)
 	spdlog::info("Shutting down...");
@@ -347,5 +384,7 @@ int main(int argc, char* argv[]) {
 	server.stopRegistryWorker();
 	if (registry) registry->stop();
 	spdlog::info("Shutdown complete");
+	if (!runOk) return failExit();
+	notifyDaemonStartup(true);
 	return 0;
 }

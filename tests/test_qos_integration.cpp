@@ -2,6 +2,7 @@
 // and various error/edge cases.
 #include <gtest/gtest.h>
 #include "TestWsClient.h"
+#include "TestProcessUtils.h"
 #include <signal.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
@@ -54,7 +55,7 @@ protected:
 
 	void TearDown() override {
 		if (sfuPid_ > 0) {
-			kill(sfuPid_, SIGTERM); for(int w_=0; w_<40 && kill(sfuPid_,0)==0; w_++) usleep(50000); kill(sfuPid_, SIGKILL); usleep(100000);
+			terminateSfuProcess(sfuPid_);
 			for (int i = 0; i < 20; ++i) {
 				usleep(50000);
 				int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -446,7 +447,7 @@ protected:
 
 	void TearDown() override {
 		if (sfuPid_ > 0) {
-			kill(sfuPid_, SIGTERM); for(int w_=0; w_<40 && kill(sfuPid_,0)==0; w_++) usleep(50000); kill(sfuPid_, SIGKILL); usleep(100000);
+			terminateSfuProcess(sfuPid_);
 			for (int i = 0; i < 20; ++i) {
 				usleep(50000);
 				int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -462,13 +463,13 @@ protected:
 			}
 		}
 		system(("rm -rf " + recordDir_).c_str());
-	}
+		}
 
-	// Simple HTTP GET helper (no WebSocket, just plain HTTP)
-	std::string httpGet(const std::string& path) {
-		int fd = socket(AF_INET, SOCK_STREAM, 0);
-		if (fd < 0) return "";
-		sockaddr_in addr{};
+		// Simple HTTP GET helper (no WebSocket, just plain HTTP)
+		std::string httpGetRaw(const std::string& path) {
+			int fd = socket(AF_INET, SOCK_STREAM, 0);
+			if (fd < 0) return "";
+			sockaddr_in addr{};
 		addr.sin_family = AF_INET;
 		addr.sin_port = htons(SFU_PORT);
 		inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
@@ -483,12 +484,17 @@ protected:
 			int n = ::recv(fd, buf, sizeof(buf), 0);
 			if (n <= 0) break;
 			response.append(buf, n);
-		}
-		::close(fd);
+			}
+			::close(fd);
 
-		// Extract body (after \r\n\r\n)
-		auto pos = response.find("\r\n\r\n");
-		if (pos == std::string::npos) return "";
+			return response;
+		}
+
+		std::string httpGet(const std::string& path) {
+			std::string response = httpGetRaw(path);
+			// Extract body (after \r\n\r\n)
+			auto pos = response.find("\r\n\r\n");
+			if (pos == std::string::npos) return "";
 		return response.substr(pos + 4);
 	}
 
@@ -633,9 +639,35 @@ TEST_F(QosRecordingTest, RecordingsFileServing) {
 
 // ─── Test: /recordings with path traversal is rejected ───
 TEST_F(QosRecordingTest, PathTraversalRejected) {
-	std::string body = httpGet("/recordings/../../../etc/passwd");
-	// Should get 403 or 404, not file contents
-	EXPECT_TRUE(body.find("root:") == std::string::npos) << "Path traversal not blocked!";
+	std::string response = httpGetRaw("/recordings/../../../etc/passwd");
+	EXPECT_TRUE(response.find("403 Forbidden") != std::string::npos ||
+		response.find("404 Not Found") != std::string::npos) << response;
+	EXPECT_TRUE(response.find("root:") == std::string::npos) << "Path traversal not blocked!";
+}
+
+// ─── Test: static file path traversal is rejected ───
+TEST_F(QosRecordingTest, StaticPathTraversalRejected) {
+	std::string response = httpGetRaw("/../../../etc/passwd");
+	EXPECT_TRUE(response.find("403 Forbidden") != std::string::npos ||
+		response.find("404 Not Found") != std::string::npos) << response;
+	EXPECT_TRUE(response.find("root:") == std::string::npos) << "Static path traversal not blocked!";
+}
+
+// ─── Test: large recording files are served successfully ───
+TEST_F(QosRecordingTest, LargeRecordingServed) {
+	std::string roomDir = recordDir_ + "/" + testRoom_;
+	ASSERT_EQ(mkdir(roomDir.c_str(), 0755), 0);
+
+	std::string payload(512 * 1024, 'x');
+	std::string filePath = roomDir + "/large.webm";
+	std::ofstream file(filePath, std::ios::binary);
+	ASSERT_TRUE(file.is_open());
+	file.write(payload.data(), static_cast<std::streamsize>(payload.size()));
+	file.close();
+
+	std::string body = httpGet("/recordings/" + testRoom_ + "/large.webm");
+	EXPECT_EQ(body.size(), payload.size());
+	EXPECT_EQ(body, payload);
 }
 
 // ─── Test: /api/recordings returns empty when no recordings ───

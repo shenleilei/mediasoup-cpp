@@ -199,21 +199,18 @@ std::shared_ptr<Producer> Transport::produce(const json& options) {
 	MS_DEBUG(logger_, "produce [kind:{}] codecs={}", kind, json(rtpMapping.codecs).dump());
 
 	std::string producerId = utils::generateUUIDv4();
-
-	auto& builder = channel_->bufferBuilder();
-
-	auto producerIdOff = builder.CreateString(producerId);
-	auto fbKind = (kind == "audio") ? FBS::RtpParameters::MediaKind::AUDIO : FBS::RtpParameters::MediaKind::VIDEO;
-	auto rtpParamsOff = buildFbsRtpParameters(builder, rtpParameters);
-	auto rtpMappingOff = buildFbsRtpMapping(builder, rtpMapping);
-
-	auto reqOff = FBS::Transport::CreateProduceRequest(
-		builder, producerIdOff, fbKind, rtpParamsOff, rtpMappingOff, 0, paused);
-
-	channel_->requestWait(
+	channel_->requestBuildWait(
 		FBS::Request::Method::TRANSPORT_PRODUCE,
 		FBS::Request::Body::Transport_ProduceRequest,
-		reqOff.Union(), id_);
+		[producerId, &kind, &rtpParameters, &rtpMapping, paused](flatbuffers::FlatBufferBuilder& builder) {
+			auto producerIdOff = builder.CreateString(producerId);
+			auto fbKind = (kind == "audio") ? FBS::RtpParameters::MediaKind::AUDIO : FBS::RtpParameters::MediaKind::VIDEO;
+			auto rtpParamsOff = buildFbsRtpParameters(builder, rtpParameters);
+			auto rtpMappingOff = buildFbsRtpMapping(builder, rtpMapping);
+			auto reqOff = FBS::Transport::CreateProduceRequest(
+				builder, producerIdOff, fbKind, rtpParamsOff, rtpMappingOff, 0, paused);
+			return reqOff.Union();
+		}, id_);
 
 	// Compute consumable RTP parameters
 	auto consumableRtpParams = ortc::getConsumableRtpParameters(
@@ -282,36 +279,33 @@ std::shared_ptr<Consumer> Transport::consume(const json& options) {
 	consumerRtpParams.mid = std::to_string(nextMid_++);
 
 	std::string consumerId = utils::generateUUIDv4();
-
-	auto& builder = channel_->bufferBuilder();
-
-	auto consumerIdOff = builder.CreateString(consumerId);
-	auto producerIdOff = builder.CreateString(producerId);
-	auto fbKind = (consumableRtpParameters.codecs[0].mimeType.find("audio") != std::string::npos)
-		? FBS::RtpParameters::MediaKind::AUDIO : FBS::RtpParameters::MediaKind::VIDEO;
-	auto rtpParamsOff = buildFbsRtpParameters(builder, consumerRtpParams);
-
-	auto fbType = pipe ? FBS::RtpParameters::Type::PIPE : FBS::RtpParameters::Type::SIMPLE;
-
-	// Build consumable encodings
-	std::vector<flatbuffers::Offset<FBS::RtpParameters::RtpEncodingParameters>> fbConsumableEncodings;
-	for (auto& enc : consumableRtpParameters.encodings) {
-		fbConsumableEncodings.push_back(FBS::RtpParameters::CreateRtpEncodingParameters(
-			builder,
-			enc.ssrc ? flatbuffers::Optional<uint32_t>(*enc.ssrc) : flatbuffers::Optional<uint32_t>(),
-			0, flatbuffers::Optional<uint8_t>(), 0, false, 0, flatbuffers::Optional<uint32_t>()));
-	}
-
-	auto reqOff = FBS::Transport::CreateConsumeRequest(
-		builder, consumerIdOff, producerIdOff, fbKind, rtpParamsOff,
-		fbType, builder.CreateVector(fbConsumableEncodings), paused, 0, false);
-
-	channel_->requestWait(
+	std::string kind = (consumableRtpParameters.codecs[0].mimeType.find("audio") != std::string::npos)
+		? "audio" : "video";
+	channel_->requestBuildWait(
 		FBS::Request::Method::TRANSPORT_CONSUME,
 		FBS::Request::Body::Transport_ConsumeRequest,
-		reqOff.Union(), id_);
+		[consumerId, &producerId, &consumableRtpParameters, &consumerRtpParams, paused, pipe](flatbuffers::FlatBufferBuilder& builder) {
+			auto consumerIdOff = builder.CreateString(consumerId);
+			auto producerIdOff = builder.CreateString(producerId);
+			auto fbKind = (consumableRtpParameters.codecs[0].mimeType.find("audio") != std::string::npos)
+				? FBS::RtpParameters::MediaKind::AUDIO : FBS::RtpParameters::MediaKind::VIDEO;
+			auto rtpParamsOff = buildFbsRtpParameters(builder, consumerRtpParams);
+			auto fbType = pipe ? FBS::RtpParameters::Type::PIPE : FBS::RtpParameters::Type::SIMPLE;
 
-	std::string kind = (fbKind == FBS::RtpParameters::MediaKind::AUDIO) ? "audio" : "video";
+			std::vector<flatbuffers::Offset<FBS::RtpParameters::RtpEncodingParameters>> fbConsumableEncodings;
+			for (auto& enc : consumableRtpParameters.encodings) {
+				fbConsumableEncodings.push_back(FBS::RtpParameters::CreateRtpEncodingParameters(
+					builder,
+					enc.ssrc ? flatbuffers::Optional<uint32_t>(*enc.ssrc) : flatbuffers::Optional<uint32_t>(),
+					0, flatbuffers::Optional<uint8_t>(), 0, false, 0, flatbuffers::Optional<uint32_t>()));
+			}
+
+			auto reqOff = FBS::Transport::CreateConsumeRequest(
+				builder, consumerIdOff, producerIdOff, fbKind, rtpParamsOff,
+				fbType, builder.CreateVector(fbConsumableEncodings), paused, 0, false);
+			return reqOff.Union();
+		}, id_);
+
 	std::string type = pipe ? "pipe" : "simple";
 
 	auto consumer = std::make_shared<Consumer>(
@@ -417,14 +411,14 @@ void Transport::close() {
 	// Unregister channel listener to break shared_ptr cycle
 	channel_->emitter().off(id_);
 
-	auto& builder = channel_->bufferBuilder();
-	auto idOff = builder.CreateString(id_);
-	auto reqOff = FBS::Router::CreateCloseTransportRequest(builder, idOff);
-
 	try {
-		channel_->request(FBS::Request::Method::ROUTER_CLOSE_TRANSPORT,
+		channel_->requestBuild(FBS::Request::Method::ROUTER_CLOSE_TRANSPORT,
 			FBS::Request::Body::Router_CloseTransportRequest,
-			reqOff.Union(), routerId_);
+			[this](flatbuffers::FlatBufferBuilder& builder) {
+				auto idOff = builder.CreateString(id_);
+				auto reqOff = FBS::Router::CreateCloseTransportRequest(builder, idOff);
+				return reqOff.Union();
+			}, routerId_);
 	} catch (const std::exception& e) {
 		spdlog::warn("Transport::close() request failed [id:{}]: {}", id_, e.what());
 	} catch (...) {

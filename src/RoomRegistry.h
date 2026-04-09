@@ -41,6 +41,11 @@ public:
 		startSubscriber();
 	}
 
+	size_t knownNodeCount() const {
+		std::lock_guard<std::mutex> cl(cacheMutex_);
+		return nodeCache_.size();
+	}
+
 	void heartbeat() {
 		std::lock_guard<std::mutex> lock(cmdMutex_);
 		if (!ensureConnected()) return;
@@ -50,26 +55,21 @@ public:
 		evictDeadNodes();
 	}
 
-	void updateLoad(size_t rooms, size_t maxRooms) {
-		std::lock_guard<std::mutex> lock(cmdMutex_);
-		if (!ensureConnected()) return;
-		std::string val = buildNodeValue(rooms, maxRooms);
-		auto* reply = (redisReply*)redisCommand(ctx_, "SET %s %s EX %d",
+		void updateLoad(size_t rooms, size_t maxRooms) {
+			std::lock_guard<std::mutex> lock(cmdMutex_);
+			if (!ensureConnected()) return;
+			std::string val = buildNodeValue(rooms, maxRooms);
+			auto* reply = (redisReply*)redisCommand(ctx_, "SET %s %s EX %d",
 			(std::string(kKeyPrefixNode) + nodeId_).c_str(), val.c_str(), nodeTTL_);
 		if (reply) freeReplyObject(reply);
 		else handleDisconnect();
 		// Update local cache for self
-		{
-			std::lock_guard<std::mutex> cl(cacheMutex_);
-			nodeCache_[nodeId_] = parseNodeValue(val);
+			{
+				std::lock_guard<std::mutex> cl(cacheMutex_);
+				nodeCache_[nodeId_] = parseNodeValue(val);
+			}
+			publishNodeUpdate(nodeId_, val);
 		}
-		// Publish actual load, not zeros
-		if (ctx_) {
-			std::string msg = nodeId_ + "=" + val;
-			auto* pr = (redisReply*)redisCommand(ctx_, "PUBLISH %s %s", kChannelNodes, msg.c_str());
-			if (pr) freeReplyObject(pr);
-		}
-	}
 
 	void refreshRooms(const std::vector<std::string>& roomIds) {
 		std::lock_guard<std::mutex> lock(cmdMutex_);
@@ -135,15 +135,20 @@ public:
 			}
 		}
 
-		// Room doesn't exist — pick best node from cache
-		auto best = findBestNodeCached(clientIp);
-		if (best.empty()) {
-			// Cache miss — node may have just registered. Sync nodes from Redis and retry.
-			std::lock_guard<std::mutex> lock(cmdMutex_);
-			syncNodesUnlocked();
-			best = findBestNodeCached(clientIp);
-		}
-		if (best.empty()) return {"", true};
+			// Room doesn't exist — pick best node from cache
+			auto best = findBestNodeCached(clientIp);
+			bool shouldRefreshNodes = best.empty();
+			if (!shouldRefreshNodes && best == nodeAddress_ && !hasRemoteNodeCached()) {
+				// Cache may only contain self even though another node registered recently.
+				shouldRefreshNodes = true;
+			}
+			if (shouldRefreshNodes) {
+				// Cache miss or self-only view — node may have just registered. Sync nodes and retry.
+				std::lock_guard<std::mutex> lock(cmdMutex_);
+				syncNodesUnlocked();
+				best = findBestNodeCached(clientIp);
+			}
+			if (best.empty()) return {"", true};
 		return {best, true};
 	}
 
@@ -348,27 +353,42 @@ private:
 
 	// ── Registration ──
 
-	void registerNode() {
-		if (!ctx_) return;
-		std::string key = std::string(kKeyPrefixNode) + nodeId_;
-		// Try EXPIRE first (preserve existing value). If key doesn't exist, SET with initial value.
-		auto* reply = (redisReply*)redisCommand(ctx_, "EXPIRE %s %d", key.c_str(), nodeTTL_);
-		if (reply && reply->type == REDIS_REPLY_INTEGER && reply->integer == 0) {
-			// Key doesn't exist — first registration
-			freeReplyObject(reply);
-			std::string val = buildNodeValue(0, 0);
-			reply = (redisReply*)redisCommand(ctx_, "SET %s %s EX %d", key.c_str(), val.c_str(), nodeTTL_);
+		void registerNode() {
+			if (!ctx_) return;
+			std::string key = std::string(kKeyPrefixNode) + nodeId_;
+			// Try EXPIRE first (preserve existing value). If key doesn't exist, SET with initial value.
+			auto* reply = (redisReply*)redisCommand(ctx_, "EXPIRE %s %d", key.c_str(), nodeTTL_);
+			if (reply && reply->type == REDIS_REPLY_INTEGER && reply->integer == 0) {
+				// Key doesn't exist — first registration
+				freeReplyObject(reply);
+				std::string val = buildNodeValue(0, 0);
+				reply = (redisReply*)redisCommand(ctx_, "SET %s %s EX %d", key.c_str(), val.c_str(), nodeTTL_);
+				if (reply) {
+					{
+						std::lock_guard<std::mutex> cl(cacheMutex_);
+						nodeCache_[nodeId_] = parseNodeValue(val);
+					}
+					publishNodeUpdate(nodeId_, val);
+				}
+			}
+			if (reply) freeReplyObject(reply);
+			else handleDisconnect();
 		}
-		if (reply) freeReplyObject(reply);
-		else handleDisconnect();
-	}
 
 	// ── Pub/Sub ──
 
 	static constexpr const char* kChannelNodes = "sfu:ch:nodes";
 	static constexpr const char* kChannelRooms = "sfu:ch:rooms";
-	static constexpr const char* kKeyPrefixRoom = "sfu:room:";
-	static constexpr const char* kKeyPrefixNode = "sfu:node:";
+		static constexpr const char* kKeyPrefixRoom = "sfu:room:";
+		static constexpr const char* kKeyPrefixNode = "sfu:node:";
+
+		void publishNodeUpdate(const std::string& nodeId, const std::string& nodeValue) {
+			if (!ctx_) return;
+			std::string msg = nodeId + "=" + nodeValue;
+			auto* reply = (redisReply*)redisCommand(ctx_, "PUBLISH %s %s",
+				kChannelNodes, msg.c_str());
+			if (reply) freeReplyObject(reply);
+		}
 
 	void publishRoomUpdate(const std::string& roomId, const std::string& ownerAddr) {
 		if (!ctx_) return;
@@ -637,8 +657,8 @@ private:
 
 	// ── Cache-based lookups ──
 
-	std::string findBestNodeCached(const std::string& clientIp) {
-		std::lock_guard<std::mutex> cl(cacheMutex_);
+		std::string findBestNodeCached(const std::string& clientIp) {
+			std::lock_guard<std::mutex> cl(cacheMutex_);
 
 		struct Candidate { std::string address; size_t rooms; double score; };
 		std::vector<Candidate> candidates;
@@ -679,8 +699,17 @@ private:
 			});
 		}
 
-		return candidates.front().address;
-	}
+			return candidates.front().address;
+		}
+
+		bool hasRemoteNodeCached() const {
+			std::lock_guard<std::mutex> cl(cacheMutex_);
+			for (auto& [nid, info] : nodeCache_) {
+				if (nid == nodeId_) continue;
+				if (!info.address.empty()) return true;
+			}
+			return false;
+		}
 
 	// ── Member fields ──
 
@@ -701,7 +730,7 @@ private:
 	// Local cache
 	std::unordered_map<std::string, NodeInfo> nodeCache_;
 	std::unordered_map<std::string, std::string> roomCache_; // roomId → ownerAddress
-	std::mutex cacheMutex_;
+		mutable std::mutex cacheMutex_;
 
 	// Subscriber thread
 	std::thread subThread_;

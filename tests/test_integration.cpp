@@ -1,6 +1,7 @@
 // Integration (black-box) tests: start real SFU, drive via WebSocket signaling.
 #include <gtest/gtest.h>
 #include "TestWsClient.h"
+#include "TestProcessUtils.h"
 #include <signal.h>
 #include <sys/wait.h>
 #include <sstream>
@@ -56,7 +57,7 @@ protected:
 
 	void TearDown() override {
 		if (sfuPid_ > 0) {
-			kill(sfuPid_, SIGTERM); for(int w_=0; w_<40 && kill(sfuPid_,0)==0; w_++) usleep(50000); kill(sfuPid_, SIGKILL); usleep(100000);
+			terminateSfuProcess(sfuPid_);
 			for (int i = 0; i < 20; ++i) {
 				usleep(50000); // 50ms
 				int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -390,7 +391,7 @@ protected:
 
 	static void killAndWaitPort(pid_t pid, int port) {
 		if (pid <= 0) return;
-		kill(pid, SIGTERM); for(int w_=0; w_<40 && kill(pid,0)==0; w_++) usleep(50000); kill(pid, SIGKILL); usleep(100000);
+		terminateSfuProcess(pid);
 		for (int i = 0; i < 20; ++i) {
 			usleep(50000);
 			int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -666,7 +667,7 @@ protected:
 
 	void TearDown() override {
 		if (sfuPid_ > 0) {
-			kill(sfuPid_, SIGTERM); for(int w_=0; w_<40 && kill(sfuPid_,0)==0; w_++) usleep(50000); kill(sfuPid_, SIGKILL); usleep(100000);
+			terminateSfuProcess(sfuPid_);
 			for (int i = 0; i < 20; ++i) {
 				usleep(50000);
 				int fd = socket(AF_INET, SOCK_STREAM, 0);

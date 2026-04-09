@@ -75,20 +75,14 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 		// Clean up recorder and client stats for old session
 		std::string key = roomId + "/" + peerId;
 		std::shared_ptr<PeerRecorder> recToStop;
-		{
-			std::lock_guard<std::mutex> lock(recorderMutex_);
-			auto it = recorders_.find(key);
-			if (it != recorders_.end()) {
-				recToStop = std::move(it->second);
-				recorders_.erase(it);
-			}
-			recorderTransports_.erase(key);
+		auto it = recorders_.find(key);
+		if (it != recorders_.end()) {
+			recToStop = std::move(it->second);
+			recorders_.erase(it);
 		}
+		recorderTransports_.erase(key);
 		if (recToStop) recToStop->stop();
-		{
-			std::lock_guard<std::mutex> lock(clientStatsMutex_);
-			clientStats_.erase(key);
-		}
+		clientStats_.erase(key);
 	}
 
 	if (registry_) {
@@ -126,24 +120,18 @@ RoomService::Result RoomService::leave(const std::string& roomId, const std::str
 	auto room = roomManager_.getRoom(roomId);
 	if (!room) return {true, {}};
 
-	// Stop recorder outside lock to avoid blocking broadcastStats
+	// Stop recorder after erasing it from single-threaded service state.
 	std::shared_ptr<PeerRecorder> recToStop;
-	{
-		std::string key = roomId + "/" + peerId;
-		std::lock_guard<std::mutex> lock(recorderMutex_);
-		auto it = recorders_.find(key);
-		if (it != recorders_.end()) {
-			recToStop = std::move(it->second);
-			recorders_.erase(it);
-		}
-		recorderTransports_.erase(key);
+	std::string key = roomId + "/" + peerId;
+	auto it = recorders_.find(key);
+	if (it != recorders_.end()) {
+		recToStop = std::move(it->second);
+		recorders_.erase(it);
 	}
+	recorderTransports_.erase(key);
 	if (recToStop) recToStop->stop();
 
-	{
-		std::lock_guard<std::mutex> lock(clientStatsMutex_);
-		clientStats_.erase(roomId + "/" + peerId);
-	}
+	clientStats_.erase(roomId + "/" + peerId);
 
 	// Remove peer's producers from router before closing peer
 	auto peer = room->getPeer(peerId);
@@ -375,8 +363,6 @@ void RoomService::autoRecord(const std::string& roomId, const std::string& peerI
 	if (recordDir_.empty()) return;
 
 	std::string key = roomId + "/" + peerId;
-	std::lock_guard<std::mutex> lock(recorderMutex_);
-
 	auto& rec = recorders_[key];
 	if (!rec) {
 		uint8_t audioPT = 100, videoPT = 101;
@@ -493,16 +479,13 @@ void RoomService::closeAllRooms() {
 
 void RoomService::cleanupRoomResources(const std::string& roomId) {
 	std::vector<std::shared_ptr<PeerRecorder>> recordersToStop;
-	{
-		std::lock_guard<std::mutex> lock(recorderMutex_);
-		std::string prefix = roomId + "/";
-		for (auto it = recorders_.begin(); it != recorders_.end(); ) {
-			if (it->first.compare(0, prefix.size(), prefix) == 0) {
-				if (it->second) recordersToStop.push_back(it->second);
-				recorderTransports_.erase(it->first);
-				it = recorders_.erase(it);
-			} else ++it;
-		}
+	std::string prefix = roomId + "/";
+	for (auto it = recorders_.begin(); it != recorders_.end(); ) {
+		if (it->first.compare(0, prefix.size(), prefix) == 0) {
+			if (it->second) recordersToStop.push_back(it->second);
+			recorderTransports_.erase(it->first);
+			it = recorders_.erase(it);
+		} else ++it;
 	}
 	for (auto& rec : recordersToStop) {
 		try {
@@ -513,13 +496,9 @@ void RoomService::cleanupRoomResources(const std::string& roomId) {
 			MS_WARN(logger_, "cleanupRoomResources recorder stop failed [room:{}]: unknown error", roomId);
 		}
 	}
-	{
-		std::lock_guard<std::mutex> lock(clientStatsMutex_);
-		std::string prefix = roomId + "/";
-		for (auto it = clientStats_.begin(); it != clientStats_.end(); )
-			if (it->first.compare(0, prefix.size(), prefix) == 0) it = clientStats_.erase(it);
-			else ++it;
-	}
+	for (auto it = clientStats_.begin(); it != clientStats_.end(); )
+		if (it->first.compare(0, prefix.size(), prefix) == 0) it = clientStats_.erase(it);
+		else ++it;
 }
 
 // ── disk cleanup ──
@@ -565,16 +544,13 @@ void RoomService::cleanOldRecordings(uint64_t maxBytes) {
 
 	for (auto& d : dirs) {
 		if (totalSize <= maxBytes) break;
-		{
-			std::lock_guard<std::mutex> lock(recorderMutex_);
-			bool active = false;
-			std::string dirName = d.path.substr(d.path.rfind('/') + 1);
-			std::string prefix = dirName + "/";
-			for (auto& [key, _] : recorders_) {
-				if (key.compare(0, prefix.size(), prefix) == 0) { active = true; break; }
-			}
-			if (active) continue;
+		bool active = false;
+		std::string dirName = d.path.substr(d.path.rfind('/') + 1);
+		std::string prefix = dirName + "/";
+		for (auto& [key, _] : recorders_) {
+			if (key.compare(0, prefix.size(), prefix) == 0) { active = true; break; }
 		}
+		if (active) continue;
 		DIR* rdir = opendir(d.path.c_str());
 		if (rdir) {
 			struct dirent* rent;
@@ -593,7 +569,6 @@ void RoomService::cleanOldRecordings(uint64_t maxBytes) {
 void RoomService::setClientStats(const std::string& roomId, const std::string& peerId,
 	const json& stats)
 {
-	std::lock_guard<std::mutex> lock(clientStatsMutex_);
 	clientStats_[roomId + "/" + peerId] = stats;
 }
 
@@ -694,11 +669,8 @@ json RoomService::collectPeerStats(const std::string& roomId, const std::string&
 	}
 	result["consumers"] = consumers;
 
-	{
-		std::lock_guard<std::mutex> lock(clientStatsMutex_);
-		auto it = clientStats_.find(roomId + "/" + peerId);
-		if (it != clientStats_.end()) result["clientStats"] = it->second;
-	}
+	auto statsIt = clientStats_.find(roomId + "/" + peerId);
+	if (statsIt != clientStats_.end()) result["clientStats"] = statsIt->second;
 
 	return result;
 }
@@ -734,11 +706,9 @@ json RoomService::getNodeLoad() const {
 	};
 }
 
-// TODO(P1): For large-room scenarios (50+ peers per WorkerThread), split broadcastStats
-// into per-room tasks via wt->post() so join/produce/leave can interleave. Current design
-// serializes all rooms×peers in one task, which is fine for 1v1/small meetings but would
-// starve control requests at scale.
 void RoomService::broadcastStats() {
+	if (statsBroadcastActive_) return;
+
 	auto roomIds = roomManager_.getRoomIds();
 	if (roomIds.empty()) return;
 
@@ -746,42 +716,66 @@ void RoomService::broadcastStats() {
 	for (auto& id : roomIds) { if (!names.empty()) names += ", "; names += id; }
 	MS_DEBUG(logger_, "broadcastStats: {} rooms [{}]", roomIds.size(), names);
 
-	for (auto& roomId : roomIds) {
-		auto room = roomManager_.getRoom(roomId);
-		if (!room) continue;
+	statsBroadcastActive_ = true;
+	pendingStatsRooms_.clear();
+	for (auto& roomId : roomIds) pendingStatsRooms_.push_back(roomId);
+	continueBroadcastStats();
+}
 
-		json allStats = json::array();
-		for (auto& peerId : room->getPeerIds()) {
-			try {
-				auto stats = collectPeerStats(roomId, peerId);
-				if (!stats.empty()) allStats.push_back(stats);
-			} catch (const std::exception& e) {
-				MS_WARN(logger_, "broadcastStats collectPeerStats failed [room:{} peer:{}]: {}", roomId, peerId, e.what());
-				allStats.push_back({{"peerId", peerId}});
-			} catch (...) {
-				MS_WARN(logger_, "broadcastStats collectPeerStats failed [room:{} peer:{}]: unknown error", roomId, peerId);
-				allStats.push_back({{"peerId", peerId}});
-			}
+void RoomService::continueBroadcastStats() {
+	if (pendingStatsRooms_.empty()) {
+		statsBroadcastActive_ = false;
+		return;
+	}
+
+	std::string roomId = std::move(pendingStatsRooms_.front());
+	pendingStatsRooms_.pop_front();
+	broadcastStatsForRoom(roomId);
+
+	if (pendingStatsRooms_.empty()) {
+		statsBroadcastActive_ = false;
+		return;
+	}
+
+	if (taskPoster_) {
+		taskPoster_([this] { continueBroadcastStats(); });
+	} else {
+		continueBroadcastStats();
+	}
+}
+
+void RoomService::broadcastStatsForRoom(const std::string& roomId) {
+	auto room = roomManager_.getRoom(roomId);
+	if (!room) return;
+
+	json allStats = json::array();
+	for (auto& peerId : room->getPeerIds()) {
+		try {
+			auto stats = collectPeerStats(roomId, peerId);
+			if (!stats.empty()) allStats.push_back(stats);
+		} catch (const std::exception& e) {
+			MS_WARN(logger_, "broadcastStats collectPeerStats failed [room:{} peer:{}]: {}", roomId, peerId, e.what());
+			allStats.push_back({{"peerId", peerId}});
+		} catch (...) {
+			MS_WARN(logger_, "broadcastStats collectPeerStats failed [room:{} peer:{}]: unknown error", roomId, peerId);
+			allStats.push_back({{"peerId", peerId}});
 		}
+	}
 
-		if (allStats.empty()) continue;
+	if (allStats.empty()) return;
 
-		if (broadcast_) {
-			broadcast_(roomId, "", {
-				{"notification", true}, {"method", "statsReport"},
-				{"data", {{"roomId", roomId}, {"peers", allStats}}}
-			});
-		}
+	if (broadcast_) {
+		broadcast_(roomId, "", {
+			{"notification", true}, {"method", "statsReport"},
+			{"data", {{"roomId", roomId}, {"peers", allStats}}}
+		});
+	}
 
-		{
-			std::lock_guard<std::mutex> lock(recorderMutex_);
-			for (auto& peerStats : allStats) {
-				std::string key = roomId + "/" + peerStats.value("peerId", "");
-				auto it = recorders_.find(key);
-				if (it != recorders_.end() && it->second)
-					it->second->appendQosSnapshot(peerStats);
-			}
-		}
+	for (auto& peerStats : allStats) {
+		std::string key = roomId + "/" + peerStats.value("peerId", "");
+		auto it = recorders_.find(key);
+		if (it != recorders_.end() && it->second)
+			it->second->appendQosSnapshot(peerStats);
 	}
 }
 

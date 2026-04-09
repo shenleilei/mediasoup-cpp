@@ -29,8 +29,6 @@ public:
 	void close();
 	bool closed() const { return closed_; }
 
-	flatbuffers::FlatBufferBuilder& bufferBuilder() { return builder_; }
-
 	struct OwnedResponse {
 		std::vector<uint8_t> data;
 		const FBS::Response::Response* response() const {
@@ -54,6 +52,7 @@ public:
 		std::future<OwnedResponse> future;
 		uint32_t requestId = 0;
 	};
+	using BuildRequestBodyFn = std::function<flatbuffers::Offset<void>(flatbuffers::FlatBufferBuilder&)>;
 
 	RequestResult requestWithId(
 		FBS::Request::Method method,
@@ -66,8 +65,23 @@ public:
 		FBS::Request::Body bodyType = FBS::Request::Body::NONE,
 		flatbuffers::Offset<void> bodyOffset = 0,
 		const std::string& handlerId = "")
+		{
+			return requestWithId(method, bodyType, bodyOffset, handlerId).future;
+		}
+
+	RequestResult requestBuildWithId(
+		FBS::Request::Method method,
+		FBS::Request::Body bodyType,
+		const BuildRequestBodyFn& build,
+		const std::string& handlerId = "");
+
+	std::future<OwnedResponse> requestBuild(
+		FBS::Request::Method method,
+		FBS::Request::Body bodyType,
+		const BuildRequestBodyFn& build,
+		const std::string& handlerId = "")
 	{
-		return requestWithId(method, bodyType, bodyOffset, handlerId).future;
+		return requestBuildWithId(method, bodyType, build, handlerId).future;
 	}
 
 	// Convenience: request + timed wait. Throws on timeout.
@@ -77,6 +91,13 @@ public:
 		FBS::Request::Method method,
 		FBS::Request::Body bodyType = FBS::Request::Body::NONE,
 		flatbuffers::Offset<void> bodyOffset = 0,
+		const std::string& handlerId = "",
+		int timeoutMs = 5000);
+
+	OwnedResponse requestBuildWait(
+		FBS::Request::Method method,
+		FBS::Request::Body bodyType,
+		const BuildRequestBodyFn& build,
 		const std::string& handlerId = "",
 		int timeoutMs = 5000);
 
@@ -107,6 +128,12 @@ private:
 		const FBS::Notification::Notification* notification);
 	void processLog(const FBS::Log::Log* log);
 	void sendBytes(const uint8_t* data, size_t len);
+	RequestResult requestWithIdLocked(
+		FBS::Request::Method method,
+		FBS::Request::Body bodyType,
+		flatbuffers::Offset<void> bodyOffset,
+		const std::string& handlerId);
+	OwnedResponse waitForResponse(std::future<OwnedResponse>& fut, uint32_t reqId, int timeoutMs);
 
 	int producerFd_;
 	int consumerFd_;

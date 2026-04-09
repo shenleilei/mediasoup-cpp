@@ -22,6 +22,8 @@ docker compose up -d
 - Grafana: `http://localhost:3001` (admin/admin)
 - Prometheus: `http://localhost:9090`
 - Alertmanager: `http://localhost:9093`
+- SFU health probe: `http://<sfu-host>:3000/healthz`
+- SFU Prometheus metrics: `http://<sfu-host>:3000/metrics`
 
 ## Important
 

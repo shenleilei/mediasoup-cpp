@@ -2,6 +2,7 @@
 // Requires a running mediasoup-sfu + mediasoup-worker.
 #include <gtest/gtest.h>
 #include "TestWsClient.h"
+#include "TestProcessUtils.h"
 #include <signal.h>
 #include <sys/wait.h>
 #include <hiredis/hiredis.h>
@@ -85,7 +86,7 @@ protected:
 
 	void TearDown() override {
 		if (sfuPid_ > 0) {
-			kill(sfuPid_, SIGTERM); for(int w_=0; w_<40 && kill(sfuPid_,0)==0; w_++) usleep(50000); kill(sfuPid_, SIGKILL); usleep(100000);
+			terminateSfuProcess(sfuPid_);
 			for (int i = 0; i < 20; ++i) {
 				usleep(50000);
 				int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -467,7 +468,7 @@ protected:
 
 	static void killAndWaitPort(pid_t pid, int port) {
 		if (pid <= 0) return;
-		kill(pid, SIGTERM); for(int w_=0; w_<40 && kill(pid,0)==0; w_++) usleep(50000); kill(pid, SIGKILL); usleep(100000);
+		terminateSfuProcess(pid);
 		for (int i = 0; i < 20; ++i) {
 			usleep(50000);
 			int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -637,7 +638,7 @@ protected:
 
 	static void killAndWaitPort(pid_t pid, int port) {
 		if (pid <= 0) return;
-		kill(pid, SIGTERM); for(int w_=0; w_<40 && kill(pid,0)==0; w_++) usleep(50000); kill(pid, SIGKILL); usleep(100000);
+		terminateSfuProcess(pid);
 		for (int i = 0; i < 20; ++i) {
 			usleep(50000);
 			int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -836,7 +837,7 @@ protected:
 
 	void TearDown() override {
 		if (sfuPid_ > 0) {
-			kill(sfuPid_, SIGTERM); for(int w_=0; w_<40 && kill(sfuPid_,0)==0; w_++) usleep(50000); kill(sfuPid_, SIGKILL); usleep(100000);
+			terminateSfuProcess(sfuPid_);
 			for (int i = 0; i < 20; ++i) {
 				usleep(50000);
 				int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -956,7 +957,7 @@ protected:
 
 	static void killAndWaitPort(pid_t pid, int port) {
 		if (pid <= 0) return;
-		kill(pid, SIGTERM); for(int w_=0; w_<40 && kill(pid,0)==0; w_++) usleep(50000); kill(pid, SIGKILL); usleep(100000);
+		terminateSfuProcess(pid);
 		for (int i = 0; i < 20; ++i) {
 			usleep(50000);
 			int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -1179,7 +1180,7 @@ protected:
 
 	static void killAndWaitPort(pid_t pid, int port) {
 		if (pid <= 0) return;
-		kill(pid, SIGTERM); for(int w_=0; w_<40 && kill(pid,0)==0; w_++) usleep(50000); kill(pid, SIGKILL); usleep(100000);
+		terminateSfuProcess(pid);
 		for (int i = 0; i < 20; ++i) {
 			usleep(50000);
 			int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -1210,12 +1211,12 @@ protected:
 		testRoom_ = "full_" + std::to_string(getpid()) + "_" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 		{
-			redisContext* ctx = redisConnect("127.0.0.1", 6379);
-			if (ctx && !ctx->err) {
-				auto* r = (redisReply*)redisCommand(ctx, "KEYS node:*");
-				if (r && r->type == REDIS_REPLY_ARRAY)
-					for (size_t i = 0; i < r->elements; i++)
-						redisCommand(ctx, "DEL %s", r->element[i]->str);
+				redisContext* ctx = redisConnect("127.0.0.1", 6379);
+				if (ctx && !ctx->err) {
+					auto* r = (redisReply*)redisCommand(ctx, "KEYS sfu:node:*");
+					if (r && r->type == REDIS_REPLY_ARRAY)
+						for (size_t i = 0; i < r->elements; i++)
+							redisCommand(ctx, "DEL %s", r->element[i]->str);
 				if (r) freeReplyObject(r);
 				redisFree(ctx);
 			}
