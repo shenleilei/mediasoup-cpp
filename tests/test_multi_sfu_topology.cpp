@@ -1,9 +1,9 @@
 // Multi-SFU multi-Worker topology integration test
 //
 // Topology:
-//   SFU-A (port 18770, 2 workers)  ──┐
-//   SFU-B (port 18771, 2 workers)  ──┼── Redis (room registry + node heartbeat)
-//   SFU-C (port 18772, 1 worker)   ──┘
+//   SFU-A (port 14003, 2 workers)  ──┐
+//   SFU-B (port 14004, 2 workers)  ──┼── Redis (room registry + node heartbeat)
+//   SFU-C (port 14005, 1 worker)   ──┘
 //
 // Scenarios:
 //   1. Room affinity: first joiner claims room, second joiner on different SFU gets redirect
@@ -81,7 +81,7 @@ protected:
 
 	static void killSfu(pid_t pid, int port) {
 		if (pid <= 0) return;
-		kill(pid, SIGKILL);
+		kill(pid, SIGTERM); for(int w_=0; w_<40 && waitpid(pid,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(pid, SIGKILL); waitpid(pid, nullptr, 0);
 		for (int i = 0; i < 30; ++i) {
 			usleep(50000);
 			int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -125,9 +125,9 @@ protected:
 		flushTestKeys();
 
 		nodes_ = {
-			{18770, 2, -1},  // SFU-A: 2 workers
-			{18771, 2, -1},  // SFU-B: 2 workers
-			{18772, 1, -1},  // SFU-C: 1 worker
+			{14003, 2, -1},  // SFU-A: 2 workers
+			{14004, 2, -1},  // SFU-B: 2 workers
+			{14005, 1, -1},  // SFU-C: 1 worker
 		};
 
 		for (auto& n : nodes_) {
@@ -180,7 +180,7 @@ TEST_F(MultiSfuTopologyTest, RoomAffinityAndRedirect) {
 
 	// Alice joins on SFU-A → claims the room (keep connection alive!)
 	TestWsClient aliceWs;
-	ASSERT_TRUE(aliceWs.connect(HOST, 18770));
+	ASSERT_TRUE(aliceWs.connect(HOST, 14003));
 	auto aliceResp = aliceWs.request("join", {
 		{"roomId", room}, {"peerId", "alice"},
 		{"displayName", "alice"}, {"rtpCapabilities", makeRtpCaps()}
@@ -188,16 +188,16 @@ TEST_F(MultiSfuTopologyTest, RoomAffinityAndRedirect) {
 	ASSERT_TRUE(aliceResp.value("ok", false)) << "Alice should join on SFU-A";
 
 	// Bob tries to join same room on SFU-B → should get redirect to SFU-A
-	auto bob = tryJoin(18771, room, "bob");
+	auto bob = tryJoin(14004, room, "bob");
 	EXPECT_FALSE(bob.ok) << "Bob should NOT join on SFU-B";
 	EXPECT_FALSE(bob.redirect.empty()) << "Bob should get redirect";
-	EXPECT_NE(bob.redirect.find("18770"), std::string::npos)
-		<< "Redirect should point to SFU-A (port 18770), got: " << bob.redirect;
+	EXPECT_NE(bob.redirect.find("14003"), std::string::npos)
+		<< "Redirect should point to SFU-A (port 14003), got: " << bob.redirect;
 
 	// Charlie tries on SFU-C → also redirect to SFU-A
-	auto charlie = tryJoin(18772, room, "charlie");
+	auto charlie = tryJoin(14005, room, "charlie");
 	EXPECT_FALSE(charlie.ok);
-	EXPECT_NE(charlie.redirect.find("18770"), std::string::npos)
+	EXPECT_NE(charlie.redirect.find("14003"), std::string::npos)
 		<< "Charlie should also be redirected to SFU-A";
 
 	aliceWs.close();
@@ -213,9 +213,9 @@ TEST_F(MultiSfuTopologyTest, MultiRoomDistribution) {
 
 	// Each room created on a different SFU — keep connections alive
 	TestWsClient wsA, wsB, wsC;
-	ASSERT_TRUE(wsA.connect(HOST, 18770));
-	ASSERT_TRUE(wsB.connect(HOST, 18771));
-	ASSERT_TRUE(wsC.connect(HOST, 18772));
+	ASSERT_TRUE(wsA.connect(HOST, 14003));
+	ASSERT_TRUE(wsB.connect(HOST, 14004));
+	ASSERT_TRUE(wsC.connect(HOST, 14005));
 
 	auto rA = wsA.request("join", {{"roomId", roomA}, {"peerId", "peerA"},
 		{"displayName", "peerA"}, {"rtpCapabilities", makeRtpCaps()}});
@@ -229,14 +229,14 @@ TEST_F(MultiSfuTopologyTest, MultiRoomDistribution) {
 	ASSERT_TRUE(rC.value("ok", false)) << "Room C on SFU-C";
 
 	// Cross-join: peer trying roomA on SFU-B → redirect to SFU-A
-	auto cross = tryJoin(18771, roomA, "crossPeer");
+	auto cross = tryJoin(14004, roomA, "crossPeer");
 	EXPECT_FALSE(cross.ok);
-	EXPECT_NE(cross.redirect.find("18770"), std::string::npos);
+	EXPECT_NE(cross.redirect.find("14003"), std::string::npos);
 
 	// Cross-join: peer trying roomB on SFU-C → redirect to SFU-B
-	auto cross2 = tryJoin(18772, roomB, "crossPeer2");
+	auto cross2 = tryJoin(14005, roomB, "crossPeer2");
 	EXPECT_FALSE(cross2.ok);
-	EXPECT_NE(cross2.redirect.find("18771"), std::string::npos);
+	EXPECT_NE(cross2.redirect.find("14004"), std::string::npos);
 
 	wsA.close(); wsB.close(); wsC.close();
 }
@@ -248,7 +248,7 @@ TEST_F(MultiSfuTopologyTest, NodeCrashRoomTakeover) {
 	std::string room = roomName("takeover");
 
 	// Alice joins on SFU-A
-	auto alice = tryJoin(18770, room, "alice");
+	auto alice = tryJoin(14003, room, "alice");
 	ASSERT_TRUE(alice.ok);
 
 	// Kill SFU-A — simulate crash
@@ -261,7 +261,7 @@ TEST_F(MultiSfuTopologyTest, NodeCrashRoomTakeover) {
 		auto* ctx = redisConnect("127.0.0.1", 6379);
 		ASSERT_NE(ctx, nullptr);
 		// Find SFU-A's node key and delete it
-		auto* reply = (redisReply*)redisCommand(ctx, "KEYS sfu:node:*18770*");
+		auto* reply = (redisReply*)redisCommand(ctx, "KEYS sfu:node:*14003*");
 		if (reply && reply->type == REDIS_REPLY_ARRAY) {
 			for (size_t i = 0; i < reply->elements; i++) {
 				std::string nid = std::string(reply->element[i]->str).substr(9); // strip "sfu:node:"
@@ -274,8 +274,8 @@ TEST_F(MultiSfuTopologyTest, NodeCrashRoomTakeover) {
 		// Also try hostname-based pattern
 		char hostname[256] = {};
 		gethostname(hostname, sizeof(hostname));
-		std::string pattern = std::string("sfu:node:") + hostname + ":18770";
-		std::string nid = std::string(hostname) + ":18770";
+		std::string pattern = std::string("sfu:node:") + hostname + ":14003";
+		std::string nid = std::string(hostname) + ":14003";
 		auto* r2 = (redisReply*)redisCommand(ctx, "DEL %s", pattern.c_str());
 		if (r2) freeReplyObject(r2);
 		std::string nmsg = nid + "=";
@@ -298,7 +298,7 @@ TEST_F(MultiSfuTopologyTest, NodeCrashRoomTakeover) {
 
 	// Bob tries to join the same room on SFU-B
 	// Since SFU-A's node key is gone, SFU-B should take over the room
-	auto bob = tryJoin(18771, room, "bob");
+	auto bob = tryJoin(14004, room, "bob");
 	EXPECT_TRUE(bob.ok)
 		<< "Bob should take over the room on SFU-B after SFU-A crash. "
 		<< "redirect=" << bob.redirect;
@@ -313,7 +313,7 @@ TEST_F(MultiSfuTopologyTest, MultiWorkerLoadBalancing) {
 	// All should succeed — if load balancing works, routers spread across workers
 	for (int i = 0; i < 6; i++) {
 		std::string room = roomName("lb_" + std::to_string(i));
-		auto r = tryJoin(18770, room, "peer_" + std::to_string(i));
+		auto r = tryJoin(14003, room, "peer_" + std::to_string(i));
 		ASSERT_TRUE(r.ok) << "Room " << i << " creation failed on SFU-A";
 	}
 
@@ -321,7 +321,7 @@ TEST_F(MultiSfuTopologyTest, MultiWorkerLoadBalancing) {
 	// Should also succeed — single worker handles all
 	for (int i = 0; i < 6; i++) {
 		std::string room = roomName("lb_c_" + std::to_string(i));
-		auto r = tryJoin(18772, room, "peer_c_" + std::to_string(i));
+		auto r = tryJoin(14005, room, "peer_c_" + std::to_string(i));
 		ASSERT_TRUE(r.ok) << "Room " << i << " creation failed on SFU-C (1 worker)";
 	}
 }
@@ -335,7 +335,7 @@ TEST_F(MultiSfuTopologyTest, FullCrossNodeConference) {
 
 	// Alice joins on SFU-A (claims room)
 	TestWsClient aliceWs;
-	ASSERT_TRUE(aliceWs.connect(HOST, 18770));
+	ASSERT_TRUE(aliceWs.connect(HOST, 14003));
 	auto aliceJoin = aliceWs.request("join", {
 		{"roomId", room}, {"peerId", "alice"},
 		{"displayName", "alice"}, {"rtpCapabilities", makeRtpCaps()}
@@ -344,7 +344,7 @@ TEST_F(MultiSfuTopologyTest, FullCrossNodeConference) {
 
 	// Bob tries SFU-B → gets redirect → follows to SFU-A
 	TestWsClient bobProbe;
-	ASSERT_TRUE(bobProbe.connect(HOST, 18771));
+	ASSERT_TRUE(bobProbe.connect(HOST, 14004));
 	auto bobTry = bobProbe.request("join", {
 		{"roomId", room}, {"peerId", "bob"},
 		{"displayName", "bob"}, {"rtpCapabilities", makeRtpCaps()}
@@ -355,7 +355,7 @@ TEST_F(MultiSfuTopologyTest, FullCrossNodeConference) {
 
 	// Bob follows redirect to SFU-A
 	TestWsClient bobWs;
-	ASSERT_TRUE(bobWs.connect(HOST, 18770));
+	ASSERT_TRUE(bobWs.connect(HOST, 14003));
 	auto bobJoin = bobWs.request("join", {
 		{"roomId", room}, {"peerId", "bob"},
 		{"displayName", "bob"}, {"rtpCapabilities", makeRtpCaps()}
@@ -396,7 +396,7 @@ TEST_F(MultiSfuTopologyTest, FullCrossNodeConference) {
 
 	// Charlie tries SFU-C → redirect → joins SFU-A
 	TestWsClient charlieProbe;
-	ASSERT_TRUE(charlieProbe.connect(HOST, 18772));
+	ASSERT_TRUE(charlieProbe.connect(HOST, 14005));
 	auto charlieTry = charlieProbe.request("join", {
 		{"roomId", room}, {"peerId", "charlie"},
 		{"displayName", "charlie"}, {"rtpCapabilities", makeRtpCaps()}
@@ -406,7 +406,7 @@ TEST_F(MultiSfuTopologyTest, FullCrossNodeConference) {
 	charlieProbe.close();
 
 	TestWsClient charlieWs;
-	ASSERT_TRUE(charlieWs.connect(HOST, 18770));
+	ASSERT_TRUE(charlieWs.connect(HOST, 14003));
 	auto charlieJoin = charlieWs.request("join", {
 		{"roomId", room}, {"peerId", "charlie"},
 		{"displayName", "charlie"}, {"rtpCapabilities", makeRtpCaps()}

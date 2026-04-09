@@ -38,7 +38,7 @@ static std::string recvHttp(int fd, int timeoutMs = 3000) {
 	return data;
 }
 
-static const int SFU_PORT = 18767;
+static const int SFU_PORT = 14002;
 static const std::string HOST = "127.0.0.1";
 
 class ReviewFixIntegration : public ::testing::Test {
@@ -85,7 +85,7 @@ protected:
 
 	void TearDown() override {
 		if (sfuPid_ > 0) {
-			kill(sfuPid_, SIGKILL);
+			kill(sfuPid_, SIGTERM); for(int w_=0; w_<40 && waitpid(sfuPid_,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(sfuPid_, SIGKILL); waitpid(sfuPid_, nullptr, 0);
 			for (int i = 0; i < 20; ++i) {
 				usleep(50000);
 				int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -420,8 +420,8 @@ TEST_F(ReviewFixIntegration, ResolveAcceptsClientIp) {
 // that join on the "wrong" node returns redirect
 // ═══════════════════════════════════════════════════════════════
 
-static const int GEO_PORT_A = 18780;  // "杭州电信"
-static const int GEO_PORT_B = 18781;  // "广州联通"
+static const int GEO_PORT_A = 14010;  // "杭州电信"
+static const int GEO_PORT_B = 14011;  // "广州联通"
 
 class GeoJoinTest : public ::testing::Test {
 protected:
@@ -467,7 +467,7 @@ protected:
 
 	static void killAndWaitPort(pid_t pid, int port) {
 		if (pid <= 0) return;
-		kill(pid, SIGKILL);
+		kill(pid, SIGTERM); for(int w_=0; w_<40 && waitpid(pid,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(pid, SIGKILL); waitpid(pid, nullptr, 0);
 		for (int i = 0; i < 20; ++i) {
 			usleep(50000);
 			int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -488,7 +488,7 @@ protected:
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 
 		// Kill ALL stale test SFU processes to prevent Redis pollution
-		system("pkill -9 -f 'mediasoup-sfu.*--port=18' 2>/dev/null");
+		system("pkill -f 'mediasoup-sfu.*--port=140' 2>/dev/null");
 		usleep(1000000);
 
 		// Clean stale room and node entries from Redis
@@ -633,7 +633,7 @@ protected:
 
 	static void killAndWaitPort(pid_t pid, int port) {
 		if (pid <= 0) return;
-		kill(pid, SIGKILL);
+		kill(pid, SIGTERM); for(int w_=0; w_<40 && waitpid(pid,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(pid, SIGKILL); waitpid(pid, nullptr, 0);
 		for (int i = 0; i < 20; ++i) {
 			usleep(50000);
 			int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -832,7 +832,7 @@ protected:
 
 	void TearDown() override {
 		if (sfuPid_ > 0) {
-			kill(sfuPid_, SIGKILL);
+			kill(sfuPid_, SIGTERM); for(int w_=0; w_<40 && waitpid(sfuPid_,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(sfuPid_, SIGKILL); waitpid(sfuPid_, nullptr, 0);
 			for (int i = 0; i < 20; ++i) {
 				usleep(50000);
 				int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -952,7 +952,7 @@ protected:
 
 	static void killAndWaitPort(pid_t pid, int port) {
 		if (pid <= 0) return;
-		kill(pid, SIGKILL);
+		kill(pid, SIGTERM); for(int w_=0; w_<40 && waitpid(pid,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(pid, SIGKILL); waitpid(pid, nullptr, 0);
 		for (int i = 0; i < 20; ++i) {
 			usleep(50000);
 			int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -1175,7 +1175,7 @@ protected:
 
 	static void killAndWaitPort(pid_t pid, int port) {
 		if (pid <= 0) return;
-		kill(pid, SIGKILL);
+		kill(pid, SIGTERM); for(int w_=0; w_<40 && waitpid(pid,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(pid, SIGKILL); waitpid(pid, nullptr, 0);
 		for (int i = 0; i < 20; ++i) {
 			usleep(50000);
 			int fd = socket(AF_INET, SOCK_STREAM, 0);

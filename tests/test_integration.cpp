@@ -6,7 +6,7 @@
 #include <sstream>
 #include <cmath>
 
-static const int SFU_PORT = 18765;  // use high port to avoid conflicts
+static const int SFU_PORT = 14000;  // use high port to avoid conflicts
 static const std::string HOST = "127.0.0.1";
 
 class IntegrationTest : public ::testing::Test {
@@ -26,6 +26,7 @@ protected:
 			" --workerBin=./mediasoup-worker"
 			" --announcedIp=127.0.0.1"
 			" --listenIp=127.0.0.1"
+			" --redisHost=0.0.0.0 --redisPort=1"
 			" > /dev/null 2>&1 & echo $!";
 		FILE* fp = popen(cmd.c_str(), "r");
 		ASSERT_NE(fp, nullptr);
@@ -55,7 +56,7 @@ protected:
 
 	void TearDown() override {
 		if (sfuPid_ > 0) {
-			kill(sfuPid_, SIGKILL); // SIGKILL for fast cleanup in tests
+			kill(sfuPid_, SIGTERM); for(int w_=0; w_<40 && waitpid(sfuPid_,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(sfuPid_, SIGKILL); waitpid(sfuPid_, nullptr, 0);
 			for (int i = 0; i < 20; ++i) {
 				usleep(50000); // 50ms
 				int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -85,7 +86,7 @@ protected:
 		c.roomId = roomId;
 		c.peerId = peerId;
 		c.ws = std::make_unique<TestWsClient>();
-		EXPECT_TRUE(c.ws->connect(HOST, 18765));
+		EXPECT_TRUE(c.ws->connect(HOST, 14000));
 
 		json rtpCaps = {
 			{"codecs", {{
@@ -231,10 +232,10 @@ TEST_F(IntegrationTest, PauseResumeProducer) {
 TEST_F(IntegrationTest, ParticipantsList) {
 	// Join 4 peers sequentially, each should see all previous peers
 	TestWsClient ws1, ws2, ws3, ws4;
-	ASSERT_TRUE(ws1.connect(HOST, 18765));
-	ASSERT_TRUE(ws2.connect(HOST, 18765));
-	ASSERT_TRUE(ws3.connect(HOST, 18765));
-	ASSERT_TRUE(ws4.connect(HOST, 18765));
+	ASSERT_TRUE(ws1.connect(HOST, 14000));
+	ASSERT_TRUE(ws2.connect(HOST, 14000));
+	ASSERT_TRUE(ws3.connect(HOST, 14000));
+	ASSERT_TRUE(ws4.connect(HOST, 14000));
 
 	auto r1 = ws1.request("join", {{"roomId", testRoom_}, {"peerId", "p1"}, {"displayName", "p1"}});
 	ASSERT_TRUE(r1.value("ok", false)) << r1.dump();
@@ -345,8 +346,8 @@ TEST_F(IntegrationTest, LateJoinerAutoSubscribe) {
 // Multi-node tests: two SFU instances sharing Redis
 // ═══════════════════════════════════════════════════════════════
 
-static const int SFU_PORT_A = 18765;
-static const int SFU_PORT_B = 18766;
+static const int SFU_PORT_A = 14000;
+static const int SFU_PORT_B = 14006;
 
 class MultiNodeTest : public ::testing::Test {
 protected:
@@ -389,7 +390,7 @@ protected:
 
 	static void killAndWaitPort(pid_t pid, int port) {
 		if (pid <= 0) return;
-		kill(pid, SIGKILL);
+		kill(pid, SIGTERM); for(int w_=0; w_<40 && waitpid(pid,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(pid, SIGKILL); waitpid(pid, nullptr, 0);
 		for (int i = 0; i < 20; ++i) {
 			usleep(50000);
 			int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -637,6 +638,7 @@ protected:
 			" --port=" + std::to_string(SFU_PORT) +
 			" --workers=1 --workerBin=./mediasoup-worker"
 			" --announcedIp=127.0.0.1 --listenIp=127.0.0.1"
+			" --redisHost=0.0.0.0 --redisPort=1"
 			" --recordDir=" + recordDir_ +
 			" > /dev/null 2>&1 & echo $!";
 		FILE* fp = popen(cmd.c_str(), "r");
@@ -664,7 +666,7 @@ protected:
 
 	void TearDown() override {
 		if (sfuPid_ > 0) {
-			kill(sfuPid_, SIGKILL);
+			kill(sfuPid_, SIGTERM); for(int w_=0; w_<40 && waitpid(sfuPid_,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(sfuPid_, SIGKILL); waitpid(sfuPid_, nullptr, 0);
 			for (int i = 0; i < 20; ++i) {
 				usleep(50000);
 				int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -942,14 +944,17 @@ TEST_F(IntegrationTest, WorkerCrashSendsServerRestart) {
 	ASSERT_TRUE(sendResp.value("ok", false));
 	usleep(500000);
 
-	// Kill all mediasoup-worker processes (exact process name match)
-	FILE* fp = popen("pgrep -x mediasoup-worke 2>/dev/null", "r");
-	char buf[64]{};
-	while (fgets(buf, sizeof(buf), fp)) {
-		pid_t p = atoi(buf);
-		if (p > 0) kill(p, SIGKILL);
+	// Kill only mediasoup-worker children of our test SFU (avoid killing production workers)
+	{
+		std::string cmd = "pgrep -P " + std::to_string(sfuPid_) + " 2>/dev/null";
+		FILE* fp = popen(cmd.c_str(), "r");
+		char buf[64]{};
+		while (fgets(buf, sizeof(buf), fp)) {
+			pid_t p = atoi(buf);
+			if (p > 0) kill(p, SIGKILL);
+		}
+		pclose(fp);
 	}
-	pclose(fp);
 
 	// Alice should receive serverRestart notification (checkRoomHealth runs every 2s)
 	auto notif = alice.ws->waitNotification("serverRestart", 10000);
@@ -967,14 +972,17 @@ TEST_F(IntegrationTest, WorkerCrashSendsServerRestart) {
 TEST_F(IntegrationTest, WorkerRespawnAllowsNewRooms) {
 	auto alice = joinRoom(testRoom_, "alice");
 
-	// Kill all workers
-	FILE* fp = popen("pgrep -x mediasoup-worke 2>/dev/null", "r");
-	char buf[64]{};
-	while (fgets(buf, sizeof(buf), fp)) {
-		pid_t p = atoi(buf);
-		if (p > 0) kill(p, SIGKILL);
+	// Kill only mediasoup-worker children of our test SFU
+	{
+		std::string cmd = "pgrep -P " + std::to_string(sfuPid_) + " 2>/dev/null";
+		FILE* fp = popen(cmd.c_str(), "r");
+		char buf[64]{};
+		while (fgets(buf, sizeof(buf), fp)) {
+			pid_t p = atoi(buf);
+			if (p > 0) kill(p, SIGKILL);
+		}
+		pclose(fp);
 	}
-	pclose(fp);
 
 	// Wait for respawn
 	usleep(4000000); // 4s — enough for respawn + checkRoomHealth

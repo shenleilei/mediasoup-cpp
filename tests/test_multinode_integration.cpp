@@ -92,7 +92,7 @@ protected:
 
 	static void killSfu(pid_t pid, int port) {
 		if (pid <= 0) return;
-		kill(pid, SIGKILL);
+		kill(pid, SIGTERM); for(int w_=0; w_<40 && waitpid(pid,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(pid, SIGKILL); waitpid(pid, nullptr, 0);
 		for (int i = 0; i < 30; ++i) {
 			usleep(50000);
 			int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -158,26 +158,26 @@ protected:
 // Test 1: /api/resolve returns self for new room
 // ═══════════════════════════════════════════════════════════════
 TEST_F(MultiNodeResolveTest, ResolveNewRoomReturnsSelf) {
-	startNodes({{18780, 0}});
-	std::string body = httpGet(HOST, 18780, "/api/resolve?roomId=" + roomName("new"));
+	startNodes({{14010, 0}});
+	std::string body = httpGet(HOST, 14010, "/api/resolve?roomId=" + roomName("new"));
 	ASSERT_FALSE(body.empty());
 	auto j = json::parse(body);
 	EXPECT_TRUE(j.contains("wsUrl"));
 	EXPECT_TRUE(j["isNew"].get<bool>());
 	// Should contain the node's own address
-	EXPECT_NE(j["wsUrl"].get<std::string>().find("18780"), std::string::npos);
+	EXPECT_NE(j["wsUrl"].get<std::string>().find("14010"), std::string::npos);
 }
 
 // ═══════════════════════════════════════════════════════════════
 // Test 2: /api/resolve returns owner node for existing room
 // ═══════════════════════════════════════════════════════════════
 TEST_F(MultiNodeResolveTest, ResolveExistingRoomReturnsOwner) {
-	startNodes({{18780, 0}, {18781, 0}});
+	startNodes({{14010, 0}, {14011, 0}});
 	std::string room = roomName("existing");
 
 	// Alice joins on SFU-A → claims room
 	TestWsClient alice;
-	ASSERT_TRUE(alice.connect(HOST, 18780));
+	ASSERT_TRUE(alice.connect(HOST, 14010));
 	auto resp = alice.request("join", {
 		{"roomId", room}, {"peerId", "alice"},
 		{"displayName", "alice"}, {"rtpCapabilities", makeRtpCaps()}
@@ -185,11 +185,11 @@ TEST_F(MultiNodeResolveTest, ResolveExistingRoomReturnsOwner) {
 	ASSERT_TRUE(resp.value("ok", false));
 
 	// Resolve from SFU-B should point to SFU-A
-	std::string body = httpGet(HOST, 18781, "/api/resolve?roomId=" + room);
+	std::string body = httpGet(HOST, 14011, "/api/resolve?roomId=" + room);
 	ASSERT_FALSE(body.empty());
 	auto j = json::parse(body);
 	EXPECT_FALSE(j["isNew"].get<bool>());
-	EXPECT_NE(j["wsUrl"].get<std::string>().find("18780"), std::string::npos)
+	EXPECT_NE(j["wsUrl"].get<std::string>().find("14010"), std::string::npos)
 		<< "Should resolve to SFU-A, got: " << j["wsUrl"];
 
 	alice.close();
@@ -199,12 +199,12 @@ TEST_F(MultiNodeResolveTest, ResolveExistingRoomReturnsOwner) {
 // Test 3: /api/resolve missing roomId returns 400
 // ═══════════════════════════════════════════════════════════════
 TEST_F(MultiNodeResolveTest, ResolveMissingRoomIdReturns400) {
-	startNodes({{18780, 0}});
+	startNodes({{14010, 0}});
 	// Raw HTTP to check status code
 	int fd = socket(AF_INET, SOCK_STREAM, 0);
 	sockaddr_in addr{};
 	addr.sin_family = AF_INET;
-	addr.sin_port = htons(18780);
+	addr.sin_port = htons(14010);
 	inet_pton(AF_INET, HOST.c_str(), &addr.sin_addr);
 	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
 	std::string req = "GET /api/resolve HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
@@ -219,24 +219,24 @@ TEST_F(MultiNodeResolveTest, ResolveMissingRoomIdReturns400) {
 // Test 4: /api/node-load returns room count
 // ═══════════════════════════════════════════════════════════════
 TEST_F(MultiNodeResolveTest, NodeLoadEndpoint) {
-	startNodes({{18780, 10}});
+	startNodes({{14010, 10}});
 
 	// Before any rooms
-	std::string body = httpGet(HOST, 18780, "/api/node-load");
+	std::string body = httpGet(HOST, 14010, "/api/node-load");
 	auto j = json::parse(body);
 	EXPECT_EQ(j["rooms"].get<int>(), 0);
 	EXPECT_EQ(j["maxRooms"].get<int>(), 10); // 1 worker * 10 maxRoutersPerWorker
 
 	// Create a room
 	TestWsClient ws;
-	ASSERT_TRUE(ws.connect(HOST, 18780));
+	ASSERT_TRUE(ws.connect(HOST, 14010));
 	auto resp = ws.request("join", {
 		{"roomId", roomName("load")}, {"peerId", "p1"},
 		{"displayName", "p1"}, {"rtpCapabilities", makeRtpCaps()}
 	});
 	ASSERT_TRUE(resp.value("ok", false));
 
-	body = httpGet(HOST, 18780, "/api/node-load");
+	body = httpGet(HOST, 14010, "/api/node-load");
 	j = json::parse(body);
 	EXPECT_EQ(j["rooms"].get<int>(), 1);
 
@@ -248,14 +248,14 @@ TEST_F(MultiNodeResolveTest, NodeLoadEndpoint) {
 // ═══════════════════════════════════════════════════════════════
 TEST_F(MultiNodeResolveTest, MaxRoutersPerWorkerRejectsWhenFull) {
 	// 1 worker, max 2 routers per worker
-	startNodes({{18780, 2}});
+	startNodes({{14010, 2}});
 
 	std::vector<std::unique_ptr<TestWsClient>> clients;
 
 	// Create 2 rooms — should succeed
 	for (int i = 0; i < 2; i++) {
 		auto ws = std::make_unique<TestWsClient>();
-		ASSERT_TRUE(ws->connect(HOST, 18780));
+		ASSERT_TRUE(ws->connect(HOST, 14010));
 		auto resp = ws->request("join", {
 			{"roomId", roomName("full_" + std::to_string(i))},
 			{"peerId", "p" + std::to_string(i)},
@@ -267,7 +267,7 @@ TEST_F(MultiNodeResolveTest, MaxRoutersPerWorkerRejectsWhenFull) {
 
 	// 3rd room — should fail (no available worker)
 	TestWsClient ws3;
-	ASSERT_TRUE(ws3.connect(HOST, 18780));
+	ASSERT_TRUE(ws3.connect(HOST, 14010));
 	auto resp3 = ws3.request("join", {
 		{"roomId", roomName("full_overflow")}, {"peerId", "overflow"},
 		{"displayName", "overflow"}, {"rtpCapabilities", makeRtpCaps()}
@@ -282,13 +282,13 @@ TEST_F(MultiNodeResolveTest, MaxRoutersPerWorkerRejectsWhenFull) {
 // Test 6: Resolve picks least-loaded node for new room
 // ═══════════════════════════════════════════════════════════════
 TEST_F(MultiNodeResolveTest, ResolveLeastLoadedNode) {
-	startNodes({{18780, 10}, {18781, 10}});
+	startNodes({{14010, 10}, {14011, 10}});
 
 	// Create 3 rooms on SFU-A to make it more loaded
 	std::vector<std::unique_ptr<TestWsClient>> clients;
 	for (int i = 0; i < 3; i++) {
 		auto ws = std::make_unique<TestWsClient>();
-		ASSERT_TRUE(ws->connect(HOST, 18780));
+		ASSERT_TRUE(ws->connect(HOST, 14010));
 		auto resp = ws->request("join", {
 			{"roomId", roomName("load_a_" + std::to_string(i))},
 			{"peerId", "pa" + std::to_string(i)},
@@ -302,10 +302,10 @@ TEST_F(MultiNodeResolveTest, ResolveLeastLoadedNode) {
 	usleep(1500000);
 
 	// Resolve a new room from SFU-A — should pick SFU-B (less loaded)
-	std::string body = httpGet(HOST, 18780, "/api/resolve?roomId=" + roomName("new_balanced"));
+	std::string body = httpGet(HOST, 14010, "/api/resolve?roomId=" + roomName("new_balanced"));
 	auto j = json::parse(body);
 	EXPECT_TRUE(j["isNew"].get<bool>());
-	EXPECT_NE(j["wsUrl"].get<std::string>().find("18781"), std::string::npos)
+	EXPECT_NE(j["wsUrl"].get<std::string>().find("14011"), std::string::npos)
 		<< "Should resolve to less-loaded SFU-B, got: " << j["wsUrl"];
 
 	for (auto& c : clients) c->close();
@@ -315,11 +315,11 @@ TEST_F(MultiNodeResolveTest, ResolveLeastLoadedNode) {
 // Test 7: Room TTL refresh — room stays alive during long session
 // ═══════════════════════════════════════════════════════════════
 TEST_F(MultiNodeResolveTest, RoomTtlRefresh) {
-	startNodes({{18780, 0}});
+	startNodes({{14010, 0}});
 	std::string room = roomName("ttl");
 
 	TestWsClient ws;
-	ASSERT_TRUE(ws.connect(HOST, 18780));
+	ASSERT_TRUE(ws.connect(HOST, 14010));
 	auto resp = ws.request("join", {
 		{"roomId", room}, {"peerId", "p1"},
 		{"displayName", "p1"}, {"rtpCapabilities", makeRtpCaps()}
@@ -349,12 +349,12 @@ TEST_F(MultiNodeResolveTest, RoomTtlRefresh) {
 // Test 8: Resolve + redirect workflow — client uses resolve then direct connects
 // ═══════════════════════════════════════════════════════════════
 TEST_F(MultiNodeResolveTest, ResolveAndDirectConnect) {
-	startNodes({{18780, 0}, {18781, 0}});
+	startNodes({{14010, 0}, {14011, 0}});
 	std::string room = roomName("resolve_flow");
 
 	// Alice joins on SFU-A
 	TestWsClient alice;
-	ASSERT_TRUE(alice.connect(HOST, 18780));
+	ASSERT_TRUE(alice.connect(HOST, 14010));
 	auto aliceResp = alice.request("join", {
 		{"roomId", room}, {"peerId", "alice"},
 		{"displayName", "alice"}, {"rtpCapabilities", makeRtpCaps()}
@@ -362,14 +362,14 @@ TEST_F(MultiNodeResolveTest, ResolveAndDirectConnect) {
 	ASSERT_TRUE(aliceResp.value("ok", false));
 
 	// Bob resolves from SFU-B
-	std::string body = httpGet(HOST, 18781, "/api/resolve?roomId=" + room);
+	std::string body = httpGet(HOST, 14011, "/api/resolve?roomId=" + room);
 	auto resolved = json::parse(body);
 	std::string wsUrl = resolved["wsUrl"].get<std::string>();
-	EXPECT_NE(wsUrl.find("18780"), std::string::npos);
+	EXPECT_NE(wsUrl.find("14010"), std::string::npos);
 
 	// Bob connects directly to SFU-A (the resolved node)
 	TestWsClient bob;
-	ASSERT_TRUE(bob.connect(HOST, 18780));
+	ASSERT_TRUE(bob.connect(HOST, 14010));
 	auto bobResp = bob.request("join", {
 		{"roomId", room}, {"peerId", "bob"},
 		{"displayName", "bob"}, {"rtpCapabilities", makeRtpCaps()}
@@ -391,7 +391,7 @@ TEST_F(MultiNodeResolveTest, ResolveAndDirectConnect) {
 TEST_F(MultiNodeResolveTest, ResolveFallbackWithoutRedis) {
 	// Start SFU without Redis (use bogus redis host so registry fails)
 	std::string cmd = "./build/mediasoup-sfu --nodaemon"
-		" --port=18782 --workers=1 --workerBin=./mediasoup-worker"
+		" --port=14012 --workers=1 --workerBin=./mediasoup-worker"
 		" --announcedIp=127.0.0.1 --listenIp=127.0.0.1"
 		" --redisHost=192.0.2.1 --redisPort=6379"
 		" > /dev/null 2>&1 & echo $!";
@@ -401,12 +401,12 @@ TEST_F(MultiNodeResolveTest, ResolveFallbackWithoutRedis) {
 	pclose(fp);
 	pid_t pid = atoi(buf);
 	ASSERT_GT(pid, 0);
-	nodes_.push_back({18782, pid, 0});
-	ASSERT_TRUE(waitForPort(18782));
+	nodes_.push_back({14012, pid, 0});
+	ASSERT_TRUE(waitForPort(14012));
 	usleep(500000);
 
 	// /api/resolve should still return something (fallback to self)
-	std::string body = httpGet(HOST, 18782, "/api/resolve?roomId=" + roomName("nredis"));
+	std::string body = httpGet(HOST, 14012, "/api/resolve?roomId=" + roomName("nredis"));
 	ASSERT_FALSE(body.empty());
 	auto j = json::parse(body);
 	EXPECT_TRUE(j.contains("wsUrl"));
@@ -417,7 +417,7 @@ TEST_F(MultiNodeResolveTest, ResolveFallbackWithoutRedis) {
 
 	// Join should work regardless of resolve outcome
 	TestWsClient ws;
-	ASSERT_TRUE(ws.connect(HOST, 18782));
+	ASSERT_TRUE(ws.connect(HOST, 14012));
 	auto resp = ws.request("join", {
 		{"roomId", roomName("nredis")}, {"peerId", "p1"},
 		{"displayName", "p1"}, {"rtpCapabilities", makeRtpCaps()}
@@ -430,12 +430,12 @@ TEST_F(MultiNodeResolveTest, ResolveFallbackWithoutRedis) {
 // Test 10: Full resolve→connect→communicate flow across two nodes
 // ═══════════════════════════════════════════════════════════════
 TEST_F(MultiNodeResolveTest, ResolveAndCommunicateCrossNode) {
-	startNodes({{18780, 0}, {18781, 0}});
+	startNodes({{14010, 0}, {14011, 0}});
 	std::string room = roomName("cross_comm");
 
 	// Alice joins on SFU-A
 	TestWsClient alice;
-	ASSERT_TRUE(alice.connect(HOST, 18780));
+	ASSERT_TRUE(alice.connect(HOST, 14010));
 	auto aliceResp = alice.request("join", {
 		{"roomId", room}, {"peerId", "alice"},
 		{"displayName", "alice"}, {"rtpCapabilities", makeRtpCaps()}
@@ -443,15 +443,15 @@ TEST_F(MultiNodeResolveTest, ResolveAndCommunicateCrossNode) {
 	ASSERT_TRUE(aliceResp.value("ok", false));
 
 	// Bob resolves from SFU-B, gets SFU-A
-	std::string body = httpGet(HOST, 18781, "/api/resolve?roomId=" + room);
+	std::string body = httpGet(HOST, 14011, "/api/resolve?roomId=" + room);
 	auto resolved = json::parse(body);
 	ASSERT_FALSE(resolved["isNew"].get<bool>());
 	std::string wsUrl = resolved["wsUrl"].get<std::string>();
-	ASSERT_NE(wsUrl.find("18780"), std::string::npos);
+	ASSERT_NE(wsUrl.find("14010"), std::string::npos);
 
 	// Bob connects to resolved node (SFU-A) and joins
 	TestWsClient bob;
-	ASSERT_TRUE(bob.connect(HOST, 18780));
+	ASSERT_TRUE(bob.connect(HOST, 14010));
 	auto bobResp = bob.request("join", {
 		{"roomId", room}, {"peerId", "bob"},
 		{"displayName", "bob"}, {"rtpCapabilities", makeRtpCaps()}
