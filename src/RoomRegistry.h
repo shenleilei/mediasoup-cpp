@@ -526,6 +526,20 @@ private:
 		MS_DEBUG(logger_, "Evicted {} dead nodes from cache", deadNodeIds.size());
 	}
 
+	// Safe MGET using redisCommandArgv (no string concatenation).
+	// Must be called with cmdMutex_ held.
+	redisReply* mgetArgv(const std::vector<std::string>& keys) {
+		std::vector<const char*> argv;
+		std::vector<size_t> argvlen;
+		argv.push_back("MGET"); argvlen.push_back(4);
+		for (auto& k : keys) {
+			argv.push_back(k.c_str());
+			argvlen.push_back(k.size());
+		}
+		return (redisReply*)redisCommandArgv(ctx_,
+			static_cast<int>(argv.size()), argv.data(), argvlen.data());
+	}
+
 	// SCAN-based key discovery (non-blocking alternative to KEYS).
 	// Must be called with cmdMutex_ held.
 	std::vector<std::string> scanKeys(const char* pattern) {
@@ -555,12 +569,9 @@ private:
 		auto nodeKeys = scanKeys("sfu:node:*");
 		if (!nodeKeys.empty()) {
 			std::vector<std::string> nids;
-			std::string mget = "MGET";
-			for (auto& key : nodeKeys) {
+			for (auto& key : nodeKeys)
 				nids.push_back(key.substr(9));
-				mget += " " + key;
-			}
-			auto* mr = (redisReply*)redisCommand(ctx_, mget.c_str());
+			auto* mr = mgetArgv(nodeKeys);
 			if (mr && mr->type == REDIS_REPLY_ARRAY) {
 				for (size_t i = 0; i < mr->elements && i < nids.size(); i++)
 					if (mr->element[i]->type == REDIS_REPLY_STRING)
@@ -584,12 +595,9 @@ private:
 		auto nodeKeys = scanKeys("sfu:node:*");
 		if (!nodeKeys.empty()) {
 			std::vector<std::string> nids;
-			std::string mget = "MGET";
-			for (auto& key : nodeKeys) {
+			for (auto& key : nodeKeys)
 				nids.push_back(key.substr(9));
-				mget += " " + key;
-			}
-			auto* mr = (redisReply*)redisCommand(ctx_, mget.c_str());
+			auto* mr = mgetArgv(nodeKeys);
 			if (mr && mr->type == REDIS_REPLY_ARRAY) {
 				for (size_t i = 0; i < mr->elements && i < nids.size(); i++)
 					if (mr->element[i]->type == REDIS_REPLY_STRING)
@@ -603,12 +611,9 @@ private:
 		auto roomKeys = scanKeys("sfu:room:*");
 		if (!roomKeys.empty()) {
 			std::vector<std::string> rids;
-			std::string mget = "MGET";
-			for (auto& key : roomKeys) {
+			for (auto& key : roomKeys)
 				rids.push_back(key.substr(9));
-				mget += " " + key;
-			}
-			auto* mr = (redisReply*)redisCommand(ctx_, mget.c_str());
+			auto* mr = mgetArgv(roomKeys);
 			if (mr && mr->type == REDIS_REPLY_ARRAY) {
 				for (size_t i = 0; i < mr->elements && i < rids.size(); i++)
 					if (mr->element[i]->type == REDIS_REPLY_STRING) {
