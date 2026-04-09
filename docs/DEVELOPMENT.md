@@ -1,311 +1,265 @@
-# mediasoup-cpp 工作上下文
+# mediasoup-cpp 开发文档
 
-## 项目概述
-基于 mediasoup C++ worker 的 SFU 服务端，参考 livekit 的 Room-first 设计思路进行改造。
+## 架构概述
 
-## 已完成的 P0 改造（3项）
-
-### 1. Peer 抽象 + 服务端自动订阅
-- `Peer.h`: 封装了 sendTransport/recvTransport/producers/consumers
-- `RoomService.h` 的 `produce()`: 当 peer produce 时，自动为房间内其他有 recvTransport 的 peer 创建 consumer，并通过 `newConsumer` 通知推送
-
-### 2. 信令与业务解耦
-- `SignalingServer.cpp`: 只负责 WebSocket 收发和路由分发
-- `RoomService.h`: 独立的业务层，包含 join/leave/createTransport/connectTransport/produce/consume 等方法
-- 未来可以从 HTTP/gRPC 等其他入口调用同一套业务逻辑
-
-### 3. Redis 多节点路由
-- `RoomRegistry.h`: 基于 Redis 的房间到节点映射（claimRoom/refreshRoom/unregisterRoom）
-- join 时如果发现房间在别的节点会返回 redirect
-- `main.cpp`: 支持 --redisHost/--redisPort/--nodeId/--nodeAddress 参数
-
-## 其他已完成
-- `RoomManager.h`: Room/RoomManager 封装，支持空闲回收，getPeerIds/getRoomIds
-- `RoomService.h` 的 `cleanIdleRooms()`: GC 空闲房间
-- 前端 `public/index.html`: 自动重连、redirect 处理、auto-subscribe 支持、QoS Monitor 面板
-
-## 已完成：QoS 实时监控
-- Channel: OwnedNotification 透传完整 FlatBuffers 通知数据（解决之前传 nullptr 的问题）
-- Producer: handleNotification 解析 PRODUCER_SCORE，getStats 获取 bitrate/jitter/RTT
-- Consumer: 解析 CONSUMER_SCORE body，getStats 获取发送端统计
-- Transport: getStats 支持 WebRtcTransport 和 PlainTransport
-- RoomService: collectPeerStats 全链路采集，broadcastStats 每 2 秒广播
-- SignalingServer: getStats 信令方法 + statsReport 推送定时器
-- 前端 QoS Monitor 面板: 颜色编码 score，展示上行/下行比特率、丢包、ICE/DTLS 状态
-
-## 已完成：录制 + QoS 时间线 + 回放
-- PeerRecorder: 录制时同步写入 .qos.json 文件，时间与视频 PTS 对齐（第一个 RTP 包为零点）
-- RoomService.broadcastStats: 广播 stats 时同步写入 recorder
-- 默认录制目录: ./recordings（main.cpp 默认值）
-- HTTP API: GET /api/recordings 列表 + GET /recordings/* 文件下载（含路径穿越防护）
-- playback.html: 视频播放器 + QoS 面板随进度同步 + score 时间线条形图
-
-## 已修复：录制链路问题
-- PlainTransport listenIp: 录制用的 PlainTransport 改为 127.0.0.1（之前复用了 WebRTC 的公网 listenInfos，导致 RTP 包无法到达本地 Recorder）
-- Video Payload Type: 从 router RTP capabilities 动态读取 VP8 的 mapped PT（之前硬编码 101，实际是 102）
-- VP8 帧重组: 将多个 RTP 包的 VP8 payload 拼接为完整帧后再写入 WebM（之前每个 RTP 包单独写入导致 Invalid sync code）
-- VP8 Payload Descriptor: 写入前剥离 VP8 RTP payload descriptor（RFC 7741）
-- VP8 Keyframe 标记: 检测 VP8 keyframe 并设置 AV_PKT_FLAG_KEY，确保浏览器 seek 正常
-- PTS 时基转换: 使用 av_rescale_q 将 RTP timestamp（90kHz/48kHz）转换为 stream time_base，修复视频时长显示异常
-- QoS 文件 double-stop: Recorder::stop() 末尾清空 outputPath_ 防止析构函数二次调用时覆盖已写入的 QoS 数据
-- playback.html QoS 容错: 处理未闭合的 JSON（SFU 异常退出时 .qos.json 可能缺少 ]）
-- playback.html seek 同步: 添加 seeked 事件监听，确保 seek 后 QoS 面板更新
-
-## 已修复：H264 录制支持
-- H264 设为默认视频编码（main.cpp codec 顺序调整，浏览器普遍硬件加速 H264）
-- H264 RTP 解包（RFC 6184）: 支持 Single NAL、FU-A 分片重组、STAP-A 聚合包
-- STAP-A SPS/PPS 提取: 从 STAP-A 包中分离 SPS(7)/PPS(8) 单独缓存，不混入帧缓冲
-- 延迟写 header: H264 matroska 容器需要 SPS/PPS extradata，initMuxer 时不写 header，等收到第一个 IDR 帧后从缓存的 SPS/PPS 构建 AVCC extradata 再写 header
-- 音频缓冲: header 延迟期间 audio RTP 包缓存在 pendingAudio_，header 写入后一次性 flush
-- Annex-B→AVCC 转换: matroska 容器要求 AVCC 格式（4字节 length prefix），flushVideoFrame 时将 Annex-B start code 转换为 AVCC
-- 无 IDR 安全退出: 如果始终没收到 IDR，finalizeMuxer 跳过 av_write_trailer，不崩溃
-- Codec 动态检测: RoomService 从 router RTP capabilities 读取 codec 类型和 PT，自动选择 H264 或 VP8
-
-## 已修复：QoS 指标显示问题
-- Jitter 单位: 之前直接显示 RTP timestamp 单位（如 36 显示为 "36 ms"），实际应除以 clockRate（video 90kHz / audio 48kHz）再转毫秒（36/90000*1000=0.4ms）
-- Fraction Lost: 之前直接显示 0-1 浮点数，改为乘 100 加 % 显示
-- Available BW ⬆: mediasoup 的 availableIncomingBitrate 在 Transport-CC 模式下永远为 0，改为浏览器上报的 candidate-pair.availableOutgoingBitrate（Transport-CC BWE）
-- Available BW ⬇: 移除（mediasoup recvTransport 的 availableOutgoingBitrate 也为 null，BWE 在此方向不可用）
-- 新增浏览器端 stats 上报: 前端每 2 秒采集 RTCPeerConnection.getStats() 中的 candidate-pair，通过 clientStats 信令上报，服务端合并到 QoS 数据
-- 新增 RTT (browser): 显示浏览器 STUN RTT（补充 mediasoup RTCP RTT）
-- playback.html 同步修复 jitter 单位和 Available BW
-
-## 已修复：黑屏问题
-- 根因：recvTransport 在 publish 时才创建，导致只 join 不 publish 的 peer 无法接收媒体
-- 修复：前端 join 后立即创建 recvTransport 并消费已有 producer，不再依赖 publish 触发
-- 服务端 `createTransport()` 创建 recvTransport 时补一轮 auto-subscribe，返回 `consumers` 数组
-
-## 已完成：公网 IP 自动探测
-- `announcedIp` 为空时，启动时自动通过 ifconfig.me / api.ipify.org / icanhazip.com 探测公网 IP
-- 探测成功后自动设置 `announcedIp`，写入 ICE candidate，浏览器可直接连接
-- 用户手动配置 `--announcedIp` 时跳过探测
-- 探测失败打 warn 日志提醒
-
-## 已完成：信令非阻塞（uWS 事件循环卸载）
-- 问题: 之前所有 RoomService 方法（join/produce/consume 等）在 uWS 主线程同步执行，Channel::RequestWait() 会阻塞事件循环，worker 响应慢时所有 WS 连接的信令都会卡住
-- 方案: SignalingServer 新增单工作线程 + 任务队列（生产者-消费者模式）
-- uWS 主线程只做 JSON 解析和 postWork()，立即返回不阻塞
-- 工作线程串行执行 RoomService 方法，Channel IPC 阻塞在此线程
-- 完成后通过 uWS::Loop::defer() 回到主线程发送 WS 响应
-- 单工作线程保证请求串行，无需改 RoomService/Room/Peer 的锁
-- per-connection alive token (shared_ptr<atomic<bool>>) 防止 defer 回调向已关闭的 ws 发送
-- notify/broadcast 回调也通过 defer() 回到 uWS 线程（线程安全）
-- 定时器回调（GC/健康检测/stats广播）也卸载到工作线程
-- clientStats 仍在主线程处理（只写 map，不涉及 Channel IPC）
-- 关键: uWS::Loop::get() 是 thread-local 的，必须在 uWS 线程捕获 loop 指针传给工作线程
-
-## 已完成：Daemon 模式 + 结构化日志
-- 默认 daemonize 运行（fork + setsid），`--nodaemon` 前台运行
-- daemon 模式日志写入文件（默认 /var/log/mediasoup-sfu.log），同时输出到 stdout
-- PID 文件（默认 /var/run/mediasoup-sfu.pid）
-- 所有业务日志统一 `[room:X Y]` 前缀（X=roomId, Y=peerId），方便 grep 定位问题
-- 信令层每个请求记录 `[room:X Y] method id=N`
-- join/disconnect 记录 info 级别日志
-- Recorder 日志带 peerId 前缀
-
-## 已完成：稳定性全面加固 (2026-04-06)
-
-### 严重 bug 修复
-- Channel::close() readThread detach→join: 修复 UAF（fd 关闭后 read 返回 0，join 安全）
-- Worker waitThread 生命周期: 析构时检测是否在自身线程中，避免 std::terminate
-- Worker::workerDied() 不调 channel->close(): 避免在 waitThread 中 join readThread 导致死锁
-- Channel request/notify 释放 builderMutex 后再 sendBytes: 防止管道满时全局阻塞
-- leave() 时从 Router 移除 peer 的 producers: 防止 stale shared_ptr 引用
-- Recorder pendingAudio_ 加 kMaxPendingAudioPackets 上限: 防止 H264 无 IDR 时 OOM
-- Transport/Producer/Consumer close 时 off channel listener: 修复 EventEmitter 内存泄漏
-- signalHandler 只设 atomic flag: 不调非 async-signal-safe 函数，uWS timer 轮询后优雅关闭
-- RTP 时间戳回绕: 用 int32 差值防止 pts 溢出
-
-### 长时间运行稳定性
-- Worker 崩溃自动重启: WorkerManager.respawnOne()，在 waitThread 的 died 回调中直接执行，带速率限制（kMaxRespawnsPerWindow/kRespawnWindowSec）
-- Worker 崩溃通知客户端: checkRoomHealth() 每 2 秒检测 dead router，broadcast serverRestart 通知
-- Redis 断连自动重连: ensureConnected() 守卫，heartbeat 通过 SignalingServer timer + postWork 定期重试
-- 录制磁盘空间保护: cleanOldRecordings() 超过 kMaxRecordingDirBytes 自动清理最老录制
-- Recorder 空文件清理: finalizeMuxer 中无帧时删除空 webm
-- GC 清理 recorder: cleanIdleRooms 同步清理 recorder/transport/clientStats
-- collectPeerStats 超时保护: 每个 getStats IPC 调用 kStatsTimeoutMs 超时
-
-### 代码整洁度
-- Constants.h: 所有魔数提取为 kXx 命名常量（timer/超时/端口/限制值等）
-- RoomService.h 拆分: .h 声明(90行) + .cpp 实现(583行)
-- Recorder public/private 整理: 内部方法改为 private，测试通过 PeerRecorderTestAccess friend class
-- broadcastStats 日志: 0 rooms 不打印，有 room 时打印房间名
-- stats 广播改为 10s 间隔，health check 保持 2s 独立 timer
-- cleanupRoomResources() 提取消除重复代码
-
-### 测试
-- 71 个单元测试: 含 Room 健康检测、EventEmitter 清理、Recorder 稳定性（pendingAudio cap/空文件清理/时间戳回绕）
-- 2 个 Worker 崩溃恢复集成测试: WorkerCrashSendsServerRestart + WorkerRespawnAllowsNewRooms
+基于 mediasoup C++ worker 的 SFU 服务端，Room-first 设计。控制面用 C++17 实现，媒体面复用 mediasoup-worker 预编译二进制（v3.14.16）。
 
 ## 线程模型
 
-### 线程清单（典型 1 worker + 2 录制 peer = 5 线程）
+### 线程清单
 
 | 线程 | 数量 | 阻塞方式 | 职责 |
 |------|------|----------|------|
-| uWS 主线程 | 1 | epoll_wait（非阻塞事件循环） | WebSocket 收发、HTTP、定时器触发、defer 回调执行 |
-| 信令工作线程 | 1 | condition_variable::wait / future::wait_for | 串行执行 RoomService 方法 + Redis heartbeat |
-| Channel readThread | ×N worker | read() on pipe fd | 读取 worker 响应和通知 |
-| Worker waitThread | ×N worker | waitpid() | 等待子进程退出，崩溃时直接 respawn |
+| uWS 主线程 | 1 | epoll_wait（非阻塞事件循环） | WebSocket 收发、HTTP、定时器、defer 回调、room dispatch |
+| WorkerThread | ×N | epoll_wait（task queue + Channel IPC + timer） | 串行执行 RoomService 方法、Channel IPC、health/GC |
+| Registry worker | 1 | condition_variable::wait | 串行执行 Redis fire-and-forget 任务（refresh/unregister） |
+| Redis subscriber | 1 | redisGetReply（2s read timeout） | pub/sub 监听，更新本地 node/room 缓存 |
+| Worker waiter | ×N worker | waitpid() | 等待子进程退出，触发 respawn |
 | Recorder recvLoop | ×M peer | recv() on UDP socket | 收 RTP 包，解包写 WebM |
 
-多 worker 时 readThread 和 waitThread 各乘 N，多录制 peer 时 recvLoop 乘 M。
+典型部署：1 WorkerThread + 1 worker + 2 录制 peer = **6 线程**。
 
-### 已消除的线程
-- ~~Respawn 线程~~: 之前 worker 崩溃时创建临时线程做 sleep+respawn，现在直接在 waitThread 的 died 回调里 respawn（waitThread 此时已无事可做）
-- ~~Registry heartbeat 线程~~: 之前独立线程 sleep(10s)+redis SET 循环，现在改为 SignalingServer timer + postWork 到信令工作线程
+### 关键不变量
 
-### 共享数据与锁
-- Channel.pendingRequests_: mutex 保护，readThread 写、信令工作线程读
-- Recorder.muxMutex_/qosMutex_: recvLoop 线程写、broadcastStats 读
-- 信令工作线程串行执行，RoomService/Room/Peer 无需额外加锁
-- per-connection alive token (shared_ptr<atomic<bool>>) 防止 defer 回调向已关闭的 ws 发送
+1. **同房间单线程**：room → WorkerThread 绑定在 uWS 主线程原子完成（dispatch 前），不在 defer 回调里。并发首 join 同房间保证落到同一线程。
+2. **uWS 主线程不阻塞**：所有 Channel IPC 在 WorkerThread 执行，主线程只做 JSON 解析 + dispatch。
+3. **旧连接不可写状态**：reconnect 时旧 socket 立即 `alive=false`；WorkerThread 执行前校验 `peer->sessionId`，不匹配返回 `"remote login"` 错误。
 
-## Channel IPC 协议（控制层 ↔ Worker）
+### Channel IPC 模式
 
-Channel 是控制层与 mediasoup-worker 子进程的唯一通信通道。
+Worker 以 `threaded=false` 创建。Channel 的 consumer fd 注册到 WorkerThread 的 epoll。IPC 调用使用 `requestWait()`（内部 poll consumer fd），**禁止使用 `request().get()`**（会死锁，因为没有独立 readThread pump fd）。
 
-### 通信方式
-- Unix Pipe: fd 3（控制层→worker 写请求）、fd 4（worker→控制层 写响应/通知）
-- 帧格式: 4 字节 little-endian size prefix + FlatBuffers payload
-- 序列化: FlatBuffers（mediasoup v3.14.16 schema，29 个 .fbs 文件）
+## 启动序列
 
-### 消息类型
+```
+1. RoomRegistry: Redis connect + syncAll() + subscriber thread
+2. WorkerThread::start() → createWorkers() (fork+exec worker)
+3. waitReady() 阻塞直到所有 WorkerThread 初始化完成
+4. uWS::App().listen() — 此时才开始接受连接
+```
 
-**Request → Response（控制层主动调用）**
-- 控制层发 Request（带递增 id），worker 处理后返回 Response（同 id）
-- 信令工作线程通过 Channel::RequestWait() 发送并阻塞等待
-- readThread 收到 Response 后通过 promise.set_value() 唤醒等待方
-- 典型请求: ROUTER_CREATE_WEBRTCTRANSPORT, TRANSPORT_PRODUCE, TRANSPORT_CONSUME, TRANSPORT_GET_STATS, TRANSPORT_CONNECT 等
+所有模块必须在 listen 之前就绪。
 
-**Notification（worker 主动推送）**
-- worker 在媒体传输过程中主动通知状态变化
-- readThread 收到后通过 EventEmitter.emit(handlerId) 分发给对应的 Producer/Consumer 对象
-- 典型通知:
-  - PRODUCER_SCORE: 上行网络质量分变化 → QoS 面板显示
-  - CONSUMER_SCORE: 下行质量分变化
-  - CONSUMER_LAYERS_CHANGED: Simulcast 层切换（720p→360p）
-  - TRANSPORT_ICE_STATE_CHANGE: ICE 连接状态变化
-  - TRANSPORT_DTLS_STATE_CHANGE: DTLS 握手状态
+## 关闭序列
 
-**Log（worker 日志转发）**
-- worker 内部日志通过 pipe 转发到控制层的 spdlog
+```
+1. g_shutdown = true → uWS timer 检测到 → 关闭 listen socket → uWS loop 退出
+2. server.run() 返回
+3. WorkerThread::stop() — closeAllRooms() 触发 unregisterRoom 入队到 registry worker
+4. server.stopRegistryWorker() — 排空剩余 Redis 任务
+5. registry->stop() — 断开 Redis 连接
+```
 
-## 数据流（完整调用链）
+顺序不能反：WorkerThread 先停（产生 unregister 任务），registry worker 后停（消费任务）。
 
-### 信令流（一次 produce 请求）
+## Session Identity
+
+```
+join 请求 → 主线程预分配 newSessionId = g_nextSessionId++
+         → WorkerThread: rs->join() 成功后 peer->sessionId = newSessionId
+         → defer: sd->sessionId = newSessionId, 旧 socket alive=false
+
+非 join 请求 → 主线程捕获 sessionId
+            → WorkerThread: 校验 peer->sessionId == sessionId
+            → 不匹配 → 返回 {"error": "remote login"}
+```
+
+`g_nextSessionId` 从随机大数开始，避免重启后 ID 碰撞。
+
+## Redis 缓存架构
+
+### 锁分离
+
+- `cmdMutex_`：串行化 Redis 命令（EVAL/GET/SET/MGET）
+- `cacheMutex_`：保护本地 `nodeCache_` / `roomCache_` 读写
+
+**规则：`cacheMutex_` 内禁止做 Redis I/O。** 先做 Redis 调用收集数据，再拿 `cacheMutex_` 一次性更新。
+
+### 批量操作
+
+- `syncAllUnlocked()`：KEYS + MGET（2 次往返），不是 KEYS + N×GET
+- `evictDeadNodes()`：pipeline EXISTS（1 次往返），不是 N×EXISTS
+- `syncNodesUnlocked()`：轻量版，只同步 node 缓存（resolveRoom cache miss fallback）
+
+### 读路径
+
+- `claimRoom()`：先查 `roomCache_`（零 Redis），miss 时走 Redis EVAL
+- `findBestNodeCached()`：纯内存遍历 `nodeCache_`
+- `resolveRoom()`：cache miss 时 `syncNodesUnlocked()` 回 Redis 查一次再重试
+
+### Fire-and-forget
+
+`refreshRoom()` / `unregisterRoom()` 通过 `registryTask_` 回调投递到 registry worker 线程，不在 WorkerThread 执行。`enqueueRegistryTask` 有 stopped 守卫：registry worker 已停时 inline 执行。
+
+## Worker 管理
+
+### Respawn
+
+WorkerThread 检测到 worker 死亡（channel fd EOF）→ `onWorkerDied()` → 从 WorkerManager 移除旧 worker → 创建新 worker → 注册到 epoll。
+
+**速率限制**：10 秒内最多 3 次 respawn。超限后放弃，日志报错。
+
+### 负载均衡
+
+`pickLeastLoadedWorkerThread()`：按 `roomCount()` 选最少的线程。跳过 `workerCount() == 0` 的死线程。
+
+## SIGPIPE 防护
+
+`main()` 启动时 `signal(SIGPIPE, SIG_IGN)`。`Channel::sendBytes()` 写失败后调用 `close()` 标记 channel 死亡，`requestWait()` 立即失败而不是等 5 秒超时。
+
+## 公网 IP 探测
+
+优先级：
+1. `--announcedIp` 命令行参数
+2. config.json 的 `announcedIp`
+3. curl 探测（2 个 URL × 2 秒超时 = 最坏 4 秒）
+4. UDP connect trick（`connect(8.8.8.8:53)` + `getsockname`，零网络开销）
+5. 最后才回退到 127.0.0.1（带 warn 日志）
+
+## 数据流
+
+### 信令流（produce 请求）
+
 ```
 浏览器A ws.send({method:"produce"})
-  → ① uWS 主线程: JSON 解析, postWork()
-  → ② 信令工作线程: RoomService.produce()
-  → ③ Transport.produce(): ORTC 协商 + FlatBuffers 序列化
-  → ④ Channel.RequestWait(): write(pipe fd 3) → future.wait()
-  → ⑤ Worker 创建 Producer, 通过 pipe fd 4 返回 Response
-  → ⑥ readThread: promise.set_value() → 信令工作线程被唤醒
-  → ⑦ RoomService: auto-subscribe (对每个其他 peer 重复 ③→⑥)
-  → ⑧ RoomService: autoRecord (创建 PlainTransport + PIPE Consumer)
-  → ⑨ loop->defer(response) → 主线程 ws->send() → 浏览器A
-  → ⑩ loop->defer(newConsumer) → 主线程 ws->send() → 浏览器B
+  → uWS 主线程: JSON 解析, alive 检查, assignRoom, wt->post()
+  → WorkerThread: sessionId 校验 → RoomService.produce()
+    → ORTC 协商 → Channel.requestWait() → pipe write → poll+read
+    → auto-subscribe: 为其他 peer 创建 Consumer
+    → auto-record: PlainTransport + PIPE Consumer
+  → loop->defer() → uWS 主线程 → ws.send(response)
+  → loop->defer() → ws.send(newConsumer) → 其他浏览器
 ```
 
-### 媒体流（RTP 数据路径，不经过控制层）
+### 媒体流（不经过控制层）
+
 ```
-浏览器A ──SRTP/UDP──→ WebRtcTransport(A.send)
-                        │ ICE + DTLS 解密
-                        ▼
-                     Producer(A.audio/video)
-                        │
-            ┌───────────┼──────────────┐
-            ▼                          ▼
-    Consumer(SIMPLE)            Consumer(PIPE)
-    给 B 的实时观看              给录制的 PlainTransport
-            │                          │
-            ▼                          ▼
-    WebRtcTransport(B.recv)     PlainTransport
-    DTLS 加密 + ICE              明文 RTP
-            │                          │
-            ▼                          │ UDP 127.0.0.1:port
-        浏览器B                         ▼
-                              PeerRecorder.recvLoop()
-                                recv() → RTP 解包 → FFmpeg → .webm
+浏览器A ──SRTP/UDP──→ WebRtcTransport → Producer
+                                          ├──→ Consumer(SIMPLE) → WebRtcTransport → 浏览器B
+                                          └──→ Consumer(PIPE) → PlainTransport
+                                                  │ UDP 127.0.0.1
+                                                  ▼
+                                            PeerRecorder → .webm + .qos.json
 ```
 
-### 录制链路说明
-- Worker 是预编译二进制（v3.14.16），不可修改，所以录制在控制层实现
-- PlainTransport 是 mediasoup 提供的机制，将明文 RTP 通过 UDP 转发到外部
-- PIPE 类型 Consumer 不做 BWE/NACK，直接转发所有 layer，适合录制
-- 走 UDP loopback 而非 pipe 是因为 Worker 的 PlainTransport 只支持 UDP/TCP 输出
+## 测试
 
-## 任务完成状态
-- P0: ✅ Peer 抽象 + 服务端自动订阅
-- P0: ✅ 信令与业务解耦
-- P0: ✅ Redis 多节点路由 + 删除 PipeTransport
-- P1: ✅ 客户端自动重连（doReconnect 已与新 join 流程对齐：rejoin → recvTransport → 消费已有 → 重建 sendTransport）
-- P1: ✅ Room 空闲回收 + 节点健康检查（GC timer 已接入 cleanIdleRooms；RoomRegistry.claimRoom 检测死节点并接管 room）
-- P1: ✅ QoS 实时监控（全链路 stats 采集 + 2 秒广播 + 前端面板）
-- P1: ✅ 录制 + QoS 时间线 + 回放页面
-- P2: ✅ Worker 负载均衡（getLeastLoadedWorker 按 routerCount 选最少的 worker）
-- P2: ✅ 信令非阻塞（SignalingServer 工作线程卸载 Channel IPC，uWS 事件循环不再阻塞）
-- P2: 待做 Dynacast
-- P2: 待做 信令协议标准化
-- P0: 待优化 virtio 单队列网络瓶颈（详见"网络瓶颈分析"），上线前必须换多队列 VM 或物理机
+### 测试矩阵
 
-## 单元测试
-- 框架: GoogleTest，`BUILD_TESTS` 默认 ON
-- 构建: `cmake --build build --target mediasoup_tests`
-- 运行: `./build/mediasoup_tests` 或 `cd build && ctest --output-on-failure`
-- 测试文件在 `tests/` 目录
-- 共 98 个单元测试用例，覆盖 ORTC 协商、RTP 类型、Room/Peer 管理、QoS 数据结构、Recorder 稳定性、EventEmitter 清理、Room 健康检测、Utils、WorkerQueue（任务队列 FIFO/并发/alive token）
-- 集成测试: mediasoup_integration_tests (14) + mediasoup_qos_integration_tests (15) + mediasoup_e2e_tests (3) + mediasoup_topology_tests (6) + mediasoup_stability_integration_tests (10)
-- 总计 122 个测试用例
+| 套件 | 数量 | 内容 |
+|------|------|------|
+| mediasoup_tests | 149 | ORTC、RTP 类型、Room/Peer、QoS 精度、Recorder、EventEmitter、WorkerQueue、respawn 限流、room dispatch |
+| mediasoup_integration_tests | 17 | 黑盒：真实 SFU + WebSocket 客户端 |
+| mediasoup_review_fix_tests | 19 | 重连、geo 路由、country isolation、缓存、session identity |
+| mediasoup_stability_integration_tests | 10 | close/disconnect 各种时序 |
+| mediasoup_qos_integration_tests | 17 | stats 采集、广播、录制 QoS |
+| mediasoup_e2e_tests | 3 | 多 peer 发布/订阅压力 |
+| mediasoup_topology_tests | 6 | 多节点 room affinity、crash takeover |
+| mediasoup_bench | - | Worker 并发压测 |
+
+**总计：221 个测试**
+
+### 运行
+
+```bash
+# 必须从项目根目录运行（worker binary 用相对路径）
+cd /path/to/mediasoup-cpp
+
+# 单元测试（约 2.5 分钟，QoS 精度测试较慢）
+./build/mediasoup_tests
+
+# 集成测试（需要 Redis）
+./build/mediasoup_integration_tests
+./build/mediasoup_review_fix_tests
+./build/mediasoup_stability_integration_tests
+./build/mediasoup_qos_integration_tests
+./build/mediasoup_e2e_tests
+./build/mediasoup_topology_tests
+
+# 跳过 QoS 精度测试（快速验证）
+./build/mediasoup_tests --gtest_filter='-QosAccuracyTest.*:QosRecordingAccuracyTest.*'
+```
+
+### 已知 flaky test
+
+- `QosRecordingAccuracyTest.TwentyPercentLossQosFile`：依赖 RTCP RR 统计时序，系统负载高时偶发失败。单独跑稳定通过。
+- `MultiSfuTopologyTest.NodeCrashRoomTakeover`：依赖 pub/sub 传播延迟（subscriber 2 秒 read timeout），偶发失败。
 
 ## 关键规则
-- 每次新增功能都必须同步补充 UT 和集成测试覆盖
 
-## 单 Worker 性能基准（已测）
-- 测试工具: `tests/bench_worker_load.cpp` → `mediasoup_bench`
-- 场景: 每房间 1P+2C, PlainTransport, opus 1200字节 300pps（等效1080p带宽）
-- 环境: Intel Xeon Platinum 2.5GHz, 2 vCPU
-- loopback 结果: 240 rooms peak, 82% CPU(单核), 180MB RSS, 72k→144k pps
-- 真实网络栈结果: 80 rooms peak, 23% CPU(单核), 67MB RSS, 24k→48k pps
-- 真实场景估算（WebRTC+SRTP+audio+video双流）: 单Worker约30-40个1v1房间
-- 关键发现: Worker每房间CPU约0.33%线性扩展; 走真实网络栈时内核softirq是瓶颈(90rooms就丢包,Worker CPU才26%)
-- 方法学: std::atomic计数器(relaxed), 动态PT从router获取, 48kHz时间戳步进, SendRate%列校验发送速率≥95%才计入峰值
-- 注意: video PipeConsumer需要有效keyframe才转发，PlainTransport无法完成keyframe协商，因此用opus替代
-- 已知局限: UdpDrops是/proc/net/udp全局口径; 两个Consumer均为PIPE类型(无BWE/NACK); PlainTransport无SRTP开销
-- 热路径优化: sendFrame预计算dest sockaddr, epoll_data.ptr直存fd+counter指针(零查表)
-
-## 网络瓶颈分析（virtio 单队列）
-- 内核参数调优无效: net.core.netdev_budget 翻倍到 600、netdev_budget_usecs 翻倍到 4000，峰值仍为 80 rooms
-- softnet_stat 证据: 测试期间 time_squeeze 增加约 3 万次/核，说明 softirq 仍处理不过来
-- 根因: virtio_net 单队列，所有包的硬中断→NAPI poll 路径只能在单核串行处理，RPS 只分散 backlog 不分散 poll
-- 多队列可解决: 多队列让网卡有 N 个独立 ring buffer 绑不同 CPU 核，收包 softirq 并行化
-- 多队列不需要同步增加 Worker: 多队列是内核层面的收包并行化，Worker 数量由 CPU 瓶颈决定
-- 物理机估算: 8 核物理机 + 万兆网卡 16 队列，8 Worker 保守 240 个 1v1 房间，总 pps 约 216k，万兆网卡不到 10% 负载
-- 结论: 当前网络瓶颈是 virtio 虚拟化特有问题，非架构性问题；上物理机或多队列 VM 后瓶颈回到 Worker CPU，多 Worker 水平扩展即可
+1. **Channel IPC 只用 `requestWait()`**，禁止 `request().get()`（非线程模式死锁）
+2. **`cacheMutex_` 内禁止 Redis I/O**
+3. **Room dispatch 在 dispatch 前绑定**，不在 defer 里
+4. **每次新增功能必须补测试**
+5. **`signal(SIGPIPE, SIG_IGN)` 必须在 main 开头**
 
 ## 关键文件
-- `src/main.cpp` - 入口，参数解析，组装各组件
-- `src/Constants.h` - 全局常量定义（kXx 命名，timer/超时/端口/限制值）
-- `src/RoomService.h` - 核心业务逻辑声明
-- `src/RoomService.cpp` - 核心业务逻辑实现（join/leave/produce/QoS采集/录制/健康检测）
-- `src/SignalingServer.cpp` - WebSocket 信令层 + 录制回放 HTTP API
-- `src/RoomManager.h` - Room/RoomManager
-- `src/RoomRegistry.h` - Redis 多节点注册（含自动重连）
-- `src/WorkerManager.h` - Worker 管理（负载均衡 + 崩溃自动重启）
-- `src/Peer.h` - Peer 抽象
-- `src/Router.cpp` - Router 封装（创建 transport、管理 producer）
-- `src/Transport.cpp` - produce/consume/getStats 的 FBS 协议实现
-- `src/Channel.h/cpp` - Worker pipe 通信（OwnedResponse/OwnedNotification）
-- `src/Worker.h/cpp` - Worker 进程管理（fork/exec/崩溃检测）
-- `src/Producer.h/cpp` - Producer（score 追踪、getStats）
-- `src/Consumer.h/cpp` - Consumer（score 追踪、getStats）
-- `src/Recorder.h` - 录制（RTP→WebM + QoS 时间线）
-- `src/ortc.h` - RTP 能力协商
-- `public/index.html` - 实时通话页面（含 QoS Monitor）
-- `public/playback.html` - 录制回放页面（视频 + QoS 时间线）
-- `tests/test_stability.cpp` - 稳定性单元测试
-- `tests/test_qos_unit.cpp` - QoS 单元测试
-- `tests/test_integration.cpp` - 集成测试（含 Worker 崩溃恢复）
-- `tests/bench_worker_load.cpp` - Worker 并发压测工具（1P+2C, PlainTransport, 逐步加压）
-- `tests/test_worker_queue.cpp` - 信令工作线程单元测试（FIFO/并发/alive token/阻塞隔离）
+
+```
+src/
+├── main.cpp              # 入口、参数解析、启动/关闭序列
+├── Constants.h           # 所有常量（kXx 命名）
+├── SignalingServer.h/cpp # WebSocket + HTTP + room dispatch + session 管理
+├── WorkerThread.h        # epoll 事件循环：task queue + Channel IPC + worker 生命周期
+├── RoomService.h/cpp     # 业务逻辑（join/leave/produce/consume/QoS/录制）
+├── RoomManager.h         # Room/Peer 生命周期、idle GC
+├── RoomRegistry.h        # Redis 多节点路由 + 本地缓存 + pub/sub
+├── GeoRouter.h           # IP 地理定位 + ISP 评分
+├── WorkerManager.h       # Worker 池、负载均衡、respawn 限流
+├── Channel.h/cpp         # Pipe IPC（FlatBuffers，request/response/notification）
+├── Worker.h/cpp          # fork+exec worker 进程管理
+├── Router.h/cpp          # Router：创建 transport、管理 producer
+├── Transport.h/cpp       # produce/consume/getStats FlatBuffers 协议
+├── WebRtcTransport.h/cpp # ICE/DTLS transport
+├── PlainTransport.h      # Plain RTP transport（录制用）
+├── Producer.h/cpp        # Producer（score 追踪、stats）
+├── Consumer.h/cpp        # Consumer（score 追踪、stats）
+├── Peer.h                # Peer 状态（transports、producers、consumers、sessionId）
+├── ortc.h                # ORTC 协商（codec 匹配、RTP mapping）
+├── Recorder.h            # RTP→WebM 录制 + QoS 时间线
+├── EventEmitter.h        # 轻量事件系统
+└── Logger.h              # spdlog 封装
+tests/
+├── test_ortc.cpp                      # ORTC 协商（25 tests）
+├── test_room.cpp                      # Room/Peer 管理
+├── test_rtp_types.cpp                 # RTP 类型序列化
+├── test_stability.cpp                 # Recorder 稳定性、EventEmitter 清理
+├── test_worker_queue.cpp              # WorkerThread 任务队列
+├── test_multinode.cpp                 # WorkerManager、room dispatch、respawn 限流
+├── test_request_timeout.cpp           # Channel IPC 超时
+├── test_review_fixes.cpp             # Channel 线程安全
+├── test_qos_unit.cpp                  # QoS 数据结构
+├── test_qos_accuracy.cpp             # QoS 精度（真实 UDP 收发）
+├── test_qos_recording_accuracy.cpp   # 录制 QoS 精度
+├── test_geo_router.cpp               # 地理路由评分
+├── test_integration.cpp              # 黑盒集成测试
+├── test_review_fixes_integration.cpp # 重连/geo/cache/session 集成测试
+├── test_stability_integration.cpp    # close/disconnect 集成测试
+├── test_qos_integration.cpp          # QoS 集成测试
+├── test_e2e_pubsub.cpp              # 端到端发布订阅
+├── test_multi_sfu_topology.cpp      # 多节点拓扑
+├── test_multinode_integration.cpp   # 多节点集成
+└── bench_worker_load.cpp            # Worker 压测
+```
+
+## 性能基准
+
+测试环境：Intel Xeon Platinum 2.5GHz, 2 vCPU
+
+| 指标 | Loopback | 真实网络 |
+|------|----------|----------|
+| 峰值房间（1P+2C） | 240 | 80 |
+| Worker CPU | 82%（单核） | 23% |
+| RSS | 180 MB | 67 MB |
+| PPS（in→out） | 72k→144k | 24k→48k |
+
+真实场景估算：单 Worker 约 **30-40 个 1v1 房间**。
+
+网络瓶颈：virtio 单队列 VM 的 softirq 是瓶颈，非架构问题。多队列 NIC 或物理机可解决。
+
+## 待做
+
+- P1: `broadcastStats` 拆分为 per-room 任务（大房间场景防止 WorkerThread 饿死）
+- P2: Dynacast
+- P2: 信令协议标准化
+- P0: 上线前换多队列 VM 或物理机（解决 virtio 网络瓶颈）
