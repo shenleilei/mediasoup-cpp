@@ -28,15 +28,15 @@ void Producer::close() {
 
 	channel_->emitter().off(id_);
 
-	auto& builder = channel_->bufferBuilder();
-	auto idOff = builder.CreateString(id_);
-	auto reqOff = FBS::Transport::CreateCloseProducerRequest(builder, idOff);
-
 	try {
-		channel_->request(FBS::Request::Method::TRANSPORT_CLOSE_PRODUCER,
+		channel_->requestBuild(FBS::Request::Method::TRANSPORT_CLOSE_PRODUCER,
 			FBS::Request::Body::Transport_CloseProducerRequest,
-			reqOff.Union(), transportId_);
-		// Fire-and-forget: don't .get() — avoids blocking control thread if worker is slow
+			[this](flatbuffers::FlatBufferBuilder& builder) {
+				auto idOff = builder.CreateString(id_);
+				auto reqOff = FBS::Transport::CreateCloseProducerRequest(builder, idOff);
+				return reqOff.Union();
+			}, transportId_);
+			// Fire-and-forget: don't .get() — avoids blocking control thread if worker is slow
 	} catch (const std::exception& e) {
 		spdlog::warn("Producer::close() request failed [id:{}]: {}", id_, e.what());
 	} catch (...) {

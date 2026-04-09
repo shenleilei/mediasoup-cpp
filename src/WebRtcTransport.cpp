@@ -7,36 +7,31 @@ namespace mediasoup {
 
 json WebRtcTransport::connect(const DtlsParameters& clientDtlsParams) {
 	if (closed_) throw std::runtime_error("Transport closed");
-
-	auto& builder = channel_->bufferBuilder();
-
-	// Build DtlsParameters FlatBuffer
-	std::vector<flatbuffers::Offset<FBS::WebRtcTransport::Fingerprint>> fbFingerprints;
-	for (auto& fp : clientDtlsParams.fingerprints) {
-		auto alg = FBS::WebRtcTransport::FingerprintAlgorithm::SHA256;
-		if (fp.algorithm == "sha-1") alg = FBS::WebRtcTransport::FingerprintAlgorithm::SHA1;
-		else if (fp.algorithm == "sha-224") alg = FBS::WebRtcTransport::FingerprintAlgorithm::SHA224;
-		else if (fp.algorithm == "sha-384") alg = FBS::WebRtcTransport::FingerprintAlgorithm::SHA384;
-		else if (fp.algorithm == "sha-512") alg = FBS::WebRtcTransport::FingerprintAlgorithm::SHA512;
-
-		fbFingerprints.push_back(
-			FBS::WebRtcTransport::CreateFingerprint(builder, alg, builder.CreateString(fp.value)));
-	}
-
-	auto dtlsRole = FBS::WebRtcTransport::DtlsRole::AUTO;
-	if (clientDtlsParams.role == "client") dtlsRole = FBS::WebRtcTransport::DtlsRole::CLIENT;
-	else if (clientDtlsParams.role == "server") dtlsRole = FBS::WebRtcTransport::DtlsRole::SERVER;
-
-	auto dtlsParamsOff = FBS::WebRtcTransport::CreateDtlsParameters(
-		builder, builder.CreateVector(fbFingerprints), dtlsRole);
-
-	auto reqOff = FBS::WebRtcTransport::CreateConnectRequest(builder, dtlsParamsOff);
-
-	channel_->requestWait(
+	channel_->requestBuildWait(
 		FBS::Request::Method::WEBRTCTRANSPORT_CONNECT,
 		FBS::Request::Body::WebRtcTransport_ConnectRequest,
-		reqOff.Union(),
-		id_);
+		[clientDtlsParams](flatbuffers::FlatBufferBuilder& builder) {
+			std::vector<flatbuffers::Offset<FBS::WebRtcTransport::Fingerprint>> fbFingerprints;
+			for (auto& fp : clientDtlsParams.fingerprints) {
+				auto alg = FBS::WebRtcTransport::FingerprintAlgorithm::SHA256;
+				if (fp.algorithm == "sha-1") alg = FBS::WebRtcTransport::FingerprintAlgorithm::SHA1;
+				else if (fp.algorithm == "sha-224") alg = FBS::WebRtcTransport::FingerprintAlgorithm::SHA224;
+				else if (fp.algorithm == "sha-384") alg = FBS::WebRtcTransport::FingerprintAlgorithm::SHA384;
+				else if (fp.algorithm == "sha-512") alg = FBS::WebRtcTransport::FingerprintAlgorithm::SHA512;
+
+				fbFingerprints.push_back(
+					FBS::WebRtcTransport::CreateFingerprint(builder, alg, builder.CreateString(fp.value)));
+			}
+
+			auto dtlsRole = FBS::WebRtcTransport::DtlsRole::AUTO;
+			if (clientDtlsParams.role == "client") dtlsRole = FBS::WebRtcTransport::DtlsRole::CLIENT;
+			else if (clientDtlsParams.role == "server") dtlsRole = FBS::WebRtcTransport::DtlsRole::SERVER;
+
+			auto dtlsParamsOff = FBS::WebRtcTransport::CreateDtlsParameters(
+				builder, builder.CreateVector(fbFingerprints), dtlsRole);
+			auto reqOff = FBS::WebRtcTransport::CreateConnectRequest(builder, dtlsParamsOff);
+			return reqOff.Union();
+		}, id_);
 
 	return {{"dtlsLocalRole", "server"}};
 }

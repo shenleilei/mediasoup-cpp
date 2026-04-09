@@ -13,6 +13,30 @@ groups:
           description: "Blackbox probe failed for {{ $labels.instance }} for >2m."
           runbook: "docs/MONITORING_RUNBOOK.md"
 
+      - alert: SfuHealthEndpointDown
+        expr: probe_success{job="blackbox-sfu-health"} == 0
+        for: 1m
+        labels:
+          severity: P1
+          team: rtc
+          escalation: immediate
+        annotations:
+          summary: "SFU application health degraded"
+          description: "Health probe failed for {{ $labels.instance }} for >1m."
+          runbook: "docs/MONITORING_RUNBOOK.md"
+
+      - alert: SfuNoAvailableWorkers
+        expr: mediasoup_sfu_has_available_workers == 0
+        for: 1m
+        labels:
+          severity: P1
+          team: rtc
+          escalation: immediate
+        annotations:
+          summary: "SFU has no available mediasoup workers"
+          description: "No workers are available on {{ $labels.instance }} for >1m."
+          runbook: "docs/MONITORING_RUNBOOK.md"
+
       - alert: NodeCpuHigh
         expr: (100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)) > 85
         for: 10m

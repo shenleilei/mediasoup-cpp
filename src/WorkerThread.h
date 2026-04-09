@@ -210,6 +210,7 @@ public:
 	void setBroadcast(RoomService::BroadcastFn fn) { broadcastFn_ = std::move(fn); }
 	void setRoomLifecycle(RoomService::RoomLifecycleFn fn) { roomLifecycleFn_ = std::move(fn); }
 	void setRegistryTask(RoomService::RegistryTaskFn fn) { registryTaskFn_ = std::move(fn); }
+	void setTaskPoster(RoomService::TaskPosterFn fn) { taskPosterFn_ = std::move(fn); }
 
 	/// Called by RoomService to update room count (from within WorkerThread).
 	void updateRoomCount() {
@@ -283,6 +284,7 @@ private:
 		if (broadcastFn_) roomService_->setBroadcast(broadcastFn_);
 		if (roomLifecycleFn_) roomService_->setRoomLifecycle(roomLifecycleFn_);
 		if (registryTaskFn_) roomService_->setRegistryTask(registryTaskFn_);
+		if (taskPosterFn_) roomService_->setTaskPoster(taskPosterFn_);
 	}
 
 	void loop() {
@@ -477,6 +479,7 @@ private:
 	RoomService::BroadcastFn broadcastFn_;
 	RoomService::RoomLifecycleFn roomLifecycleFn_;
 	RoomService::RegistryTaskFn registryTaskFn_;
+	RoomService::TaskPosterFn taskPosterFn_;
 
 	std::shared_ptr<spdlog::logger> logger_;
 };

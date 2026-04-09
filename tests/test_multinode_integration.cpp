@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 #include "TestWsClient.h"
+#include "TestProcessUtils.h"
 #include <signal.h>
 #include <sys/wait.h>
 #include <hiredis/hiredis.h>
@@ -92,7 +93,7 @@ protected:
 
 	static void killSfu(pid_t pid, int port) {
 		if (pid <= 0) return;
-		kill(pid, SIGTERM); for(int w_=0; w_<40 && kill(pid,0)==0; w_++) usleep(50000); kill(pid, SIGKILL); usleep(100000);
+		terminateSfuProcess(pid);
 		for (int i = 0; i < 30; ++i) {
 			usleep(50000);
 			int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -196,6 +197,30 @@ TEST_F(MultiNodeResolveTest, ResolveExistingRoomReturnsOwner) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Test 2b: two fresh nodes discover each other without any rooms
+// ═══════════════════════════════════════════════════════════════
+TEST_F(MultiNodeResolveTest, NodesDiscoverEachOtherAfterStartup) {
+	startNodes({{14010, 0}, {14011, 0}});
+
+	bool discovered = false;
+	for (int i = 0; i < 100; ++i) {  // up to 10s
+		usleep(100000);
+		auto bodyA = httpGet(HOST, 14010, "/api/node-load");
+		auto bodyB = httpGet(HOST, 14011, "/api/node-load");
+		auto jA = json::parse(bodyA, nullptr, false);
+		auto jB = json::parse(bodyB, nullptr, false);
+		if (!jA.is_discarded() && !jB.is_discarded() &&
+			jA.value("knownNodes", 0) >= 2 &&
+			jB.value("knownNodes", 0) >= 2) {
+			discovered = true;
+			break;
+		}
+	}
+
+	EXPECT_TRUE(discovered) << "Nodes never discovered each other via registry cache";
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Test 3: /api/resolve missing roomId returns 400
 // ═══════════════════════════════════════════════════════════════
 TEST_F(MultiNodeResolveTest, ResolveMissingRoomIdReturns400) {
@@ -241,6 +266,54 @@ TEST_F(MultiNodeResolveTest, NodeLoadEndpoint) {
 	EXPECT_EQ(j["rooms"].get<int>(), 1);
 
 	ws.close();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Test 4b: /healthz returns healthy state with available workers
+// ═══════════════════════════════════════════════════════════════
+TEST_F(MultiNodeResolveTest, HealthEndpointReportsHealthy) {
+	startNodes({{14010, 10}});
+
+	int fd = socket(AF_INET, SOCK_STREAM, 0);
+	ASSERT_GE(fd, 0);
+	sockaddr_in addr{};
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(14010);
+	inet_pton(AF_INET, HOST.c_str(), &addr.sin_addr);
+	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
+	std::string req = "GET /healthz HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+	::send(fd, req.data(), req.size(), 0);
+	std::string response;
+	char buf[4096];
+	while (true) {
+		int n = ::recv(fd, buf, sizeof(buf), 0);
+		if (n <= 0) break;
+		response.append(buf, n);
+	}
+	::close(fd);
+
+	ASSERT_NE(response.find("200 OK"), std::string::npos) << response;
+	auto hdrEnd = response.find("\r\n\r\n");
+	ASSERT_NE(hdrEnd, std::string::npos);
+	auto j = json::parse(response.substr(hdrEnd + 4));
+	EXPECT_TRUE(j["ok"].get<bool>());
+	EXPECT_TRUE(j["startupSucceeded"].get<bool>());
+	EXPECT_EQ(j["workers"].get<int>(), 1);
+	EXPECT_EQ(j["availableWorkerThreads"].get<int>(), 1);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Test 4c: /metrics exports worker availability gauges
+// ═══════════════════════════════════════════════════════════════
+TEST_F(MultiNodeResolveTest, MetricsEndpointExportsHealthGauges) {
+	startNodes({{14010, 10}});
+
+	std::string body = httpGet(HOST, 14010, "/metrics");
+	ASSERT_FALSE(body.empty());
+	EXPECT_NE(body.find("mediasoup_sfu_up 1"), std::string::npos);
+	EXPECT_NE(body.find("mediasoup_sfu_healthy 1"), std::string::npos);
+	EXPECT_NE(body.find("mediasoup_sfu_has_available_workers 1"), std::string::npos);
+	EXPECT_NE(body.find("mediasoup_sfu_workers 1"), std::string::npos);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -298,15 +371,25 @@ TEST_F(MultiNodeResolveTest, ResolveLeastLoadedNode) {
 		clients.push_back(std::move(ws));
 	}
 
-	// Wait for heartbeat to propagate load to Redis
-	usleep(1500000);
+	// Poll resolve until heartbeat propagates SFU-A's load and SFU-B is chosen.
+	// Heartbeat interval is 10s, so this may take up to ~12s.
+	// Use a different roomId each attempt since resolve may cache the result.
+	std::string body;
+	json j;
+	bool resolved = false;
+	for (int i = 0; i < 250; ++i) {  // up to 25s
+		usleep(100000);
+		body = httpGet(HOST, 14010, "/api/resolve?roomId=" + roomName("new_balanced_" + std::to_string(i)));
+		j = json::parse(body, nullptr, false);
+		if (!j.is_discarded() && j.value("isNew", false) &&
+			j.value("wsUrl", "").find("14011") != std::string::npos) {
+			resolved = true;
+			break;
+		}
+	}
 
-	// Resolve a new room from SFU-A — should pick SFU-B (less loaded)
-	std::string body = httpGet(HOST, 14010, "/api/resolve?roomId=" + roomName("new_balanced"));
-	auto j = json::parse(body);
-	EXPECT_TRUE(j["isNew"].get<bool>());
-	EXPECT_NE(j["wsUrl"].get<std::string>().find("14011"), std::string::npos)
-		<< "Should resolve to less-loaded SFU-B, got: " << j["wsUrl"];
+	EXPECT_TRUE(resolved)
+		<< "SFU-A never routed to less-loaded SFU-B, last response: " << body;
 
 	for (auto& c : clients) c->close();
 }

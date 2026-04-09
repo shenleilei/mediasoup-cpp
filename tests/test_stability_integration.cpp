@@ -5,6 +5,7 @@
 // - Unknown method returns error (not crash)
 #include <gtest/gtest.h>
 #include "TestWsClient.h"
+#include "TestProcessUtils.h"
 #include <signal.h>
 #include <sys/wait.h>
 
@@ -55,7 +56,7 @@ protected:
 
 	void TearDown() override {
 		if (sfuPid_ > 0) {
-			kill(sfuPid_, SIGTERM); for(int w_=0; w_<40 && kill(sfuPid_,0)==0; w_++) usleep(50000); kill(sfuPid_, SIGKILL); usleep(100000);
+			terminateSfuProcess(sfuPid_);
 			for (int i = 0; i < 20; ++i) {
 				usleep(50000);
 				int fd = socket(AF_INET, SOCK_STREAM, 0);

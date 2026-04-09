@@ -1,13 +1,17 @@
 #include "SignalingServer.h"
 #include "Constants.h"
 #include <App.h>
+#include <array>
+#include <filesystem>
 #include <fstream>
+#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 #include <mutex>
 #include <atomic>
 #include <thread>
 #include <random>
+#include <sstream>
 #include <dirent.h>
 #include <sys/stat.h>
 
@@ -36,6 +40,139 @@ static uint64_t initSessionIdBase() {
 }
 static uint64_t g_sessionIdBase [[maybe_unused]] = initSessionIdBase();
 
+namespace {
+namespace fs = std::filesystem;
+
+static constexpr size_t kInlineFileReadBytes = 128 * 1024;
+static constexpr size_t kFileStreamChunkBytes = 64 * 1024;
+
+struct ResolvedFile {
+	fs::path path;
+	uintmax_t size = 0;
+};
+
+bool isPathWithin(const fs::path& base, const fs::path& candidate) {
+	auto baseIt = base.begin();
+	auto candidateIt = candidate.begin();
+	for (; baseIt != base.end() && candidateIt != candidate.end(); ++baseIt, ++candidateIt) {
+		if (*baseIt != *candidateIt) return false;
+	}
+	return baseIt == base.end();
+}
+
+std::optional<ResolvedFile> resolveFileUnderBase(
+	const fs::path& baseDir, std::string_view requestPath, bool& forbidden)
+{
+	forbidden = false;
+	std::error_code ec;
+	fs::path base = fs::weakly_canonical(baseDir, ec);
+	if (ec) return std::nullopt;
+
+	fs::path relative = fs::path(std::string(requestPath)).relative_path();
+	fs::path normalized = (base / relative).lexically_normal();
+	if (!isPathWithin(base, normalized)) {
+		forbidden = true;
+		return std::nullopt;
+	}
+	if (!fs::exists(normalized, ec) || ec) return std::nullopt;
+	if (!fs::is_regular_file(normalized, ec) || ec) return std::nullopt;
+
+	fs::path canonical = fs::weakly_canonical(normalized, ec);
+	if (ec) return std::nullopt;
+	if (!isPathWithin(base, canonical)) {
+		forbidden = true;
+		return std::nullopt;
+	}
+
+	auto size = fs::file_size(canonical, ec);
+	if (ec) return std::nullopt;
+	return ResolvedFile{canonical, size};
+}
+
+std::string contentTypeForPath(std::string_view path) {
+	if (path.find(".webm") != std::string::npos) return "video/webm";
+	if (path.find(".json") != std::string::npos) return "application/json";
+	if (path.find(".html") != std::string::npos) return "text/html";
+	if (path.find(".js") != std::string::npos) return "application/javascript";
+	if (path.find(".css") != std::string::npos) return "text/css";
+	return "application/octet-stream";
+}
+
+template <bool SSL>
+struct FileStreamState {
+	std::ifstream file;
+	std::array<char, kFileStreamChunkBytes> buffer{};
+	uintmax_t totalSize = 0;
+	std::shared_ptr<std::atomic<bool>> aborted = std::make_shared<std::atomic<bool>>(false);
+};
+
+template <bool SSL>
+void streamResolvedFile(uWS::HttpResponse<SSL>* res, std::shared_ptr<FileStreamState<SSL>> state) {
+	while (!state->aborted->load(std::memory_order_relaxed)) {
+		uintmax_t offset = res->getWriteOffset();
+		if (offset >= state->totalSize) return;
+
+		state->file.clear();
+		state->file.seekg(static_cast<std::streamoff>(offset));
+		if (!state->file.good()) {
+			res->close();
+			return;
+		}
+
+		auto remaining = state->totalSize - offset;
+		auto toRead = std::min<uintmax_t>(state->buffer.size(), remaining);
+		state->file.read(state->buffer.data(), static_cast<std::streamsize>(toRead));
+		auto readBytes = state->file.gcount();
+		if (readBytes <= 0) {
+			res->close();
+			return;
+		}
+
+		auto [ok, done] = res->tryEnd(
+			std::string_view(state->buffer.data(), static_cast<size_t>(readBytes)),
+			state->totalSize);
+		if (done) return;
+		if (!ok) {
+			res->onWritable([res, state](int) {
+				streamResolvedFile(res, state);
+				return false;
+			});
+			return;
+		}
+	}
+}
+
+template <bool SSL>
+void serveResolvedFile(uWS::HttpResponse<SSL>* res, const ResolvedFile& resolved, const std::string& contentType) {
+	if (resolved.size <= kInlineFileReadBytes) {
+		std::ifstream file(resolved.path, std::ios::binary);
+		if (!file.is_open()) {
+			res->writeStatus("404 Not Found")->end("Not Found");
+			return;
+		}
+		std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+		res->writeHeader("Content-Type", contentType);
+		res->end(content);
+		return;
+	}
+
+	auto state = std::make_shared<FileStreamState<SSL>>();
+	state->totalSize = resolved.size;
+	state->file.open(resolved.path, std::ios::binary);
+	if (!state->file.is_open()) {
+		res->writeStatus("404 Not Found")->end("Not Found");
+		return;
+	}
+
+	res->writeHeader("Content-Type", contentType);
+	auto aborted = state->aborted;
+	res->onAborted([aborted] {
+		aborted->store(true, std::memory_order_relaxed);
+	});
+	streamResolvedFile(res, state);
+}
+} // namespace
+
 SignalingServer::SignalingServer(int port,
 	std::vector<std::unique_ptr<WorkerThread>>& workerThreads,
 	RoomRegistry* registry,
@@ -45,6 +182,76 @@ SignalingServer::SignalingServer(int port,
 
 SignalingServer::~SignalingServer() {
 	stop();
+}
+
+	SignalingServer::RuntimeSnapshot SignalingServer::collectRuntimeSnapshot() const {
+		RuntimeSnapshot snapshot;
+		snapshot.registryEnabled = (registry_ != nullptr);
+		if (registry_) snapshot.knownNodes = registry_->knownNodeCount();
+		snapshot.startupSucceeded = startupSucceeded_.load(std::memory_order_relaxed);
+	snapshot.shutdownRequested = g_shutdown.load(std::memory_order_relaxed);
+	snapshot.staleRequestDrops = staleRequestDrops_.load(std::memory_order_relaxed);
+	snapshot.rejectedClientStats = rejectedClientStats_.load(std::memory_order_relaxed);
+
+	for (auto& wt : workerThreads_) {
+		auto workerCount = wt->workerCount();
+		snapshot.totalRooms += wt->roomCount();
+		snapshot.totalWorkers += workerCount;
+		snapshot.totalMaxRooms += wt->maxRoomsCapacity();
+		if (workerCount > 0) snapshot.availableWorkerThreads++;
+		snapshot.workerQueues.push_back({
+			{"threadId", wt->id()},
+			{"roomCount", wt->roomCount()},
+			{"workerCount", workerCount},
+			{"queueDepth", wt->queueDepth()},
+			{"queuePeakDepth", wt->queuePeakDepth()},
+			{"avgTaskWaitUs", wt->avgTaskWaitUs()}
+		});
+	}
+
+	snapshot.dispatchRooms = roomDispatch_.size();
+	for (auto& [roomId, wt] : roomDispatch_) {
+		snapshot.roomOwnership[roomId] = wt ? wt->id() : -1;
+	}
+
+	return snapshot;
+}
+
+bool SignalingServer::isHealthy(const RuntimeSnapshot& snapshot) const {
+	return snapshot.startupSucceeded &&
+		!snapshot.shutdownRequested &&
+		snapshot.totalWorkers > 0 &&
+		snapshot.availableWorkerThreads > 0;
+}
+
+std::string SignalingServer::buildPrometheusMetrics(const RuntimeSnapshot& snapshot) const {
+	std::ostringstream out;
+	auto writeMetric = [&out](const char* name, const char* help, double value) {
+		out << "# HELP " << name << ' ' << help << "\n";
+		out << "# TYPE " << name << " gauge\n";
+		out << name << ' ' << value << "\n";
+	};
+	auto writeCounter = [&out](const char* name, const char* help, double value) {
+		out << "# HELP " << name << ' ' << help << "\n";
+		out << "# TYPE " << name << " counter\n";
+		out << name << ' ' << value << "\n";
+	};
+
+	writeMetric("mediasoup_sfu_up", "Whether the signaling server finished startup successfully", snapshot.startupSucceeded ? 1 : 0);
+	writeMetric("mediasoup_sfu_healthy", "Whether the signaling server currently has capacity to serve traffic", isHealthy(snapshot) ? 1 : 0);
+	writeMetric("mediasoup_sfu_shutdown_requested", "Whether shutdown has been requested", snapshot.shutdownRequested ? 1 : 0);
+	writeMetric("mediasoup_sfu_registry_enabled", "Whether Redis-backed registry is enabled", snapshot.registryEnabled ? 1 : 0);
+	writeMetric("mediasoup_sfu_workers", "Total mediasoup worker processes currently attached", static_cast<double>(snapshot.totalWorkers));
+	writeMetric("mediasoup_sfu_worker_threads", "Configured worker thread count", static_cast<double>(workerThreads_.size()));
+	writeMetric("mediasoup_sfu_available_worker_threads", "Worker threads that still have at least one worker", static_cast<double>(snapshot.availableWorkerThreads));
+	writeMetric("mediasoup_sfu_known_nodes", "Registry nodes currently visible in local cache", static_cast<double>(snapshot.knownNodes));
+	writeMetric("mediasoup_sfu_has_available_workers", "Whether at least one worker is available", snapshot.totalWorkers > 0 ? 1 : 0);
+	writeMetric("mediasoup_sfu_rooms", "Current room count on this node", static_cast<double>(snapshot.totalRooms));
+	writeMetric("mediasoup_sfu_max_rooms", "Current total room capacity on this node", static_cast<double>(snapshot.totalMaxRooms));
+	writeMetric("mediasoup_sfu_dispatch_rooms", "Rooms tracked in the dispatch table", static_cast<double>(snapshot.dispatchRooms));
+	writeCounter("mediasoup_sfu_stale_request_drops_total", "Dropped stale requests", static_cast<double>(snapshot.staleRequestDrops));
+	writeCounter("mediasoup_sfu_rejected_client_stats_total", "Rejected clientStats requests", static_cast<double>(snapshot.rejectedClientStats));
+	return out.str();
 }
 
 WorkerThread* SignalingServer::pickLeastLoadedWorkerThread() const {
@@ -135,7 +342,17 @@ void SignalingServer::enqueueRegistryTask(std::function<void()> task) {
 	registryTaskCv_.notify_one();
 }
 
-void SignalingServer::run() {
+bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
+	bool startupNotified = false;
+	startupSucceeded_.store(false, std::memory_order_relaxed);
+	auto notifyStartup = [&](bool ok) {
+		if (!startupNotified) {
+			startupNotified = true;
+			startupSucceeded_.store(ok, std::memory_order_relaxed);
+			if (startupResult) startupResult(ok);
+		}
+	};
+
 	running_ = true;
 	startRegistryWorker();
 
@@ -205,6 +422,9 @@ void SignalingServer::run() {
 		wt->setRegistryTask([this](std::function<void()> task) {
 			enqueueRegistryTask(std::move(task));
 		});
+		wt->setTaskPoster([wtRaw](std::function<void()> task) {
+			wtRaw->post(std::move(task));
+		});
 
 		// Start the WorkerThread event loop
 		wt->start();
@@ -222,7 +442,10 @@ void SignalingServer::run() {
 	}
 	if (!anyWorkers) {
 		spdlog::error("No mediasoup workers available, refusing to listen");
-		return;
+		notifyStartup(false);
+		running_ = false;
+		stopRegistryWorker();
+		return false;
 	}
 
 	// Stats broadcast timer — dispatches to all WorkerThreads
@@ -231,6 +454,7 @@ void SignalingServer::run() {
 	// Redis heartbeat timer — runs in main thread (RoomRegistry is thread-safe)
 	struct us_timer_t* redisTimer = nullptr;
 
+	bool listenSucceeded = false;
 	uWS::App().ws<PerSocketData>("/ws", {
 		.compression = uWS::DISABLED,
 		.maxPayloadLength = kWsMaxPayloadBytes,
@@ -606,42 +830,54 @@ void SignalingServer::run() {
 		});
 
 	}).get("/api/node-load", [this](auto* res, auto*) {
-		// Aggregate load from all WorkerThreads
-		size_t totalRooms = 0;
-		size_t totalWorkers = 0;
-		size_t totalMaxRooms = 0;
-		json workerQueues = json::array();
-		for (auto& wt : workerThreads_) {
-			totalRooms += wt->roomCount();
-			totalWorkers += wt->workerCount();
-			totalMaxRooms += wt->maxRoomsCapacity();
-			workerQueues.push_back({
-				{"threadId", wt->id()},
-				{"roomCount", wt->roomCount()},
-				{"workerCount", wt->workerCount()},
-				{"queueDepth", wt->queueDepth()},
-				{"queuePeakDepth", wt->queuePeakDepth()},
-				{"avgTaskWaitUs", wt->avgTaskWaitUs()}
-			});
-		}
-		json roomOwnership = json::object();
-		for (auto& [roomId, wt] : roomDispatch_) {
-			roomOwnership[roomId] = wt ? wt->id() : -1;
-		}
-		json load = {
-			{"rooms", totalRooms},
-			{"maxRooms", totalMaxRooms},
-			{"workers", totalWorkers},
-			{"workerThreads", workerThreads_.size()},
-			{"dispatchRooms", roomDispatch_.size()},
-			{"staleRequestDrops", staleRequestDrops_.load(std::memory_order_relaxed)},
-			{"rejectedClientStats", rejectedClientStats_.load(std::memory_order_relaxed)},
-			{"workerQueueStats", workerQueues},
-			{"roomOwnership", roomOwnership}
+		auto snapshot = collectRuntimeSnapshot();
+			json load = {
+				{"rooms", snapshot.totalRooms},
+				{"maxRooms", snapshot.totalMaxRooms},
+				{"workers", snapshot.totalWorkers},
+				{"workerThreads", workerThreads_.size()},
+				{"availableWorkerThreads", snapshot.availableWorkerThreads},
+				{"knownNodes", snapshot.knownNodes},
+				{"registryEnabled", snapshot.registryEnabled},
+				{"startupSucceeded", snapshot.startupSucceeded},
+				{"shutdownRequested", snapshot.shutdownRequested},
+			{"healthy", isHealthy(snapshot)},
+			{"dispatchRooms", snapshot.dispatchRooms},
+			{"staleRequestDrops", snapshot.staleRequestDrops},
+			{"rejectedClientStats", snapshot.rejectedClientStats},
+			{"workerQueueStats", snapshot.workerQueues},
+			{"roomOwnership", snapshot.roomOwnership}
 		};
 		res->writeHeader("Content-Type", "application/json")
 			->writeHeader("Access-Control-Allow-Origin", "*")
 			->end(load.dump());
+
+	}).get("/healthz", [this](auto* res, auto*) {
+		auto snapshot = collectRuntimeSnapshot();
+		bool healthy = isHealthy(snapshot);
+		json health = {
+			{"ok", healthy},
+			{"startupSucceeded", snapshot.startupSucceeded},
+			{"shutdownRequested", snapshot.shutdownRequested},
+			{"registryEnabled", snapshot.registryEnabled},
+			{"workers", snapshot.totalWorkers},
+			{"workerThreads", workerThreads_.size()},
+			{"availableWorkerThreads", snapshot.availableWorkerThreads},
+			{"rooms", snapshot.totalRooms},
+			{"maxRooms", snapshot.totalMaxRooms}
+		};
+		if (healthy) {
+			res->writeHeader("Content-Type", "application/json")->end(health.dump());
+		} else {
+			res->writeStatus("503 Service Unavailable")
+				->writeHeader("Content-Type", "application/json")
+				->end(health.dump());
+		}
+
+	}).get("/metrics", [this](auto* res, auto*) {
+		auto snapshot = collectRuntimeSnapshot();
+		res->writeHeader("Content-Type", "text/plain; version=0.0.4")
+			->end(buildPrometheusMetrics(snapshot));
 
 	}).get("/api/recordings", [this](auto* res, auto*) {
 		if (recordDir_.empty()) {
@@ -684,37 +920,35 @@ void SignalingServer::run() {
 		closedir(dir);
 		res->writeHeader("Content-Type", "application/json")->end(result.dump());
 
-	}).get("/recordings/*", [this](auto* res, auto* req) {
-		if (recordDir_.empty()) { res->writeStatus("404 Not Found")->end("Not Found"); return; }
-		std::string url(req->getUrl());
-		std::string relPath = url.substr(12);
-		if (relPath.find("..") != std::string::npos) {
-			res->writeStatus("403 Forbidden")->end("Forbidden"); return;
-		}
-		std::string fullPath = recordDir_ + "/" + relPath;
-		std::ifstream file(fullPath, std::ios::binary);
-		if (!file.is_open()) { res->writeStatus("404 Not Found")->end("Not Found"); return; }
-		std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-		std::string ct = "application/octet-stream";
-		if (relPath.find(".webm") != std::string::npos) ct = "video/webm";
-		else if (relPath.find(".json") != std::string::npos) ct = "application/json";
-		res->writeHeader("Content-Type", ct)->end(content);
+		}).get("/recordings/*", [this](auto* res, auto* req) {
+			if (recordDir_.empty()) { res->writeStatus("404 Not Found")->end("Not Found"); return; }
+			std::string url(req->getUrl());
+			std::string relPath = url.substr(12);
+			bool forbidden = false;
+			auto resolved = resolveFileUnderBase(recordDir_, relPath, forbidden);
+			if (!resolved) {
+				if (forbidden) res->writeStatus("403 Forbidden")->end("Forbidden");
+				else res->writeStatus("404 Not Found")->end("Not Found");
+				return;
+			}
+			serveResolvedFile(res, *resolved, contentTypeForPath(relPath));
 
-	}).get("/*", [](auto* res, auto* req) {
-		std::string url(req->getUrl());
-		if (url == "/") url = "/index.html";
-		std::string path = "public" + url;
-		std::ifstream file(path, std::ios::binary);
-		if (!file.is_open()) { res->writeStatus("404 Not Found")->end("Not Found"); return; }
-		std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-		std::string ct = "text/plain";
-		if (url.find(".html") != std::string::npos) ct = "text/html";
-		else if (url.find(".js") != std::string::npos) ct = "application/javascript";
-		else if (url.find(".css") != std::string::npos) ct = "text/css";
-		res->writeHeader("Content-Type", ct)->end(content);
+		}).get("/*", [](auto* res, auto* req) {
+			std::string url(req->getUrl());
+			if (url == "/") url = "/index.html";
+			bool forbidden = false;
+			auto resolved = resolveFileUnderBase("public", url, forbidden);
+			if (!resolved) {
+				if (forbidden) res->writeStatus("403 Forbidden")->end("Forbidden");
+				else res->writeStatus("404 Not Found")->end("Not Found");
+				return;
+			}
+			serveResolvedFile(res, *resolved, contentTypeForPath(url));
 
-	}).listen(port_, [this, &statsTimer, &redisTimer](auto* listenSocket) {
+		}).listen(port_, [this, &statsTimer, &redisTimer, &listenSucceeded, &notifyStartup](auto* listenSocket) {
 		if (listenSocket) {
+			listenSucceeded = true;
+			notifyStartup(true);
 			spdlog::info("SignalingServer listening on port {}", port_);
 			auto* loop = uWS::Loop::get();
 
@@ -784,13 +1018,22 @@ void SignalingServer::run() {
 				}
 			}, kShutdownPollIntervalMs, kShutdownPollIntervalMs);
 		} else {
+			notifyStartup(false);
 			spdlog::error("SignalingServer failed to listen on port {}", port_);
 		}
 	}).run();
+
+	running_ = false;
+	if (!listenSucceeded) {
+		stopRegistryWorker();
+		return false;
+	}
+	return true;
 }
 
 void SignalingServer::stop() {
 	running_ = false;
+	startupSucceeded_.store(false, std::memory_order_relaxed);
 	stopRegistryWorker();
 	// WorkerThreads are stopped by main.cpp
 }

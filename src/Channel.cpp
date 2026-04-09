@@ -96,6 +96,7 @@ void Channel::notify(
 	std::vector<uint8_t> sendBuf;
 	{
 		std::lock_guard<std::mutex> lock(builderMutex_);
+		builder_.Clear();
 
 		auto handlerIdOff = builder_.CreateString(handlerId);
 		auto notifOff = FBS::Notification::CreateNotification(
@@ -127,41 +128,69 @@ Channel::RequestResult Channel::requestWithId(
 	const std::string& handlerId)
 {
 	if (closed_) throw std::runtime_error("Channel closed");
-
-	auto sent = std::make_shared<PendingSent>();
-	std::vector<uint8_t> sendBuf;
+	if (bodyType != FBS::Request::Body::NONE && bodyOffset.o != 0) {
+		throw std::logic_error("prebuilt request bodies are not supported; use requestBuild/requestBuildWait");
+	}
 
 	{
 		std::lock_guard<std::mutex> lock(builderMutex_);
-
-		if (nextId_ < 4294967295u) ++nextId_; else nextId_ = 1;
-		uint32_t id = nextId_;
-
-		auto handlerIdOff = builder_.CreateString(handlerId);
-		auto reqOff = FBS::Request::CreateRequest(
-			builder_, id, method, handlerIdOff, bodyType, bodyOffset);
-		auto msgOff = FBS::Message::CreateMessage(
-			builder_, FBS::Message::Body::Request, reqOff.Union());
-		builder_.FinishSizePrefixed(msgOff);
-
-		auto buf = builder_.GetBufferPointer();
-		auto size = builder_.GetSize();
-
-		if (size > MESSAGE_MAX_LEN) {
-			builder_.Clear();
-			throw std::runtime_error("request too big");
-		}
-
-		sendBuf.assign(buf, buf + size);
 		builder_.Clear();
+		return requestWithIdLocked(method, bodyType, bodyOffset, handlerId);
+	}
+}
 
-		sent->id = id;
-		sent->method = FBS::Request::EnumNameMethod(method);
+Channel::RequestResult Channel::requestBuildWithId(
+	FBS::Request::Method method,
+	FBS::Request::Body bodyType,
+	const BuildRequestBodyFn& build,
+	const std::string& handlerId)
+{
+	if (closed_) throw std::runtime_error("Channel closed");
 
-		{
-			std::lock_guard<std::mutex> slock(sentsMutex_);
-			sents_[id] = sent;
-		}
+	{
+		std::lock_guard<std::mutex> lock(builderMutex_);
+		builder_.Clear();
+		auto bodyOffset = build ? build(builder_) : flatbuffers::Offset<void>(0);
+		return requestWithIdLocked(method, bodyType, bodyOffset, handlerId);
+	}
+}
+
+Channel::RequestResult Channel::requestWithIdLocked(
+	FBS::Request::Method method,
+	FBS::Request::Body bodyType,
+	flatbuffers::Offset<void> bodyOffset,
+	const std::string& handlerId)
+{
+	auto sent = std::make_shared<PendingSent>();
+	std::vector<uint8_t> sendBuf;
+
+	if (nextId_ < 4294967295u) ++nextId_; else nextId_ = 1;
+	uint32_t id = nextId_;
+
+	auto handlerIdOff = builder_.CreateString(handlerId);
+	auto reqOff = FBS::Request::CreateRequest(
+		builder_, id, method, handlerIdOff, bodyType, bodyOffset);
+	auto msgOff = FBS::Message::CreateMessage(
+		builder_, FBS::Message::Body::Request, reqOff.Union());
+	builder_.FinishSizePrefixed(msgOff);
+
+	auto buf = builder_.GetBufferPointer();
+	auto size = builder_.GetSize();
+
+	if (size > MESSAGE_MAX_LEN) {
+		builder_.Clear();
+		throw std::runtime_error("request too big");
+	}
+
+	sendBuf.assign(buf, buf + size);
+	builder_.Clear();
+
+	sent->id = id;
+	sent->method = FBS::Request::EnumNameMethod(method);
+
+	{
+		std::lock_guard<std::mutex> slock(sentsMutex_);
+		sents_[id] = sent;
 	}
 
 	auto future = sent->promise.get_future();
@@ -180,7 +209,21 @@ Channel::OwnedResponse Channel::requestWait(
 	int timeoutMs)
 {
 	auto [fut, reqId] = requestWithId(method, bodyType, bodyOffset, handlerId);
+	return waitForResponse(fut, reqId, timeoutMs);
+}
 
+Channel::OwnedResponse Channel::requestBuildWait(
+	FBS::Request::Method method,
+	FBS::Request::Body bodyType,
+	const BuildRequestBodyFn& build,
+	const std::string& handlerId,
+	int timeoutMs)
+{
+	auto [fut, reqId] = requestBuildWithId(method, bodyType, build, handlerId);
+	return waitForResponse(fut, reqId, timeoutMs);
+}
+
+Channel::OwnedResponse Channel::waitForResponse(std::future<OwnedResponse>& fut, uint32_t reqId, int timeoutMs) {
 	if (threaded_) {
 		// Threaded mode: readThread is pumping the fd, just wait on the future
 		if (fut.wait_for(std::chrono::milliseconds(timeoutMs)) != std::future_status::ready) {

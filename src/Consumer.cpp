@@ -24,21 +24,23 @@ void Consumer::resume() {
 
 void Consumer::setPreferredLayers(uint8_t spatialLayer, uint8_t temporalLayer) {
 	if (closed_) return;
-	auto& builder = channel_->bufferBuilder();
-	auto layersOff = FBS::Consumer::CreateConsumerLayers(builder, spatialLayer, temporalLayer);
-	auto reqOff = FBS::Consumer::CreateSetPreferredLayersRequest(builder, layersOff);
-	channel_->requestWait(FBS::Request::Method::CONSUMER_SET_PREFERRED_LAYERS,
+	channel_->requestBuildWait(FBS::Request::Method::CONSUMER_SET_PREFERRED_LAYERS,
 		FBS::Request::Body::Consumer_SetPreferredLayersRequest,
-		reqOff.Union(), id_);
+		[spatialLayer, temporalLayer](flatbuffers::FlatBufferBuilder& builder) {
+			auto layersOff = FBS::Consumer::CreateConsumerLayers(builder, spatialLayer, temporalLayer);
+			auto reqOff = FBS::Consumer::CreateSetPreferredLayersRequest(builder, layersOff);
+			return reqOff.Union();
+		}, id_);
 }
 
 void Consumer::setPriority(uint8_t priority) {
 	if (closed_) return;
-	auto& builder = channel_->bufferBuilder();
-	auto reqOff = FBS::Consumer::CreateSetPriorityRequest(builder, priority);
-	channel_->requestWait(FBS::Request::Method::CONSUMER_SET_PRIORITY,
+	channel_->requestBuildWait(FBS::Request::Method::CONSUMER_SET_PRIORITY,
 		FBS::Request::Body::Consumer_SetPriorityRequest,
-		reqOff.Union(), id_);
+		[priority](flatbuffers::FlatBufferBuilder& builder) {
+			auto reqOff = FBS::Consumer::CreateSetPriorityRequest(builder, priority);
+			return reqOff.Union();
+		}, id_);
 }
 
 void Consumer::requestKeyFrame() {
@@ -53,14 +55,14 @@ void Consumer::close() {
 
 	channel_->emitter().off(id_);
 
-	auto& builder = channel_->bufferBuilder();
-	auto idOff = builder.CreateString(id_);
-	auto reqOff = FBS::Transport::CreateCloseConsumerRequest(builder, idOff);
-
 	try {
-		channel_->request(FBS::Request::Method::TRANSPORT_CLOSE_CONSUMER,
+		channel_->requestBuild(FBS::Request::Method::TRANSPORT_CLOSE_CONSUMER,
 			FBS::Request::Body::Transport_CloseConsumerRequest,
-			reqOff.Union(), transportId_);
+			[this](flatbuffers::FlatBufferBuilder& builder) {
+				auto idOff = builder.CreateString(id_);
+				auto reqOff = FBS::Transport::CreateCloseConsumerRequest(builder, idOff);
+				return reqOff.Union();
+			}, transportId_);
 	} catch (const std::exception& e) {
 		spdlog::warn("Consumer::close() request failed [id:{}]: {}", id_, e.what());
 	} catch (...) {

@@ -252,16 +252,14 @@ std::shared_ptr<Router> Worker::createRouter(
 	if (closed_) throw std::runtime_error("Worker closed");
 
 	std::string routerId = utils::generateUUIDv4();
-
-	auto& builder = channel_->bufferBuilder();
-	auto routerIdOff = builder.CreateString(routerId);
-	auto reqOff = FBS::Worker::CreateCreateRouterRequest(builder, routerIdOff);
-
-	channel_->requestWait(
+	channel_->requestBuildWait(
 		FBS::Request::Method::WORKER_CREATE_ROUTER,
 		FBS::Request::Body::Worker_CreateRouterRequest,
-		reqOff.Union(),
-		""); // wait for response
+		[routerId](flatbuffers::FlatBufferBuilder& builder) {
+			auto routerIdOff = builder.CreateString(routerId);
+			auto reqOff = FBS::Worker::CreateCreateRouterRequest(builder, routerIdOff);
+			return reqOff.Union();
+		}, ""); // wait for response
 
 	auto router = std::make_shared<Router>(routerId, channel_.get(), mediaCodecs);
 	routers_.insert(router);

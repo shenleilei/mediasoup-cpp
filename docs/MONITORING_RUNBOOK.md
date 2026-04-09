@@ -206,8 +206,16 @@ Grafana 是整个监控栈的可视化层，将 Prometheus 指标和 Loki 日志
 
 ## 9. 本项目适配说明
 
-当前模板默认通过黑盒探活和系统/进程指标提供可观测性，不依赖应用内 `/metrics`。
+当前模板已经接入两类应用层信号：
 
-如果后续在 `mediasoup-sfu` 增加 Prometheus 原生指标，请在
+- `GET /healthz`
+  返回 `200` 表示 SFU 已完成启动且仍有可用 worker；返回 `503` 表示应用已降级。
+- `GET /metrics`
+  暴露 Prometheus 指标，例如：
+  - `mediasoup_sfu_healthy`
+  - `mediasoup_sfu_has_available_workers`
+  - `mediasoup_sfu_workers`
+  - `mediasoup_sfu_rooms`
+
 `deploy/monitoring/prometheus/prometheus.yml`
-中启用 `mediasoup-sfu` scrape job，并将业务指标接入 `Business KPI` 看板。
+默认已启用 `mediasoup-sfu` scrape job 和 `blackbox-sfu-health` 探活。

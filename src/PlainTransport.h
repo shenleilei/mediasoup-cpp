@@ -15,20 +15,20 @@ public:
 
 	const TransportTuple& tuple() const { return tuple_; }
 
-	json connect(const std::string& ip, uint16_t port) {
-		if (closed_) throw std::runtime_error("Transport closed");
+		json connect(const std::string& ip, uint16_t port) {
+			if (closed_) throw std::runtime_error("Transport closed");
 
-		auto& builder = channel_->bufferBuilder();
-		auto reqOff = FBS::PlainTransport::CreateConnectRequest(
-			builder, builder.CreateString(ip),
-			flatbuffers::Optional<uint16_t>(port),
-			flatbuffers::Optional<uint16_t>(), 0);
-
-		auto owned = channel_->requestWait(
-			FBS::Request::Method::PLAINTRANSPORT_CONNECT,
-			FBS::Request::Body::PlainTransport_ConnectRequest,
-			reqOff.Union(), id_);
-		auto* response = owned.response();
+			auto owned = channel_->requestBuildWait(
+				FBS::Request::Method::PLAINTRANSPORT_CONNECT,
+				FBS::Request::Body::PlainTransport_ConnectRequest,
+				[ip, port](flatbuffers::FlatBufferBuilder& builder) {
+					auto reqOff = FBS::PlainTransport::CreateConnectRequest(
+						builder, builder.CreateString(ip),
+						flatbuffers::Optional<uint16_t>(port),
+						flatbuffers::Optional<uint16_t>(), 0);
+					return reqOff.Union();
+				}, id_);
+			auto* response = owned.response();
 
 		if (response && response->body_type() == FBS::Response::Body::PlainTransport_ConnectResponse) {
 			auto cr = response->body_as_PlainTransport_ConnectResponse();

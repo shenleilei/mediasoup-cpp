@@ -10,10 +10,10 @@
 #include "Constants.h"
 #include "Logger.h"
 #include <nlohmann/json.hpp>
+#include <deque>
 #include <functional>
 #include <string>
 #include <memory>
-#include <mutex>
 #include <unordered_map>
 
 namespace mediasoup {
@@ -22,12 +22,14 @@ using json = nlohmann::json;
 
 class RoomService {
 public:
+	// All methods are expected to run on a single WorkerThread event loop.
 	// NotifyFn(roomId, peerId, msg)
 	using NotifyFn = std::function<void(const std::string&, const std::string&, const json&)>;
 	using BroadcastFn = std::function<void(const std::string&, const std::string&, const json&)>;
 	// RoomLifecycleFn(roomId, created): created=true when room is created, false when destroyed.
 	using RoomLifecycleFn = std::function<void(const std::string&, bool)>;
 	using RegistryTaskFn = std::function<void(std::function<void()>)>;
+	using TaskPosterFn = std::function<void(std::function<void()>)>;
 
 	RoomService(RoomManager& roomManager, RoomRegistry* registry,
 		const std::string& recordDir = "");
@@ -36,6 +38,7 @@ public:
 	void setBroadcast(BroadcastFn fn) { broadcast_ = std::move(fn); }
 	void setRoomLifecycle(RoomLifecycleFn fn) { roomLifecycle_ = std::move(fn); }
 	void setRegistryTask(RegistryTaskFn fn) { registryTask_ = std::move(fn); }
+	void setTaskPoster(TaskPosterFn fn) { taskPoster_ = std::move(fn); }
 
 	void postRegistryTask(std::function<void()> task) {
 		if (registryTask_) registryTask_(std::move(task));
@@ -88,6 +91,8 @@ private:
 	void autoRecord(const std::string& roomId, const std::string& peerId,
 		std::shared_ptr<Room> room, std::shared_ptr<Producer> producer);
 	void cleanupRoomResources(const std::string& roomId);
+	void broadcastStatsForRoom(const std::string& roomId);
+	void continueBroadcastStats();
 
 	RoomManager& roomManager_;
 	RoomRegistry* registry_;
@@ -96,14 +101,14 @@ private:
 	BroadcastFn broadcast_;
 	RoomLifecycleFn roomLifecycle_;
 	RegistryTaskFn registryTask_;
+	TaskPosterFn taskPoster_;
 	std::shared_ptr<spdlog::logger> logger_;
 
-	std::mutex recorderMutex_;
 	std::unordered_map<std::string, std::shared_ptr<PeerRecorder>> recorders_;
 	std::unordered_map<std::string, std::shared_ptr<PlainTransport>> recorderTransports_;
-
-	std::mutex clientStatsMutex_;
 	std::unordered_map<std::string, json> clientStats_;
+	std::deque<std::string> pendingStatsRooms_;
+	bool statsBroadcastActive_ = false;
 };
 
 } // namespace mediasoup
