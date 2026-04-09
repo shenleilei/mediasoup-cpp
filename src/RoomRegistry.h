@@ -55,7 +55,7 @@ public:
 		if (!ensureConnected()) return;
 		std::string val = buildNodeValue(rooms, maxRooms);
 		auto* reply = (redisReply*)redisCommand(ctx_, "SET %s %s EX %d",
-			("node:" + nodeId_).c_str(), val.c_str(), nodeTTL_);
+			(std::string(kKeyPrefixNode) + nodeId_).c_str(), val.c_str(), nodeTTL_);
 		if (reply) freeReplyObject(reply);
 		else handleDisconnect();
 		// Update local cache for self
@@ -76,7 +76,7 @@ public:
 		if (!ensureConnected()) return;
 		for (auto& roomId : roomIds) {
 			auto* reply = (redisReply*)redisCommand(ctx_, "EXPIRE %s %d",
-				("room:" + roomId).c_str(), roomTTL_);
+				(std::string(kKeyPrefixRoom) + roomId).c_str(), roomTTL_);
 			if (reply) freeReplyObject(reply);
 			else { handleDisconnect(); return; }
 		}
@@ -100,7 +100,7 @@ public:
 		{
 			std::lock_guard<std::mutex> lock(cmdMutex_);
 			if (ensureConnected()) {
-				auto* reply = (redisReply*)redisCommand(ctx_, "GET %s", ("room:" + roomId).c_str());
+				auto* reply = (redisReply*)redisCommand(ctx_, "GET %s", (std::string(kKeyPrefixRoom) + roomId).c_str());
 				if (reply && reply->type == REDIS_REPLY_STRING) {
 					std::string ownerNodeId = reply->str;
 					freeReplyObject(reply);
@@ -113,7 +113,7 @@ public:
 					}
 					// Cache miss for node — fall back to Redis GET
 					if (addr.empty()) {
-						auto* nr = (redisReply*)redisCommand(ctx_, "GET %s", ("node:" + ownerNodeId).c_str());
+						auto* nr = (redisReply*)redisCommand(ctx_, "GET %s", (std::string(kKeyPrefixNode) + ownerNodeId).c_str());
 						if (nr && nr->type == REDIS_REPLY_STRING) {
 							auto info = parseNodeValue(nr->str);
 							addr = info.address;
@@ -179,8 +179,8 @@ public:
 			return 'addr:' .. node
 		)LUA";
 
-		std::string roomKey = "room:" + roomId;
-		std::string nodePrefix = "node:";
+		std::string roomKey = std::string(kKeyPrefixRoom) + roomId;
+		std::string nodePrefix = kKeyPrefixNode;
 		std::string ttlStr = std::to_string(roomTTL_);
 
 		auto* reply = (redisReply*)redisCommand(ctx_,
@@ -245,7 +245,7 @@ public:
 		std::lock_guard<std::mutex> lock(cmdMutex_);
 		if (!ensureConnected()) return;
 		auto* reply = (redisReply*)redisCommand(ctx_, "EXPIRE %s %d",
-			("room:" + roomId).c_str(), roomTTL_);
+			(std::string(kKeyPrefixRoom) + roomId).c_str(), roomTTL_);
 		if (reply) freeReplyObject(reply);
 		else handleDisconnect();
 	}
@@ -257,7 +257,7 @@ public:
 		}
 		std::lock_guard<std::mutex> lock(cmdMutex_);
 		if (!ensureConnected()) return;
-		auto* reply = (redisReply*)redisCommand(ctx_, "DEL %s", ("room:" + roomId).c_str());
+		auto* reply = (redisReply*)redisCommand(ctx_, "DEL %s", (std::string(kKeyPrefixRoom) + roomId).c_str());
 		if (reply) freeReplyObject(reply);
 		else handleDisconnect();
 		publishRoomUpdate(roomId, "");
@@ -273,7 +273,7 @@ public:
 		{
 			std::lock_guard<std::mutex> lock(cmdMutex_);
 			if (ctx_ && !ctx_->err) {
-				auto* reply = (redisReply*)redisCommand(ctx_, "DEL %s", ("node:" + nodeId_).c_str());
+				auto* reply = (redisReply*)redisCommand(ctx_, "DEL %s", (std::string(kKeyPrefixNode) + nodeId_).c_str());
 				if (reply) freeReplyObject(reply);
 				// Publish node removal so other nodes evict from cache
 				std::string msg = nodeId_ + "=";
@@ -350,7 +350,7 @@ private:
 
 	void registerNode() {
 		if (!ctx_) return;
-		std::string key = "node:" + nodeId_;
+		std::string key = std::string(kKeyPrefixNode) + nodeId_;
 		// Try EXPIRE first (preserve existing value). If key doesn't exist, SET with initial value.
 		auto* reply = (redisReply*)redisCommand(ctx_, "EXPIRE %s %d", key.c_str(), nodeTTL_);
 		if (reply && reply->type == REDIS_REPLY_INTEGER && reply->integer == 0) {
@@ -365,8 +365,10 @@ private:
 
 	// ── Pub/Sub ──
 
-	static constexpr const char* kChannelNodes = "sfu:nodes";
-	static constexpr const char* kChannelRooms = "sfu:rooms";
+	static constexpr const char* kChannelNodes = "sfu:ch:nodes";
+	static constexpr const char* kChannelRooms = "sfu:ch:rooms";
+	static constexpr const char* kKeyPrefixRoom = "sfu:room:";
+	static constexpr const char* kKeyPrefixNode = "sfu:node:";
 
 	void publishRoomUpdate(const std::string& roomId, const std::string& ownerAddr) {
 		if (!ctx_) return;
@@ -491,7 +493,7 @@ private:
 
 		// Step 2: pipeline EXISTS — one round-trip (no cacheMutex_)
 		for (auto& nid : nodeIds)
-			redisAppendCommand(ctx_, "EXISTS %s", ("node:" + nid).c_str());
+			redisAppendCommand(ctx_, "EXISTS %s", (std::string(kKeyPrefixNode) + nid).c_str());
 
 		std::vector<std::string> deadNodeIds;
 		for (auto& nid : nodeIds) {
@@ -550,12 +552,12 @@ private:
 	void syncNodesUnlocked() {
 		if (!ensureConnected()) return;
 		std::unordered_map<std::string, NodeInfo> tmpNodes;
-		auto nodeKeys = scanKeys("node:*");
+		auto nodeKeys = scanKeys("sfu:node:*");
 		if (!nodeKeys.empty()) {
 			std::vector<std::string> nids;
 			std::string mget = "MGET";
 			for (auto& key : nodeKeys) {
-				nids.push_back(key.substr(5));
+				nids.push_back(key.substr(9));
 				mget += " " + key;
 			}
 			auto* mr = (redisReply*)redisCommand(ctx_, mget.c_str());
@@ -579,12 +581,12 @@ private:
 
 		// Step 1: fetch all node data via SCAN + MGET (no cacheMutex_)
 		std::unordered_map<std::string, NodeInfo> tmpNodes;
-		auto nodeKeys = scanKeys("node:*");
+		auto nodeKeys = scanKeys("sfu:node:*");
 		if (!nodeKeys.empty()) {
 			std::vector<std::string> nids;
 			std::string mget = "MGET";
 			for (auto& key : nodeKeys) {
-				nids.push_back(key.substr(5));
+				nids.push_back(key.substr(9));
 				mget += " " + key;
 			}
 			auto* mr = (redisReply*)redisCommand(ctx_, mget.c_str());
@@ -598,12 +600,12 @@ private:
 
 		// Step 2: fetch all room data via SCAN + MGET (no cacheMutex_)
 		std::unordered_map<std::string, std::string> tmpRooms;
-		auto roomKeys = scanKeys("room:*");
+		auto roomKeys = scanKeys("sfu:room:*");
 		if (!roomKeys.empty()) {
 			std::vector<std::string> rids;
 			std::string mget = "MGET";
 			for (auto& key : roomKeys) {
-				rids.push_back(key.substr(5));
+				rids.push_back(key.substr(9));
 				mget += " " + key;
 			}
 			auto* mr = (redisReply*)redisCommand(ctx_, mget.c_str());

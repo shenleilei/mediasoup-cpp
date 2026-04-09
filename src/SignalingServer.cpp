@@ -298,6 +298,19 @@ void SignalingServer::run() {
 			if (method == "join") {
 				joinRoomId = data.value("roomId", "default");
 				joinPeerId = data.value("peerId", "");
+				// Validate roomId/peerId: [A-Za-z0-9_-]{1,128}
+				auto isValidId = [](const std::string& s) {
+					if (s.empty() || s.size() > 128) return false;
+					for (char c : s)
+						if (!std::isalnum(c) && c != '_' && c != '-') return false;
+					return true;
+				};
+				if (!isValidId(joinRoomId) || !isValidId(joinPeerId)) {
+					json resp = {{"response", true}, {"id", id}, {"ok", false},
+						{"error", "invalid roomId or peerId (allowed: [A-Za-z0-9_-]{1,128})"}};
+					ws->send(resp.dump(), uWS::OpCode::TEXT);
+					return;
+				}
 				joinDisplayName = data.value("displayName", joinPeerId);
 				joinRtpCaps = data.value("rtpCapabilities", json::object());
 				joinClientIp = data.value("clientIp", "");
