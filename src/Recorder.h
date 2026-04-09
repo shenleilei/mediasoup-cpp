@@ -92,6 +92,10 @@ public:
 		return port_;
 	}
 
+	// TODO(P1): Replace per-peer threads with shared epoll-based RecorderWorker pool.
+	// Current: each PeerRecorder spawns its own recvLoop thread (1 thread per peer).
+	// Target: 1-2 RecorderWorker threads using epoll to multiplex all recorder UDP sockets.
+	// This reduces thread count from N_peers to 2 when recording at scale (100+ peers).
 	bool start() {
 		if (sock_ < 0) return false;
 		if (!initMuxer()) return false;
