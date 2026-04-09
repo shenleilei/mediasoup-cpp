@@ -124,7 +124,6 @@ void SignalingServer::run() {
 
 	// peerId → ws* mapping for notify/broadcast
 	struct WsMap {
-		std::mutex mutex;
 		// Key: "roomId/peerId" — isolates peers across rooms
 		std::unordered_map<std::string, uWS::WebSocket<false, true, PerSocketData>*> peers;
 		static std::string key(const std::string& roomId, const std::string& peerId) {
@@ -143,7 +142,6 @@ void SignalingServer::run() {
 			std::string data = msg.dump();
 			std::string mapKey = WsMap::key(roomId, peerId);
 			loop->defer([wsMap, mapKey, data = std::move(data)] {
-				std::lock_guard<std::mutex> lock(wsMap->mutex);
 				auto it = wsMap->peers.find(mapKey);
 				if (it != wsMap->peers.end())
 					it->second->send(data, uWS::OpCode::TEXT);
@@ -156,7 +154,6 @@ void SignalingServer::run() {
 			std::string data = msg.dump();
 			std::string excludeKey = excludePeerId.empty() ? "" : WsMap::key(roomId, excludePeerId);
 			loop->defer([wsMap, roomId, excludeKey, data = std::move(data)] {
-				std::lock_guard<std::mutex> lock(wsMap->mutex);
 				for (auto& [mapKey, ws] : wsMap->peers) {
 					if (mapKey == excludeKey) continue;
 					auto* sd = ws->getUserData();
@@ -231,13 +228,10 @@ void SignalingServer::run() {
 					return;
 				}
 				bool validSession = false;
-				{
-					std::lock_guard<std::mutex> lock(wsMap->mutex);
-					auto mapKey = WsMap::key(roomId, peerId);
-					auto it = wsMap->peers.find(mapKey);
-					validSession = (it != wsMap->peers.end() && it->second == ws &&
-						it->second->getUserData()->sessionId == sessionId);
-				}
+				auto mapKey = WsMap::key(roomId, peerId);
+				auto it = wsMap->peers.find(mapKey);
+				validSession = (it != wsMap->peers.end() && it->second == ws &&
+					it->second->getUserData()->sessionId == sessionId);
 				if (!validSession) {
 					staleRequestDrops_.fetch_add(1, std::memory_order_relaxed);
 					json resp = {{"response", true}, {"id", id}, {"ok", false},
@@ -295,23 +289,12 @@ void SignalingServer::run() {
 			}
 
 			// Dispatch to the WorkerThread
-			wt->post([this, wt, wsMap, ws, alive, loop, method, id, data,
-				roomId, peerId, sessionId, joinRoomId, joinPeerId, joinDisplayName,
+			wt->post([this, wt, ws, alive, loop, method, id, data,
+				roomId, peerId, joinRoomId, joinPeerId, joinDisplayName,
 				joinRtpCaps, joinClientIp, targetRoomId]
 			{
 				auto* rs = wt->roomService();
 				if (!rs) return;
-
-				// For non-join requests, verify this socket's session is still current.
-				if (method != "join" && !roomId.empty()) {
-					std::lock_guard<std::mutex> lock(wsMap->mutex);
-					auto mapKey = WsMap::key(roomId, peerId);
-					auto it = wsMap->peers.find(mapKey);
-					if (it == wsMap->peers.end() || it->second->getUserData()->sessionId != sessionId) {
-						staleRequestDrops_.fetch_add(1, std::memory_order_relaxed);
-						return; // stale request from replaced connection
-					}
-				}
 
 				RoomService::Result result;
 				try {
@@ -383,14 +366,11 @@ void SignalingServer::run() {
 						sd->peerId = jPeerId;
 						std::string mapKey = WsMap::key(jRoomId, jPeerId);
 						decltype(ws) oldWs = nullptr;
-						{
-							std::lock_guard<std::mutex> lock(wsMap->mutex);
-							sd->sessionId = g_nextSessionId++;
-							auto it = wsMap->peers.find(mapKey);
-							if (it != wsMap->peers.end() && it->second != ws)
-								oldWs = it->second;
-							wsMap->peers[mapKey] = ws;
-						}
+						sd->sessionId = g_nextSessionId++;
+						auto it = wsMap->peers.find(mapKey);
+						if (it != wsMap->peers.end() && it->second != ws)
+							oldWs = it->second;
+						wsMap->peers[mapKey] = ws;
 						assignRoom(jRoomId, wt);
 						spdlog::info("[{} {}] joined (session:{})", jRoomId, jPeerId, sd->sessionId);
 						if (oldWs) oldWs->end(4000, "replaced");
@@ -409,13 +389,10 @@ void SignalingServer::run() {
 				std::string peerId = sd->peerId;
 				std::string mapKey = WsMap::key(roomId, peerId);
 				bool erased = false;
-				{
-					std::lock_guard<std::mutex> lock(wsMap->mutex);
-					auto it = wsMap->peers.find(mapKey);
-					if (it != wsMap->peers.end() && it->second == ws) {
-						wsMap->peers.erase(it);
-						erased = true;
-					}
+				auto it = wsMap->peers.find(mapKey);
+				if (it != wsMap->peers.end() && it->second == ws) {
+					wsMap->peers.erase(it);
+					erased = true;
 				}
 				if (erased && !roomId.empty()) {
 					auto* wt = getWorkerThread(roomId, false);
