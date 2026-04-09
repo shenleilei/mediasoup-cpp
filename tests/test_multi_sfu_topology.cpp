@@ -97,19 +97,19 @@ protected:
 		}
 	}
 
-	// Flush all room:* and node:* keys from Redis to avoid cross-test pollution
+	// Flush all sfu:room:* and sfu:node:* keys from Redis to avoid cross-test pollution
 	void flushTestKeys() {
 		auto* ctx = redisConnect("127.0.0.1", 6379);
 		if (!ctx || ctx->err) { if (ctx) redisFree(ctx); return; }
 		// Delete room keys
-		auto* reply = (redisReply*)redisCommand(ctx, "KEYS room:*");
+		auto* reply = (redisReply*)redisCommand(ctx, "KEYS sfu:room:*");
 		if (reply && reply->type == REDIS_REPLY_ARRAY) {
 			for (size_t i = 0; i < reply->elements; i++)
 				redisCommand(ctx, "DEL %s", reply->element[i]->str);
 		}
 		if (reply) freeReplyObject(reply);
 		// Delete node keys
-		reply = (redisReply*)redisCommand(ctx, "KEYS node:*");
+		reply = (redisReply*)redisCommand(ctx, "KEYS sfu:node:*");
 		if (reply && reply->type == REDIS_REPLY_ARRAY) {
 			for (size_t i = 0; i < reply->elements; i++)
 				redisCommand(ctx, "DEL %s", reply->element[i]->str);
@@ -255,41 +255,39 @@ TEST_F(MultiSfuTopologyTest, NodeCrashRoomTakeover) {
 	killSfu(nodes_[0].pid, nodes_[0].port);
 	nodes_[0].pid = -1;
 
-	// Wait for Redis node:* key to expire (nodeTTL=30s is too long for test).
+	// Wait for Redis sfu:node:* key to expire (nodeTTL=30s is too long for test).
 	// Instead, manually delete the node key to simulate expiry.
 	{
 		auto* ctx = redisConnect("127.0.0.1", 6379);
 		ASSERT_NE(ctx, nullptr);
 		// Find SFU-A's node key and delete it
-		auto* reply = (redisReply*)redisCommand(ctx, "KEYS node:*18770*");
+		auto* reply = (redisReply*)redisCommand(ctx, "KEYS sfu:node:*18770*");
 		if (reply && reply->type == REDIS_REPLY_ARRAY) {
 			for (size_t i = 0; i < reply->elements; i++) {
-				std::string nid = std::string(reply->element[i]->str).substr(5); // strip "node:"
+				std::string nid = std::string(reply->element[i]->str).substr(9); // strip "sfu:node:"
 				redisCommand(ctx, "DEL %s", reply->element[i]->str);
-				// Notify other nodes via pub/sub
 				std::string msg = nid + "=";
-				redisCommand(ctx, "PUBLISH sfu:nodes %s", msg.c_str());
+				redisCommand(ctx, "PUBLISH sfu:ch:nodes %s", msg.c_str());
 			}
 		}
 		if (reply) freeReplyObject(reply);
 		// Also try hostname-based pattern
 		char hostname[256] = {};
 		gethostname(hostname, sizeof(hostname));
-		std::string pattern = std::string("node:") + hostname + ":18770";
+		std::string pattern = std::string("sfu:node:") + hostname + ":18770";
 		std::string nid = std::string(hostname) + ":18770";
 		auto* r2 = (redisReply*)redisCommand(ctx, "DEL %s", pattern.c_str());
 		if (r2) freeReplyObject(r2);
-		// Publish node removal
 		std::string nmsg = nid + "=";
-		redisCommand(ctx, "PUBLISH sfu:nodes %s", nmsg.c_str());
+		redisCommand(ctx, "PUBLISH sfu:ch:nodes %s", nmsg.c_str());
 		// Also delete the room key so SFU-B can take over
-		auto* rk = (redisReply*)redisCommand(ctx, "KEYS room:*");
+		auto* rk = (redisReply*)redisCommand(ctx, "KEYS sfu:room:*");
 		if (rk && rk->type == REDIS_REPLY_ARRAY) {
 			for (size_t i = 0; i < rk->elements; i++) {
-				std::string rid = std::string(rk->element[i]->str).substr(5);
+				std::string rid = std::string(rk->element[i]->str).substr(9); // strip "sfu:room:"
 				redisCommand(ctx, "DEL %s", rk->element[i]->str);
 				std::string rmsg = rid + "=";
-				redisCommand(ctx, "PUBLISH sfu:rooms %s", rmsg.c_str());
+				redisCommand(ctx, "PUBLISH sfu:ch:rooms %s", rmsg.c_str());
 			}
 		}
 		if (rk) freeReplyObject(rk);

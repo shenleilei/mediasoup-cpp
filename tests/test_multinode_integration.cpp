@@ -111,12 +111,12 @@ protected:
 	void flushRedis() {
 		auto* ctx = redisConnect("127.0.0.1", 6379);
 		if (!ctx || ctx->err) { if (ctx) redisFree(ctx); return; }
-		auto* reply = (redisReply*)redisCommand(ctx, "KEYS room:*");
+		auto* reply = (redisReply*)redisCommand(ctx, "KEYS sfu:room:*");
 		if (reply && reply->type == REDIS_REPLY_ARRAY)
 			for (size_t i = 0; i < reply->elements; i++)
 				redisCommand(ctx, "DEL %s", reply->element[i]->str);
 		if (reply) freeReplyObject(reply);
-		reply = (redisReply*)redisCommand(ctx, "KEYS node:*");
+		reply = (redisReply*)redisCommand(ctx, "KEYS sfu:node:*");
 		if (reply && reply->type == REDIS_REPLY_ARRAY)
 			for (size_t i = 0; i < reply->elements; i++)
 				redisCommand(ctx, "DEL %s", reply->element[i]->str);
@@ -334,7 +334,7 @@ TEST_F(MultiNodeResolveTest, RoomTtlRefresh) {
 	// Wait for at least one heartbeat cycle
 	usleep(1500000);
 
-	auto* reply = (redisReply*)redisCommand(ctx, "TTL room:%s", room.c_str());
+	auto* reply = (redisReply*)redisCommand(ctx, "TTL sfu:room:%s", room.c_str());
 	ASSERT_NE(reply, nullptr);
 	ASSERT_EQ(reply->type, REDIS_REPLY_INTEGER);
 	// TTL should be close to kRedisRoomTtlSec (300), not decreasing toward 0

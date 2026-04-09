@@ -448,12 +448,12 @@ protected:
 		{
 			redisContext* ctx = redisConnect("127.0.0.1", 6379);
 			if (ctx && !ctx->err) {
-				auto* r = (redisReply*)redisCommand(ctx, "KEYS room:geo_*");
+				auto* r = (redisReply*)redisCommand(ctx, "KEYS sfu:room:geo_*");
 				if (r && r->type == REDIS_REPLY_ARRAY)
 					for (size_t i = 0; i < r->elements; i++)
 						redisCommand(ctx, "DEL %s", r->element[i]->str);
 				if (r) freeReplyObject(r);
-				r = (redisReply*)redisCommand(ctx, "KEYS node:*");
+				r = (redisReply*)redisCommand(ctx, "KEYS sfu:node:*");
 				if (r && r->type == REDIS_REPLY_ARRAY)
 					for (size_t i = 0; i < r->elements; i++)
 						redisCommand(ctx, "DEL %s", r->element[i]->str);
@@ -610,13 +610,13 @@ protected:
 		{
 			redisContext* ctx = redisConnect("127.0.0.1", 6379);
 			if (ctx && !ctx->err) {
-				auto* r = (redisReply*)redisCommand(ctx, "KEYS room:iso_*");
+				auto* r = (redisReply*)redisCommand(ctx, "KEYS sfu:room:iso_*");
 				if (r && r->type == REDIS_REPLY_ARRAY) {
 					for (size_t i = 0; i < r->elements; i++)
 						redisCommand(ctx, "DEL %s", r->element[i]->str);
 					freeReplyObject(r);
 				}
-				r = (redisReply*)redisCommand(ctx, "KEYS node:*");
+				r = (redisReply*)redisCommand(ctx, "KEYS sfu:node:*");
 				if (r && r->type == REDIS_REPLY_ARRAY) {
 					for (size_t i = 0; i < r->elements; i++)
 						redisCommand(ctx, "DEL %s", r->element[i]->str);
@@ -940,12 +940,12 @@ protected:
 		{
 			redisContext* ctx = redisConnect("127.0.0.1", 6379);
 			if (ctx && !ctx->err) {
-				auto* r = (redisReply*)redisCommand(ctx, "KEYS node:*");
+				auto* r = (redisReply*)redisCommand(ctx, "KEYS sfu:node:*");
 				if (r && r->type == REDIS_REPLY_ARRAY)
 					for (size_t i = 0; i < r->elements; i++)
 						redisCommand(ctx, "DEL %s", r->element[i]->str);
 				if (r) freeReplyObject(r);
-				r = (redisReply*)redisCommand(ctx, "KEYS room:cache_*");
+				r = (redisReply*)redisCommand(ctx, "KEYS sfu:room:cache_*");
 				if (r && r->type == REDIS_REPLY_ARRAY)
 					for (size_t i = 0; i < r->elements; i++)
 						redisCommand(ctx, "DEL %s", r->element[i]->str);
