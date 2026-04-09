@@ -246,10 +246,7 @@ private:
 					fdToWorker_[fd] = worker;
 				}
 
-				// Add to WorkerManager for room creation
-				// WorkerManager::addWorker is not available, so we use createWorker
-				// Actually WorkerManager creates workers itself. We need to add
-				// our pre-created workers. Let me add them directly.
+				// Add pre-created worker to WorkerManager for room creation.
 				workerManager_->addExistingWorker(worker);
 
 				MS_DEBUG(logger_, "WorkerThread {} created worker {} [pid:{}]", id_, i, worker->pid());

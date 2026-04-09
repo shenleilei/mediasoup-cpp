@@ -15,7 +15,7 @@ extern std::atomic<bool> g_shutdown;
 namespace mediasoup {
 
 static constexpr uint64_t kInvalidSessionId = 0;
-static constexpr int kResolveTimeoutMs = 50;
+static constexpr int kResolveTimeoutMs = 150;
 
 struct PerSocketData {
 	std::string peerId;
@@ -648,8 +648,10 @@ void SignalingServer::run() {
 					}
 					std::vector<std::string> allRoomIds;
 					allRoomIds.reserve(s->roomDispatch_.size());
-					for (auto& [rid, _] : s->roomDispatch_)
+					for (auto& [rid, assignedThread] : s->roomDispatch_) {
+						(void)assignedThread;
 						allRoomIds.push_back(rid);
+					}
 					s->enqueueRegistryTask([s, totalRooms, maxRooms, allRoomIds = std::move(allRoomIds)]() mutable {
 						try {
 							s->registry_->heartbeat();

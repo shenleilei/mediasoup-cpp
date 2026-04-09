@@ -176,5 +176,7 @@ TEST(ChannelThreadSafetyFixTest, ProcessAvailableDataRejectedInThreadedMode) {
 	}
 
 	::close(producerPipe[0]);
+	::close(producerPipe[1]);
+	::close(consumerPipe[0]);
 	::close(consumerPipe[1]);
 }

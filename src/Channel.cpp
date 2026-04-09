@@ -11,6 +11,7 @@ namespace mediasoup {
 static constexpr uint32_t MESSAGE_MAX_LEN = 4194308;
 static constexpr size_t RECV_BUFFER_MAX_LEN = 16 * 1024 * 1024;
 static constexpr int kPollTimeoutSliceMs = 100;
+static constexpr size_t kReadChunkSize = 65536;
 
 // Original constructor — threaded mode (backward compat)
 Channel::Channel(int producerFd, int consumerFd, int pid)
@@ -239,7 +240,7 @@ bool Channel::processAvailableData() {
 
 	std::lock_guard<std::mutex> recvLock(recvBufMutex_);
 
-	uint8_t tmp[65536];
+	uint8_t tmp[kReadChunkSize];
 	while (true) {
 		ssize_t n = ::read(consumerFd_, tmp, sizeof(tmp));
 		if (n > 0) {
@@ -300,7 +301,7 @@ bool Channel::processAvailableData() {
 
 void Channel::readLoop() {
 	// Threaded mode: blocking read loop (original behavior)
-	uint8_t tmp[65536];
+	uint8_t tmp[kReadChunkSize];
 
 	while (!closed_) {
 		ssize_t n = ::read(consumerFd_, tmp, sizeof(tmp));
