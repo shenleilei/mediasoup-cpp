@@ -54,6 +54,7 @@ static bool daemonize(const std::string& logFile, const std::string& pidFile) {
 int main(int argc, char* argv[]) {
 	signal(SIGINT, signalHandler);
 	signal(SIGTERM, signalHandler);
+	signal(SIGPIPE, SIG_IGN);
 
 	// Defaults
 	int numWorkers = static_cast<int>(std::thread::hardware_concurrency());
@@ -159,9 +160,8 @@ int main(int argc, char* argv[]) {
 	if (announcedIp.empty()) {
 		auto detectPublicIp = []() -> std::string {
 			const char* cmds[] = {
-				"curl -s --max-time 3 http://ifconfig.me 2>/dev/null",
-				"curl -s --max-time 3 http://api.ipify.org 2>/dev/null",
-				"curl -s --max-time 3 http://icanhazip.com 2>/dev/null",
+				"curl -s --max-time 2 http://ifconfig.me 2>/dev/null",
+				"curl -s --max-time 2 http://api.ipify.org 2>/dev/null",
 				nullptr
 			};
 			for (auto cmd = cmds; *cmd; ++cmd) {
@@ -298,9 +298,12 @@ int main(int argc, char* argv[]) {
 
 	// Graceful shutdown (reached when g_shutdown causes uWS loop to stop)
 	spdlog::info("Shutting down...");
+	// Stop WorkerThreads first — closeAllRooms() enqueues unregisterRoom tasks
 	for (auto& wt : workerThreads) {
 		wt->stop();
 	}
+	// Now stop registry worker — drains remaining unregister tasks
+	server.stopRegistryWorker();
 	if (registry) registry->stop();
 	spdlog::info("Shutdown complete");
 	return 0;

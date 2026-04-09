@@ -77,7 +77,8 @@ void Channel::sendBytes(const uint8_t* data, size_t len) {
 	while (written < len) {
 		ssize_t n = ::write(producerFd_, data + written, len - written);
 		if (n <= 0) {
-			MS_ERROR(logger_, "write failed: {}", strerror(errno));
+			MS_ERROR(logger_, "write to worker pipe failed: {}", strerror(errno));
+			close();
 			return;
 		}
 		written += n;
