@@ -222,6 +222,7 @@ Channel::OwnedResponse Channel::requestWait(
 		struct pollfd pfd{};
 		pfd.fd = consumerFd_;
 		pfd.events = POLLIN;
+		// Slice poll wait to keep request timeout checks responsive.
 		int waitMs = std::max(0, std::min<int>(static_cast<int>(remaining.count()), kPollTimeoutSliceMs));
 		::poll(&pfd, 1, waitMs);
 	}

@@ -14,6 +14,8 @@ namespace mediasoup {
 
 static const char* MEDIASOUP_VERSION = "3.14.0";
 static constexpr int kTerminateGraceMs = 500;
+static constexpr int kWorkerDeathReapTimeoutMs = 100;
+static constexpr int kWaitTimeoutStatusSentinel = std::numeric_limits<int>::min();
 
 namespace {
 int waitChildWithTimeout(pid_t pid, int timeoutMs)
@@ -27,7 +29,7 @@ int waitChildWithTimeout(pid_t pid, int timeoutMs)
 		if (r < 0 && errno == ECHILD) return status;
 		std::this_thread::sleep_for(std::chrono::milliseconds(10));
 	}
-	return std::numeric_limits<int>::min();
+	return kWaitTimeoutStatusSentinel;
 }
 } // namespace
 
@@ -205,7 +207,7 @@ void Worker::close() {
 	// In non-threaded mode, wait/reap child to avoid zombie
 	if (!threaded_ && pid_ > 0) {
 		int status = waitChildWithTimeout(pid_, kTerminateGraceMs);
-		if (status == std::numeric_limits<int>::min()) {
+		if (status == kWaitTimeoutStatusSentinel) {
 			::kill(pid_, SIGKILL);
 			(void)::waitpid(pid_, &status, 0);
 		}
@@ -240,8 +242,8 @@ bool Worker::processChannelData() {
 void Worker::handleWorkerDeath() {
 	if (closed_) return;
 
-	int status = waitChildWithTimeout(pid_, 100);
-	if (status == std::numeric_limits<int>::min()) {
+	int status = waitChildWithTimeout(pid_, kWorkerDeathReapTimeoutMs);
+	if (status == kWaitTimeoutStatusSentinel) {
 		status = 0;
 	}
 	workerDied("worker process exited with status " + std::to_string(status));

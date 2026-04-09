@@ -220,6 +220,7 @@ public:
 	}
 
 	size_t maxRoomsCapacity() const {
+		// 0 means unlimited capacity when maxRoutersPerWorker is unset.
 		if (maxRoutersPerWorker_ == 0) return 0;
 		return workerCount() * maxRoutersPerWorker_;
 	}
