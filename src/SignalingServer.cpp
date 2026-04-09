@@ -6,7 +6,6 @@
 #include <mutex>
 #include <atomic>
 #include <thread>
-#include <future>
 #include <dirent.h>
 #include <sys/stat.h>
 
@@ -15,7 +14,6 @@ extern std::atomic<bool> g_shutdown;
 namespace mediasoup {
 
 static constexpr uint64_t kInvalidSessionId = 0;
-static constexpr int kResolveTimeoutMs = 150;
 
 struct PerSocketData {
 	std::string peerId;
@@ -64,7 +62,6 @@ WorkerThread* SignalingServer::getWorkerThread(const std::string& roomId, bool a
 
 void SignalingServer::assignRoom(const std::string& roomId, WorkerThread* wt) {
 	roomDispatch_[roomId] = wt;
-	std::lock_guard<std::mutex> lock(destroyedRoomsMutex_);
 	destroyedRooms_.erase(roomId);
 }
 
@@ -170,16 +167,12 @@ void SignalingServer::run() {
 		});
 
 		wt->setRoomLifecycle([this, loop, wtRaw](const std::string& roomId, bool created) {
-			if (created) {
-				std::lock_guard<std::mutex> lock(destroyedRoomsMutex_);
-				destroyedRooms_.erase(roomId);
-				return;
-			}
-			{
-				std::lock_guard<std::mutex> lock(destroyedRoomsMutex_);
+			loop->defer([this, roomId, wtRaw, created] {
+				if (created) {
+					destroyedRooms_.erase(roomId);
+					return;
+				}
 				destroyedRooms_.insert(roomId);
-			}
-			loop->defer([this, roomId, wtRaw] {
 				auto it = roomDispatch_.find(roomId);
 				if (it != roomDispatch_.end() && it->second == wtRaw) {
 					roomDispatch_.erase(it);
@@ -288,11 +281,7 @@ void SignalingServer::run() {
 			std::string targetRoomId = (method == "join") ? joinRoomId : roomId;
 			WorkerThread* wt = nullptr;
 			if (method == "join") {
-				bool destroyed = false;
-				{
-					std::lock_guard<std::mutex> lock(destroyedRoomsMutex_);
-					destroyed = (destroyedRooms_.find(targetRoomId) != destroyedRooms_.end());
-				}
+				bool destroyed = (destroyedRooms_.find(targetRoomId) != destroyedRooms_.end());
 				wt = destroyed ? nullptr : getWorkerThread(targetRoomId, false);
 				if (!wt) wt = pickLeastLoadedWorkerThread();
 			} else {
@@ -447,7 +436,7 @@ void SignalingServer::run() {
 			}
 		}
 
-	}).get("/api/resolve", [this](auto* res, auto* req) {
+	}).get("/api/resolve", [this, loop](auto* res, auto* req) {
 		std::string roomId(req->getQuery("roomId"));
 		if (roomId.empty()) {
 			res->writeStatus("400 Bad Request")->writeHeader("Content-Type", "application/json")
@@ -464,41 +453,43 @@ void SignalingServer::run() {
 		}
 		if (clientIp.empty()) clientIp = std::string(res->getRemoteAddressAsText());
 
-		// resolveRoom is thread-safe on RoomRegistry
-		if (registry_) {
-			auto promise = std::make_shared<std::promise<RoomRegistry::ResolveResult>>();
-			auto fut = promise->get_future();
-			enqueueRegistryTask([this, roomId, clientIp, promise]() {
-				try {
-					promise->set_value(registry_->resolveRoom(roomId, clientIp));
-				} catch (...) {
-					promise->set_exception(std::current_exception());
-				}
-			});
+		if (!registry_) {
+			res->writeHeader("Content-Type", "application/json")
+				->writeHeader("Access-Control-Allow-Origin", "*")
+				->end(R"({"wsUrl":"","isNew":true})");
+			return;
+		}
+
+		auto aborted = std::make_shared<std::atomic<bool>>(false);
+		res->onAborted([aborted] {
+			aborted->store(true, std::memory_order_relaxed);
+		});
+
+		enqueueRegistryTask([this, loop, res, aborted, roomId, clientIp] {
 			RoomRegistry::ResolveResult result{"", true};
-			if (fut.wait_for(std::chrono::milliseconds(kResolveTimeoutMs)) == std::future_status::ready) {
-				try {
-					result = fut.get();
-				} catch (const std::exception& e) {
-					spdlog::warn("resolveRoom failed: {}", e.what());
-				} catch (...) {
-					spdlog::warn("resolveRoom failed: unknown error");
-				}
+			try {
+				result = registry_->resolveRoom(roomId, clientIp);
+			} catch (const std::exception& e) {
+				spdlog::warn("resolveRoom failed: {}", e.what());
+			} catch (...) {
+				spdlog::warn("resolveRoom failed: unknown error");
 			}
+
 			json j;
 			if (!result.wsUrl.empty()) {
 				j = {{"wsUrl", result.wsUrl}, {"isNew", result.isNew}};
 			} else {
 				j = {{"wsUrl", ""}, {"isNew", true}};
 			}
-			res->writeHeader("Content-Type", "application/json")
-				->writeHeader("Access-Control-Allow-Origin", "*")
-				->end(j.dump());
-		} else {
-			res->writeHeader("Content-Type", "application/json")
-				->writeHeader("Access-Control-Allow-Origin", "*")
-				->end(R"({"wsUrl":"","isNew":true})");
-		}
+			std::string body = j.dump();
+
+			loop->defer([res, aborted, body = std::move(body)] {
+				if (aborted->load(std::memory_order_relaxed)) return;
+				res->writeHeader("Content-Type", "application/json")
+					->writeHeader("Access-Control-Allow-Origin", "*")
+					->end(body);
+			});
+		});
 
 	}).get("/api/node-load", [this](auto* res, auto*) {
 		// Aggregate load from all WorkerThreads

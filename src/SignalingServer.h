@@ -57,7 +57,6 @@ private:
 
 	// Room → WorkerThread dispatch table (only accessed from main uWS thread, no lock needed)
 	std::unordered_map<std::string, WorkerThread*> roomDispatch_;
-	std::mutex destroyedRoomsMutex_;
 	std::unordered_set<std::string> destroyedRooms_;
 
 	std::mutex registryTaskMutex_;
