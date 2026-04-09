@@ -81,7 +81,7 @@ protected:
 
 	static void killSfu(pid_t pid, int port) {
 		if (pid <= 0) return;
-		kill(pid, SIGTERM); for(int w_=0; w_<40 && waitpid(pid,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(pid, SIGKILL); waitpid(pid, nullptr, 0);
+		kill(pid, SIGTERM); for(int w_=0; w_<40 && kill(pid,0)==0; w_++) usleep(50000); kill(pid, SIGKILL); usleep(100000);
 		for (int i = 0; i < 30; ++i) {
 			usleep(50000);
 			int fd = socket(AF_INET, SOCK_STREAM, 0);

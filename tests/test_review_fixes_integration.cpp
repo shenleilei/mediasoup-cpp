@@ -85,7 +85,7 @@ protected:
 
 	void TearDown() override {
 		if (sfuPid_ > 0) {
-			kill(sfuPid_, SIGTERM); for(int w_=0; w_<40 && waitpid(sfuPid_,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(sfuPid_, SIGKILL); waitpid(sfuPid_, nullptr, 0);
+			kill(sfuPid_, SIGTERM); for(int w_=0; w_<40 && kill(sfuPid_,0)==0; w_++) usleep(50000); kill(sfuPid_, SIGKILL); usleep(100000);
 			for (int i = 0; i < 20; ++i) {
 				usleep(50000);
 				int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -467,7 +467,7 @@ protected:
 
 	static void killAndWaitPort(pid_t pid, int port) {
 		if (pid <= 0) return;
-		kill(pid, SIGTERM); for(int w_=0; w_<40 && waitpid(pid,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(pid, SIGKILL); waitpid(pid, nullptr, 0);
+		kill(pid, SIGTERM); for(int w_=0; w_<40 && kill(pid,0)==0; w_++) usleep(50000); kill(pid, SIGKILL); usleep(100000);
 		for (int i = 0; i < 20; ++i) {
 			usleep(50000);
 			int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -489,7 +489,11 @@ protected:
 
 		// Kill ALL stale test SFU processes to prevent Redis pollution
 		system("pkill -f 'mediasoup-sfu.*--port=140' 2>/dev/null");
-		usleep(1000000);
+		for (int i = 0; i < 40; ++i) {
+			if (system("pgrep -f 'mediasoup-sfu.*--port=140' >/dev/null 2>&1") != 0) break;
+			usleep(50000);
+		}
+		usleep(200000);
 
 		// Clean stale room and node entries from Redis
 		{
@@ -633,7 +637,7 @@ protected:
 
 	static void killAndWaitPort(pid_t pid, int port) {
 		if (pid <= 0) return;
-		kill(pid, SIGTERM); for(int w_=0; w_<40 && waitpid(pid,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(pid, SIGKILL); waitpid(pid, nullptr, 0);
+		kill(pid, SIGTERM); for(int w_=0; w_<40 && kill(pid,0)==0; w_++) usleep(50000); kill(pid, SIGKILL); usleep(100000);
 		for (int i = 0; i < 20; ++i) {
 			usleep(50000);
 			int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -832,7 +836,7 @@ protected:
 
 	void TearDown() override {
 		if (sfuPid_ > 0) {
-			kill(sfuPid_, SIGTERM); for(int w_=0; w_<40 && waitpid(sfuPid_,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(sfuPid_, SIGKILL); waitpid(sfuPid_, nullptr, 0);
+			kill(sfuPid_, SIGTERM); for(int w_=0; w_<40 && kill(sfuPid_,0)==0; w_++) usleep(50000); kill(sfuPid_, SIGKILL); usleep(100000);
 			for (int i = 0; i < 20; ++i) {
 				usleep(50000);
 				int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -952,7 +956,7 @@ protected:
 
 	static void killAndWaitPort(pid_t pid, int port) {
 		if (pid <= 0) return;
-		kill(pid, SIGTERM); for(int w_=0; w_<40 && waitpid(pid,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(pid, SIGKILL); waitpid(pid, nullptr, 0);
+		kill(pid, SIGTERM); for(int w_=0; w_<40 && kill(pid,0)==0; w_++) usleep(50000); kill(pid, SIGKILL); usleep(100000);
 		for (int i = 0; i < 20; ++i) {
 			usleep(50000);
 			int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -1175,7 +1179,7 @@ protected:
 
 	static void killAndWaitPort(pid_t pid, int port) {
 		if (pid <= 0) return;
-		kill(pid, SIGTERM); for(int w_=0; w_<40 && waitpid(pid,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(pid, SIGKILL); waitpid(pid, nullptr, 0);
+		kill(pid, SIGTERM); for(int w_=0; w_<40 && kill(pid,0)==0; w_++) usleep(50000); kill(pid, SIGKILL); usleep(100000);
 		for (int i = 0; i < 20; ++i) {
 			usleep(50000);
 			int fd = socket(AF_INET, SOCK_STREAM, 0);

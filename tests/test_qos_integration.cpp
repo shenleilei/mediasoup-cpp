@@ -54,7 +54,7 @@ protected:
 
 	void TearDown() override {
 		if (sfuPid_ > 0) {
-			kill(sfuPid_, SIGTERM); for(int w_=0; w_<40 && waitpid(sfuPid_,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(sfuPid_, SIGKILL); waitpid(sfuPid_, nullptr, 0);
+			kill(sfuPid_, SIGTERM); for(int w_=0; w_<40 && kill(sfuPid_,0)==0; w_++) usleep(50000); kill(sfuPid_, SIGKILL); usleep(100000);
 			for (int i = 0; i < 20; ++i) {
 				usleep(50000);
 				int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -392,6 +392,7 @@ protected:
 
 	void SetUp() override {
 		// Wait for port to be free (previous fixture may have just torn down)
+		bool portFree = false;
 		for (int i = 0; i < 30; ++i) {
 			int fd = socket(AF_INET, SOCK_STREAM, 0);
 			sockaddr_in addr{};
@@ -400,11 +401,12 @@ protected:
 			addr.sin_addr.s_addr = htonl(INADDR_ANY);
 			int opt = 1;
 			setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-			bool free = (bind(fd, (sockaddr*)&addr, sizeof(addr)) == 0);
+			portFree = (bind(fd, (sockaddr*)&addr, sizeof(addr)) == 0);
 			::close(fd);
-			if (free) break;
+			if (portFree) break;
 			usleep(100000);
 		}
+		ASSERT_TRUE(portFree) << "Port " << SFU_PORT << " still occupied by previous SFU";
 
 		testRoom_ = "qosrec_" + std::to_string(getpid()) + "_" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
@@ -444,7 +446,7 @@ protected:
 
 	void TearDown() override {
 		if (sfuPid_ > 0) {
-			kill(sfuPid_, SIGTERM); for(int w_=0; w_<40 && waitpid(sfuPid_,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(sfuPid_, SIGKILL); waitpid(sfuPid_, nullptr, 0);
+			kill(sfuPid_, SIGTERM); for(int w_=0; w_<40 && kill(sfuPid_,0)==0; w_++) usleep(50000); kill(sfuPid_, SIGKILL); usleep(100000);
 			for (int i = 0; i < 20; ++i) {
 				usleep(50000);
 				int fd = socket(AF_INET, SOCK_STREAM, 0);
