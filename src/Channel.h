@@ -127,8 +127,8 @@ private:
 	std::unordered_map<uint32_t, std::shared_ptr<PendingSent>> sents_;
 	std::mutex sentsMutex_;
 
-	std::vector<uint8_t> recvBuf_;  // Shared receive buffer (for both modes)
-	std::mutex recvBufMutex_;
+	// Non-threaded mode receive buffer (owned by WorkerThread event loop thread).
+	std::vector<uint8_t> recvBuf_;
 	std::thread readThread_;
 	EventEmitter emitter_;
 	std::shared_ptr<spdlog::logger> logger_;

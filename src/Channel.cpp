@@ -238,8 +238,6 @@ bool Channel::processAvailableData() {
 		return false;
 	}
 
-	std::lock_guard<std::mutex> recvLock(recvBufMutex_);
-
 	uint8_t tmp[kReadChunkSize];
 	while (true) {
 		ssize_t n = ::read(consumerFd_, tmp, sizeof(tmp));
@@ -301,6 +299,7 @@ bool Channel::processAvailableData() {
 
 void Channel::readLoop() {
 	// Threaded mode: blocking read loop (original behavior)
+	std::vector<uint8_t> recvBuf;
 	uint8_t tmp[kReadChunkSize];
 
 	while (!closed_) {
@@ -310,43 +309,40 @@ void Channel::readLoop() {
 			break;
 		}
 
-		{
-			std::lock_guard<std::mutex> recvLock(recvBufMutex_);
-			recvBuf_.insert(recvBuf_.end(), tmp, tmp + static_cast<size_t>(n));
-			if (recvBuf_.size() > RECV_BUFFER_MAX_LEN) {
+		recvBuf.insert(recvBuf.end(), tmp, tmp + static_cast<size_t>(n));
+		if (recvBuf.size() > RECV_BUFFER_MAX_LEN) {
+			MS_WARN(logger_,
+				"recv buffer exceeded limit [pid:{} size:{} limit:{}], closing channel",
+				pid_, recvBuf.size(), RECV_BUFFER_MAX_LEN);
+			close();
+			break;
+		}
+
+		size_t offset = 0;
+		while (offset + 4 <= recvBuf.size()) {
+			uint32_t msgLen;
+			std::memcpy(&msgLen, recvBuf.data() + offset, 4);
+			if (msgLen == 0 || msgLen > MESSAGE_MAX_LEN) {
 				MS_WARN(logger_,
-					"recv buffer exceeded limit [pid:{} size:{} limit:{}], closing channel",
-					pid_, recvBuf_.size(), RECV_BUFFER_MAX_LEN);
+					"invalid frame length [pid:{} msgLen:{} max:{}], closing channel",
+					pid_, msgLen, MESSAGE_MAX_LEN);
 				close();
+				offset = recvBuf.size();
 				break;
 			}
+			if (offset + 4 + msgLen > recvBuf.size()) break;
 
-			size_t offset = 0;
-			while (offset + 4 <= recvBuf_.size()) {
-				uint32_t msgLen;
-				std::memcpy(&msgLen, recvBuf_.data() + offset, 4);
-				if (msgLen == 0 || msgLen > MESSAGE_MAX_LEN) {
-					MS_WARN(logger_,
-						"invalid frame length [pid:{} msgLen:{} max:{}], closing channel",
-						pid_, msgLen, MESSAGE_MAX_LEN);
-					close();
-					offset = recvBuf_.size();
-					break;
-				}
-				if (offset + 4 + msgLen > recvBuf_.size()) break;
-
-				if (!processMessage(recvBuf_.data() + offset + 4, msgLen)) {
-					MS_WARN(logger_, "invalid FlatBuffers message [pid:{} len:{}], closing channel", pid_, msgLen);
-					close();
-					offset = recvBuf_.size();
-					break;
-				}
-				offset += 4 + msgLen;
+			if (!processMessage(recvBuf.data() + offset + 4, msgLen)) {
+				MS_WARN(logger_, "invalid FlatBuffers message [pid:{} len:{}], closing channel", pid_, msgLen);
+				close();
+				offset = recvBuf.size();
+				break;
 			}
+			offset += 4 + msgLen;
+		}
 
-			if (offset > 0) {
-				recvBuf_.erase(recvBuf_.begin(), recvBuf_.begin() + static_cast<ptrdiff_t>(offset));
-			}
+		if (offset > 0) {
+			recvBuf.erase(recvBuf.begin(), recvBuf.begin() + static_cast<ptrdiff_t>(offset));
 		}
 	}
 }
