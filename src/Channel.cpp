@@ -10,6 +10,7 @@ namespace mediasoup {
 
 static constexpr uint32_t MESSAGE_MAX_LEN = 4194308;
 static constexpr size_t RECV_BUFFER_MAX_LEN = 16 * 1024 * 1024;
+static constexpr int kPollTimeoutSliceMs = 100;
 
 // Original constructor — threaded mode (backward compat)
 Channel::Channel(int producerFd, int consumerFd, int pid)
@@ -221,7 +222,7 @@ Channel::OwnedResponse Channel::requestWait(
 		struct pollfd pfd{};
 		pfd.fd = consumerFd_;
 		pfd.events = POLLIN;
-		int waitMs = std::max(0, std::min<int>(static_cast<int>(remaining.count()), 100));
+		int waitMs = std::max(0, std::min<int>(static_cast<int>(remaining.count()), kPollTimeoutSliceMs));
 		::poll(&pfd, 1, waitMs);
 	}
 }
@@ -230,6 +231,12 @@ Channel::OwnedResponse Channel::requestWait(
 // Returns true if fd is still open, false on EOF (worker died).
 bool Channel::processAvailableData() {
 	if (closed_ || consumerFd_ < 0) return false;
+	if (threaded_) {
+		MS_WARN(logger_, "processAvailableData called in threaded mode [pid:{}], rejecting", pid_);
+		return false;
+	}
+
+	std::lock_guard<std::mutex> recvLock(recvBufMutex_);
 
 	uint8_t tmp[65536];
 	while (true) {
@@ -301,40 +308,43 @@ void Channel::readLoop() {
 			break;
 		}
 
-		recvBuf_.insert(recvBuf_.end(), tmp, tmp + static_cast<size_t>(n));
-		if (recvBuf_.size() > RECV_BUFFER_MAX_LEN) {
-			MS_WARN(logger_,
-				"recv buffer exceeded limit [pid:{} size:{} limit:{}], closing channel",
-				pid_, recvBuf_.size(), RECV_BUFFER_MAX_LEN);
-			close();
-			break;
-		}
-
-		size_t offset = 0;
-		while (offset + 4 <= recvBuf_.size()) {
-			uint32_t msgLen;
-			std::memcpy(&msgLen, recvBuf_.data() + offset, 4);
-			if (msgLen == 0 || msgLen > MESSAGE_MAX_LEN) {
+		{
+			std::lock_guard<std::mutex> recvLock(recvBufMutex_);
+			recvBuf_.insert(recvBuf_.end(), tmp, tmp + static_cast<size_t>(n));
+			if (recvBuf_.size() > RECV_BUFFER_MAX_LEN) {
 				MS_WARN(logger_,
-					"invalid frame length [pid:{} msgLen:{} max:{}], closing channel",
-					pid_, msgLen, MESSAGE_MAX_LEN);
+					"recv buffer exceeded limit [pid:{} size:{} limit:{}], closing channel",
+					pid_, recvBuf_.size(), RECV_BUFFER_MAX_LEN);
 				close();
-				offset = recvBuf_.size();
 				break;
 			}
-			if (offset + 4 + msgLen > recvBuf_.size()) break;
 
-			if (!processMessage(recvBuf_.data() + offset + 4, msgLen)) {
-				MS_WARN(logger_, "invalid FlatBuffers message [pid:{} len:{}], closing channel", pid_, msgLen);
-				close();
-				offset = recvBuf_.size();
-				break;
+			size_t offset = 0;
+			while (offset + 4 <= recvBuf_.size()) {
+				uint32_t msgLen;
+				std::memcpy(&msgLen, recvBuf_.data() + offset, 4);
+				if (msgLen == 0 || msgLen > MESSAGE_MAX_LEN) {
+					MS_WARN(logger_,
+						"invalid frame length [pid:{} msgLen:{} max:{}], closing channel",
+						pid_, msgLen, MESSAGE_MAX_LEN);
+					close();
+					offset = recvBuf_.size();
+					break;
+				}
+				if (offset + 4 + msgLen > recvBuf_.size()) break;
+
+				if (!processMessage(recvBuf_.data() + offset + 4, msgLen)) {
+					MS_WARN(logger_, "invalid FlatBuffers message [pid:{} len:{}], closing channel", pid_, msgLen);
+					close();
+					offset = recvBuf_.size();
+					break;
+				}
+				offset += 4 + msgLen;
 			}
-			offset += 4 + msgLen;
-		}
 
-		if (offset > 0) {
-			recvBuf_.erase(recvBuf_.begin(), recvBuf_.begin() + static_cast<ptrdiff_t>(offset));
+			if (offset > 0) {
+				recvBuf_.erase(recvBuf_.begin(), recvBuf_.begin() + static_cast<ptrdiff_t>(offset));
+			}
 		}
 	}
 }

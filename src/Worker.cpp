@@ -6,11 +6,30 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <cstring>
+#include <chrono>
+#include <limits>
 #include <nlohmann/json.hpp>
 
 namespace mediasoup {
 
 static const char* MEDIASOUP_VERSION = "3.14.0";
+static constexpr int kTerminateGraceMs = 500;
+
+namespace {
+int waitChildWithTimeout(pid_t pid, int timeoutMs)
+{
+	if (pid <= 0) return 0;
+	int status = 0;
+	auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+	while (std::chrono::steady_clock::now() < deadline) {
+		pid_t r = ::waitpid(pid, &status, WNOHANG);
+		if (r == pid) return status;
+		if (r < 0 && errno == ECHILD) return status;
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
+	return std::numeric_limits<int>::min();
+}
+} // namespace
 
 // Original constructor — threaded mode (backward compat)
 Worker::Worker(const WorkerSettings& settings)
@@ -183,9 +202,13 @@ void Worker::close() {
 	else if (waitThread_.joinable())
 		waitThread_.detach();
 
-	// In non-threaded mode, reap child to avoid zombie
+	// In non-threaded mode, wait/reap child to avoid zombie
 	if (!threaded_ && pid_ > 0) {
-		::waitpid(pid_, nullptr, WNOHANG);
+		int status = waitChildWithTimeout(pid_, kTerminateGraceMs);
+		if (status == std::numeric_limits<int>::min()) {
+			::kill(pid_, SIGKILL);
+			(void)::waitpid(pid_, &status, 0);
+		}
 	}
 
 	emitter_.emit("close");
@@ -217,10 +240,9 @@ bool Worker::processChannelData() {
 void Worker::handleWorkerDeath() {
 	if (closed_) return;
 
-	// Reap the child process
-	int status = 0;
-	if (pid_ > 0) {
-		::waitpid(pid_, &status, WNOHANG);
+	int status = waitChildWithTimeout(pid_, 100);
+	if (status == std::numeric_limits<int>::min()) {
+		status = 0;
 	}
 	workerDied("worker process exited with status " + std::to_string(status));
 }

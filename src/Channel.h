@@ -128,6 +128,7 @@ private:
 	std::mutex sentsMutex_;
 
 	std::vector<uint8_t> recvBuf_;  // Shared receive buffer (for both modes)
+	std::mutex recvBufMutex_;
 	std::thread readThread_;
 	EventEmitter emitter_;
 	std::shared_ptr<spdlog::logger> logger_;

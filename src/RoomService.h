@@ -63,6 +63,7 @@ public:
 
 	void checkRoomHealth();
 	void cleanIdleRooms(int idleSeconds = kIdleRoomTimeoutSec);
+	void closeAllRooms();
 	void cleanOldRecordings(uint64_t maxBytes = kMaxRecordingDirBytes);
 	void setClientStats(const std::string& roomId, const std::string& peerId, const json& stats);
 	json collectPeerStats(const std::string& roomId, const std::string& peerId);
