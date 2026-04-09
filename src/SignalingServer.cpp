@@ -3,6 +3,7 @@
 #include <App.h>
 #include <fstream>
 #include <unordered_map>
+#include <unordered_set>
 #include <mutex>
 #include <atomic>
 #include <thread>
@@ -126,6 +127,8 @@ void SignalingServer::run() {
 	struct WsMap {
 		// Key: "roomId/peerId" — isolates peers across rooms
 		std::unordered_map<std::string, uWS::WebSocket<false, true, PerSocketData>*> peers;
+		// Secondary index: roomId -> sockets in room
+		std::unordered_map<std::string, std::unordered_set<uWS::WebSocket<false, true, PerSocketData>*>> roomPeers;
 		static std::string key(const std::string& roomId, const std::string& peerId) {
 			return roomId + "/" + peerId;
 		}
@@ -154,11 +157,17 @@ void SignalingServer::run() {
 			std::string data = msg.dump();
 			std::string excludeKey = excludePeerId.empty() ? "" : WsMap::key(roomId, excludePeerId);
 			loop->defer([wsMap, roomId, excludeKey, data = std::move(data)] {
-				for (auto& [mapKey, ws] : wsMap->peers) {
-					if (mapKey == excludeKey) continue;
-					auto* sd = ws->getUserData();
-					if (sd->roomId == roomId)
-						ws->send(data, uWS::OpCode::TEXT);
+				uWS::WebSocket<false, true, PerSocketData>* excludeWs = nullptr;
+				if (!excludeKey.empty()) {
+					auto eit = wsMap->peers.find(excludeKey);
+					if (eit != wsMap->peers.end())
+						excludeWs = eit->second;
+				}
+				auto rit = wsMap->roomPeers.find(roomId);
+				if (rit == wsMap->roomPeers.end()) return;
+				for (auto* ws : rit->second) {
+					if (ws == excludeWs) continue;
+					ws->send(data, uWS::OpCode::TEXT);
 				}
 			});
 		});
@@ -371,6 +380,15 @@ void SignalingServer::run() {
 						if (it != wsMap->peers.end() && it->second != ws)
 							oldWs = it->second;
 						wsMap->peers[mapKey] = ws;
+						if (oldWs) {
+							auto oldRoomIt = wsMap->roomPeers.find(jRoomId);
+							if (oldRoomIt != wsMap->roomPeers.end()) {
+								oldRoomIt->second.erase(oldWs);
+								if (oldRoomIt->second.empty())
+									wsMap->roomPeers.erase(oldRoomIt);
+							}
+						}
+						wsMap->roomPeers[jRoomId].insert(ws);
 						assignRoom(jRoomId, wt);
 						spdlog::info("[{} {}] joined (session:{})", jRoomId, jPeerId, sd->sessionId);
 						if (oldWs) oldWs->end(4000, "replaced");
@@ -392,6 +410,12 @@ void SignalingServer::run() {
 				auto it = wsMap->peers.find(mapKey);
 				if (it != wsMap->peers.end() && it->second == ws) {
 					wsMap->peers.erase(it);
+					auto roomIt = wsMap->roomPeers.find(roomId);
+					if (roomIt != wsMap->roomPeers.end()) {
+						roomIt->second.erase(ws);
+						if (roomIt->second.empty())
+							wsMap->roomPeers.erase(roomIt);
+					}
 					erased = true;
 				}
 				if (erased && !roomId.empty()) {
