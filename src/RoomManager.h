@@ -97,7 +97,7 @@ public:
 		std::lock_guard<std::mutex> lock(mutex_);
 		for (auto& [_, p] : peers_) p->close();
 		peers_.clear();
-		router_->close();
+		if (router_) router_->close();
 	}
 
 private:
