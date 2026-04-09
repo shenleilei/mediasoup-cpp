@@ -215,6 +215,16 @@ void SignalingServer::run() {
 		wt->waitReady();
 	}
 
+	// Verify at least one worker is available
+	bool anyWorkers = false;
+	for (auto& wt : workerThreads_) {
+		if (wt->workerCount() > 0) { anyWorkers = true; break; }
+	}
+	if (!anyWorkers) {
+		spdlog::error("No mediasoup workers available, refusing to listen");
+		return;
+	}
+
 	// Stats broadcast timer — dispatches to all WorkerThreads
 	struct us_timer_t* statsTimer = nullptr;
 
@@ -302,7 +312,8 @@ void SignalingServer::run() {
 				auto isValidId = [](const std::string& s) {
 					if (s.empty() || s.size() > 128) return false;
 					for (char c : s)
-						if (!std::isalnum(c) && c != '_' && c != '-') return false;
+						if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+							  (c >= '0' && c <= '9') || c == '_' || c == '-')) return false;
 					return true;
 				};
 				if (!isValidId(joinRoomId) || !isValidId(joinPeerId)) {

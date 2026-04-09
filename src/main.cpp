@@ -196,6 +196,20 @@ int main(int argc, char* argv[]) {
 		gethostname(hostname, sizeof(hostname));
 		nodeId = std::string(hostname) + ":" + std::to_string(signalingPort);
 	}
+	// Validate nodeId: [A-Za-z0-9_\-.:]{1,128}
+	{
+		bool valid = !nodeId.empty() && nodeId.size() <= 128;
+		for (char c : nodeId) {
+			if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+				  (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.' || c == ':')) {
+				valid = false; break;
+			}
+		}
+		if (!valid) {
+			spdlog::error("Invalid nodeId '{}' (allowed: [A-Za-z0-9_-.:]{{1,128}})", nodeId);
+			return 1;
+		}
+	}
 	if (nodeAddress.empty()) {
 		std::string ip = announcedIp.empty() ? listenIp : announcedIp;
 		if (ip == "0.0.0.0") {
