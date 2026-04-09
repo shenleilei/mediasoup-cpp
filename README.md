@@ -28,7 +28,7 @@ The mediasoup-worker C++ binary (media processing) is used as-is, communicating 
 Browser A ──WebSocket──→ SignalingServer (uWS, non-blocking)
                               │ postWork()
                               ▼
-                         Worker Thread (serial task queue)
+                         WorkerThread (epoll event loop + serial task queue)
                               │
                          RoomService (business logic)
                               │
@@ -50,13 +50,14 @@ Browser B ←──SRTP/UDP─────────────────�
 ## Features
 
 - **Room-first design** — auto-subscribe: when a peer produces, all other peers in the room automatically receive the stream
-- **Non-blocking signaling** — all Channel IPC calls run on a dedicated worker thread; the uWS event loop never blocks
+- **Non-blocking signaling** — all Channel IPC calls run on dedicated WorkerThread epoll loops; the uWS event loop never blocks
 - **H264/VP8 recording** — RTP depacketization, frame reassembly, FFmpeg muxer to WebM, with synchronized QoS timeline
 - **QoS monitoring** — real-time stats panel (bitrate, jitter, RTT, packet loss, score) with 3-second refresh, verified against tcpdump
 - **Multi-node routing** — Redis-based room registry with dead-node takeover, automatic redirect, local cache + pub/sub sync
 - **Geo-aware routing** — ip2region IP geolocation, ISP-aware scoring (same ISP > cloud BGP > cross-ISP), country isolation, 339 city coordinates
 - **Redis resilience** — local cache serves requests when Redis is down, pub/sub for real-time sync, graceful degradation to single-node mode
-- **Worker crash recovery** — automatic respawn with rate limiting, client notification within 2 seconds
+- **Worker crash recovery** — automatic respawn with rate limiting (max 3 in 10s), client notification within 2 seconds
+- **Session identity** — sessionId-based stale request rejection, reconnect kicks old connection with "remote login" error
 - **Daemon mode** — fork + setsid, structured logging, PID file, auto public IP detection
 
 ## Quick Start
@@ -108,6 +109,7 @@ Open `http://<server-ip>:3000` in two browser tabs to start a video call.
 |--------|---------|-------------|
 | `--port` | 3000 | Signaling + HTTP port |
 | `--workers` | CPU count | Number of mediasoup-worker processes |
+| `--workerThreads` | auto | Number of WorkerThread event loops |
 | `--listenIp` | 0.0.0.0 | WebRTC listen IP |
 | `--announcedIp` | auto-detect | Public IP for ICE candidates |
 | `--workerBin` | ./mediasoup-worker | Path to worker binary |
@@ -128,22 +130,41 @@ Open `http://<server-ip>:3000` in two browser tabs to start a video call.
 | Thread | Count | Role |
 |--------|-------|------|
 | uWS main | 1 | Event loop: WebSocket, HTTP, timers (never blocks) |
-| Signaling worker | 1 | Serial execution of RoomService methods + Channel IPC |
-| Channel reader | ×N workers | Reads pipe responses/notifications from worker |
-| Worker waiter | ×N workers | waitpid(), respawns on crash |
+| WorkerThread | ×N | epoll event loop: task queue + Channel IPC + health/GC timers |
+| Registry worker | 1 | Serial execution of Redis fire-and-forget tasks (refresh, unregister) |
+| Redis subscriber | 1 | Blocking pub/sub listener, updates local node/room cache |
+| Channel reader | (non-threaded) | Integrated into WorkerThread epoll via `requestWait()` polling |
+| Worker waiter | ×N workers | waitpid(), respawns on crash with rate limiting |
 | Recorder | ×M peers | UDP recv → RTP depacketize → FFmpeg mux |
 
-Typical: 1 worker + 2 recording peers = **5 threads**.
+Typical: 1 WorkerThread + 1 worker + 2 recording peers = **6 threads**.
+
+### Startup Sequence
+
+All modules must be fully initialized before accepting connections:
+
+1. RoomRegistry: Redis connect + `syncAll()` + subscriber thread started
+2. WorkerThreads: `start()` → `createWorkers()` (fork+exec worker processes)
+3. `waitReady()` blocks until all WorkerThreads report workers initialized
+4. `uWS::App().listen()` — only now begins accepting WebSocket/HTTP connections
+
+### Room Dispatch Invariant
+
+**Same room → same WorkerThread, always.** Room-to-thread binding happens atomically in the uWS main thread before dispatching the first join task. Concurrent first-joins for the same room are serialized by this binding. If join fails (redirect/error), the binding is rolled back.
+
+### Session Identity
+
+Each join pre-assigns a `sessionId` (random-based, monotonically increasing). The sessionId is stamped on both the `Peer` object (in WorkerThread) and the `PerSocketData` (in main thread). Non-join requests carry the sessionId captured at dispatch time; the WorkerThread validates it against the peer's current sessionId before executing. Stale requests from replaced connections receive `{"error": "remote login"}`.
 
 ## Data Flow
 
 ### Signaling (e.g. produce request)
 
 ```
-Browser → WS message → uWS main thread (JSON parse, postWork)
-  → Worker thread: RoomService.produce()
+Browser → WS message → uWS main thread (JSON parse, alive check, postWork)
+  → WorkerThread: sessionId validation → RoomService.produce()
     → ORTC negotiation
-    → Channel.RequestWait() → pipe write → worker processes → pipe read
+    → Channel.requestWait() → pipe write → worker processes → poll+read
     → Auto-subscribe: create Consumer for each other peer
     → Auto-record: PlainTransport + PIPE Consumer
   → Loop::defer() → uWS main thread → ws.send(response)
@@ -163,21 +184,25 @@ Browser A ──SRTP/UDP──→ WebRtcTransport → Producer
 
 ## Testing
 
+All tests must be run from the project root directory.
+
 ```bash
-# Unit tests (143 tests)
+# Unit tests (149 tests)
 ./build/mediasoup_tests
 
 # Integration tests (requires built mediasoup-sfu + worker)
 ./build/mediasoup_integration_tests            # 17 tests
-./build/mediasoup_review_fix_tests             # 17 tests (code review fixes + geo routing + cache)
+./build/mediasoup_review_fix_tests             # 19 tests (code review fixes + geo routing + cache)
 ./build/mediasoup_stability_integration_tests  # 10 tests
-./build/mediasoup_qos_integration_tests        # 15 tests
+./build/mediasoup_qos_integration_tests        # 17 tests
 ./build/mediasoup_e2e_tests                    # 3 tests
 ./build/mediasoup_topology_tests               # 6 tests
 
 # Worker load benchmark
 ./build/mediasoup_bench
 ```
+
+Total: **149 unit tests + 72 integration tests = 221 tests**.
 
 ## Operations: Monitoring & Alerting
 
@@ -246,14 +271,15 @@ Network bottleneck on virtio single-queue VMs is kernel softirq, not worker CPU.
 
 ```
 src/
-├── main.cpp              # Entry point, config parsing
+├── main.cpp              # Entry point, config parsing, startup sequence
 ├── Constants.h           # All magic numbers as named constants
-├── SignalingServer.h/cpp # WebSocket + HTTP + worker thread
+├── SignalingServer.h/cpp # WebSocket + HTTP + room dispatch + session management
+├── WorkerThread.h        # epoll event loop: task queue + Channel IPC + worker lifecycle
 ├── RoomService.h/cpp     # Business logic (join/leave/produce/consume/QoS/recording)
 ├── RoomManager.h         # Room/Peer lifecycle, idle GC
-├── RoomRegistry.h        # Redis multi-node routing + local cache + pub/sub
+├── RoomRegistry.h        # Redis multi-node routing + local cache + pub/sub sync
 ├── GeoRouter.h           # IP geolocation (ip2region) + ISP-aware scoring
-├── WorkerManager.h       # Worker pool, load balancing, crash recovery
+├── WorkerManager.h       # Worker pool, load balancing, respawn rate limiting
 ├── Channel.h/cpp         # Pipe IPC (FlatBuffers, request/response/notification)
 ├── Worker.h/cpp          # fork+exec worker process management
 ├── Router.h/cpp          # Router: create transports, manage producers
@@ -262,6 +288,7 @@ src/
 ├── PlainTransport.h      # Plain RTP transport (recording)
 ├── Producer.h/cpp        # Media producer (score tracking, stats)
 ├── Consumer.h/cpp        # Media consumer (score tracking, stats)
+├── Peer.h                # Peer state (transports, producers, consumers, sessionId)
 ├── ortc.h                # ORTC negotiation (codec matching, RTP mapping)
 ├── Recorder.h            # RTP→WebM recording + QoS timeline
 ├── EventEmitter.h        # Lightweight event system
@@ -271,12 +298,17 @@ tests/
 ├── test_room.cpp         # Room/Peer management
 ├── test_stability.cpp    # Crash recovery, EventEmitter cleanup
 ├── test_worker_queue.cpp # Worker thread FIFO, alive token
+├── test_multinode.cpp    # WorkerManager, room dispatch, respawn rate limit
 ├── test_integration.cpp  # Black-box: real SFU + WebSocket clients
+├── test_review_fixes_integration.cpp  # Reconnect, geo routing, cache, session identity
+├── test_stability_integration.cpp     # Close/disconnect resilience
+├── test_multi_sfu_topology.cpp        # Multi-node room affinity, crash takeover
 ├── test_e2e_pubsub.cpp   # Multi-peer publish/subscribe stress
 └── bench_worker_load.cpp # Worker capacity benchmark
 public/
 ├── index.html            # Video call page with QoS monitor panel
-└── playback.html         # Recording playback with QoS timeline
+├── playback.html         # Recording playback with QoS timeline
+└── mediasoup-client.bundle.js  # mediasoup client SDK
 ```
 
 ## Geo-Aware Node Routing
@@ -345,9 +377,9 @@ Geo info auto-detects from the node's public IP if not configured.
              zero Redis)                             zero Redis)
 ```
 
-- **Reads**: local cache (zero Redis round-trips)
+- **Reads**: local cache (zero Redis round-trips, cacheMutex_ never held during I/O)
 - **Writes**: Redis EVAL for atomic room claim + PUBLISH to sync caches
-- **Sync**: subscriber thread + full sync on startup/reconnect
+- **Sync**: KEYS + MGET batch fetch (2 round-trips), subscriber thread for real-time updates
 - **Degradation**: Redis down → local cache continues, new rooms created locally
 
 ## License
