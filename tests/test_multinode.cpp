@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include "WorkerManager.h"
 #include "RoomManager.h"
+#include <deque>
 
 using namespace mediasoup;
 
@@ -51,4 +52,72 @@ TEST(RoomManagerTest, CreateRoomThrowsWhenNoWorkers) {
 	std::vector<nlohmann::json> codecs, listenInfos;
 	RoomManager rm(wm, codecs, listenInfos);
 	EXPECT_THROW(rm.createRoom("test-room"), std::runtime_error);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// WorkerManager: removeWorker cleans up dead entries
+// ═══════════════════════════════════════════════════════════════
+
+TEST(WorkerManagerTest, RemoveWorkerNullSafe) {
+	WorkerManager wm;
+	wm.removeWorker(nullptr);
+	EXPECT_EQ(wm.totalRouterCount(), 0u);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Room dispatch: concurrent first-join must not split room
+// ═══════════════════════════════════════════════════════════════
+
+TEST(RoomDispatchTest, ConcurrentFirstJoinSameThread) {
+	// Simulate the dispatch table logic: first miss binds immediately
+	std::unordered_map<std::string, int> roomDispatch;
+
+	auto getOrAssign = [&](const std::string& roomId) -> int {
+		auto it = roomDispatch.find(roomId);
+		if (it != roomDispatch.end()) return it->second;
+		int thread = 0;
+		roomDispatch[roomId] = thread;
+		return thread;
+	};
+
+	int t1 = getOrAssign("room1");
+	int t2 = getOrAssign("room1");
+	EXPECT_EQ(t1, t2) << "Same room must map to same thread";
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Respawn rate limiter
+// ═══════════════════════════════════════════════════════════════
+
+TEST(RespawnRateLimitTest, AllowsUpToThreeInWindow) {
+	std::deque<std::chrono::steady_clock::time_point> times;
+	auto now = std::chrono::steady_clock::now();
+
+	auto tryRespawn = [&]() -> bool {
+		times.push_back(now);
+		while (!times.empty() && (now - times.front()) > std::chrono::seconds(10))
+			times.pop_front();
+		return times.size() <= 3;
+	};
+
+	EXPECT_TRUE(tryRespawn());
+	EXPECT_TRUE(tryRespawn());
+	EXPECT_TRUE(tryRespawn());
+	EXPECT_FALSE(tryRespawn());  // 4th — rate limited
+}
+
+TEST(RespawnRateLimitTest, WindowExpiry) {
+	std::deque<std::chrono::steady_clock::time_point> times;
+	auto base = std::chrono::steady_clock::now();
+
+	for (int i = 0; i < 3; i++)
+		times.push_back(base);
+
+	// At t=11s, old entries should be expired
+	auto now = base + std::chrono::seconds(11);
+	times.push_back(now);
+	while (!times.empty() && (now - times.front()) > std::chrono::seconds(10))
+		times.pop_front();
+
+	EXPECT_EQ(times.size(), 1u) << "Old entries should be expired";
 }

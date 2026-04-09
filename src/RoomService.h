@@ -27,6 +27,7 @@ public:
 	using BroadcastFn = std::function<void(const std::string&, const std::string&, const json&)>;
 	// RoomLifecycleFn(roomId, created): created=true when room is created, false when destroyed.
 	using RoomLifecycleFn = std::function<void(const std::string&, bool)>;
+	using RegistryTaskFn = std::function<void(std::function<void()>)>;
 
 	RoomService(RoomManager& roomManager, RoomRegistry* registry,
 		const std::string& recordDir = "");
@@ -34,6 +35,12 @@ public:
 	void setNotify(NotifyFn fn) { notify_ = std::move(fn); }
 	void setBroadcast(BroadcastFn fn) { broadcast_ = std::move(fn); }
 	void setRoomLifecycle(RoomLifecycleFn fn) { roomLifecycle_ = std::move(fn); }
+	void setRegistryTask(RegistryTaskFn fn) { registryTask_ = std::move(fn); }
+
+	void postRegistryTask(std::function<void()> task) {
+		if (registryTask_) registryTask_(std::move(task));
+		else { try { task(); } catch (...) {} }
+	}
 
 	struct Result {
 		bool ok = true;
@@ -64,6 +71,8 @@ public:
 	void checkRoomHealth();
 	void cleanIdleRooms(int idleSeconds = kIdleRoomTimeoutSec);
 	void closeAllRooms();
+	bool hasRoom(const std::string& roomId) { return roomManager_.getRoom(roomId) != nullptr; }
+	std::shared_ptr<Room> getRoom(const std::string& roomId) { return roomManager_.getRoom(roomId); }
 	void cleanOldRecordings(uint64_t maxBytes = kMaxRecordingDirBytes);
 	void setClientStats(const std::string& roomId, const std::string& peerId, const json& stats);
 	json collectPeerStats(const std::string& roomId, const std::string& peerId);
@@ -86,6 +95,7 @@ private:
 	NotifyFn notify_;
 	BroadcastFn broadcast_;
 	RoomLifecycleFn roomLifecycle_;
+	RegistryTaskFn registryTask_;
 	std::shared_ptr<spdlog::logger> logger_;
 
 	std::mutex recorderMutex_;

@@ -7,6 +7,7 @@
 #include <mutex>
 #include <atomic>
 #include <thread>
+#include <random>
 #include <dirent.h>
 #include <sys/stat.h>
 
@@ -24,7 +25,16 @@ struct PerSocketData {
 	std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>>(true);
 };
 
-static std::atomic<uint64_t> g_nextSessionId{1}; // Session IDs start at 1.
+static std::atomic<uint64_t> g_nextSessionId{0};
+
+static uint64_t initSessionIdBase() {
+	std::random_device rd;
+	uint64_t base = (static_cast<uint64_t>(rd()) << 32) | rd();
+	base = (base & 0x0000FFFFFFFFFFFF) | 0x0001000000000000; // ensure high bits set, never 0
+	g_nextSessionId.store(base, std::memory_order_relaxed);
+	return base;
+}
+static uint64_t g_sessionIdBase [[maybe_unused]] = initSessionIdBase();
 
 SignalingServer::SignalingServer(int port,
 	std::vector<std::unique_ptr<WorkerThread>>& workerThreads,
@@ -186,8 +196,17 @@ void SignalingServer::run() {
 			});
 		});
 
+		wt->setRegistryTask([this](std::function<void()> task) {
+			enqueueRegistryTask(std::move(task));
+		});
+
 		// Start the WorkerThread event loop
 		wt->start();
+	}
+
+	// Wait for all WorkerThreads to be ready before accepting connections
+	for (auto& wt : workerThreads_) {
+		wt->waitReady();
 	}
 
 	// Stats broadcast timer — dispatches to all WorkerThreads
@@ -215,10 +234,13 @@ void SignalingServer::run() {
 			} catch (...) { return; }
 			if (!req.contains("request") || !req["request"].get<bool>()) return;
 
+			auto* sd = ws->getUserData();
+			// Reject requests from invalidated sockets (replaced by reconnect)
+			if (!sd->alive->load()) return;
+
 			std::string method = req.value("method", "");
 			uint64_t id = req.value("id", 0);
 			json data = req.value("data", json::object());
-			auto* sd = ws->getUserData();
 			std::string roomId = sd->roomId;
 			std::string peerId = sd->peerId;
 			uint64_t sessionId = sd->sessionId;
@@ -280,13 +302,22 @@ void SignalingServer::run() {
 			// Capture alive token to detect if ws was closed before defer runs
 			auto alive = sd->alive;
 
+			// For join, pre-assign sessionId so WorkerThread can set it on the peer
+			uint64_t newSessionId = kInvalidSessionId;
+			if (method == "join") newSessionId = g_nextSessionId++;
+
 			// Determine target WorkerThread
 			std::string targetRoomId = (method == "join") ? joinRoomId : roomId;
 			WorkerThread* wt = nullptr;
 			if (method == "join") {
 				bool destroyed = (destroyedRooms_.find(targetRoomId) != destroyedRooms_.end());
 				wt = destroyed ? nullptr : getWorkerThread(targetRoomId, false);
-				if (!wt) wt = pickLeastLoadedWorkerThread();
+				if (!wt) {
+					wt = pickLeastLoadedWorkerThread();
+					// Atomically bind room to this WorkerThread before dispatching,
+					// so concurrent joins for the same room go to the same thread.
+					if (wt) assignRoom(targetRoomId, wt);
+				}
 			} else {
 				wt = getWorkerThread(targetRoomId, false);
 			}
@@ -298,17 +329,54 @@ void SignalingServer::run() {
 			}
 
 			// Dispatch to the WorkerThread
-			wt->post([this, wt, ws, alive, loop, method, id, data,
+			wt->post([this, wt, wsMap, ws, alive, loop, method, id, data,
 				roomId, peerId, joinRoomId, joinPeerId, joinDisplayName,
-				joinRtpCaps, joinClientIp, targetRoomId]
+				joinRtpCaps, joinClientIp, targetRoomId, sessionId, newSessionId]
 			{
 				auto* rs = wt->roomService();
-				if (!rs) return;
+				if (!rs) {
+					loop->defer([ws, alive, id] {
+						if (!alive->load(std::memory_order_relaxed)) return;
+						json resp = {{"response", true}, {"id", id}, {"ok", false},
+							{"error", "worker not ready"}};
+						ws->send(resp.dump(), uWS::OpCode::TEXT);
+					});
+					return;
+				}
+
+				// For non-join methods, verify the peer's session hasn't been
+				// replaced by a reconnect. This closes the race window where a
+				// stale request was already queued before alive was set to false.
+				if (method != "join" && sessionId != kInvalidSessionId) {
+					auto room = rs->getRoom(roomId);
+					if (room) {
+						auto peer = room->getPeer(peerId);
+						if (peer && peer->sessionId != 0 && peer->sessionId != sessionId) {
+							spdlog::warn("[{} {}] dropping stale {} (session:{} current:{})",
+								roomId, peerId, method, sessionId, peer->sessionId);
+							loop->defer([ws, alive, id] {
+								if (!alive->load()) return;
+								json resp = {{"response", true}, {"id", id}, {"ok", false},
+									{"error", "remote login"}};
+								ws->send(resp.dump(), uWS::OpCode::TEXT);
+							});
+							return;
+						}
+					}
+				}
 
 				RoomService::Result result;
 				try {
 					if (method == "join") {
 						result = rs->join(joinRoomId, joinPeerId, joinDisplayName, joinRtpCaps, joinClientIp);
+						// Stamp the peer with this session's ID for stale-request detection
+						if (result.ok && result.redirect.empty()) {
+							auto room = rs->getRoom(joinRoomId);
+							if (room) {
+								auto peer = room->getPeer(joinPeerId);
+								if (peer) peer->sessionId = newSessionId;
+							}
+						}
 					} else if (method == "createWebRtcTransport") {
 						result = rs->createTransport(roomId, peerId,
 							data.value("producing", false), data.value("consuming", false));
@@ -362,25 +430,37 @@ void SignalingServer::run() {
 				std::string respStr = resp.dump();
 
 				bool joinOk = (method == "join" && result.ok && result.redirect.empty());
+				bool joinFailed = (method == "join" && !joinOk);
 				std::string jRoomId = joinRoomId, jPeerId = joinPeerId;
 
 				// Defer ws->send() back to the uWS event loop thread
 				loop->defer([this, wt, wsMap, ws, alive, respStr = std::move(respStr),
-					joinOk, jRoomId = std::move(jRoomId), jPeerId = std::move(jPeerId)]
+					joinOk, joinFailed, newSessionId,
+					jRoomId = std::move(jRoomId), jPeerId = std::move(jPeerId)]
 				{
-					if (!alive->load()) return;
+					if (!alive->load()) {
+						return;
+					}
+					if (joinFailed) {
+						// Roll back early room assignment if join didn't succeed
+						// Only unassign if no room was actually created on this thread
+						if (!wt->roomService() || !wt->roomService()->hasRoom(jRoomId))
+							unassignRoom(jRoomId);
+					}
 					if (joinOk) {
 						auto* sd = ws->getUserData();
 						sd->roomId = jRoomId;
 						sd->peerId = jPeerId;
 						std::string mapKey = WsMap::key(jRoomId, jPeerId);
 						decltype(ws) oldWs = nullptr;
-						sd->sessionId = g_nextSessionId++;
+						sd->sessionId = newSessionId;
 						auto it = wsMap->peers.find(mapKey);
 						if (it != wsMap->peers.end() && it->second != ws)
 							oldWs = it->second;
 						wsMap->peers[mapKey] = ws;
 						if (oldWs) {
+							// Immediately invalidate old socket to prevent stale requests
+							oldWs->getUserData()->alive->store(false);
 							auto oldRoomIt = wsMap->roomPeers.find(jRoomId);
 							if (oldRoomIt != wsMap->roomPeers.end()) {
 								oldRoomIt->second.erase(oldWs);
@@ -391,7 +471,10 @@ void SignalingServer::run() {
 						wsMap->roomPeers[jRoomId].insert(ws);
 						assignRoom(jRoomId, wt);
 						spdlog::info("[{} {}] joined (session:{})", jRoomId, jPeerId, sd->sessionId);
-						if (oldWs) oldWs->end(4000, "replaced");
+						if (oldWs) {
+							spdlog::info("[{} {}] kicking old connection (new session:{})", jRoomId, jPeerId, newSessionId);
+							oldWs->end(4000, "replaced");
+						}
 					}
 					ws->send(respStr, uWS::OpCode::TEXT);
 				});
@@ -402,7 +485,7 @@ void SignalingServer::run() {
 			auto* sd = ws->getUserData();
 			sd->alive->store(false);
 			if (!sd->peerId.empty()) {
-				spdlog::info("[{} {}] disconnected", sd->roomId, sd->peerId);
+				spdlog::info("[{} {}] disconnected (session:{})", sd->roomId, sd->peerId, sd->sessionId);
 				std::string roomId = sd->roomId;
 				std::string peerId = sd->peerId;
 				std::string mapKey = WsMap::key(roomId, peerId);

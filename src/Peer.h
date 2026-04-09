@@ -15,6 +15,7 @@ using json = nlohmann::json;
 struct Peer {
 	std::string id;
 	std::string displayName;
+	uint64_t sessionId = 0;
 	RtpCapabilities rtpCapabilities;
 	std::shared_ptr<WebRtcTransport> sendTransport;
 	std::shared_ptr<WebRtcTransport> recvTransport;

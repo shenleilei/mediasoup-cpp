@@ -200,7 +200,6 @@ Channel::OwnedResponse Channel::requestWait(
 	while (true) {
 		// Process any data already buffered or available
 		processAvailableData();
-
 		// Check if response arrived
 		if (fut.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
 			return fut.get();
