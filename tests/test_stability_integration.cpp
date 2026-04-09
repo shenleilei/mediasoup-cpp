@@ -8,7 +8,7 @@
 #include <signal.h>
 #include <sys/wait.h>
 
-static const int SFU_PORT = 18770;
+static const int SFU_PORT = 14003;
 static const std::string HOST = "127.0.0.1";
 
 class StabilityIntegrationTest : public ::testing::Test {
@@ -55,7 +55,7 @@ protected:
 
 	void TearDown() override {
 		if (sfuPid_ > 0) {
-			kill(sfuPid_, SIGKILL);
+			kill(sfuPid_, SIGTERM); for(int w_=0; w_<40 && waitpid(sfuPid_,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(sfuPid_, SIGKILL); waitpid(sfuPid_, nullptr, 0);
 			for (int i = 0; i < 20; ++i) {
 				usleep(50000);
 				int fd = socket(AF_INET, SOCK_STREAM, 0);

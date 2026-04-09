@@ -7,7 +7,7 @@
 #include <sys/stat.h>
 #include <fstream>
 
-static const int SFU_PORT = 18766; // different port from main integration tests
+static const int SFU_PORT = 14001; // different port from main integration tests
 static const std::string HOST = "127.0.0.1";
 
 class QosIntegrationTest : public ::testing::Test {
@@ -25,6 +25,7 @@ protected:
 			" --workerBin=./mediasoup-worker"
 			" --announcedIp=127.0.0.1"
 			" --listenIp=127.0.0.1"
+			" --redisHost=0.0.0.0 --redisPort=1"
 			" > /dev/null 2>&1 & echo $!";
 		FILE* fp = popen(cmd.c_str(), "r");
 		ASSERT_NE(fp, nullptr);
@@ -53,7 +54,7 @@ protected:
 
 	void TearDown() override {
 		if (sfuPid_ > 0) {
-			kill(sfuPid_, SIGKILL);
+			kill(sfuPid_, SIGTERM); for(int w_=0; w_<40 && waitpid(sfuPid_,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(sfuPid_, SIGKILL); waitpid(sfuPid_, nullptr, 0);
 			for (int i = 0; i < 20; ++i) {
 				usleep(50000);
 				int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -390,6 +391,21 @@ protected:
 	std::string recordDir_;
 
 	void SetUp() override {
+		// Wait for port to be free (previous fixture may have just torn down)
+		for (int i = 0; i < 30; ++i) {
+			int fd = socket(AF_INET, SOCK_STREAM, 0);
+			sockaddr_in addr{};
+			addr.sin_family = AF_INET;
+			addr.sin_port = htons(SFU_PORT);
+			addr.sin_addr.s_addr = htonl(INADDR_ANY);
+			int opt = 1;
+			setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+			bool free = (bind(fd, (sockaddr*)&addr, sizeof(addr)) == 0);
+			::close(fd);
+			if (free) break;
+			usleep(100000);
+		}
+
 		testRoom_ = "qosrec_" + std::to_string(getpid()) + "_" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 		recordDir_ = "/tmp/mediasoup_qosrec_" + std::to_string(getpid());
@@ -400,6 +416,7 @@ protected:
 			" --port=" + std::to_string(SFU_PORT) +
 			" --workers=1 --workerBin=./mediasoup-worker"
 			" --announcedIp=127.0.0.1 --listenIp=127.0.0.1"
+			" --redisHost=0.0.0.0 --redisPort=1"
 			" --recordDir=" + recordDir_ +
 			" > /tmp/sfu_qostest.log 2>&1 & echo $!";
 		FILE* fp = popen(cmd.c_str(), "r");
@@ -427,7 +444,7 @@ protected:
 
 	void TearDown() override {
 		if (sfuPid_ > 0) {
-			kill(sfuPid_, SIGKILL);
+			kill(sfuPid_, SIGTERM); for(int w_=0; w_<40 && waitpid(sfuPid_,nullptr,WNOHANG)==0; w_++) usleep(50000); kill(sfuPid_, SIGKILL); waitpid(sfuPid_, nullptr, 0);
 			for (int i = 0; i < 20; ++i) {
 				usleep(50000);
 				int fd = socket(AF_INET, SOCK_STREAM, 0);
