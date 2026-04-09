@@ -342,6 +342,53 @@ TEST_F(ReviewFixIntegration, ProduceTriggersRecordingWithoutHang) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Input validation: invalid roomId/peerId rejected at join
+// ═══════════════════════════════════════════════════════════════
+
+TEST_F(ReviewFixIntegration, InvalidRoomIdRejected) {
+	TestWsClient ws;
+	ASSERT_TRUE(ws.connect(HOST, SFU_PORT));
+	json rtpCaps = {{"codecs", json::array()}, {"headerExtensions", json::array()}};
+
+	// roomId with slash
+	auto resp = ws.request("join", {
+		{"roomId", "room/../../etc"}, {"peerId", "alice"},
+		{"displayName", "alice"}, {"rtpCapabilities", rtpCaps}
+	});
+	EXPECT_FALSE(resp.value("ok", false));
+	EXPECT_NE(resp.value("error", "").find("invalid"), std::string::npos)
+		<< "Should reject invalid roomId: " << resp.dump();
+}
+
+TEST_F(ReviewFixIntegration, InvalidPeerIdRejected) {
+	TestWsClient ws;
+	ASSERT_TRUE(ws.connect(HOST, SFU_PORT));
+	json rtpCaps = {{"codecs", json::array()}, {"headerExtensions", json::array()}};
+
+	// peerId with space
+	auto resp = ws.request("join", {
+		{"roomId", "valid-room"}, {"peerId", "alice bob"},
+		{"displayName", "alice"}, {"rtpCapabilities", rtpCaps}
+	});
+	EXPECT_FALSE(resp.value("ok", false));
+	EXPECT_NE(resp.value("error", "").find("invalid"), std::string::npos)
+		<< "Should reject invalid peerId: " << resp.dump();
+}
+
+TEST_F(ReviewFixIntegration, EmptyPeerIdRejected) {
+	TestWsClient ws;
+	ASSERT_TRUE(ws.connect(HOST, SFU_PORT));
+	json rtpCaps = {{"codecs", json::array()}, {"headerExtensions", json::array()}};
+
+	auto resp = ws.request("join", {
+		{"roomId", "valid-room"}, {"peerId", ""},
+		{"displayName", "alice"}, {"rtpCapabilities", rtpCaps}
+	});
+	EXPECT_FALSE(resp.value("ok", false))
+		<< "Should reject empty peerId: " << resp.dump();
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Geo-aware resolve: /api/resolve accepts clientIp
 // ═══════════════════════════════════════════════════════════════
 
