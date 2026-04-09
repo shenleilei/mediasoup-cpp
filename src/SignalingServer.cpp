@@ -51,6 +51,7 @@ WorkerThread* SignalingServer::pickLeastLoadedWorkerThread() const {
 	WorkerThread* best = nullptr;
 	size_t minLoad = SIZE_MAX;
 	for (auto& wt : workerThreads_) {
+		if (wt->workerCount() == 0) continue;
 		size_t load = wt->roomCount();
 		if (load < minLoad) {
 			minLoad = load;

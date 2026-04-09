@@ -137,6 +137,12 @@ public:
 
 		// Room doesn't exist — pick best node from cache
 		auto best = findBestNodeCached(clientIp);
+		if (best.empty()) {
+			// Cache miss — node may have just registered. Sync nodes from Redis and retry.
+			std::lock_guard<std::mutex> lock(cmdMutex_);
+			syncNodesUnlocked();
+			best = findBestNodeCached(clientIp);
+		}
 		if (best.empty()) return {"", true};
 		return {best, true};
 	}
@@ -516,6 +522,36 @@ private:
 			}
 		}
 		MS_DEBUG(logger_, "Evicted {} dead nodes from cache", deadNodeIds.size());
+	}
+
+	// Sync only node cache from Redis (lightweight, no room sync).
+	// Must be called with cmdMutex_ held.
+	void syncNodesUnlocked() {
+		if (!ensureConnected()) return;
+		std::unordered_map<std::string, NodeInfo> tmpNodes;
+		auto* nkeys = (redisReply*)redisCommand(ctx_, "KEYS node:*");
+		if (nkeys && nkeys->type == REDIS_REPLY_ARRAY && nkeys->elements > 0) {
+			std::vector<std::string> nids;
+			std::string mget = "MGET";
+			for (size_t i = 0; i < nkeys->elements; i++) {
+				std::string key = nkeys->element[i]->str;
+				nids.push_back(key.substr(5));
+				mget += " " + key;
+			}
+			auto* mr = (redisReply*)redisCommand(ctx_, mget.c_str());
+			if (mr && mr->type == REDIS_REPLY_ARRAY) {
+				for (size_t i = 0; i < mr->elements && i < nids.size(); i++)
+					if (mr->element[i]->type == REDIS_REPLY_STRING)
+						tmpNodes[nids[i]] = parseNodeValue(mr->element[i]->str);
+			}
+			if (mr) freeReplyObject(mr);
+		}
+		if (nkeys) freeReplyObject(nkeys);
+		if (!tmpNodes.empty()) {
+			std::lock_guard<std::mutex> cl(cacheMutex_);
+			for (auto& [nid, info] : tmpNodes)
+				nodeCache_[nid] = info; // merge, don't replace — preserve existing entries
+		}
 	}
 
 	// Must be called with cmdMutex_ held
