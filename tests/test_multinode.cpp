@@ -121,3 +121,52 @@ TEST(RespawnRateLimitTest, WindowExpiry) {
 
 	EXPECT_EQ(times.size(), 1u) << "Old entries should be expired";
 }
+
+// ═══════════════════════════════════════════════════════════════
+// ID validation: roomId/peerId whitelist [A-Za-z0-9_-]{1,128}
+// ═══════════════════════════════════════════════════════════════
+
+static bool isValidId(const std::string& s) {
+	if (s.empty() || s.size() > 128) return false;
+	for (char c : s)
+		if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+			  (c >= '0' && c <= '9') || c == '_' || c == '-')) return false;
+	return true;
+}
+
+TEST(IdValidationTest, ValidIds) {
+	EXPECT_TRUE(isValidId("room-123"));
+	EXPECT_TRUE(isValidId("peer_abc"));
+	EXPECT_TRUE(isValidId("A"));
+	EXPECT_TRUE(isValidId(std::string(128, 'a')));
+}
+
+TEST(IdValidationTest, InvalidIds) {
+	EXPECT_FALSE(isValidId(""));
+	EXPECT_FALSE(isValidId(std::string(129, 'a')));
+	EXPECT_FALSE(isValidId("room/123"));
+	EXPECT_FALSE(isValidId("room:123"));
+	EXPECT_FALSE(isValidId("room 123"));
+	EXPECT_FALSE(isValidId("room\n123"));
+	EXPECT_FALSE(isValidId("room*"));
+	EXPECT_FALSE(isValidId("房间"));
+}
+
+// nodeId allows additional . and : for hostname:port
+static bool isValidNodeId(const std::string& s) {
+	if (s.empty() || s.size() > 128) return false;
+	for (char c : s)
+		if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+			  (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.' || c == ':')) return false;
+	return true;
+}
+
+TEST(IdValidationTest, NodeIdValid) {
+	EXPECT_TRUE(isValidNodeId("myhost:3000"));
+	EXPECT_TRUE(isValidNodeId("sfu-01.prod:3000"));
+}
+
+TEST(IdValidationTest, NodeIdInvalid) {
+	EXPECT_FALSE(isValidNodeId("my host:3000"));
+	EXPECT_FALSE(isValidNodeId("node\t1"));
+}
