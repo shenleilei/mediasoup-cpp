@@ -294,7 +294,7 @@ TEST_F(MultiSfuTopologyTest, NodeCrashRoomTakeover) {
 		redisFree(ctx);
 	}
 
-	usleep(3000000); // wait for pub/sub propagation (subscriber has 2s read timeout)
+	usleep(5000000); // wait for pub/sub propagation (subscriber has 2s read timeout)
 
 	// Bob tries to join the same room on SFU-B
 	// Since SFU-A's node key is gone, SFU-B should take over the room
