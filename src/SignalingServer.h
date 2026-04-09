@@ -32,6 +32,7 @@ public:
 	~SignalingServer();
 	void run();
 	void stop();
+	void stopRegistryWorker();
 
 private:
 	// Pick the WorkerThread for a given roomId.
@@ -46,7 +47,6 @@ private:
 	// Remove room assignment (called when room is cleaned up).
 	void unassignRoom(const std::string& roomId);
 	void startRegistryWorker();
-	void stopRegistryWorker();
 	void enqueueRegistryTask(std::function<void()> task);
 
 	int port_;

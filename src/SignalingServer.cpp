@@ -122,6 +122,11 @@ void SignalingServer::stopRegistryWorker() {
 
 void SignalingServer::enqueueRegistryTask(std::function<void()> task) {
 	if (!registry_) return;
+	if (stopRegistryThread_.load(std::memory_order_relaxed)) {
+		// Registry worker already stopped; execute inline to avoid losing task
+		try { task(); } catch (...) {}
+		return;
+	}
 	{
 		std::lock_guard<std::mutex> lock(registryTaskMutex_);
 		registryTasks_.push(std::move(task));
@@ -757,8 +762,6 @@ void SignalingServer::run() {
 			spdlog::error("SignalingServer failed to listen on port {}", port_);
 		}
 	}).run();
-
-	stopRegistryWorker();
 }
 
 void SignalingServer::stop() {
