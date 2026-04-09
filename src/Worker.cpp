@@ -7,7 +7,7 @@
 #include <signal.h>
 #include <cstring>
 #include <chrono>
-#include <limits>
+#include <optional>
 #include <nlohmann/json.hpp>
 
 namespace mediasoup {
@@ -15,21 +15,20 @@ namespace mediasoup {
 static const char* MEDIASOUP_VERSION = "3.14.0";
 static constexpr int kTerminateGraceMs = 500;
 static constexpr int kWorkerDeathReapTimeoutMs = 100;
-static constexpr int kWaitTimeoutStatusSentinel = std::numeric_limits<int>::min();
 
 namespace {
-int waitChildWithTimeout(pid_t pid, int timeoutMs)
+std::optional<int> waitChildWithTimeout(pid_t pid, int timeoutMs)
 {
 	if (pid <= 0) return 0;
 	int status = 0;
 	auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
 	while (std::chrono::steady_clock::now() < deadline) {
 		pid_t r = ::waitpid(pid, &status, WNOHANG);
-		if (r == pid) return status;
-		if (r < 0 && errno == ECHILD) return status;
+		if (r == pid) return std::optional<int>(status);
+		if (r < 0 && errno == ECHILD) return std::optional<int>(status);
 		std::this_thread::sleep_for(std::chrono::milliseconds(10));
 	}
-	return kWaitTimeoutStatusSentinel;
+	return std::nullopt;
 }
 } // namespace
 
@@ -206,10 +205,11 @@ void Worker::close() {
 
 	// In non-threaded mode, wait/reap child to avoid zombie
 	if (!threaded_ && pid_ > 0) {
-		int status = waitChildWithTimeout(pid_, kTerminateGraceMs);
-		if (status == kWaitTimeoutStatusSentinel) {
+		auto status = waitChildWithTimeout(pid_, kTerminateGraceMs);
+		if (!status.has_value()) {
+			int forcedStatus = 0;
 			::kill(pid_, SIGKILL);
-			(void)::waitpid(pid_, &status, 0);
+			(void)::waitpid(pid_, &forcedStatus, 0);
 		}
 	}
 
@@ -242,10 +242,7 @@ bool Worker::processChannelData() {
 void Worker::handleWorkerDeath() {
 	if (closed_) return;
 
-	int status = waitChildWithTimeout(pid_, kWorkerDeathReapTimeoutMs);
-	if (status == kWaitTimeoutStatusSentinel) {
-		status = 0;
-	}
+	int status = waitChildWithTimeout(pid_, kWorkerDeathReapTimeoutMs).value_or(0);
 	workerDied("worker process exited with status " + std::to_string(status));
 }
 
