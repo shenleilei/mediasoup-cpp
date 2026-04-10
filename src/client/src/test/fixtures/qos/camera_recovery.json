@@ -1,0 +1,28 @@
+{
+	"initialLevel": 4,
+	"initialAudioOnly": true,
+	"steps": [
+		{
+			"state": "recovering",
+			"expectedPrimaryAction": "exitAudioOnly",
+			"expectedLevel": 3
+		},
+		{
+			"state": "recovering",
+			"expectedPrimaryAction": "setEncodingParameters",
+			"expectedLevel": 2
+		},
+		{
+			"state": "recovering",
+			"expectedPrimaryAction": "setEncodingParameters",
+			"expectedLevel": 1
+		},
+		{
+			"state": "stable",
+			"expectedPrimaryAction": "setEncodingParameters",
+			"expectedLevel": 0
+		}
+	],
+	"expectedFinalLevel": 0,
+	"expectedFinalAudioOnly": false
+}
