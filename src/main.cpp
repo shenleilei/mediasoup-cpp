@@ -3,6 +3,7 @@
 #include "RoomRegistry.h"
 #include "SignalingServer.h"
 #include "GeoRouter.h"
+#include "GeoDbResolver.h"
 #include <nlohmann/json.hpp>
 #include <csignal>
 #include <atomic>
@@ -11,6 +12,7 @@
 #include <array>
 #include <cstdio>
 #include <cmath>
+#include <sstream>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -107,6 +109,7 @@ int main(int argc, char* argv[]) {
 	std::string nodeCountry;
 	bool countryIsolation = true;
 	std::string geoDbPath = "./ip2region.xdb";
+	bool geoDbPathExplicit = false;
 	bool noDaemon = false;
 	std::string logFile = "/var/log/mediasoup-sfu.log";
 	std::string pidFile = "/var/run/mediasoup-sfu.pid";
@@ -140,7 +143,7 @@ int main(int argc, char* argv[]) {
 				if (cfg.contains("isp"))            nodeIsp = cfg["isp"].get<std::string>();
 				if (cfg.contains("country"))        nodeCountry = cfg["country"].get<std::string>();
 				if (cfg.contains("countryIsolation")) countryIsolation = cfg["countryIsolation"].get<bool>();
-				if (cfg.contains("geoDb"))          geoDbPath = cfg["geoDb"].get<std::string>();
+				if (cfg.contains("geoDb"))          { geoDbPath = cfg["geoDb"].get<std::string>(); geoDbPathExplicit = true; }
 				if (cfg.contains("logFile"))        logFile = cfg["logFile"].get<std::string>();
 				if (cfg.contains("pidFile"))        pidFile = cfg["pidFile"].get<std::string>();
 				if (cfg.contains("logLevel"))       logLevel = cfg["logLevel"].get<std::string>();
@@ -173,7 +176,7 @@ int main(int argc, char* argv[]) {
 		else if (arg.find("--country=") == 0)      nodeCountry = arg.substr(10);
 		else if (arg == "--countryIsolation")       countryIsolation = true;
 		else if (arg == "--noCountryIsolation")     countryIsolation = false;
-		else if (arg.find("--geoDb=") == 0)        geoDbPath = arg.substr(8);
+		else if (arg.find("--geoDb=") == 0)        { geoDbPath = arg.substr(8); geoDbPathExplicit = true; }
 		else if (arg.find("--logFile=") == 0)  logFile = arg.substr(10);
 		else if (arg.find("--pidFile=") == 0)  pidFile = arg.substr(10);
 		else if (arg.find("--logLevel=") == 0) logLevel = arg.substr(11);
@@ -290,23 +293,39 @@ int main(int argc, char* argv[]) {
 
 	// GeoRouter for IP-based node selection
 	std::unique_ptr<GeoRouter> geoRouter;
-	geoRouter = std::make_unique<GeoRouter>();
-	if (geoRouter->init(geoDbPath)) {
-		spdlog::info("GeoRouter initialized from {}", geoDbPath);
-		if (nodeLat == 0 && nodeLng == 0 && !announcedIp.empty()) {
-			auto info = geoRouter->lookup(announcedIp);
-			if (info.valid) {
-				nodeLat = info.lat;
-				nodeLng = info.lng;
-				if (nodeIsp.empty()) nodeIsp = info.isp;
-				if (nodeCountry.empty()) nodeCountry = info.country;
-				spdlog::info("Auto-detected node geo: {}/{} lat={} lng={} isp={} country={}",
-					info.province, info.city, nodeLat, nodeLng, nodeIsp, nodeCountry);
-			}
+	auto geoDbResolution = resolveGeoDbPath(geoDbPath, geoDbPathExplicit);
+	if (geoDbResolution.resolvedPath.empty()) {
+		std::ostringstream searched;
+		for (size_t i = 0; i < geoDbResolution.candidates.size(); ++i) {
+			if (i != 0) searched << ", ";
+			searched << geoDbResolution.candidates[i];
 		}
+		spdlog::warn("GeoRouter DB not found (requested: {}). Searched: {}. Geo-routing disabled",
+			geoDbPath, searched.str());
 	} else {
-		spdlog::warn("GeoRouter init failed ({}), geo-routing disabled", geoDbPath);
-		geoRouter.reset();
+		if (geoDbResolution.usedFallback) {
+			spdlog::warn("GeoRouter DB {} not found, falling back to {}",
+				geoDbPath, geoDbResolution.resolvedPath);
+		}
+		geoDbPath = geoDbResolution.resolvedPath;
+		geoRouter = std::make_unique<GeoRouter>();
+		if (geoRouter->init(geoDbPath)) {
+			spdlog::info("GeoRouter initialized from {}", geoDbPath);
+			if (nodeLat == 0 && nodeLng == 0 && !announcedIp.empty()) {
+				auto info = geoRouter->lookup(announcedIp);
+				if (info.valid) {
+					nodeLat = info.lat;
+					nodeLng = info.lng;
+					if (nodeIsp.empty()) nodeIsp = info.isp;
+					if (nodeCountry.empty()) nodeCountry = info.country;
+					spdlog::info("Auto-detected node geo: {}/{} lat={} lng={} isp={} country={}",
+						info.province, info.city, nodeLat, nodeLng, nodeIsp, nodeCountry);
+				}
+			}
+		} else {
+			spdlog::warn("GeoRouter init failed ({}), geo-routing disabled", geoDbPath);
+			geoRouter.reset();
+		}
 	}
 
 	// Redis room registry

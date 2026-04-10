@@ -485,7 +485,9 @@ Open `http://<server-ip>:3000`.
 | `--country` | auto-detect | node country |
 | `--countryIsolation` | on | same-country routing only |
 | `--noCountryIsolation` | flag | disable country isolation |
-| `--geoDb` | `./ip2region.xdb` | ip2region database path |
+| `--geoDb` | `./ip2region.xdb` | ip2region database path (falls back to `./third_party/ip2region/ip2region.xdb`) |
+
+If `./ip2region.xdb` is not present, the server also checks the vendored source copy at `./third_party/ip2region/ip2region.xdb` and the executable's build directory copy.
 
 ## Important Deployment Notes
 

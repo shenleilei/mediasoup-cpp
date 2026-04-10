@@ -28,6 +28,8 @@ __pycache__/
 *.pyc
 
 # Logs & runtime
+# ip2region.xdb in root is a build-time copy, source lives in third_party/
+/ip2region.xdb
 log/
 *.log
 recordings/

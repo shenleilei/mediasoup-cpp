@@ -1,5 +1,6 @@
 // Unit tests for GeoRouter: IP lookup, scoring, ISP handling
 #include <gtest/gtest.h>
+#include "GeoDbResolver.h"
 #include "GeoRouter.h"
 
 using namespace mediasoup;
@@ -8,18 +9,28 @@ class GeoRouterTest : public ::testing::Test {
 protected:
 	static GeoRouter geo_;
 	static bool inited_;
+	static GeoDbResolution resolution_;
 
 	static void SetUpTestSuite() {
 		Logger::Init("", "warn");
-		inited_ = geo_.init("ip2region.xdb");
+		resolution_ = resolveGeoDbPath("./ip2region.xdb", false);
+		inited_ = !resolution_.resolvedPath.empty() && geo_.init(resolution_.resolvedPath);
 	}
 
 	void SetUp() override {
-		if (!inited_) GTEST_SKIP() << "ip2region.xdb not found";
+		if (!inited_) {
+			std::string searched;
+			for (size_t i = 0; i < resolution_.candidates.size(); ++i) {
+				if (!searched.empty()) searched += ", ";
+				searched += resolution_.candidates[i];
+			}
+			GTEST_SKIP() << "ip2region.xdb not found; searched: " << searched;
+		}
 	}
 };
 GeoRouter GeoRouterTest::geo_;
 bool GeoRouterTest::inited_ = false;
+GeoDbResolution GeoRouterTest::resolution_;
 
 // ── IP Lookup ──
 
