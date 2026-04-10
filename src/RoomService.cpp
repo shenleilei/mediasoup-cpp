@@ -706,8 +706,8 @@ json RoomService::getNodeLoad() const {
 	};
 }
 
-void RoomService::broadcastStats() {
-	if (statsBroadcastActive_) return;
+	void RoomService::broadcastStats() {
+		if (statsBroadcastActive_) return;
 
 	auto roomIds = roomManager_.getRoomIds();
 	if (roomIds.empty()) return;
@@ -716,11 +716,17 @@ void RoomService::broadcastStats() {
 	for (auto& id : roomIds) { if (!names.empty()) names += ", "; names += id; }
 	MS_DEBUG(logger_, "broadcastStats: {} rooms [{}]", roomIds.size(), names);
 
-	statsBroadcastActive_ = true;
-	pendingStatsRooms_.clear();
-	for (auto& roomId : roomIds) pendingStatsRooms_.push_back(roomId);
-	continueBroadcastStats();
-}
+		statsBroadcastActive_ = true;
+		pendingStatsRooms_.clear();
+		for (auto& roomId : roomIds) pendingStatsRooms_.push_back(roomId);
+		try {
+			continueBroadcastStats();
+		} catch (...) {
+			statsBroadcastActive_ = false;
+			pendingStatsRooms_.clear();
+			throw;
+		}
+	}
 
 void RoomService::continueBroadcastStats() {
 	if (pendingStatsRooms_.empty()) {
@@ -728,9 +734,15 @@ void RoomService::continueBroadcastStats() {
 		return;
 	}
 
-	std::string roomId = std::move(pendingStatsRooms_.front());
-	pendingStatsRooms_.pop_front();
-	broadcastStatsForRoom(roomId);
+		std::string roomId = std::move(pendingStatsRooms_.front());
+		pendingStatsRooms_.pop_front();
+		try {
+			broadcastStatsForRoom(roomId);
+		} catch (...) {
+			statsBroadcastActive_ = false;
+			pendingStatsRooms_.clear();
+			throw;
+		}
 
 	if (pendingStatsRooms_.empty()) {
 		statsBroadcastActive_ = false;
