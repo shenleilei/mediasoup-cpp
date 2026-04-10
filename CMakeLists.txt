@@ -31,6 +31,7 @@ set(UWS_INCLUDE ${CMAKE_SOURCE_DIR}/third_party/uWebSockets/src)
 # ── Main library ──
 add_library(mediasoup_lib STATIC
     src/Channel.cpp
+    src/GeoDbResolver.cpp
     src/Worker.cpp
     src/Transport.cpp
     src/WebRtcTransport.cpp
@@ -55,6 +56,11 @@ target_link_libraries(mediasoup_lib PUBLIC spdlog::spdlog uSockets pthread avfor
 set(IP2REGION_DIR ${CMAKE_SOURCE_DIR}/third_party/ip2region/binding/c)
 add_library(ip2region STATIC ${IP2REGION_DIR}/xdb_searcher.c ${IP2REGION_DIR}/xdb_util.c)
 target_include_directories(ip2region PUBLIC ${IP2REGION_DIR})
+
+# Copy ip2region.xdb to build output directory
+configure_file(
+    ${CMAKE_SOURCE_DIR}/third_party/ip2region/ip2region.xdb
+    ${CMAKE_BINARY_DIR}/ip2region.xdb COPYONLY)
 
 # ── Main executable ──
 add_executable(mediasoup-sfu
