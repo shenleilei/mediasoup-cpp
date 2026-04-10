@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <mutex>
 #include <thread>
+#include <poll.h>
+#include <fcntl.h>
 #include <atomic>
 #include <cmath>
 #include <unordered_map>
@@ -417,14 +419,15 @@ private:
 				continue;
 			}
 
-			// Set read timeout so we can check subStop_ periodically
-			struct timeval rtv = {2, 0};
-			redisSetTimeout(sub, rtv);
-
 			auto* reply = (redisReply*)redisCommand(sub, "SUBSCRIBE %s %s",
 				kChannelNodes, kChannelRooms);
 			if (reply) freeReplyObject(reply);
 			else { redisFree(sub); continue; }
+
+			// Set fd non-blocking for poll-based timeout control
+			redisSetTimeout(sub, (struct timeval){0, 0});
+			int flags = fcntl(sub->fd, F_GETFL, 0);
+			fcntl(sub->fd, F_SETFL, flags | O_NONBLOCK);
 
 			MS_DEBUG(logger_, "Subscriber connected");
 
@@ -432,14 +435,18 @@ private:
 			syncAll();
 
 			while (!subStop_) {
+				// Use poll to wait for data, avoiding hiredis timeout
+				// that corrupts context error state and causes busy loop.
+				struct pollfd pfd = {sub->fd, POLLIN, 0};
+				int ret = poll(&pfd, 1, 2000);
+				if (ret == 0) continue;  // timeout, re-check subStop_
+				if (ret < 0) break;      // poll error
+
 				redisReply* msg = nullptr;
 				int rc = redisGetReply(sub, (void**)&msg);
 				if (rc != REDIS_OK || !msg) {
-					if (sub->err == REDIS_ERR_IO &&
-						(errno == EAGAIN || errno == EWOULDBLOCK))
-						continue; // read timeout, not a real disconnect
 					if (sub->err == REDIS_ERR_IO || sub->err == REDIS_ERR_EOF) break;
-					continue;
+					if (!msg) continue;
 				}
 
 				if (msg->type == REDIS_REPLY_ARRAY && msg->elements >= 3) {
