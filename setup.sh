@@ -72,12 +72,12 @@ echo "  Generated $(ls generated/*_generated.h | wc -l) header files"
 # 4. Download mediasoup-worker binary
 echo "[4/5] Checking mediasoup-worker binary..."
 if [ ! -x "mediasoup-worker" ]; then
-  echo "  Downloading mediasoup-worker v3.14.16..."
+  echo "  Downloading mediasoup-worker v3.14.6..."
   KERNEL_MAJOR=$(uname -r | cut -d. -f1)
   if [ "$KERNEL_MAJOR" -ge 6 ]; then
-    WORKER_URL="https://github.com/versatica/mediasoup/releases/download/3.14.16/mediasoup-worker-3.14.16-linux-x64-kernel6.tgz"
+    WORKER_URL="https://github.com/versatica/mediasoup/releases/download/3.14.6/mediasoup-worker-3.14.6-linux-x64-kernel6.tgz"
   else
-    WORKER_URL="https://github.com/versatica/mediasoup/releases/download/3.14.16/mediasoup-worker-3.14.16-linux-x64-kernel5.tgz"
+    WORKER_URL="https://github.com/versatica/mediasoup/releases/download/3.14.6/mediasoup-worker-3.14.6-linux-x64-kernel5.tgz"
   fi
   curl -L -o /tmp/mediasoup-worker.tgz "$WORKER_URL"
   tar xzf /tmp/mediasoup-worker.tgz

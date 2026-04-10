@@ -121,16 +121,16 @@ void Channel::notify(
 	sendBytes(sendBuf.data(), sendBuf.size());
 }
 
-Channel::RequestResult Channel::requestWithId(
-	FBS::Request::Method method,
-	FBS::Request::Body bodyType,
+	Channel::RequestResult Channel::requestWithId(
+		FBS::Request::Method method,
+		FBS::Request::Body bodyType,
 	flatbuffers::Offset<void> bodyOffset,
 	const std::string& handlerId)
-{
-	if (closed_) throw std::runtime_error("Channel closed");
-	if (bodyType != FBS::Request::Body::NONE && bodyOffset.o != 0) {
-		throw std::logic_error("prebuilt request bodies are not supported; use requestBuild/requestBuildWait");
-	}
+	{
+		if (closed_) throw std::runtime_error("Channel closed");
+		if (bodyType != FBS::Request::Body::NONE) {
+			throw std::invalid_argument("requestWithId only supports bodyless requests; use requestBuildWithId instead");
+		}
 
 	{
 		std::lock_guard<std::mutex> lock(builderMutex_);

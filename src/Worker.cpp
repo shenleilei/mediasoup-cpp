@@ -12,7 +12,7 @@
 
 namespace mediasoup {
 
-static const char* MEDIASOUP_VERSION = "3.14.0";
+static const char* MEDIASOUP_VERSION = "3.14.6";
 static constexpr int kTerminateGraceMs = 500;
 static constexpr int kWorkerDeathReapTimeoutMs = 100;
 

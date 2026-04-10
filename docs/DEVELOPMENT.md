@@ -2,7 +2,7 @@
 
 ## 架构概述
 
-基于 mediasoup C++ worker 的 SFU 服务端，Room-first 设计。控制面用 C++17 实现，媒体面复用 mediasoup-worker 预编译二进制（v3.14.16）。
+基于 mediasoup C++ worker 的 SFU 服务端，Room-first 设计。控制面用 C++17 实现，媒体面复用 mediasoup-worker 预编译二进制（v3.14.6）。
 
 ## 线程模型
 
