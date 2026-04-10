@@ -1,0 +1,12 @@
+{
+	"schema": "mediasoup.qos.policy.v1",
+	"sampleIntervalMs": 1000,
+	"snapshotIntervalMs": 2000,
+	"allowAudioOnly": true,
+	"allowVideoPause": true,
+	"profiles": {
+		"camera": "default",
+		"screenShare": "clarity-first",
+		"audio": "speech-first"
+	}
+}

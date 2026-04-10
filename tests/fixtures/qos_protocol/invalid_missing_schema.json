@@ -1,0 +1,10 @@
+{
+  "seq": 42,
+  "tsMs": 1712736000123,
+  "peerState": {
+    "mode": "audio-video",
+    "quality": "poor",
+    "stale": false
+  },
+  "tracks": []
+}

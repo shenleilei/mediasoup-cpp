@@ -1,0 +1,11 @@
+{
+  "schema": "mediasoup.qos.client.v1",
+  "seq": "not-a-number",
+  "tsMs": 1712736000123,
+  "peerState": {
+    "mode": "audio-video",
+    "quality": "poor",
+    "stale": false
+  },
+  "tracks": []
+}

@@ -1,0 +1,13 @@
+#pragma once
+#include "qos/QosTypes.h"
+
+namespace mediasoup::qos {
+
+class QosValidator {
+public:
+	static ParseResult<ClientQosSnapshot> ParseClientSnapshot(const json& payload);
+	static ParseResult<QosPolicy> ParsePolicy(const json& payload);
+	static ParseResult<QosOverride> ParseOverride(const json& payload);
+};
+
+} // namespace mediasoup::qos
