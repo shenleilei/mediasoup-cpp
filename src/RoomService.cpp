@@ -82,9 +82,7 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 		}
 		recorderTransports_.erase(key);
 		if (recToStop) recToStop->stop();
-		qosRegistry_.ErasePeer(roomId, peerId);
-		autoQosOverrideRecords_.erase(key);
-		lastConnectionQualitySignatures_.erase(key);
+		clientStats_.erase(key);
 	}
 
 	if (registry_) {
@@ -114,8 +112,7 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 	return {true, {
 		{"routerRtpCapabilities", room->router()->rtpCapabilities()},
 		{"existingProducers", existingProducers},
-		{"participants", room->getParticipants()},
-		{"qosPolicy", getDefaultQosPolicy()}
+		{"participants", room->getParticipants()}
 	}};
 }
 
@@ -134,9 +131,7 @@ RoomService::Result RoomService::leave(const std::string& roomId, const std::str
 	recorderTransports_.erase(key);
 	if (recToStop) recToStop->stop();
 
-	qosRegistry_.ErasePeer(roomId, peerId);
-	autoQosOverrideRecords_.erase(roomId + "/" + peerId);
-	lastConnectionQualitySignatures_.erase(roomId + "/" + peerId);
+	clientStats_.erase(roomId + "/" + peerId);
 
 	// Remove peer's producers from router before closing peer
 	auto peer = room->getPeer(peerId);
@@ -360,50 +355,6 @@ RoomService::Result RoomService::restartIce(const std::string& roomId,
 	return {true, wt->restartIce()};
 }
 
-RoomService::Result RoomService::setQosOverride(
-	const std::string& roomId, const std::string& targetPeerId, const json& overrideData)
-{
-	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {false, {}, "", "room not found"};
-	auto peer = room->getPeer(targetPeerId);
-	if (!peer) return {false, {}, "", "peer not found"};
-
-	auto parsed = qos::QosValidator::ParseOverride(overrideData);
-	if (!parsed.ok) return {false, {}, "", "invalid qosOverride: " + parsed.error};
-
-	if (notify_) {
-		notify_(roomId, targetPeerId, {
-			{"notification", true},
-			{"method", "qosOverride"},
-			{"data", qos::ToJson(parsed.value)}
-		});
-	}
-
-	return {true, json::object()};
-}
-
-RoomService::Result RoomService::setQosPolicy(
-	const std::string& roomId, const std::string& targetPeerId, const json& policyData)
-{
-	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {false, {}, "", "room not found"};
-	auto peer = room->getPeer(targetPeerId);
-	if (!peer) return {false, {}, "", "peer not found"};
-
-	auto parsed = qos::QosValidator::ParsePolicy(policyData);
-	if (!parsed.ok) return {false, {}, "", "invalid qosPolicy: " + parsed.error};
-
-	if (notify_) {
-		notify_(roomId, targetPeerId, {
-			{"notification", true},
-			{"method", "qosPolicy"},
-			{"data", qos::ToJson(parsed.value)}
-		});
-	}
-
-	return {true, json::object()};
-}
-
 // ── auto-record ──
 
 void RoomService::autoRecord(const std::string& roomId, const std::string& peerId,
@@ -545,16 +496,9 @@ void RoomService::cleanupRoomResources(const std::string& roomId) {
 			MS_WARN(logger_, "cleanupRoomResources recorder stop failed [room:{}]: unknown error", roomId);
 		}
 	}
-	qosRegistry_.EraseRoom(roomId);
-	for (auto it = autoQosOverrideRecords_.begin(); it != autoQosOverrideRecords_.end(); ) {
-		if (it->first.compare(0, prefix.size(), prefix) == 0) it = autoQosOverrideRecords_.erase(it);
+	for (auto it = clientStats_.begin(); it != clientStats_.end(); )
+		if (it->first.compare(0, prefix.size(), prefix) == 0) it = clientStats_.erase(it);
 		else ++it;
-	}
-	for (auto it = lastConnectionQualitySignatures_.begin(); it != lastConnectionQualitySignatures_.end(); ) {
-		if (it->first.compare(0, prefix.size(), prefix) == 0) it = lastConnectionQualitySignatures_.erase(it);
-		else ++it;
-	}
-	lastRoomQosStateSignatures_.erase(roomId);
 }
 
 // ── disk cleanup ──
@@ -625,24 +569,7 @@ void RoomService::cleanOldRecordings(uint64_t maxBytes) {
 void RoomService::setClientStats(const std::string& roomId, const std::string& peerId,
 	const json& stats)
 {
-	auto parsed = qos::QosValidator::ParseClientSnapshot(stats);
-	if (!parsed.ok) {
-		MS_WARN(logger_, "[{} {}] invalid QoS clientStats ignored: {}", roomId, peerId, parsed.error);
-		return;
-	}
-
-	std::string rejectReason;
-	if (!qosRegistry_.Upsert(roomId, peerId, parsed.value, qos::NowMs(), &rejectReason)) {
-		MS_DEBUG(logger_, "[{} {}] dropped QoS clientStats [{}]", roomId, peerId, rejectReason);
-		return;
-	}
-
-	auto qosEntry = qosRegistry_.Get(roomId, peerId);
-	if (!qosEntry) return;
-	auto aggregate = qos::QosAggregator::Aggregate(qosEntry, qos::NowMs());
-	maybeNotifyConnectionQuality(roomId, peerId, aggregate);
-	maybeSendAutomaticQosOverride(roomId, peerId, aggregate);
-	maybeBroadcastRoomQosState(roomId);
+	clientStats_[roomId + "/" + peerId] = stats;
 }
 
 json RoomService::collectPeerStats(const std::string& roomId, const std::string& peerId) {
@@ -742,14 +669,8 @@ json RoomService::collectPeerStats(const std::string& roomId, const std::string&
 	}
 	result["consumers"] = consumers;
 
-	auto qosEntry = qosRegistry_.Get(roomId, peerId);
-	if (qosEntry) {
-		auto aggregate = qos::QosAggregator::Aggregate(qosEntry, qos::NowMs());
-		result["clientStats"] = qos::ToJson(qosEntry->snapshot);
-		result["qos"] = qos::ToJson(aggregate);
-		result["qosStale"] = aggregate.stale;
-		result["qosLastUpdatedMs"] = aggregate.lastUpdatedMs;
-	}
+	auto statsIt = clientStats_.find(roomId + "/" + peerId);
+	if (statsIt != clientStats_.end()) result["clientStats"] = statsIt->second;
 
 	return result;
 }
@@ -785,176 +706,8 @@ json RoomService::getNodeLoad() const {
 	};
 }
 
-json RoomService::getDefaultQosPolicy() const {
-	return {
-		{"schema", "mediasoup.qos.policy.v1"},
-		{"sampleIntervalMs", 1000},
-		{"snapshotIntervalMs", 2000},
-		{"allowAudioOnly", true},
-		{"allowVideoPause", true},
-		{"profiles", {
-			{"camera", "default"},
-			{"screenShare", "clarity-first"},
-			{"audio", "speech-first"}
-		}}
-	};
-}
-
-void RoomService::maybeSendAutomaticQosOverride(
-	const std::string& roomId, const std::string& peerId,
-	const qos::PeerQosAggregate& aggregate)
-{
-	auto automatic = qos::QosOverrideBuilder::BuildForAggregate(aggregate);
-	const std::string key = roomId + "/" + peerId;
-	if (!automatic.has_value()) {
-		auto it = autoQosOverrideRecords_.find(key);
-		if (it != autoQosOverrideRecords_.end()) {
-			if (notify_) {
-				notify_(roomId, peerId, {
-					{"notification", true},
-					{"method", "qosOverride"},
-					{"data", {
-						{"schema", "mediasoup.qos.override.v1"},
-						{"scope", "peer"},
-						{"trackId", nullptr},
-						{"ttlMs", 0},
-						{"reason", "server_auto_clear"}
-					}}
-				});
-			}
-			autoQosOverrideRecords_.erase(it);
-		}
-		return;
-	}
-
-	const auto nowMs = qos::NowMs();
-	auto it = autoQosOverrideRecords_.find(key);
-	if (it != autoQosOverrideRecords_.end()) {
-		const auto refreshInterval = static_cast<int64_t>(it->second.ttlMs) / 2;
-		if (it->second.signature == automatic->signature &&
-			(nowMs - it->second.sentAtMs) < std::max<int64_t>(1000, refreshInterval)) {
-			return;
-		}
-	}
-
-	if (notify_) {
-		notify_(roomId, peerId, {
-			{"notification", true},
-			{"method", "qosOverride"},
-			{"data", qos::ToJson(automatic->overrideData)}
-		});
-	}
-
-	autoQosOverrideRecords_[key] = {
-		automatic->signature,
-		nowMs,
-		automatic->overrideData.ttlMs
-	};
-}
-
-void RoomService::maybeNotifyConnectionQuality(
-	const std::string& roomId, const std::string& peerId,
-	const qos::PeerQosAggregate& aggregate)
-{
-	if (!notify_ || !aggregate.hasSnapshot) return;
-
-	const std::string key = roomId + "/" + peerId;
-	const json payload = {
-		{"quality", aggregate.quality},
-		{"stale", aggregate.stale},
-		{"lost", aggregate.lost},
-		{"lastUpdatedMs", aggregate.lastUpdatedMs}
-	};
-	const std::string signature = payload.dump();
-	auto it = lastConnectionQualitySignatures_.find(key);
-	if (it != lastConnectionQualitySignatures_.end() && it->second == signature) return;
-
-	notify_(roomId, peerId, {
-		{"notification", true},
-		{"method", "qosConnectionQuality"},
-		{"data", payload}
-	});
-	lastConnectionQualitySignatures_[key] = signature;
-}
-
-void RoomService::maybeBroadcastRoomQosState(const std::string& roomId) {
-	if (!broadcast_) return;
-	auto room = roomManager_.getRoom(roomId);
-	if (!room) return;
-
-	std::vector<qos::PeerQosAggregate> peers;
-	for (auto& peerId : room->getPeerIds()) {
-		auto entry = qosRegistry_.Get(roomId, peerId);
-		if (entry) peers.push_back(qos::QosAggregator::Aggregate(entry, qos::NowMs()));
-	}
-	auto roomAggregate = qos::QosRoomAggregator::Aggregate(peers);
-	if (!roomAggregate.hasQos) {
-		lastRoomQosStateSignatures_.erase(roomId);
-		return;
-	}
-
-	const std::string signature = roomAggregate.data.dump();
-	auto it = lastRoomQosStateSignatures_.find(roomId);
-	if (it == lastRoomQosStateSignatures_.end() || it->second != signature) {
-		broadcast_(roomId, "", {
-			{"notification", true},
-			{"method", "qosRoomState"},
-			{"data", roomAggregate.data}
-		});
-		lastRoomQosStateSignatures_[roomId] = signature;
-	}
-
-	maybeSendRoomPressureOverrides(roomId, roomAggregate);
-}
-
-void RoomService::maybeSendRoomPressureOverrides(
-	const std::string& roomId, const qos::RoomQosAggregate& aggregate)
-{
-	auto room = roomManager_.getRoom(roomId);
-	if (!room || !notify_) return;
-
-	auto roomAutomatic = qos::QosOverrideBuilder::BuildForRoomAggregate(aggregate);
-	for (auto& peerId : room->getPeerIds()) {
-		const std::string key = roomId + "/" + peerId + "#room";
-		if (!roomAutomatic.has_value()) {
-			auto it = autoQosOverrideRecords_.find(key);
-			if (it != autoQosOverrideRecords_.end()) {
-				notify_(roomId, peerId, {
-					{"notification", true},
-					{"method", "qosOverride"},
-					{"data", {
-						{"schema", "mediasoup.qos.override.v1"},
-						{"scope", "peer"},
-						{"trackId", nullptr},
-						{"ttlMs", 0},
-						{"reason", "server_room_pressure_clear"}
-					}}
-				});
-				autoQosOverrideRecords_.erase(it);
-			}
-			continue;
-		}
-
-		auto it = autoQosOverrideRecords_.find(key);
-		if (it != autoQosOverrideRecords_.end() && it->second.signature == roomAutomatic->signature) {
-			continue;
-		}
-
-		notify_(roomId, peerId, {
-			{"notification", true},
-			{"method", "qosOverride"},
-			{"data", qos::ToJson(roomAutomatic->overrideData)}
-		});
-		autoQosOverrideRecords_[key] = {
-			roomAutomatic->signature,
-			qos::NowMs(),
-			roomAutomatic->overrideData.ttlMs
-		};
-	}
-}
-
-void RoomService::broadcastStats() {
-	if (statsBroadcastActive_) return;
+	void RoomService::broadcastStats() {
+		if (statsBroadcastActive_) return;
 
 	auto roomIds = roomManager_.getRoomIds();
 	if (roomIds.empty()) return;
@@ -963,17 +716,17 @@ void RoomService::broadcastStats() {
 	for (auto& id : roomIds) { if (!names.empty()) names += ", "; names += id; }
 	MS_DEBUG(logger_, "broadcastStats: {} rooms [{}]", roomIds.size(), names);
 
-	statsBroadcastActive_ = true;
-	pendingStatsRooms_.clear();
-	for (auto& roomId : roomIds) pendingStatsRooms_.push_back(roomId);
-	try {
-		continueBroadcastStats();
-	} catch (...) {
-		statsBroadcastActive_ = false;
+		statsBroadcastActive_ = true;
 		pendingStatsRooms_.clear();
-		throw;
+		for (auto& roomId : roomIds) pendingStatsRooms_.push_back(roomId);
+		try {
+			continueBroadcastStats();
+		} catch (...) {
+			statsBroadcastActive_ = false;
+			pendingStatsRooms_.clear();
+			throw;
+		}
 	}
-}
 
 void RoomService::continueBroadcastStats() {
 	if (pendingStatsRooms_.empty()) {
@@ -981,15 +734,15 @@ void RoomService::continueBroadcastStats() {
 		return;
 	}
 
-	std::string roomId = std::move(pendingStatsRooms_.front());
-	pendingStatsRooms_.pop_front();
-	try {
-		broadcastStatsForRoom(roomId);
-	} catch (...) {
-		statsBroadcastActive_ = false;
-		pendingStatsRooms_.clear();
-		throw;
-	}
+		std::string roomId = std::move(pendingStatsRooms_.front());
+		pendingStatsRooms_.pop_front();
+		try {
+			broadcastStatsForRoom(roomId);
+		} catch (...) {
+			statsBroadcastActive_ = false;
+			pendingStatsRooms_.clear();
+			throw;
+		}
 
 	if (pendingStatsRooms_.empty()) {
 		statsBroadcastActive_ = false;

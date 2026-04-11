@@ -38,12 +38,6 @@ add_library(mediasoup_lib STATIC
     src/Router.cpp
     src/Producer.cpp
     src/Consumer.cpp
-    src/qos/QosSnapshot.cpp
-    src/qos/QosValidator.cpp
-    src/qos/QosRegistry.cpp
-    src/qos/QosAggregator.cpp
-    src/qos/QosRoomAggregator.cpp
-    src/qos/QosOverride.cpp
 )
 
 target_include_directories(mediasoup_lib PUBLIC
