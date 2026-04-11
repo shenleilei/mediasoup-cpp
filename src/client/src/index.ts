@@ -1,17 +1,11 @@
 import debug from 'debug';
 import { Device, detectDevice } from './Device';
 import * as types from './types';
-import * as qos from './qos';
 
 /**
  * Expose all types.
  */
 export { types };
-
-/**
- * Expose QoS module as an independent namespace.
- */
-export { qos };
 
 /**
  * Expose mediasoup-client version.

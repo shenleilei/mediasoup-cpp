@@ -1,9 +1,0 @@
-qos_unit	PASS	0	基础能力支撑（协议/校验/聚合/override builder）	服务端 QoS 单元测试	/root/mediasoup-cpp/tests/qos_harness/artifacts/uplink-qos-test-plan-20260410-212123/qos_unit.log
-qos_integration	PASS	33	P2 / P3 / P5 / RM2-RM4 + clientStats 聚合链路	服务端 uplink QoS 黑盒集成测试子集	/root/mediasoup-cpp/tests/qos_harness/artifacts/uplink-qos-test-plan-20260410-212123/qos_integration.log
-publish_snapshot	PASS	4	clientStats 聚合链路	Node harness: publish snapshot + aggregation	/root/mediasoup-cpp/tests/qos_harness/artifacts/uplink-qos-test-plan-20260410-212123/publish_snapshot.log
-stale_seq	PASS	3	旧 seq 不应覆盖新快照	Node harness: stale seq ignored	/root/mediasoup-cpp/tests/qos_harness/artifacts/uplink-qos-test-plan-20260410-212123/stale_seq.log
-policy_update	PASS	4	P2	Node harness: qosPolicy hot update	/root/mediasoup-cpp/tests/qos_harness/artifacts/uplink-qos-test-plan-20260410-212123/policy_update.log
-auto_override_poor	PASS	3	L5 / L8 相关覆盖	Node harness: automatic poor override	/root/mediasoup-cpp/tests/qos_harness/artifacts/uplink-qos-test-plan-20260410-212123/auto_override_poor.log
-override_force_audio_only	PASS	4	P3 / P4	Node harness: manual override force audio-only	/root/mediasoup-cpp/tests/qos_harness/artifacts/uplink-qos-test-plan-20260410-212123/override_force_audio_only.log
-browser_server_signal	PASS	3	P2 / P5 / RM4 / severe degrade-recover 联动	Browser harness: policy update + automatic override + automatic clear	/root/mediasoup-cpp/tests/qos_harness/artifacts/uplink-qos-test-plan-20260410-212123/browser_server_signal.log
-browser_loopback	PASS	15	R4 / J3 / T5 相关覆盖	Browser loopback + tc netem 弱网退化/恢复	/root/mediasoup-cpp/tests/qos_harness/artifacts/uplink-qos-test-plan-20260410-212123/browser_loopback.log

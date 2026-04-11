@@ -679,8 +679,8 @@ TEST_F(QosRecordingTest, EmptyRecordingsApi) {
 	EXPECT_TRUE(rooms.empty());
 }
 
-// ─── Test: QoS clientStats are stored, validated and aggregated ───
-TEST_F(QosIntegrationTest, ClientStatsQosStoredAndAggregated) {
+// ─── Test: clientStats with downlink metrics are stored and retrievable ───
+TEST_F(QosIntegrationTest, ClientStatsDownlinkPassthrough) {
 	auto alice = joinRoom(testRoom_, "alice");
 	produceAudio(alice, 80000001);
 	usleep(200000);
@@ -688,109 +688,94 @@ TEST_F(QosIntegrationTest, ClientStatsQosStoredAndAggregated) {
 	auto observer = joinRoom(testRoom_, "observer");
 	usleep(200000);
 
+	// Simulate browser sending clientStats with downlink metrics
 	json clientReport = {
-		{"schema", "mediasoup.qos.client.v1"},
-		{"seq", 42},
-		{"tsMs", 1712736000123LL},
-		{"peerState", {
-			{"mode", "audio-video"},
-			{"quality", "poor"},
-			{"stale", false}
+		{"recv", {
+			{"currentRoundTripTime", 0.025},
+			{"bytesReceived", 500000}
 		}},
-		{"tracks", json::array({
-			{
-				{"localTrackId", "camera-main"},
-				{"producerId", "producer-123"},
-				{"kind", "video"},
-				{"source", "camera"},
-				{"state", "congested"},
-				{"reason", "network"},
-				{"quality", "poor"},
-				{"ladderLevel", 3},
-				{"signals", {
-					{"sendBitrateBps", 380000},
-					{"targetBitrateBps", 900000},
-					{"lossRate", 0.11},
-					{"rttMs", 260},
-					{"jitterMs", 24},
-					{"frameWidth", 640},
-					{"frameHeight", 360},
-					{"framesPerSecond", 12},
-					{"qualityLimitationReason", "bandwidth"}
-				}},
-				{"lastAction", {
-					{"type", "setEncodingParameters"},
-					{"applied", true}
-				}}
-			}
-		})}
+		{"inboundVideo", {
+			{"jitter", 0.005},
+			{"packetsLost", 3},
+			{"packetsReceived", 1500},
+			{"framesPerSecond", 30},
+			{"frameWidth", 1280},
+			{"frameHeight", 720},
+			{"nackCount", 2},
+			{"pliCount", 1}
+		}},
+		{"inboundAudio", {
+			{"jitter", 0.002},
+			{"packetsLost", 0},
+			{"packetsReceived", 2500},
+			{"concealedSamples", 480},
+			{"totalSamplesReceived", 240000}
+		}},
+		{"videoFreeze", {
+			{"freezeCount", 2},
+			{"totalFreezesDuration", 0.8},
+			{"totalFramesDuration", 30.0},
+			{"framesDropped", 1},
+			{"jitterBufferDelayMs", 45}
+		}}
 	};
-	auto statsResp = alice.ws->request("clientStats", clientReport);
-	ASSERT_TRUE(statsResp.value("ok", false)) << statsResp.dump();
+	alice.ws->request("clientStats", clientReport);
 	usleep(500000);
 
+	// Query stats — clientStats should be included
 	auto resp = observer.ws->request("getStats", {{"peerId", "alice"}});
 	ASSERT_TRUE(resp.value("ok", false)) << resp.dump();
 
 	auto& data = resp["data"];
 	ASSERT_TRUE(data.contains("clientStats")) << "clientStats missing from getStats response";
-	ASSERT_TRUE(data.contains("qos")) << "qos aggregate missing from getStats response";
-	EXPECT_FALSE(data.value("qosStale", true));
-	EXPECT_EQ(data.value("qosLastUpdatedMs", 0LL), 1712736000123LL);
 
 	auto& cs = data["clientStats"];
-	EXPECT_EQ(cs["schema"], "mediasoup.qos.client.v1");
-	EXPECT_EQ(cs["seq"], 42);
-	ASSERT_TRUE(cs.contains("tracks"));
-	ASSERT_EQ(cs["tracks"].size(), 1u);
-	EXPECT_EQ(cs["tracks"][0]["quality"], "poor");
-	EXPECT_EQ(cs["tracks"][0]["signals"]["qualityLimitationReason"], "bandwidth");
 
-	auto& qos = data["qos"];
-	EXPECT_EQ(qos["quality"], "poor");
-	EXPECT_EQ(qos["seq"], 42);
-	EXPECT_FALSE(qos["stale"].get<bool>());
-	EXPECT_FALSE(qos["lost"].get<bool>());
+	// Verify inboundVideo passthrough
+	ASSERT_TRUE(cs.contains("inboundVideo"));
+	EXPECT_NEAR(cs["inboundVideo"]["jitter"].get<double>(), 0.005, 0.001);
+	EXPECT_EQ(cs["inboundVideo"]["packetsLost"].get<int>(), 3);
+	EXPECT_EQ(cs["inboundVideo"]["frameWidth"].get<int>(), 1280);
+	EXPECT_EQ(cs["inboundVideo"]["frameHeight"].get<int>(), 720);
+	EXPECT_EQ(cs["inboundVideo"]["framesPerSecond"].get<int>(), 30);
+
+	// Verify inboundAudio passthrough
+	ASSERT_TRUE(cs.contains("inboundAudio"));
+	EXPECT_NEAR(cs["inboundAudio"]["jitter"].get<double>(), 0.002, 0.001);
+	EXPECT_EQ(cs["inboundAudio"]["concealedSamples"].get<int>(), 480);
+
+	// Verify videoFreeze passthrough
+	ASSERT_TRUE(cs.contains("videoFreeze"));
+	EXPECT_EQ(cs["videoFreeze"]["freezeCount"].get<int>(), 2);
+	EXPECT_NEAR(cs["videoFreeze"]["totalFreezesDuration"].get<double>(), 0.8, 0.01);
+	EXPECT_EQ(cs["videoFreeze"]["framesDropped"].get<int>(), 1);
+
+	// Verify recv passthrough
+	ASSERT_TRUE(cs.contains("recv"));
+	EXPECT_NEAR(cs["recv"]["currentRoundTripTime"].get<double>(), 0.025, 0.001);
 }
 
-// ─── Test: QoS clientStats appear in statsReport broadcast ───
-TEST_F(QosIntegrationTest, ClientStatsQosInBroadcast) {
+// ─── Test: clientStats appear in statsReport broadcast ───
+TEST_F(QosIntegrationTest, ClientStatsInBroadcast) {
 	auto alice = joinRoom(testRoom_, "alice");
 	produceAudio(alice, 80000002);
 	usleep(200000);
 
+	// Send clientStats
 	json clientReport = {
-		{"schema", "mediasoup.qos.client.v1"},
-		{"seq", 99},
-		{"tsMs", 1712736002222LL},
-		{"peerState", {
-			{"mode", "audio-video"},
-			{"quality", "good"},
-			{"stale", false}
+		{"inboundVideo", {
+			{"jitter", 0.012},
+			{"packetsLost", 7},
+			{"frameWidth", 640},
+			{"frameHeight", 480}
 		}},
-		{"tracks", json::array({
-			{
-				{"localTrackId", "camera-main"},
-				{"kind", "video"},
-				{"source", "camera"},
-				{"state", "early_warning"},
-				{"reason", "network"},
-				{"quality", "good"},
-				{"ladderLevel", 1},
-				{"signals", {
-					{"sendBitrateBps", 700000},
-					{"targetBitrateBps", 900000},
-					{"lossRate", 0.03},
-					{"rttMs", 180},
-					{"jitterMs", 12},
-					{"frameWidth", 640},
-					{"frameHeight", 480}
-				}}
-			}
-		})}
+		{"videoFreeze", {
+			{"freezeCount", 5},
+			{"totalFreezesDuration", 2.5},
+			{"totalFramesDuration", 60.0}
+		}}
 	};
-	auto statsResp = alice.ws->request("clientStats", clientReport);
-	ASSERT_TRUE(statsResp.value("ok", false)) << statsResp.dump();
+	alice.ws->request("clientStats", clientReport);
 
 	// Wait for statsReport notification (3s interval)
 	auto notif = alice.ws->waitNotification("statsReport", 8000);
@@ -805,409 +790,19 @@ TEST_F(QosIntegrationTest, ClientStatsQosInBroadcast) {
 		if (p.value("peerId", "") == "alice") {
 			found = true;
 			ASSERT_TRUE(p.contains("clientStats"));
-			ASSERT_TRUE(p.contains("qos"));
-			EXPECT_EQ(p["clientStats"]["schema"], "mediasoup.qos.client.v1");
-			EXPECT_EQ(p["clientStats"]["seq"], 99);
-			EXPECT_EQ(p["qos"]["quality"], "good");
-			EXPECT_FALSE(p["qos"]["stale"].get<bool>());
+			auto& cs = p["clientStats"];
+			ASSERT_TRUE(cs.contains("inboundVideo"));
+			EXPECT_EQ(cs["inboundVideo"]["packetsLost"].get<int>(), 7);
+			ASSERT_TRUE(cs.contains("videoFreeze"));
+			EXPECT_EQ(cs["videoFreeze"]["freezeCount"].get<int>(), 5);
 			break;
 		}
 	}
 	EXPECT_TRUE(found) << "Alice not found in statsReport";
 }
 
-TEST_F(QosIntegrationTest, InvalidClientStatsRejected) {
-	auto alice = joinRoom(testRoom_, "alice");
-	auto resp = alice.ws->request("clientStats", {
-		{"recv", {{"currentRoundTripTime", 0.025}}}
-	});
-
-	EXPECT_FALSE(resp.value("ok", true));
-	EXPECT_NE(resp.value("error", "").find("invalid clientStats"), std::string::npos);
-}
-
-TEST_F(QosIntegrationTest, OlderClientStatsSeqIsIgnored) {
-	auto alice = joinRoom(testRoom_, "alice");
-	produceAudio(alice, 80000003);
-	usleep(200000);
-
-	auto observer = joinRoom(testRoom_, "observer");
-	usleep(200000);
-
-	json newer = {
-		{"schema", "mediasoup.qos.client.v1"},
-		{"seq", 50},
-		{"tsMs", 1712736003000LL},
-		{"peerState", {
-			{"mode", "audio-video"},
-			{"quality", "good"},
-			{"stale", false}
-		}},
-		{"tracks", json::array({
-			{
-				{"localTrackId", "camera-main"},
-				{"kind", "video"},
-				{"source", "camera"},
-				{"state", "early_warning"},
-				{"reason", "network"},
-				{"quality", "good"},
-				{"ladderLevel", 1},
-				{"signals", {
-					{"sendBitrateBps", 700000},
-					{"targetBitrateBps", 900000}
-				}}
-			}
-		})}
-	};
-	json older = newer;
-	older["seq"] = 49;
-	older["peerState"]["quality"] = "poor";
-	older["tracks"][0]["quality"] = "poor";
-
-	ASSERT_TRUE(alice.ws->request("clientStats", newer).value("ok", false));
-	ASSERT_TRUE(alice.ws->request("clientStats", older).value("ok", false));
-	usleep(500000);
-
-	auto resp = observer.ws->request("getStats", {{"peerId", "alice"}});
-	ASSERT_TRUE(resp.value("ok", false)) << resp.dump();
-	ASSERT_TRUE(resp["data"].contains("clientStats"));
-	ASSERT_TRUE(resp["data"].contains("qos"));
-
-	EXPECT_EQ(resp["data"]["clientStats"]["seq"], 50);
-	EXPECT_EQ(resp["data"]["qos"]["seq"], 50);
-	EXPECT_EQ(resp["data"]["qos"]["quality"], "good");
-}
-
-TEST_F(QosIntegrationTest, JoinReceivesQosPolicyNotification) {
-	auto alice = joinRoom(testRoom_, "alice");
-
-	auto notif = alice.ws->waitNotification("qosPolicy", 3000);
-	ASSERT_FALSE(notif.empty()) << "Did not receive qosPolicy";
-
-	ASSERT_TRUE(notif["data"].is_object());
-	EXPECT_EQ(notif["data"]["schema"], "mediasoup.qos.policy.v1");
-	EXPECT_EQ(notif["data"]["sampleIntervalMs"], 1000);
-	EXPECT_EQ(notif["data"]["snapshotIntervalMs"], 2000);
-	EXPECT_TRUE(notif["data"]["allowAudioOnly"].get<bool>());
-}
-
-TEST_F(QosIntegrationTest, SetQosOverrideNotifiesTargetPeer) {
-	auto alice = joinRoom(testRoom_, "alice");
-	(void)alice.ws->waitNotification("qosPolicy", 3000);
-
-	auto resp = alice.ws->request("setQosOverride", {
-		{"peerId", "alice"},
-		{"override", {
-			{"schema", "mediasoup.qos.override.v1"},
-			{"scope", "peer"},
-			{"trackId", nullptr},
-			{"forceAudioOnly", true},
-			{"ttlMs", 10000},
-			{"reason", "room_protection"}
-		}}
-	});
-	ASSERT_TRUE(resp.value("ok", false)) << resp.dump();
-
-	auto notif = alice.ws->waitNotification("qosOverride", 3000);
-	ASSERT_FALSE(notif.empty()) << "Did not receive qosOverride";
-	EXPECT_EQ(notif["data"]["schema"], "mediasoup.qos.override.v1");
-	EXPECT_EQ(notif["data"]["scope"], "peer");
-	EXPECT_TRUE(notif["data"]["forceAudioOnly"].get<bool>());
-	EXPECT_EQ(notif["data"]["ttlMs"], 10000);
-}
-
-TEST_F(QosIntegrationTest, SetQosPolicyNotifiesTargetPeer) {
-	auto alice = joinRoom(testRoom_, "alice");
-	(void)alice.ws->waitNotification("qosPolicy", 3000);
-
-	auto resp = alice.ws->request("setQosPolicy", {
-		{"peerId", "alice"},
-		{"policy", {
-			{"schema", "mediasoup.qos.policy.v1"},
-			{"sampleIntervalMs", 1500},
-			{"snapshotIntervalMs", 4000},
-			{"allowAudioOnly", false},
-			{"allowVideoPause", false},
-			{"profiles", {
-				{"camera", "conservative"},
-				{"screenShare", "clarity-first"},
-				{"audio", "speech-first"}
-			}}
-		}}
-	});
-	ASSERT_TRUE(resp.value("ok", false)) << resp.dump();
-
-	auto notif = alice.ws->waitNotification("qosPolicy", 3000);
-	ASSERT_FALSE(notif.empty()) << "Did not receive qosPolicy";
-	EXPECT_EQ(notif["data"]["sampleIntervalMs"], 1500);
-	EXPECT_EQ(notif["data"]["snapshotIntervalMs"], 4000);
-	EXPECT_FALSE(notif["data"]["allowAudioOnly"].get<bool>());
-	EXPECT_EQ(notif["data"]["profiles"]["camera"], "conservative");
-}
-
-TEST_F(QosIntegrationTest, AutomaticQosOverrideOnPoorQuality) {
-	auto alice = joinRoom(testRoom_, "alice");
-	(void)alice.ws->waitNotification("qosPolicy", 3000);
-
-	json poorClientReport = {
-		{"schema", "mediasoup.qos.client.v1"},
-		{"seq", 77},
-		{"tsMs", 1712736007777LL},
-		{"peerState", {
-			{"mode", "audio-video"},
-			{"quality", "poor"},
-			{"stale", false}
-		}},
-		{"tracks", json::array({
-			{
-				{"localTrackId", "camera-main"},
-				{"kind", "video"},
-				{"source", "camera"},
-				{"state", "congested"},
-				{"reason", "network"},
-				{"quality", "poor"},
-				{"ladderLevel", 3},
-				{"signals", {
-					{"sendBitrateBps", 300000},
-					{"targetBitrateBps", 900000},
-					{"lossRate", 0.12},
-					{"rttMs", 280}
-				}}
-			}
-		})}
-	};
-	ASSERT_TRUE(alice.ws->request("clientStats", poorClientReport).value("ok", false));
-
-	auto notif = alice.ws->waitNotification("qosOverride", 3000);
-	ASSERT_FALSE(notif.empty()) << "Did not receive automatic qosOverride";
-	EXPECT_EQ(notif["data"]["reason"], "server_auto_poor");
-	EXPECT_EQ(notif["data"]["maxLevelClamp"], 2);
-	EXPECT_TRUE(notif["data"]["disableRecovery"].get<bool>());
-}
-
-TEST_F(QosIntegrationTest, AutomaticQosOverrideOnLostQuality) {
-	auto alice = joinRoom(testRoom_, "alice");
-	(void)alice.ws->waitNotification("qosPolicy", 3000);
-
-	json lostClientReport = {
-		{"schema", "mediasoup.qos.client.v1"},
-		{"seq", 88},
-		{"tsMs", 1712736008888LL},
-		{"peerState", {
-			{"mode", "audio-video"},
-			{"quality", "lost"},
-			{"stale", false}
-		}},
-		{"tracks", json::array({
-			{
-				{"localTrackId", "camera-main"},
-				{"kind", "video"},
-				{"source", "camera"},
-				{"state", "congested"},
-				{"reason", "network"},
-				{"quality", "lost"},
-				{"ladderLevel", 4},
-				{"signals", {
-					{"sendBitrateBps", 0},
-					{"targetBitrateBps", 900000},
-					{"lossRate", 0.2},
-					{"rttMs", 400}
-				}}
-			}
-		})}
-	};
-	ASSERT_TRUE(alice.ws->request("clientStats", lostClientReport).value("ok", false));
-
-	auto notif = alice.ws->waitNotification("qosOverride", 3000);
-	ASSERT_FALSE(notif.empty()) << "Did not receive automatic lost qosOverride";
-	EXPECT_EQ(notif["data"]["reason"], "server_auto_lost");
-	EXPECT_TRUE(notif["data"]["forceAudioOnly"].get<bool>());
-	EXPECT_TRUE(notif["data"]["disableRecovery"].get<bool>());
-	EXPECT_EQ(notif["data"]["ttlMs"], 15000);
-}
-
-TEST_F(QosIntegrationTest, AutomaticQosOverrideClearsWhenQualityRecovers) {
-	auto alice = joinRoom(testRoom_, "alice");
-	(void)alice.ws->waitNotification("qosPolicy", 3000);
-
-	json poorClientReport = {
-		{"schema", "mediasoup.qos.client.v1"},
-		{"seq", 100},
-		{"tsMs", 1712736010000LL},
-		{"peerState", {
-			{"mode", "audio-video"},
-			{"quality", "poor"},
-			{"stale", false}
-		}},
-		{"tracks", json::array({
-			{
-				{"localTrackId", "camera-main"},
-				{"kind", "video"},
-				{"source", "camera"},
-				{"state", "congested"},
-				{"reason", "network"},
-				{"quality", "poor"},
-				{"ladderLevel", 3},
-				{"signals", {
-					{"sendBitrateBps", 300000},
-					{"targetBitrateBps", 900000},
-					{"lossRate", 0.12},
-					{"rttMs", 280}
-				}}
-			}
-		})}
-	};
-	ASSERT_TRUE(alice.ws->request("clientStats", poorClientReport).value("ok", false));
-	auto poorNotif = alice.ws->waitNotification("qosOverride", 3000);
-	ASSERT_FALSE(poorNotif.empty());
-	EXPECT_EQ(poorNotif["data"]["reason"], "server_auto_poor");
-
-	json recoveredClientReport = poorClientReport;
-	recoveredClientReport["seq"] = 101;
-	recoveredClientReport["tsMs"] = 1712736011000LL;
-	recoveredClientReport["peerState"]["quality"] = "good";
-	recoveredClientReport["tracks"][0]["quality"] = "good";
-	recoveredClientReport["tracks"][0]["state"] = "stable";
-	recoveredClientReport["tracks"][0]["ladderLevel"] = 0;
-	recoveredClientReport["tracks"][0]["signals"]["sendBitrateBps"] = 800000;
-	recoveredClientReport["tracks"][0]["signals"]["lossRate"] = 0.01;
-	recoveredClientReport["tracks"][0]["signals"]["rttMs"] = 120;
-
-	ASSERT_TRUE(alice.ws->request("clientStats", recoveredClientReport).value("ok", false));
-	auto clearNotif = alice.ws->waitNotification("qosOverride", 3000);
-	ASSERT_FALSE(clearNotif.empty()) << "Did not receive qosOverride clear";
-	EXPECT_EQ(clearNotif["data"]["reason"], "server_auto_clear");
-	EXPECT_EQ(clearNotif["data"]["ttlMs"], 0);
-}
-
-TEST_F(QosIntegrationTest, ConnectionQualityNotificationDelivered) {
-	auto alice = joinRoom(testRoom_, "alice");
-	(void)alice.ws->waitNotification("qosPolicy", 3000);
-
-	json poorClientReport = {
-		{"schema", "mediasoup.qos.client.v1"},
-		{"seq", 120},
-		{"tsMs", 1712736012000LL},
-		{"peerState", {
-			{"mode", "audio-video"},
-			{"quality", "poor"},
-			{"stale", false}
-		}},
-		{"tracks", json::array({
-			{
-				{"localTrackId", "camera-main"},
-				{"kind", "video"},
-				{"source", "camera"},
-				{"state", "congested"},
-				{"reason", "network"},
-				{"quality", "poor"},
-				{"ladderLevel", 3},
-				{"signals", {
-					{"sendBitrateBps", 300000},
-					{"targetBitrateBps", 900000},
-					{"lossRate", 0.12},
-					{"rttMs", 280}
-				}}
-			}
-		})}
-	};
-	ASSERT_TRUE(alice.ws->request("clientStats", poorClientReport).value("ok", false));
-	auto observed = alice.ws->drainNotifications();
-	std::string observedMethods;
-	for (auto& msg : observed) {
-		if (!observedMethods.empty()) observedMethods += ",";
-		observedMethods += msg.value("method", "");
-	}
-	json notif;
-	for (auto& msg : observed) {
-		if (msg.value("method", "") == "qosConnectionQuality") {
-			notif = msg;
-			break;
-		}
-	}
-	if (notif.empty()) notif = alice.ws->waitNotification("qosConnectionQuality", 3000);
-	ASSERT_FALSE(notif.empty()) << "Did not receive qosConnectionQuality [observed:" << observedMethods << "]";
-	EXPECT_EQ(notif["data"]["quality"], "poor");
-	EXPECT_FALSE(notif["data"]["stale"].get<bool>());
-	EXPECT_FALSE(notif["data"]["lost"].get<bool>());
-}
-
-TEST_F(QosIntegrationTest, RoomQosStateAndRoomPressureOverride) {
-	auto alice = joinRoom(testRoom_, "alice");
-	auto bob = joinRoom(testRoom_, "bob");
-	(void)alice.ws->waitNotification("qosPolicy", 3000);
-	(void)bob.ws->waitNotification("qosPolicy", 3000);
-
-	auto makePoor = [](int seq, const std::string& trackId) {
-		return json{
-			{"schema", "mediasoup.qos.client.v1"},
-			{"seq", seq},
-			{"tsMs", 1712736013000LL + seq},
-			{"peerState", {
-				{"mode", "audio-video"},
-				{"quality", "poor"},
-				{"stale", false}
-			}},
-			{"tracks", json::array({
-				{
-					{"localTrackId", trackId},
-					{"kind", "video"},
-					{"source", "camera"},
-					{"state", "congested"},
-					{"reason", "network"},
-					{"quality", "poor"},
-					{"ladderLevel", 3},
-					{"signals", {
-						{"sendBitrateBps", 300000},
-						{"targetBitrateBps", 900000},
-						{"lossRate", 0.12},
-						{"rttMs", 280}
-					}}
-				}
-			})}
-		};
-	};
-
-	ASSERT_TRUE(alice.ws->request("clientStats", makePoor(130, "camera-a")).value("ok", false));
-	ASSERT_TRUE(bob.ws->request("clientStats", makePoor(131, "camera-b")).value("ok", false));
-	auto roomObserved = alice.ws->drainNotifications();
-	std::string roomObservedMethods;
-	for (auto& msg : roomObserved) {
-		if (!roomObservedMethods.empty()) roomObservedMethods += ",";
-		roomObservedMethods += msg.value("method", "");
-	}
-	json roomState;
-	for (auto& msg : roomObserved) {
-		if (msg.value("method", "") == "qosRoomState") {
-			roomState = msg;
-		}
-	}
-	if (roomState.empty()) roomState = alice.ws->waitNotification("qosRoomState", 3000);
-	ASSERT_FALSE(roomState.empty()) << "Did not receive qosRoomState [observed:" << roomObservedMethods << "]";
-	if (roomState["data"]["poorPeers"] != 2) {
-		auto nextRoomState = alice.ws->waitNotification("qosRoomState", 3000);
-		if (!nextRoomState.empty()) roomState = nextRoomState;
-	}
-	EXPECT_EQ(roomState["data"]["poorPeers"], 2);
-	EXPECT_EQ(roomState["data"]["quality"], "poor");
-
-	json aliceOverride;
-	for (auto& msg : roomObserved) {
-		if (msg.value("method", "") == "qosOverride" &&
-			msg["data"].value("reason", "") == "server_room_pressure") {
-			aliceOverride = msg;
-			break;
-		}
-	}
-	if (aliceOverride.empty()) aliceOverride = alice.ws->waitNotification("qosOverride", 3000);
-	ASSERT_FALSE(aliceOverride.empty()) << "Did not receive room pressure qosOverride";
-	EXPECT_EQ(aliceOverride["data"]["reason"], "server_room_pressure");
-	EXPECT_EQ(aliceOverride["data"]["maxLevelClamp"], 1);
-	EXPECT_TRUE(aliceOverride["data"]["disableRecovery"].get<bool>());
-}
-
 // ─── Test: clientStats in recording QoS file ───
-// Note: QoS snapshot passthrough to QoS file is implicitly tested by
-// test_qos_recording_accuracy.cpp (appendQosSnapshot writes full peer stats
-// including clientStats/qos). The service-side passthrough itself is verified
-// by ClientStatsQosStoredAndAggregated and ClientStatsQosInBroadcast above.
+// Note: clientStats passthrough to QoS file is implicitly tested by
+// test_qos_recording_accuracy.cpp (appendQosSnapshot writes full stats
+// including clientStats). The passthrough itself is verified by
+// ClientStatsDownlinkPassthrough and ClientStatsInBroadcast above.
