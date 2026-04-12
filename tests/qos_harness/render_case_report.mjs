@@ -6,19 +6,59 @@ import {
   extractTiming,
   getImpairedStateForEvaluation,
 } from './synthetic_sweep_shared.mjs';
+import {
+  archiveCurrentReportSet,
+  archiveKnownArtifacts,
+  defaultCaseReportOutputPath,
+  getReportSetPaths,
+  getRunTypeForMatrixInput,
+  getRunTypeFromSelectedCaseIds,
+} from './report_artifacts.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..', '..');
 const scenariosPath = path.join(__dirname, 'scenarios', 'sweep_cases.json');
-const matrixReportPath = path.join(repoRoot, 'docs', 'generated', 'uplink-qos-matrix-report.json');
-const outputPath = path.join(repoRoot, 'docs', 'uplink-qos-case-results.md');
+const args = process.argv.slice(2);
+
+function resolvePathArg(value) {
+  return path.isAbsolute(value) ? value : path.resolve(repoRoot, value);
+}
+
+const inputArg = args.find(arg => arg.startsWith('--input='));
+const outputArg = args.find(arg => arg.startsWith('--output='));
+const matrixReportPath = inputArg
+  ? resolvePathArg(inputArg.slice('--input='.length))
+  : getReportSetPaths(repoRoot, 'full').matrixJsonPath;
+const outputPath = outputArg
+  ? resolvePathArg(outputArg.slice('--output='.length))
+  : defaultCaseReportOutputPath(repoRoot, matrixReportPath);
 
 const scenarios = JSON.parse(fs.readFileSync(scenariosPath, 'utf8'));
 const matrixReport = JSON.parse(fs.readFileSync(matrixReportPath, 'utf8'));
 const resultByCaseId = new Map((matrixReport.cases ?? []).map(entry => [entry.caseId, entry]));
+const inferredRunType =
+  getRunTypeForMatrixInput(repoRoot, matrixReportPath) ??
+  getRunTypeFromSelectedCaseIds(matrixReport.selectedCaseIds);
+const inferredReportPaths = getReportSetPaths(repoRoot, inferredRunType);
+const updatesKnownLatest =
+  path.resolve(matrixReportPath) === inferredReportPaths.matrixJsonPath &&
+  path.resolve(outputPath) === inferredReportPaths.caseMarkdownPath;
 
 const baselineCases = scenarios.filter(item => item.group === 'baseline');
+const groupOrder = [...new Set(scenarios.map(item => item.group))];
+
+function groupLabel(group) {
+  return {
+    baseline: 'baseline',
+    bw_sweep: 'bw_sweep',
+    loss_sweep: 'loss_sweep',
+    rtt_sweep: 'rtt_sweep',
+    jitter_sweep: 'jitter_sweep',
+    transition: 'transition',
+    burst: 'burst',
+  }[group] ?? group;
+}
 
 function fmtMs(value) {
   return typeof value === 'number' ? `${value}ms` : '-';
@@ -32,6 +72,17 @@ function fmtState(state) {
 function fmtNetem(netem) {
   if (!netem) return '-';
   return `${netem.bandwidth}kbps / RTT ${netem.rtt}ms / loss ${netem.loss}% / jitter ${netem.jitter}ms`;
+}
+
+function caseAnchor(caseId) {
+  return `#${String(caseId).trim().toLowerCase()}`;
+}
+
+function caseLink(caseId) {
+  if (!caseId || caseId === '-') {
+    return '-';
+  }
+  return `[${caseId}](${caseAnchor(caseId)})`;
 }
 
 function findPrereqCase(result) {
@@ -199,6 +250,18 @@ const summary = {
 const failedCases = casesWithEvaluation.filter(
   item => item.result?.error || (item.result && item.evaluation?.passed !== true)
 );
+const caseLinksByGroup = new Map();
+
+for (const group of groupOrder) {
+  caseLinksByGroup.set(
+    group,
+    scenarios
+      .filter(item => item.group === group)
+      .map(item => caseLink(item.caseId))
+      .join('、')
+  );
+}
+
 const lines = [];
 
 lines.push('# 上行 QoS 逐 Case 最终结果');
@@ -220,15 +283,27 @@ if (failedCases.length > 0) {
   lines.push('|---|---|---|');
   for (const item of failedCases) {
     if (item.result?.error) {
-      lines.push(`| \`${item.scenario.caseId}\` | \`ERROR\` | ${item.result.error} |`);
+      lines.push(`| ${caseLink(item.scenario.caseId)} | \`ERROR\` | ${item.result.error} |`);
     } else {
-      lines.push(`| \`${item.scenario.caseId}\` | \`FAIL\` | ${item.evaluation?.reason ?? 'unknown'} |`);
+      lines.push(`| ${caseLink(item.scenario.caseId)} | \`FAIL\` | ${item.evaluation?.reason ?? 'unknown'} |`);
     }
   }
   lines.push('');
 }
 
-lines.push('## 2. 逐 Case 结果');
+lines.push('## 2. 快速跳转');
+lines.push('');
+lines.push(
+  failedCases.length > 0
+    ? `- 失败 / 错误：${failedCases.map(item => caseLink(item.scenario.caseId)).join('、')}`
+    : '- 失败 / 错误：无'
+);
+for (const group of groupOrder) {
+  lines.push(`- ${groupLabel(group)}：${caseLinksByGroup.get(group)}`);
+}
+lines.push('');
+
+lines.push('## 3. 逐 Case 结果');
 lines.push('');
 
 for (const scenario of scenarios) {
@@ -238,7 +313,7 @@ for (const scenario of scenarios) {
   lines.push('| 字段 | 内容 |');
   lines.push('|---|---|');
   lines.push(`| Case ID | \`${scenario.caseId}\` |`);
-  lines.push(`| 前置 Case | ${findPrereqCase(result)} |`);
+  lines.push(`| 前置 Case | ${caseLink(findPrereqCase(result))} |`);
   lines.push(`| 类型 | \`${scenario.group}\` / priority \`${scenario.priority}\` |`);
   lines.push(`| 上行带宽 | ${result?.impairment?.netem?.bandwidth ?? scenario.bandwidth} kbps |`);
   lines.push(`| RTT | ${result?.impairment?.netem?.rtt ?? scenario.rtt} ms |`);
@@ -257,5 +332,33 @@ for (const scenario of scenarios) {
   lines.push('');
 }
 
+if (updatesKnownLatest) {
+  archiveKnownArtifacts(
+    repoRoot,
+    [
+      {
+        path: outputPath,
+        relativePath: inferredReportPaths.caseMarkdownRelativePath,
+        kind: 'caseMarkdown',
+        runType: inferredRunType,
+      },
+    ],
+    {
+      runType: inferredRunType,
+      sourceScript: 'tests/qos_harness/render_case_report.mjs',
+    }
+  );
+}
+
+fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 fs.writeFileSync(outputPath, `${lines.join('\n')}\n`);
+
+if (updatesKnownLatest) {
+  archiveCurrentReportSet(repoRoot, {
+    generatedAt: matrixReport.generatedAt,
+    runType: inferredRunType,
+    selectedCaseIds: matrixReport.selectedCaseIds,
+    sourceScript: 'tests/qos_harness/render_case_report.mjs',
+  });
+}
 console.log(`case report written to ${outputPath}`);

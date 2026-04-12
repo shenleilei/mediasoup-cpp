@@ -35,7 +35,7 @@
 
 | 排名 | 事项 | 原因 | 目标结果 |
 |---|---|---|---|
-| 3 | full matrix 稳定性固化与归档 | 当前 `41 case` 已 PASS，但 machine-generated artifact 仍会被 targeted rerun 覆盖，且缺少连续多轮门禁 | 连续多轮可重复 PASS，并保留独立 full-matrix artifact / gate |
+| 3 | full matrix 稳定性固化与归档 | 当前 `41 case` 已 PASS；full / targeted / archive 产物已拆分，但仍缺少连续多轮门禁 | 连续多轮可重复 PASS，并保留独立 full-matrix artifact / gate |
 | 4 | override 语义彻底收口 | manual / automatic / room pressure / TTL clear 虽已可用，但语义仍偏实现驱动 | 文档、测试、实现三者完全一致 |
 | 5 | 运行时 QoS 可观测性 | 现在测试侧可观测性比运行时强，线上排障仍偏弱 | 暴露 metrics / counters / current QoS state / override stats |
 
@@ -86,7 +86,7 @@
 建议产出：
 
 - 全量 `41 case` 连续多轮可复现 `PASS`
-- full matrix 输出不再被 targeted rerun 覆盖，保留独立归档 artifact
+- full matrix / targeted rerun / archive 快照继续保持隔离，避免后续回归再次串档
 - 可以作为 nightly / pre-merge gate 长期运行
 
 ### 4. override 语义收口

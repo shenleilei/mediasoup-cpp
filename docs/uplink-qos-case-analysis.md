@@ -11,7 +11,10 @@
 - PASS/FAIL 的判定依据
 - 需要特别说明的口径差异
 
-当前可复核的机器数据来自 [generated/uplink-qos-matrix-report.json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.json)，只覆盖最后一次 targeted rerun 的 `8` 个 case：
+当前可复核的 targeted rerun 机器数据来自 [generated/uplink-qos-matrix-report.targeted.json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.targeted.json)；
+历史 targeted / full matrix 快照会按 `generatedAt` 归档到 [archive/uplink-qos-runs](/root/mediasoup-cpp/docs/archive/uplink-qos-runs)。
+
+本文件当前只覆盖最后一次 targeted rerun 的 `8` 个 case：
 
 - `T4`
 - `T6`

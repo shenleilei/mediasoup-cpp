@@ -14,10 +14,21 @@
 
 | Case ID | 结果 | 说明 |
 |---|---|---|
-| `B3` | `FAIL` | stateMatch=false, levelMatch=false, recoveryPassed=true, analysis=过弱 |
-| `J3` | `FAIL` | stateMatch=false, levelMatch=false, recoveryPassed=true, analysis=过强 |
+| [B3](#b3) | `FAIL` | stateMatch=false, levelMatch=false, recoveryPassed=true, analysis=过弱 |
+| [J3](#j3) | `FAIL` | stateMatch=false, levelMatch=false, recoveryPassed=true, analysis=过强 |
 
-## 2. 逐 Case 结果
+## 2. 快速跳转
+
+- 失败 / 错误：[B3](#b3)、[J3](#j3)
+- baseline：[B1](#b1)、[B2](#b2)、[B3](#b3)
+- bw_sweep：[BW1](#bw1)、[BW2](#bw2)、[BW3](#bw3)、[BW4](#bw4)、[BW5](#bw5)、[BW6](#bw6)、[BW7](#bw7)
+- loss_sweep：[L1](#l1)、[L2](#l2)、[L3](#l3)、[L4](#l4)、[L5](#l5)、[L6](#l6)、[L7](#l7)、[L8](#l8)
+- rtt_sweep：[R1](#r1)、[R2](#r2)、[R3](#r3)、[R4](#r4)、[R5](#r5)、[R6](#r6)
+- jitter_sweep：[J1](#j1)、[J2](#j2)、[J3](#j3)、[J4](#j4)、[J5](#j5)
+- transition：[T1](#t1)、[T2](#t2)、[T3](#t3)、[T4](#t4)、[T5](#t5)、[T6](#t6)、[T7](#t7)、[T8](#t8)
+- burst：[S1](#s1)、[S2](#s2)、[S3](#s3)、[S4](#s4)
+
+## 3. 逐 Case 结果
 
 ### B1
 
@@ -90,7 +101,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `BW1` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `bw_sweep` / priority `P1` |
 | 上行带宽 | 3000 kbps |
 | RTT | 25 ms |
@@ -112,7 +123,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `BW2` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `bw_sweep` / priority `P1` |
 | 上行带宽 | 2000 kbps |
 | RTT | 25 ms |
@@ -134,7 +145,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `BW3` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `bw_sweep` / priority `P0` |
 | 上行带宽 | 1000 kbps |
 | RTT | 25 ms |
@@ -156,7 +167,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `BW4` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `bw_sweep` / priority `P1` |
 | 上行带宽 | 800 kbps |
 | RTT | 25 ms |
@@ -178,7 +189,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `BW5` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `bw_sweep` / priority `P0` |
 | 上行带宽 | 500 kbps |
 | RTT | 25 ms |
@@ -200,7 +211,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `BW6` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `bw_sweep` / priority `P1` |
 | 上行带宽 | 300 kbps |
 | RTT | 25 ms |
@@ -222,7 +233,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `BW7` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `bw_sweep` / priority `P1` |
 | 上行带宽 | 200 kbps |
 | RTT | 25 ms |
@@ -244,7 +255,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `L1` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `loss_sweep` / priority `P1` |
 | 上行带宽 | 4000 kbps |
 | RTT | 25 ms |
@@ -266,7 +277,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `L2` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `loss_sweep` / priority `P1` |
 | 上行带宽 | 4000 kbps |
 | RTT | 25 ms |
@@ -288,7 +299,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `L3` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `loss_sweep` / priority `P0` |
 | 上行带宽 | 4000 kbps |
 | RTT | 25 ms |
@@ -310,7 +321,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `L4` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `loss_sweep` / priority `P1` |
 | 上行带宽 | 4000 kbps |
 | RTT | 25 ms |
@@ -332,7 +343,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `L5` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `loss_sweep` / priority `P0` |
 | 上行带宽 | 4000 kbps |
 | RTT | 25 ms |
@@ -354,7 +365,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `L6` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `loss_sweep` / priority `P1` |
 | 上行带宽 | 4000 kbps |
 | RTT | 25 ms |
@@ -376,7 +387,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `L7` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `loss_sweep` / priority `P1` |
 | 上行带宽 | 4000 kbps |
 | RTT | 25 ms |
@@ -398,7 +409,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `L8` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `loss_sweep` / priority `P0` |
 | 上行带宽 | 4000 kbps |
 | RTT | 25 ms |
@@ -420,7 +431,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `R1` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `rtt_sweep` / priority `P1` |
 | 上行带宽 | 4000 kbps |
 | RTT | 50 ms |
@@ -442,7 +453,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `R2` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `rtt_sweep` / priority `P1` |
 | 上行带宽 | 4000 kbps |
 | RTT | 80 ms |
@@ -464,7 +475,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `R3` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `rtt_sweep` / priority `P1` |
 | 上行带宽 | 4000 kbps |
 | RTT | 120 ms |
@@ -486,7 +497,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `R4` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `rtt_sweep` / priority `P0` |
 | 上行带宽 | 4000 kbps |
 | RTT | 180 ms |
@@ -508,7 +519,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `R5` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `rtt_sweep` / priority `P1` |
 | 上行带宽 | 4000 kbps |
 | RTT | 250 ms |
@@ -530,7 +541,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `R6` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `rtt_sweep` / priority `P1` |
 | 上行带宽 | 4000 kbps |
 | RTT | 350 ms |
@@ -552,7 +563,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `J1` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `jitter_sweep` / priority `P1` |
 | 上行带宽 | 4000 kbps |
 | RTT | 25 ms |
@@ -574,7 +585,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `J2` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `jitter_sweep` / priority `P1` |
 | 上行带宽 | 4000 kbps |
 | RTT | 25 ms |
@@ -596,7 +607,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `J3` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `jitter_sweep` / priority `P0` |
 | 上行带宽 | 4000 kbps |
 | RTT | 25 ms |
@@ -618,7 +629,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `J4` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `jitter_sweep` / priority `P1` |
 | 上行带宽 | 4000 kbps |
 | RTT | 25 ms |
@@ -640,7 +651,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `J5` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `jitter_sweep` / priority `P1` |
 | 上行带宽 | 4000 kbps |
 | RTT | 25 ms |
@@ -662,7 +673,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `T1` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `transition` / priority `P1` |
 | 上行带宽 | 2000 kbps |
 | RTT | 25 ms |
@@ -684,7 +695,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `T2` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `transition` / priority `P0` |
 | 上行带宽 | 1000 kbps |
 | RTT | 25 ms |
@@ -706,7 +717,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `T3` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `transition` / priority `P1` |
 | 上行带宽 | 500 kbps |
 | RTT | 25 ms |
@@ -728,7 +739,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `T4` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `transition` / priority `P1` |
 | 上行带宽 | 4000 kbps |
 | RTT | 25 ms |
@@ -750,7 +761,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `T5` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `transition` / priority `P0` |
 | 上行带宽 | 4000 kbps |
 | RTT | 25 ms |
@@ -772,7 +783,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `T6` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `transition` / priority `P1` |
 | 上行带宽 | 4000 kbps |
 | RTT | 180 ms |
@@ -794,7 +805,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `T7` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `transition` / priority `P1` |
 | 上行带宽 | 4000 kbps |
 | RTT | 25 ms |
@@ -816,7 +827,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `T8` |
-| 前置 Case | B3 |
+| 前置 Case | [B3](#b3) |
 | 类型 | `transition` / priority `P1` |
 | 上行带宽 | 800 kbps |
 | RTT | 120 ms |
@@ -838,7 +849,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `S1` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `burst` / priority `P1` |
 | 上行带宽 | 4000 kbps |
 | RTT | 25 ms |
@@ -860,7 +871,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `S2` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `burst` / priority `P1` |
 | 上行带宽 | 300 kbps |
 | RTT | 25 ms |
@@ -882,7 +893,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `S3` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `burst` / priority `P1` |
 | 上行带宽 | 4000 kbps |
 | RTT | 200 ms |
@@ -904,7 +915,7 @@
 | 字段 | 内容 |
 |---|---|
 | Case ID | `S4` |
-| 前置 Case | B1 |
+| 前置 Case | [B1](#b1) |
 | 类型 | `burst` / priority `P1` |
 | 上行带宽 | 4000 kbps |
 | RTT | 25 ms |
@@ -920,4 +931,3 @@
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
 | 关键时间指标 | impairment: warning=2843ms, congested=-, firstAction=2843ms, L1=2843ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=90ms, congested=-, firstAction=14590ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
-

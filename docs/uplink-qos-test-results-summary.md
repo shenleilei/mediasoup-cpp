@@ -41,9 +41,10 @@
 
 说明：
 
-- `run_matrix.mjs` 当前每次执行会覆盖 [generated/uplink-qos-matrix-report.json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.json)。
-- 因此，当前 JSON 文件只代表“最后一次 targeted rerun”的结果，不代表整轮调试后的 consolidated final summary。
-- 本文件和 [uplink-qos-final-report.md](/root/mediasoup-cpp/docs/uplink-qos-final-report.md) 才是本轮最终签收口径。
+- full matrix 当前结果保留在 [generated/uplink-qos-matrix-report.json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.json)。
+- targeted rerun 当前结果单独保留在 [generated/uplink-qos-matrix-report.targeted.json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.targeted.json)，不会再覆盖 full matrix 主报告。
+- 每次报告生成都会按 `generatedAt` 归档到 [archive/uplink-qos-runs](/root/mediasoup-cpp/docs/archive/uplink-qos-runs)，方便和上一轮直接对比。
+- 本文件和 [uplink-qos-final-report.md](/root/mediasoup-cpp/docs/uplink-qos-final-report.md) 仍是本轮最终签收口径。
 
 ## 4. 本轮关闭的关键问题
 
@@ -65,7 +66,7 @@
   `browser -> real SFU signaling`
   `服务端集成测试`
   共同覆盖。
-- 已决定在后续 P1 阶段补一份“单次串行 41 case、不经中途调试覆盖的 machine-generated artifact”，并归档独立输出文件。
+- 已将 full matrix / targeted rerun / archive 快照拆分，后续 P1 阶段继续补连续多轮门禁与独立固化 artifact。
 
 ## 6. 上报建议口径
 

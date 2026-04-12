@@ -119,9 +119,10 @@
 
 补充说明：
 
-- 当前 [generated/uplink-qos-matrix-report.json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.json) 只保留“最后一次 targeted rerun”的机器输出。
-- 这是因为 `run_matrix.mjs` 每次执行会覆盖该 JSON。
-- 若需要逐 case 的“预期 vs 实测”详细分析，请结合 [uplink-qos-case-analysis.md](/root/mediasoup-cpp/docs/uplink-qos-case-analysis.md) 查看当前保留的 targeted rerun 结果。
+- full matrix 当前机器输出保留在 [generated/uplink-qos-matrix-report.json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.json)。
+- targeted rerun 当前机器输出单独保留在 [generated/uplink-qos-matrix-report.targeted.json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.targeted.json)，不会再覆盖 full matrix 主报告。
+- 每次报告生成都会按 `generatedAt` 归档到 [archive/uplink-qos-runs](/root/mediasoup-cpp/docs/archive/uplink-qos-runs)，方便对比相邻两轮结果。
+- 若需要逐 case 的“预期 vs 实测”详细分析，请结合 [uplink-qos-case-analysis.md](/root/mediasoup-cpp/docs/uplink-qos-case-analysis.md) 查看当前 targeted rerun 或历史 archive 快照。
 - 因此，上报时应以本报告和 [uplink-qos-test-results-summary.md](/root/mediasoup-cpp/docs/uplink-qos-test-results-summary.md) 作为本轮 consolidated final result。
 
 ## 6. 建议对上口径

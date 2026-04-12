@@ -13,17 +13,25 @@ import {
   getImpairedStateForEvaluation,
   summarizePhaseState,
 } from './synthetic_sweep_shared.mjs';
+import {
+  archiveCurrentReportSet,
+  backupLatestReportSet,
+  getReportSetPaths,
+  getRunTypeForSelectedCases,
+} from './report_artifacts.mjs';
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 const repoRoot = path.resolve(__dirname, '..', '..');
 const scenariosPath = path.join(__dirname, 'scenarios', 'sweep_cases.json');
-const outputPath = path.join(repoRoot, 'docs', 'generated', 'uplink-qos-matrix-report.json');
 
 const args = process.argv.slice(2);
 const caseArg = args.find(arg => arg.startsWith('--cases='));
 const selectedCases = caseArg
   ? new Set(caseArg.replace('--cases=', '').split(',').map(id => id.trim()).filter(Boolean))
   : null;
+const runType = getRunTypeForSelectedCases(selectedCases);
+const reportPaths = getReportSetPaths(repoRoot, runType);
+const outputPath = reportPaths.matrixJsonPath;
 
 const durationScale = Number(process.env.QOS_MATRIX_SPEED) || 1;
 
@@ -204,6 +212,10 @@ function buildSummary(results) {
 }
 
 async function runMatrix() {
+  backupLatestReportSet(repoRoot, runType, {
+    sourceScript: 'tests/qos_harness/run_matrix.mjs',
+  });
+
   const rawCases = JSON.parse(fs.readFileSync(scenariosPath, 'utf8'));
   const cases = selectedCases
     ? rawCases.filter(caseDef => selectedCases.has(caseDef.caseId))
@@ -255,7 +267,15 @@ async function runMatrix() {
     cases: results,
   };
 
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   fs.writeFileSync(outputPath, JSON.stringify(report, null, 2));
+  archiveCurrentReportSet(repoRoot, {
+    generatedAt: report.generatedAt,
+    runType,
+    selectedCaseIds: report.selectedCaseIds,
+    includeCaseMarkdown: false,
+    sourceScript: 'tests/qos_harness/run_matrix.mjs',
+  });
   console.error(
     `matrix summary: passed=${report.summary.passed} failed=${report.summary.failed} errors=${report.summary.errors} total=${report.summary.total}`
   );
