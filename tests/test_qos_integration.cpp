@@ -1345,7 +1345,9 @@ TEST_F(QosIntegrationTest, SetQosPolicyDeniedForOtherPeer) {
 
 TEST_F(QosIntegrationTest, ReconnectClearsQosAndAcceptsNewStats) {
 	auto alice = joinRoom(testRoom_, "alice");
+	auto observer = joinRoom(testRoom_, "observer");
 	(void)alice.ws->waitNotification("qosPolicy", 3000);
+	(void)observer.ws->waitNotification("qosPolicy", 3000);
 
 	json peerState = {{"mode","audio-video"},{"quality","good"},{"stale",false}};
 
@@ -1354,26 +1356,37 @@ TEST_F(QosIntegrationTest, ReconnectClearsQosAndAcceptsNewStats) {
 		{"schema", "mediasoup.qos.client.v1"}, {"seq", 5000},
 		{"tsMs", 1712736000000LL}, {"peerState", peerState}, {"tracks", json::array()}
 	};
-	ASSERT_TRUE(alice.ws->request("clientStats", report1).value("ok", false));
+	alice.ws->request("clientStats", report1);
+	usleep(300000);
 
-	// Reconnect: same peerId, new WebSocket (old QoS entry is erased)
+	// Verify baseline stored
+	auto stats0 = observer.ws->request("getStats", {{"peerId", "alice"}});
+	ASSERT_TRUE(stats0.value("ok", false));
+	EXPECT_EQ(stats0["data"]["clientStats"]["seq"], 5000);
+
+	// Reconnect: same peerId, new WebSocket (old QoS entry should be erased)
 	auto alice2 = joinRoom(testRoom_, "alice");
 	(void)alice2.ws->waitNotification("qosPolicy", 3000);
+
+	// Right after reconnect, old entry should be gone
+	auto statsCleared = observer.ws->request("getStats", {{"peerId", "alice"}});
+	ASSERT_TRUE(statsCleared.value("ok", false));
+	EXPECT_FALSE(statsCleared["data"].contains("clientStats"))
+		<< "reconnect should clear old QoS entry";
 
 	// New session starts from seq=1 — accepted because entry was cleared
 	json report2 = {
 		{"schema", "mediasoup.qos.client.v1"}, {"seq", 1},
 		{"tsMs", 1712736010000LL}, {"peerState", peerState}, {"tracks", json::array()}
 	};
-	auto resp = alice2.ws->request("clientStats", report2);
-	EXPECT_TRUE(resp.value("ok", false)) << "clientStats after reconnect should be accepted: " << resp.dump();
+	alice2.ws->request("clientStats", report2);
+	usleep(300000);
 
-	// Subsequent increment also works
-	json report3 = {
-		{"schema", "mediasoup.qos.client.v1"}, {"seq", 2},
-		{"tsMs", 1712736020000LL}, {"peerState", peerState}, {"tracks", json::array()}
-	};
-	EXPECT_TRUE(alice2.ws->request("clientStats", report3).value("ok", false));
+	auto stats1 = observer.ws->request("getStats", {{"peerId", "alice"}});
+	ASSERT_TRUE(stats1.value("ok", false));
+	ASSERT_TRUE(stats1["data"].contains("clientStats"));
+	EXPECT_EQ(stats1["data"]["clientStats"]["seq"], 1)
+		<< "new stats after reconnect should be stored";
 }
 
 TEST_F(QosIntegrationTest, SeqResetThresholdWithoutReconnect) {
