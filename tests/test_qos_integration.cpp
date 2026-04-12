@@ -1343,6 +1343,39 @@ TEST_F(QosIntegrationTest, SetQosPolicyDeniedForOtherPeer) {
 	EXPECT_NE(resp.value("error", "").find("permission denied"), std::string::npos);
 }
 
+TEST_F(QosIntegrationTest, ReconnectClientStatsSeqResetAccepted) {
+	auto alice = joinRoom(testRoom_, "alice");
+	(void)alice.ws->waitNotification("qosPolicy", 3000);
+
+	json peerState = {{"mode","audio-video"},{"quality","good"},{"stale",false}};
+
+	// Submit clientStats with high seq
+	json report1 = {
+		{"schema", "mediasoup.qos.client.v1"}, {"seq", 5000},
+		{"tsMs", 1712736000000LL}, {"peerState", peerState}, {"tracks", json::array()}
+	};
+	ASSERT_TRUE(alice.ws->request("clientStats", report1).value("ok", false));
+
+	// Reconnect: same peerId, new WebSocket
+	auto alice2 = joinRoom(testRoom_, "alice");
+	(void)alice2.ws->waitNotification("qosPolicy", 3000);
+
+	// After reconnect, seq restarts from 1 (gap > 1000 → accepted as reset)
+	json report2 = {
+		{"schema", "mediasoup.qos.client.v1"}, {"seq", 1},
+		{"tsMs", 1712736010000LL}, {"peerState", peerState}, {"tracks", json::array()}
+	};
+	auto resp = alice2.ws->request("clientStats", report2);
+	EXPECT_TRUE(resp.value("ok", false)) << "clientStats after reconnect should be accepted: " << resp.dump();
+
+	// Subsequent increment also works
+	json report3 = {
+		{"schema", "mediasoup.qos.client.v1"}, {"seq", 2},
+		{"tsMs", 1712736020000LL}, {"peerState", peerState}, {"tracks", json::array()}
+	};
+	EXPECT_TRUE(alice2.ws->request("clientStats", report3).value("ok", false));
+}
+
 // ─── Test: clientStats in recording QoS file ───
 // Note: QoS snapshot passthrough to QoS file is implicitly tested by
 // test_qos_recording_accuracy.cpp (appendQosSnapshot writes full peer stats
