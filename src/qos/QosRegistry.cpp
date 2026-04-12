@@ -12,12 +12,12 @@ bool QosRegistry::Upsert(const std::string& roomId, const std::string& peerId,
 		if (snapshot.seq <= prevSeq) {
 			// Accept seq reset: if the new seq is drastically lower than the
 			// stored value the client likely reloaded and restarted from 0.
+			// Reject when gap <= 1000 (stale); accept when gap > 1000 (reset).
 			constexpr uint64_t kSeqResetThreshold = 1000u;
 			if (prevSeq - snapshot.seq <= kSeqResetThreshold) {
 				if (rejectReason) *rejectReason = "stale-seq";
 				return false;
 			}
-			// Seq jumped back by >= threshold → treat as client reset.
 		}
 	}
 

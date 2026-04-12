@@ -1343,7 +1343,7 @@ TEST_F(QosIntegrationTest, SetQosPolicyDeniedForOtherPeer) {
 	EXPECT_NE(resp.value("error", "").find("permission denied"), std::string::npos);
 }
 
-TEST_F(QosIntegrationTest, ReconnectClientStatsSeqResetAccepted) {
+TEST_F(QosIntegrationTest, ReconnectClearsQosAndAcceptsNewStats) {
 	auto alice = joinRoom(testRoom_, "alice");
 	(void)alice.ws->waitNotification("qosPolicy", 3000);
 
@@ -1356,11 +1356,11 @@ TEST_F(QosIntegrationTest, ReconnectClientStatsSeqResetAccepted) {
 	};
 	ASSERT_TRUE(alice.ws->request("clientStats", report1).value("ok", false));
 
-	// Reconnect: same peerId, new WebSocket
+	// Reconnect: same peerId, new WebSocket (old QoS entry is erased)
 	auto alice2 = joinRoom(testRoom_, "alice");
 	(void)alice2.ws->waitNotification("qosPolicy", 3000);
 
-	// After reconnect, seq restarts from 1 (gap > 1000 → accepted as reset)
+	// New session starts from seq=1 — accepted because entry was cleared
 	json report2 = {
 		{"schema", "mediasoup.qos.client.v1"}, {"seq", 1},
 		{"tsMs", 1712736010000LL}, {"peerState", peerState}, {"tracks", json::array()}
@@ -1374,6 +1374,49 @@ TEST_F(QosIntegrationTest, ReconnectClientStatsSeqResetAccepted) {
 		{"tsMs", 1712736020000LL}, {"peerState", peerState}, {"tracks", json::array()}
 	};
 	EXPECT_TRUE(alice2.ws->request("clientStats", report3).value("ok", false));
+}
+
+TEST_F(QosIntegrationTest, SeqResetThresholdWithoutReconnect) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto observer = joinRoom(testRoom_, "observer");
+	(void)alice.ws->waitNotification("qosPolicy", 3000);
+	(void)observer.ws->waitNotification("qosPolicy", 3000);
+
+	json peerState = {{"mode","audio-video"},{"quality","good"},{"stale",false}};
+
+	// Establish high seq baseline
+	json report1 = {
+		{"schema", "mediasoup.qos.client.v1"}, {"seq", 5000},
+		{"tsMs", 1712736000000LL}, {"peerState", peerState}, {"tracks", json::array()}
+	};
+	ASSERT_TRUE(alice.ws->request("clientStats", report1).value("ok", false));
+	usleep(300000);  // let async post settle
+
+	// Small jump back (within 1000) → silently dropped, stored seq stays 5000
+	json stale = {
+		{"schema", "mediasoup.qos.client.v1"}, {"seq", 4500},
+		{"tsMs", 1712736001000LL}, {"peerState", peerState}, {"tracks", json::array()}
+	};
+	alice.ws->request("clientStats", stale);
+	usleep(300000);
+
+	auto stats1 = observer.ws->request("getStats", {{"peerId", "alice"}});
+	ASSERT_TRUE(stats1.value("ok", false));
+	EXPECT_EQ(stats1["data"]["clientStats"]["seq"], 5000)
+		<< "stale seq should have been silently dropped";
+
+	// Large jump back (> 1000) → accepted as client reset, stored seq becomes 1
+	json reset = {
+		{"schema", "mediasoup.qos.client.v1"}, {"seq", 1},
+		{"tsMs", 1712736002000LL}, {"peerState", peerState}, {"tracks", json::array()}
+	};
+	alice.ws->request("clientStats", reset);
+	usleep(300000);
+
+	auto stats2 = observer.ws->request("getStats", {{"peerId", "alice"}});
+	ASSERT_TRUE(stats2.value("ok", false));
+	EXPECT_EQ(stats2["data"]["clientStats"]["seq"], 1)
+		<< "seq reset (gap > 1000) should have been accepted";
 }
 
 // ─── Test: clientStats in recording QoS file ───
