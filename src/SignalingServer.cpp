@@ -1,5 +1,6 @@
 #include "SignalingServer.h"
 #include "Constants.h"
+#include "qos/QosValidator.h"
 #include <App.h>
 #include <array>
 #include <filesystem>
@@ -518,6 +519,14 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 					ws->send(resp.dump(), uWS::OpCode::TEXT);
 					return;
 				}
+				auto qosParse = qos::QosValidator::ParseClientSnapshot(data);
+				if (!qosParse.ok) {
+					rejectedClientStats_.fetch_add(1, std::memory_order_relaxed);
+					json resp = {{"response", true}, {"id", id}, {"ok", false},
+						{"error", "invalid clientStats: " + qosParse.error}};
+					ws->send(resp.dump(), uWS::OpCode::TEXT);
+					return;
+				}
 				wt->post([wt, roomId, peerId, data] {
 					wt->roomService()->setClientStats(roomId, peerId, data);
 				});
@@ -661,6 +670,14 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 						json stats = rs->collectPeerStats(roomId,
 							data.value("peerId", peerId));
 						result = {true, stats};
+					} else if (method == "setQosOverride") {
+						result = rs->setQosOverride(roomId,
+							data.value("peerId", peerId),
+							data.at("override"));
+					} else if (method == "setQosPolicy") {
+						result = rs->setQosPolicy(roomId,
+							data.value("peerId", peerId),
+							data.at("policy"));
 					} else {
 						result = {false, {}, "", "unknown method: " + method};
 					}
@@ -686,11 +703,16 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 				bool joinOk = (method == "join" && result.ok && result.redirect.empty());
 				bool joinFailed = (method == "join" && !joinOk);
 				std::string jRoomId = joinRoomId, jPeerId = joinPeerId;
+				json joinQosPolicy = json::object();
+				if (joinOk && wt->roomService()) {
+					joinQosPolicy = wt->roomService()->getDefaultQosPolicy();
+				}
 
 				// Defer ws->send() back to the uWS event loop thread
 				loop->defer([this, wt, wsMap, ws, alive, respStr = std::move(respStr),
 					joinOk, joinFailed, newSessionId,
-					jRoomId = std::move(jRoomId), jPeerId = std::move(jPeerId)]
+					jRoomId = std::move(jRoomId), jPeerId = std::move(jPeerId),
+					joinQosPolicy = std::move(joinQosPolicy)]
 				{
 					if (!alive->load()) {
 						return;
@@ -731,6 +753,14 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 						}
 					}
 					ws->send(respStr, uWS::OpCode::TEXT);
+					if (joinOk && !joinQosPolicy.empty()) {
+						json msg = {
+							{"notification", true},
+							{"method", "qosPolicy"},
+							{"data", joinQosPolicy}
+						};
+						ws->send(msg.dump(), uWS::OpCode::TEXT);
+					}
 				});
 			});
 		},

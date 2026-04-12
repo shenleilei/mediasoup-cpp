@@ -56,6 +56,7 @@ private:
 
 // Log macros with source location (file:line)
 #define MS_DEBUG(logger, ...) (logger)->log(spdlog::source_loc{__FILE__, __LINE__, __FUNCTION__}, spdlog::level::debug, __VA_ARGS__)
+#define MS_INFO(logger, ...)  (logger)->log(spdlog::source_loc{__FILE__, __LINE__, __FUNCTION__}, spdlog::level::info, __VA_ARGS__)
 #define MS_WARN(logger, ...)  (logger)->log(spdlog::source_loc{__FILE__, __LINE__, __FUNCTION__}, spdlog::level::warn, __VA_ARGS__)
 #define MS_ERROR(logger, ...) (logger)->log(spdlog::source_loc{__FILE__, __LINE__, __FUNCTION__}, spdlog::level::err, __VA_ARGS__)
 

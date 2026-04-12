@@ -1,659 +1,383 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>mediasoup-cpp SFU Test</title>
+<title>mediasoup-cpp 1v1 QoS Demo</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:sans-serif; background:#1a1a2e; color:#eee; padding:20px; }
-h1 { margin-bottom:10px; font-size:1.4em; }
-#status { color:#0f0; margin-bottom:15px; }
-.controls { margin-bottom:15px; }
-button { padding:8px 16px; margin:4px; border:none; border-radius:4px; cursor:pointer; font-size:14px; }
-button:disabled { opacity:0.5; cursor:default; }
-#joinBtn { background:#4CAF50; color:#fff; }
-#publishBtn { background:#2196F3; color:#fff; }
-.videos { display:flex; flex-wrap:wrap; gap:10px; }
-.video-box { background:#000; border-radius:8px; overflow:hidden; position:relative; }
-.video-box video { width:320px; height:240px; object-fit:cover; }
-.video-box .label { position:absolute; bottom:5px; left:5px; background:rgba(0,0,0,0.7); padding:2px 8px; border-radius:4px; font-size:12px; }
-#log { margin-top:15px; background:#0d0d1a; padding:10px; border-radius:4px; height:200px; overflow-y:auto; font-family:monospace; font-size:12px; white-space:pre-wrap; }
-#qos-panel { margin-top:15px; background:#0d0d1a; border:1px solid #333; border-radius:8px; padding:15px; }
-#qos-panel h2 { font-size:1.1em; margin-bottom:10px; color:#4CAF50; }
-.qos-peer { margin-bottom:12px; padding:10px; background:#1a1a2e; border-radius:6px; border-left:3px solid #555; }
-.qos-peer.good { border-left-color:#4CAF50; }
-.qos-peer.fair { border-left-color:#FF9800; }
-.qos-peer.poor { border-left-color:#f44336; }
-.qos-peer-header { font-weight:bold; margin-bottom:6px; display:flex; align-items:center; gap:8px; }
-.qos-score { display:inline-block; padding:2px 8px; border-radius:10px; font-size:12px; color:#fff; }
-.qos-score.good { background:#4CAF50; }
-.qos-score.fair { background:#FF9800; }
-.qos-score.poor { background:#f44336; }
-.qos-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); gap:6px; font-size:12px; }
-.qos-item { background:#222; padding:4px 8px; border-radius:4px; }
-.qos-item .label { color:#888; }
-.qos-item .value { color:#eee; font-family:monospace; }
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+  color: #e5e7eb;
+  min-height: 100vh;
+  padding: 24px;
+}
+.page {
+  max-width: 1360px;
+  margin: 0 auto;
+}
+.hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+.hero-copy h1 {
+  font-size: 28px;
+  line-height: 1.1;
+  margin-bottom: 8px;
+}
+.hero-copy p {
+  color: #9ca3af;
+  max-width: 760px;
+  font-size: 14px;
+}
+.hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid #334155;
+  background: rgba(15, 23, 42, 0.7);
+  border-radius: 999px;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+.layout {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 20px;
+}
+.panel {
+  background: rgba(15, 23, 42, 0.78);
+  border: 1px solid #1f2937;
+  border-radius: 16px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
+}
+.panel-header {
+  padding: 18px 18px 0 18px;
+}
+.panel-header h2 {
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+.panel-header p {
+  font-size: 12px;
+  color: #94a3b8;
+}
+.panel-body {
+  padding: 18px;
+}
+.status {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid #334155;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+.status strong {
+  color: #f8fafc;
+}
+.status.ok { border-color: #14532d; color: #86efac; }
+.status.warn { border-color: #78350f; color: #fcd34d; }
+.status.err { border-color: #7f1d1d; color: #fca5a5; }
+.control-group {
+  margin-bottom: 14px;
+}
+.control-group label {
+  display: block;
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 6px;
+}
+.control-row {
+  display: flex;
+  gap: 10px;
+}
+input[type="text"] {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #334155;
+  background: #0b1220;
+  color: #e5e7eb;
+  font-size: 14px;
+}
+button {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.btn-join { background: #2563eb; color: #fff; }
+.btn-publish { background: #0f766e; color: #fff; }
+.btn-stop { background: #7c2d12; color: #fff; }
+.control-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.meta-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+.meta-item {
+  padding: 10px 12px;
+  background: rgba(2, 6, 23, 0.56);
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  font-size: 12px;
+}
+.meta-item .label {
+  color: #94a3b8;
+  display: block;
+  margin-bottom: 4px;
+}
+.meta-item .value {
+  color: #f8fafc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+.video-card {
+  background: rgba(2, 6, 23, 0.72);
+  border: 1px solid #1e293b;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.video-frame {
+  aspect-ratio: 4 / 3;
+  background: #020617;
+}
+.video-frame video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+}
+.video-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid #1e293b;
+}
+.video-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+.video-subtitle {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+.qos-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.qos-section {
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(2, 6, 23, 0.6);
+  border: 1px solid #1e293b;
+}
+.qos-section h3 {
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+.qos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+}
+.qos-item {
+  padding: 9px 10px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid #1f2937;
+  border-radius: 10px;
+  font-size: 12px;
+}
+.qos-item .label {
+  color: #94a3b8;
+  display: block;
+  margin-bottom: 4px;
+}
+.qos-item .value {
+  color: #f8fafc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.track-card,
+.peer-card {
+  padding: 12px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid #1f2937;
+  border-radius: 12px;
+  margin-bottom: 10px;
+}
+.track-header,
+.peer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.track-title,
+.peer-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.pill.stable { background: rgba(21, 128, 61, 0.18); color: #86efac; }
+.pill.early_warning { background: rgba(180, 83, 9, 0.18); color: #fcd34d; }
+.pill.congested { background: rgba(185, 28, 28, 0.18); color: #fca5a5; }
+.pill.recovering { background: rgba(8, 145, 178, 0.18); color: #67e8f9; }
+.pill.quality-good { background: rgba(21, 128, 61, 0.18); color: #86efac; }
+.pill.quality-poor,
+.pill.quality-lost { background: rgba(185, 28, 28, 0.18); color: #fca5a5; }
+.pill.quality-excellent { background: rgba(30, 64, 175, 0.18); color: #93c5fd; }
+.hint {
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.5;
+}
+#log {
+  margin-top: 18px;
+  padding: 14px;
+  min-height: 180px;
+  max-height: 260px;
+  overflow-y: auto;
+  border-radius: 14px;
+  background: rgba(2, 6, 23, 0.72);
+  border: 1px solid #1e293b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+@media (max-width: 1100px) {
+  .layout { grid-template-columns: 1fr; }
+  .qos-layout { grid-template-columns: 1fr; }
+}
 </style>
 </head>
 <body>
-<h1>mediasoup-cpp SFU Test</h1>
-<div id="status">Disconnected</div>
-<div class="controls">
-  <input id="roomInput" placeholder="Room ID" value="test-room" style="padding:8px;border-radius:4px;border:1px solid #555;background:#2a2a3e;color:#eee;">
-  <button id="joinBtn" onclick="join()">Join Room</button>
-  <button id="publishBtn" onclick="publish()" disabled>Publish A/V</button>
-</div>
-<div class="videos" id="videos">
-  <div class="video-box">
-    <video id="localVideo" autoplay muted playsinline></video>
-    <div class="label">Local</div>
+<div class="page">
+  <div class="hero">
+    <div class="hero-copy">
+      <h1>mediasoup-cpp 1v1 QoS Demo</h1>
+      <p>
+        This demo keeps the existing 1v1 room flow but replaces the old browser-side
+        manual QoS upload logic with the new client QoS library. The panel shows live
+        controller state, policy/override notifications, browser debug stats, and
+        server-side aggregate snapshots.
+      </p>
+    </div>
+    <div class="hero-badges">
+      <div class="badge">QoS Library: <strong>enabled</strong></div>
+      <div class="badge">Mode: <strong>1v1 demo</strong></div>
+      <div class="badge">Modes: <strong>`?qos=legacy` / `?qos=full`</strong></div>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Session</h2>
+        <p>Join a room, publish local media, then inspect the new QoS pipeline.</p>
+      </div>
+      <div class="panel-body">
+        <div id="status" class="status warn"><strong>Status:</strong> Disconnected</div>
+
+        <div class="control-group">
+          <label for="roomInput">Room ID</label>
+          <input id="roomInput" type="text" value="test-room" placeholder="Enter room id">
+        </div>
+
+        <div class="control-actions">
+          <button id="joinBtn" class="btn-join">Join Room</button>
+          <button id="publishBtn" class="btn-publish" disabled>Publish A/V</button>
+          <button id="stopBtn" class="btn-stop" disabled>Stop QoS</button>
+        </div>
+
+        <div class="meta-list">
+          <div class="meta-item">
+            <span class="label">Current Room</span>
+            <span class="value" id="metaRoom">-</span>
+          </div>
+          <div class="meta-item">
+            <span class="label">Current Peer</span>
+            <span class="value" id="metaPeer">-</span>
+          </div>
+          <div class="meta-item">
+            <span class="label">Active QoS Mode</span>
+            <span class="value" id="metaQosMode">new library</span>
+          </div>
+        </div>
+
+        <div id="log"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="video-grid" id="videos">
+        <div class="video-card">
+          <div class="video-frame">
+            <video id="localVideo" autoplay muted playsinline></video>
+          </div>
+          <div class="video-meta">
+            <div>
+              <div class="video-title">Local Publisher</div>
+              <div class="video-subtitle">Camera or fallback canvas stream</div>
+            </div>
+            <div class="badge" id="localVideoBadge">idle</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:20px;">
+        <div class="panel-header">
+          <h2>QoS Monitor</h2>
+          <p>Controller state, policy/override notifications, local debug stats, and server aggregate view.</p>
+        </div>
+        <div class="panel-body">
+          <div id="qos-content" class="hint">Join a room and publish a video track to activate QoS.</div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
-<div id="qos-panel">
-  <h2>📡 QoS Monitor</h2>
-  <div id="qos-content"><span style="color:#888">Waiting for stats...</span></div>
-</div>
-<div id="log"></div>
 
-<script src="/mediasoup-client.bundle.js"></script>
-<script>
-try {
-  const ortc = require('mediasoup-client/lib/ortc');
-  if (ortc && ortc.canConsume) ortc.canConsume = function() { return true; };
-} catch(e) {}
-</script>
-<script>
-const log = (msg) => { const el=document.getElementById('log'); el.textContent+=new Date().toLocaleTimeString()+' '+msg+'\n'; el.scrollTop=el.scrollHeight; console.log(msg); };
-const setStatus = (s,c) => { const el=document.getElementById('status'); el.textContent=s; el.style.color=c||'#0f0'; };
-
-let ws, device, sendTransport, recvTransport, reqId=0;
-const pending = {};
-let currentRoomId, currentPeerId;
-
-// P4: auto-reconnect state
-let reconnectAttempts = 0;
-const MAX_RECONNECT = 10;
-let shouldReconnect = false;
-
-function wsRequest(method, data={}) {
-  return new Promise((resolve, reject) => {
-    const id = ++reqId;
-    pending[id] = {resolve, reject};
-    ws.send(JSON.stringify({request:true, id, method, data}));
-    setTimeout(() => { if(pending[id]) { delete pending[id]; reject(new Error('timeout')); } }, 10000);
-  });
-}
-
-function connectWs(url) {
-  return new Promise((resolve, reject) => {
-    ws = new WebSocket(url);
-    ws.onopen = () => { reconnectAttempts = 0; resolve(); };
-    ws.onerror = () => reject(new Error('WS connect failed'));
-    ws.onclose = () => {
-      setStatus('Disconnected', '#f00');
-      if (shouldReconnect && reconnectAttempts < MAX_RECONNECT) {
-        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
-        reconnectAttempts++;
-        log(`Reconnecting in ${delay}ms (attempt ${reconnectAttempts})...`);
-        setTimeout(() => doReconnect(url), delay);
-      }
-    };
-    ws.onmessage = handleMessage;
-  });
-}
-
-async function doReconnect(url) {
-  try {
-    await connectWs(url);
-    setStatus('Reconnected, rejoining...');
-    let joinResp = await wsRequest('join', {roomId: currentRoomId, peerId: currentPeerId});
-    if (!joinResp) joinResp = await wsRequest('join', {roomId: currentRoomId, peerId: currentPeerId});
-    log('Rejoined room after reconnect');
-
-    // Recreate recvTransport + consume existing producers
-    if (device) {
-      // Clear stale remote videos
-      document.querySelectorAll('.video-box:not(:first-child)').forEach(el => el.remove());
-
-      const rData = await wsRequest('createWebRtcTransport', {producing:false, consuming:true});
-      recvTransport = device.createRecvTransport(rData);
-      recvTransport.on('connect', async ({dtlsParameters}, cb, eb) => {
-        try { await wsRequest('connectWebRtcTransport', {transportId:recvTransport.id, dtlsParameters}); cb(); }
-        catch(e) { eb(e); }
-      });
-      for (const c of (rData.consumers || [])) await handleNewConsumer(c);
-    }
-
-    // Recreate sendTransport and re-produce if we had tracks
-    const stream = document.getElementById('localVideo').srcObject;
-    if (stream && device) {
-      const tData = await wsRequest('createWebRtcTransport', {producing:true, consuming:false});
-      sendTransport = device.createSendTransport(tData);
-      sendTransport.on('connect', async ({dtlsParameters}, cb, eb) => {
-        try { await wsRequest('connectWebRtcTransport', {transportId:sendTransport.id, dtlsParameters}); cb(); }
-        catch(e) { eb(e); }
-      });
-      sendTransport.on('produce', async ({kind, rtpParameters}, cb, eb) => {
-        try { const r = await wsRequest('produce', {transportId:sendTransport.id, kind, rtpParameters}); cb({id:r.id}); }
-        catch(e) { eb(e); }
-      });
-      for (const track of stream.getTracks()) await sendTransport.produce({track});
-    }
-
-    setStatus('In room: ' + currentRoomId);
-  } catch(e) {
-    log('Reconnect failed: ' + e.message);
-  }
-}
-
-function handleMessage(ev) {
-  const msg = JSON.parse(ev.data);
-  if (msg.response) {
-    const p = pending[msg.id];
-    if (p) {
-      delete pending[msg.id];
-      if (msg.redirect) {
-        // P3: redirect to correct node
-        log('Redirecting to ' + msg.redirect);
-        ws.close();
-        connectWs(msg.redirect).then(() => {
-          p.resolve(null); // caller will re-join
-        }).catch(p.reject);
-        return;
-      }
-      msg.ok ? p.resolve(msg.data) : p.reject(new Error(msg.error));
-    }
-  } else if (msg.notification) {
-    handleNotification(msg);
-  }
-}
-
-function fmtBitrate(bps) {
-  if (!bps && bps !== 0) return '-';
-  if (bps >= 1000000) return (bps/1000000).toFixed(1) + ' Mbps';
-  if (bps >= 1000) return (bps/1000).toFixed(0) + ' kbps';
-  return bps + ' bps';
-}
-function fmtLoss(v) { return v != null ? (v * 100).toFixed(1) + '%' : '-'; }
-function scoreClass(s) { return s >= 7 ? 'good' : s >= 4 ? 'fair' : 'poor'; }
-function qosItem(label, value) { return `<div class="qos-item"><span class="label">${label}</span> <span class="value">${value}</span></div>`; }
-
-function renderQosPanel(data) {
-  const el = document.getElementById('qos-content');
-  if (!data || !data.peers || data.peers.length === 0) {
-    el.innerHTML = '<span style="color:#888">No peers</span>';
-    return;
-  }
-  let html = '';
-  for (const peer of data.peers) {
-    // Determine overall score from producers
-    let worstScore = 10;
-    const producers = peer.producers || {};
-    for (const pid in producers) {
-      const p = producers[pid];
-      if (p.scores) for (const s of p.scores) worstScore = Math.min(worstScore, s.score);
-      if (p.stats) for (const s of p.stats) if (s.score != null) worstScore = Math.min(worstScore, s.score);
-    }
-    const sc = Object.keys(producers).length > 0 ? scoreClass(worstScore) : 'good';
-
-    html += `<div class="qos-peer ${sc}">`;
-    html += `<div class="qos-peer-header">${peer.peerId} <span class="qos-score ${sc}">Score: ${worstScore}/10</span></div>`;
-
-    // sendTransport (uplink)
-    const st = peer.sendTransport;
-    if (st && Object.keys(st).length > 0) {
-      html += `<div style="margin:4px 0;color:#4CAF50;font-size:12px;font-weight:bold">⬆ Uplink</div>`;
-      html += '<div class="qos-grid">';
-      html += qosItem('Send Bitrate ⬆', fmtBitrate(st.rtpRecvBitrate));
-      const clientSend = peer.clientStats && peer.clientStats.send;
-      html += qosItem('Available BW ⬆', fmtBitrate(clientSend ? clientSend.availableOutgoingBitrate : null));
-      html += qosItem('RTT', clientSend && clientSend.currentRoundTripTime != null ? (clientSend.currentRoundTripTime * 1000).toFixed(0) + ' ms' : '-');
-      html += qosItem('Packet Loss ⬆', fmtLoss(st.rtpPacketLossReceived));
-      html += qosItem('ICE State', st.iceState || '-');
-      html += qosItem('DTLS State', st.dtlsState || '-');
-      if (st.iceSelectedTuple) {
-        html += qosItem('Remote', (st.iceSelectedTuple.remoteIp || '') + ':' + (st.iceSelectedTuple.remotePort || ''));
-        html += qosItem('Protocol', st.iceSelectedTuple.protocol || '-');
-      }
-      html += '</div>';
-    }
-
-    // Producers (per-track detail)
-    for (const pid in producers) {
-      const p = producers[pid];
-      html += `<div style="margin:4px 0;color:#2196F3;font-size:12px;font-weight:bold">📹 Producer: ${p.kind}</div>`;
-      html += '<div class="qos-grid">';
-      // From score notifications
-      if (p.scores && p.scores.length > 0) {
-        for (const s of p.scores) html += qosItem('Score (SSRC ' + s.ssrc + ')', s.score + '/10');
-      }
-      // From getStats
-      if (p.stats && p.stats.length > 0) {
-        const s = p.stats[0];
-        html += qosItem('Bitrate', fmtBitrate(s.bitrate));
-        // jitter is in RTP timestamp units; convert to ms (video=90kHz, audio=48kHz)
-        let jitterMs = '-';
-        if (s.jitter != null) {
-          const clock = (p.kind === 'video') ? 90000 : 48000;
-          jitterMs = (s.jitter / clock * 1000).toFixed(1) + ' ms';
-        }
-        html += qosItem('Jitter', jitterMs);
-        html += qosItem('RTT', s.roundTripTime != null ? s.roundTripTime.toFixed(1) + ' ms' : '-');
-        html += qosItem('Packets Lost', s.packetsLost != null ? s.packetsLost : '-');
-        html += qosItem('Fraction Lost', s.fractionLost != null ? (s.fractionLost / 256 * 100).toFixed(1) + '%' : '-');
-        html += qosItem('NACK Count', s.nackCount != null ? s.nackCount : '-');
-        html += qosItem('PLI Count', s.pliCount != null ? s.pliCount : '-');
-        html += qosItem('FIR Count', s.firCount != null ? s.firCount : '-');
-        html += qosItem('Packets', s.packetCount != null ? s.packetCount : '-');
-      }
-      html += '</div>';
-    }
-
-    // recvTransport (downlink)
-    const rt = peer.recvTransport;
-    const vf = peer.clientStats && peer.clientStats.videoFreeze;
-    const iv = peer.clientStats && peer.clientStats.inboundVideo;
-    const ia = peer.clientStats && peer.clientStats.inboundAudio;
-    const rc = peer.clientStats && peer.clientStats.recv;
-    if (rt || vf || iv) {
-      html += `<div style="margin:4px 0;color:#FF9800;font-size:12px;font-weight:bold">⬇ Downlink</div>`;
-      html += '<div class="qos-grid">';
-      if (rt) {
-        html += qosItem('Recv Bitrate ⬇', fmtBitrate(rt.rtpSendBitrate));
-        html += qosItem('Packet Loss ⬇', fmtLoss(rt.rtpPacketLossSent));
-      }
-      if (rc) {
-        html += qosItem('RTT ⬇', rc.currentRoundTripTime ? (rc.currentRoundTripTime * 1000).toFixed(0) + ' ms' : '-');
-      }
-      if (iv) {
-        html += qosItem('Video Jitter ⬇', (iv.jitter * 1000).toFixed(1) + ' ms');
-        html += qosItem('Video Lost ⬇', iv.packetsLost);
-        html += qosItem('Resolution', iv.frameWidth && iv.frameHeight ? iv.frameWidth + '×' + iv.frameHeight : '-');
-        html += qosItem('FPS', iv.framesPerSecond || '-');
-        html += qosItem('NACK ⬇', iv.nackCount);
-        html += qosItem('PLI ⬇', iv.pliCount);
-      }
-      if (ia) {
-        html += qosItem('Audio Jitter ⬇', (ia.jitter * 1000).toFixed(1) + ' ms');
-        html += qosItem('Audio Lost ⬇', ia.packetsLost);
-        const concealRate = ia.totalSamplesReceived > 0
-          ? (ia.concealedSamples / ia.totalSamplesReceived * 100).toFixed(1) + '%' : '-';
-        html += qosItem('Audio Conceal', concealRate);
-      }
-      if (vf) {
-        const freezeRate = vf.totalFramesDuration > 0
-          ? (vf.totalFreezesDuration / vf.totalFramesDuration * 100).toFixed(1) + '%' : '-';
-        const recentFreeze = vf.recentFreezeRate != null
-          ? (vf.recentFreezeRate * 100).toFixed(1) + '%' : '-';
-        html += qosItem('Freeze Rate', freezeRate);
-        html += qosItem('Recent Freeze', recentFreeze);
-        html += qosItem('Freeze Count', vf.freezeCount);
-        html += qosItem('Frames Dropped', vf.framesDropped);
-        html += qosItem('JB Delay', vf.jitterBufferDelayMs != null ? vf.jitterBufferDelayMs.toFixed(0) + ' ms' : '-');
-      }
-      html += '</div>';
-    }
-
-    // Consumer scores
-    const consumers = peer.consumers || {};
-    const consumerEntries = Object.entries(consumers);
-    if (consumerEntries.length > 0) {
-      html += `<div style="margin:4px 0;color:#9C27B0;font-size:12px;font-weight:bold">🔊 Consumers</div>`;
-      html += '<div class="qos-grid">';
-      for (const [cid, c] of consumerEntries) {
-        html += qosItem(c.kind + ' score', c.score + '/10');
-        html += qosItem(c.kind + ' prod score', c.producerScore + '/10');
-      }
-      html += '</div>';
-    }
-
-    html += '</div>';
-  }
-  el.innerHTML = html;
-}
-
-function handleNotification(msg) {
-  if (msg.method === 'statsReport') {
-    renderQosPanel(msg.data);
-    return;
-  }
-  log('Notification: ' + msg.method);
-  if (msg.method === 'newConsumer') {
-    // P1: server-driven auto-subscribe — consumer already created server-side
-    handleNewConsumer(msg.data);
-  } else if (msg.method === 'newProducer') {
-    // Legacy fallback: consume manually if server didn't auto-subscribe
-    consumeProducer(msg.data.producerId, msg.data.kind);
-  } else if (msg.method === 'peerJoined') {
-    log('Peer joined: ' + msg.data.peerId);
-  } else if (msg.method === 'peerLeft') {
-    log('Peer left: ' + msg.data.peerId);
-  }
-}
-
-async function handleNewConsumer(data) {
-  if (!recvTransport) {
-    log('No recvTransport yet, queuing newConsumer');
-    window._pendingConsumers = window._pendingConsumers || [];
-    window._pendingConsumers.push(data);
-    return;
-  }
-  try {
-    const consumer = await recvTransport.consume({
-      id: data.id,
-      producerId: data.producerId,
-      kind: data.kind,
-      rtpParameters: data.rtpParameters,
-      appData: {}
-    });
-
-    const el = document.createElement(consumer.kind === 'video' ? 'video' : 'audio');
-    el.autoplay = true; el.playsinline = true;
-    el.srcObject = new MediaStream([consumer.track]);
-    el.play().catch(()=>{});
-
-    if (consumer.kind === 'video') {
-      const box = document.createElement('div');
-      box.className = 'video-box';
-      box.appendChild(el);
-      const label = document.createElement('div');
-      label.className = 'label';
-      label.textContent = 'Remote ' + data.kind + (data.peerId ? ' (' + data.peerId + ')' : '');
-      box.appendChild(label);
-      document.getElementById('videos').appendChild(box);
-    }
-    log('Auto-subscribed ' + data.kind + ' from ' + (data.peerId || data.producerId));
-  } catch(e) {
-    log('newConsumer error: ' + e.message);
-  }
-}
-
-async function join() {
-  const roomId = document.getElementById('roomInput').value || 'test-room';
-  const peerId = 'peer-' + Math.random().toString(36).substr(2,6);
-  currentRoomId = roomId;
-  currentPeerId = peerId;
-
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  let wsUrl = `${proto}://${location.hostname}:${location.port||3000}/ws`;
-
-  // Resolve room location — connect directly to the correct node
-  try {
-    const res = await fetch(`/api/resolve?roomId=${encodeURIComponent(roomId)}`);
-    if (res.ok) {
-      const info = await res.json();
-      if (info.wsUrl) {
-        const target = new URL(info.wsUrl);
-        const targetWs = `${proto}://${target.hostname}:${target.port||location.port||3000}/ws`;
-        if (targetWs !== wsUrl) {
-          log('Room is on node ' + info.wsUrl + ', connecting there');
-          wsUrl = targetWs;
-        }
-      }
-    }
-  } catch(e) { /* resolve failed, fall back to current node */ }
-
-  log('Connecting...');
-  try {
-    await connectWs(wsUrl);
-  } catch(e) {
-    log('Connect failed: ' + e.message);
-    setStatus('Connect failed', '#f00');
-    return;
-  }
-
-  shouldReconnect = true;
-  setStatus('Connected');
-
-  try {
-    let joinResp = await wsRequest('join', {roomId, peerId});
-
-    // If redirected, rejoin on new connection
-    if (!joinResp) {
-      joinResp = await wsRequest('join', {roomId, peerId});
-    }
-
-    log('Joined room: ' + roomId);
-
-    device = new mediasoupClient.Device();
-    await device.load({routerRtpCapabilities: joinResp.routerRtpCapabilities});
-    log('Device loaded');
-
-    // Create recvTransport immediately so we can receive others' media
-    const rData = await wsRequest('createWebRtcTransport', {producing:false, consuming:true});
-    const pendingServerConsumers = rData.consumers || [];
-    recvTransport = device.createRecvTransport(rData);
-    recvTransport.on('connect', async ({dtlsParameters}, cb, eb) => {
-      try { await wsRequest('connectWebRtcTransport', {transportId:recvTransport.id, dtlsParameters}); cb(); }
-      catch(e) { eb(e); }
-    });
-    log('Recv transport ready, server pre-created ' + pendingServerConsumers.length + ' consumers');
-
-    // Consume server-side pre-created consumers (existing producers in room)
-    for (const c of pendingServerConsumers) {
-      log('Consuming pre-created: ' + c.kind + ' from ' + c.peerId);
-      await handleNewConsumer(c);
-    }
-
-    // Consume existing producers not already handled by pre-created consumers
-    const consumedProducerIds = new Set(pendingServerConsumers.map(c => c.producerId));
-    for (const p of (joinResp.existingProducers || [])) {
-      if (consumedProducerIds.has(p.producerId)) continue;
-      log('Consuming existing: ' + p.producerId);
-      await consumeProducer(p.producerId, p.kind);
-    }
-
-    // Process any queued newConsumer notifications
-    if (window._pendingConsumers) {
-      for (const c of window._pendingConsumers) await handleNewConsumer(c);
-      window._pendingConsumers = [];
-    }
-
-    document.getElementById('publishBtn').disabled = false;
-    setStatus('In room: ' + roomId);
-    startClientStatsReporting();
-  } catch(e) {
-    log('ERROR: ' + e.message);
-    setStatus('Error', '#f00');
-  }
-}
-
-async function publish() {
-  try {
-    log('Getting user media...');
-    let stream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({audio:true, video:true});
-    } catch(e) {
-      log('Camera not available, using fake stream');
-      const canvas = document.createElement('canvas');
-      canvas.width = 640; canvas.height = 480;
-      const ctx = canvas.getContext('2d');
-      let frame = 0;
-      setInterval(() => {
-        frame++;
-        ctx.fillStyle = `hsl(${frame*3%360},70%,50%)`;
-        ctx.fillRect(0,0,640,480);
-        ctx.fillStyle='#fff'; ctx.font='bold 40px sans-serif';
-        ctx.fillText('mediasoup-cpp SFU', 120, 220);
-        ctx.font='30px sans-serif';
-        ctx.fillText('Frame: ' + frame, 220, 280);
-        ctx.fillText(new Date().toLocaleTimeString(), 200, 330);
-      }, 66);
-      stream = canvas.captureStream(15);
-      const ac = new AudioContext();
-      const osc = ac.createOscillator();
-      const dest = ac.createMediaStreamDestination();
-      osc.connect(dest); osc.start();
-      stream.addTrack(dest.stream.getAudioTracks()[0]);
-    }
-    document.getElementById('localVideo').srcObject = stream;
-
-    // Send transport
-    const tData = await wsRequest('createWebRtcTransport', {producing:true, consuming:false});
-    sendTransport = device.createSendTransport(tData);
-    sendTransport.on('connect', async ({dtlsParameters}, cb, eb) => {
-      try { await wsRequest('connectWebRtcTransport', {transportId:sendTransport.id, dtlsParameters}); cb(); }
-      catch(e) { eb(e); }
-    });
-    sendTransport.on('produce', async ({kind, rtpParameters}, cb, eb) => {
-      try { const r = await wsRequest('produce', {transportId:sendTransport.id, kind, rtpParameters}); cb({id:r.id}); }
-      catch(e) { eb(e); }
-    });
-
-    for (const track of stream.getTracks()) {
-      const producer = await sendTransport.produce({track});
-      log('Producing ' + track.kind + ' [' + producer.id + ']');
-    }
-
-    setStatus('Publishing A/V');
-    document.getElementById('publishBtn').disabled = true;
-    startClientStatsReporting();
-
-    // Process any newConsumer notifications that arrived during produce
-    if (window._pendingConsumers) {
-      for (const c of window._pendingConsumers) await handleNewConsumer(c);
-      window._pendingConsumers = [];
-    }
-
-  } catch(e) {
-    log('ERROR: ' + e.message);
-    setStatus('Error', '#f00');
-  }
-}
-
-// ── Browser-side stats reporting (BWE, candidate-pair) ──
-let _clientStatsTimer = null;
-let _prevJbDelay = 0, _prevJbCount = 0;
-let _prevFreezesDuration = 0, _prevFramesDuration = 0;
-function startClientStatsReporting() {
-  if (_clientStatsTimer) return;
-  _prevJbDelay = 0; _prevJbCount = 0;
-  _prevFreezesDuration = 0; _prevFramesDuration = 0;
-  _clientStatsTimer = setInterval(async () => {
-    if (!ws || ws.readyState !== 1) return;
-    try {
-      const report = {};
-      if (sendTransport && sendTransport._handler) {
-        const pc = sendTransport._handler._pc;
-        if (pc) {
-          const stats = await pc.getStats();
-          stats.forEach(r => {
-            if (r.type === 'candidate-pair' && r.nominated) {
-              report.send = {
-                availableOutgoingBitrate: r.availableOutgoingBitrate || 0,
-                currentRoundTripTime: r.currentRoundTripTime || 0,
-                totalRoundTripTime: r.totalRoundTripTime || 0,
-                bytesSent: r.bytesSent || 0,
-                bytesReceived: r.bytesReceived || 0
-              };
-            }
-          });
-        }
-      }
-      if (recvTransport && recvTransport._handler) {
-        const pc = recvTransport._handler._pc;
-        if (pc) {
-          const stats = await pc.getStats();
-          const videoFreeze = {};
-          const inboundVideo = {};
-          const inboundAudio = {};
-          stats.forEach(r => {
-            if (r.type === 'candidate-pair' && r.nominated) {
-              report.recv = {
-                availableIncomingBitrate: r.availableIncomingBitrate || 0,
-                currentRoundTripTime: r.currentRoundTripTime || 0,
-                bytesReceived: r.bytesReceived || 0
-              };
-            }
-            if (r.type === 'inbound-rtp' && r.kind === 'video') {
-              inboundVideo.jitter = r.jitter || 0;
-              inboundVideo.packetsLost = r.packetsLost || 0;
-              inboundVideo.packetsReceived = r.packetsReceived || 0;
-              inboundVideo.bytesReceived = r.bytesReceived || 0;
-              inboundVideo.framesPerSecond = r.framesPerSecond || 0;
-              inboundVideo.frameWidth = r.frameWidth || 0;
-              inboundVideo.frameHeight = r.frameHeight || 0;
-              inboundVideo.nackCount = r.nackCount || 0;
-              inboundVideo.pliCount = r.pliCount || 0;
-              // Freeze stats
-              videoFreeze.freezeCount = r.freezeCount || 0;
-              videoFreeze.totalFreezesDuration = r.totalFreezesDuration || 0;
-              videoFreeze.totalFramesDuration = r.totalFramesDuration || 0;
-              videoFreeze.framesReceived = r.framesReceived || 0;
-              videoFreeze.framesDecoded = r.framesDecoded || 0;
-              videoFreeze.framesDropped = r.framesDropped || 0;
-              // Incremental JB delay
-              const curDelay = r.jitterBufferDelay || 0;
-              const curCount = r.jitterBufferEmittedCount || 0;
-              const dDelay = curDelay - _prevJbDelay;
-              const dCount = curCount - _prevJbCount;
-              videoFreeze.jitterBufferDelayMs = dCount > 0 ? (dDelay / dCount * 1000) : 0;
-              _prevJbDelay = curDelay;
-              _prevJbCount = curCount;
-              // Incremental freeze rate
-              const curFreeze = r.totalFreezesDuration || 0;
-              const curFrames = r.totalFramesDuration || 0;
-              const dFreeze = curFreeze - _prevFreezesDuration;
-              const dFrames = curFrames - _prevFramesDuration;
-              videoFreeze.recentFreezeRate = dFrames > 0 ? (dFreeze / dFrames) : 0;
-              _prevFreezesDuration = curFreeze;
-              _prevFramesDuration = curFrames;
-            }
-            if (r.type === 'inbound-rtp' && r.kind === 'audio') {
-              inboundAudio.jitter = r.jitter || 0;
-              inboundAudio.packetsLost = r.packetsLost || 0;
-              inboundAudio.packetsReceived = r.packetsReceived || 0;
-              inboundAudio.concealedSamples = r.concealedSamples || 0;
-              inboundAudio.totalSamplesReceived = r.totalSamplesReceived || 0;
-            }
-          });
-          if (Object.keys(videoFreeze).length > 0) report.videoFreeze = videoFreeze;
-          if (Object.keys(inboundVideo).length > 0) report.inboundVideo = inboundVideo;
-          if (Object.keys(inboundAudio).length > 0) report.inboundAudio = inboundAudio;
-        }
-      }
-      if (Object.keys(report).length > 0) {
-        wsRequest('clientStats', report).catch(() => {});
-      }
-    } catch(e) {}
-  }, 2000);
-}
-
-async function consumeProducer(producerId, kind) {
-  if (!recvTransport) return;
-  try {
-    const resp = await wsRequest('consume', {
-      transportId: recvTransport.id, producerId,
-      rtpCapabilities: device.rtpCapabilities
-    });
-
-    const consumer = await recvTransport.consume({
-      id: resp.id, producerId: resp.producerId,
-      kind: resp.kind || kind, rtpParameters: resp.rtpParameters, appData: {}
-    });
-
-    const el = document.createElement(consumer.kind === 'video' ? 'video' : 'audio');
-    el.autoplay = true; el.playsinline = true;
-    el.srcObject = new MediaStream([consumer.track]);
-    el.play().catch(()=>{});
-
-    if (consumer.kind === 'video') {
-      const box = document.createElement('div');
-      box.className = 'video-box';
-      box.appendChild(el);
-      const label = document.createElement('div');
-      label.className = 'label';
-      label.textContent = 'Remote ' + (resp.kind || kind);
-      box.appendChild(label);
-      document.getElementById('videos').appendChild(box);
-    }
-    log('Consuming ' + (resp.kind||kind) + ' from ' + producerId);
-  } catch(e) {
-    log('Consume error: ' + e.message);
-  }
-}
-</script>
+<script src="/mediasoup-client.qos.bundle.js"></script>
+<script src="/qos-demo.js"></script>
 </body>
 </html>

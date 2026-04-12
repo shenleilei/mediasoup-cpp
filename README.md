@@ -121,6 +121,41 @@ There is also a dedicated Redis subscriber thread that listens for node and room
 - worker crash recovery: child process respawn with rate limiting
 - daemon mode: fork, PID file, structured logs
 
+## QoS Status
+
+This repo now includes a full uplink QoS path across:
+
+- client-side publisher QoS state machine and ladder control
+- server-side `clientStats` ingestion, validation, aggregation, and automatic override generation
+- browser/node harnesses for publish / stale-seq / policy-update / automatic override / manual clear
+- browser loopback weak-network matrix execution and case-by-case reporting
+
+### Latest host-run result
+
+Latest full host run of the QoS script:
+
+- `client-js`: `PASS`
+- `cpp-unit`: `PASS`
+- `cpp-integration`: `PASS`
+- `cpp-accuracy`: `PASS`
+- `cpp-recording`: `PASS`
+- `node-harness`: `PASS`
+- `browser-harness`: `PASS`
+- `matrix`: `41` cases total, `39 PASS`, `1 FAIL`, `1 ERROR`
+
+Current matrix exceptions:
+
+- `R4`: `FAIL` (`impaired=congested/L4`, judged `过强`)
+- `L8`: `ERROR` (`Protocol error (Runtime.callFunctionOn): Target closed`)
+
+Source-of-truth links:
+
+- final summary: [docs/uplink-qos-final-report.md](/root/mediasoup-cpp/docs/uplink-qos-final-report.md)
+- result summary: [docs/uplink-qos-test-results-summary.md](/root/mediasoup-cpp/docs/uplink-qos-test-results-summary.md)
+- per-case final result: [docs/uplink-qos-case-results.md](/root/mediasoup-cpp/docs/uplink-qos-case-results.md)
+- generated matrix artifact: [docs/generated/uplink-qos-matrix-report.json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.json)
+- detailed review notes: [docs/review_qos.md](/root/mediasoup-cpp/docs/review_qos.md)
+
 ## Core Runtime Model
 
 ### uWS Main Thread
@@ -553,6 +588,34 @@ cmake --build build -j$(nproc)
 # full baseline
 ./build/mediasoup_tests
 ```
+
+### QoS Test Entry
+
+For QoS-specific validation, use the unified script:
+
+```bash
+cd /root/mediasoup-cpp
+
+# full QoS run
+./scripts/run_qos_tests.sh
+
+# continue from last failed tasks only
+./scripts/run_qos_tests.sh --resume
+
+# skip browser-dependent parts
+./scripts/run_qos_tests.sh --skip-browser
+
+# run selected groups
+./scripts/run_qos_tests.sh client-js cpp-unit
+```
+
+Behavior:
+
+- default mode runs all QoS groups and continues even if one group fails
+- failures are recorded to `tests/qos_harness/artifacts/last-failures.txt`
+- `--resume` reruns only the last failed precise tasks
+- if `matrix` is executed, the script also regenerates the per-case report:
+  [docs/uplink-qos-case-results.md](/root/mediasoup-cpp/docs/uplink-qos-case-results.md)
 
 ### Troubleshooting
 

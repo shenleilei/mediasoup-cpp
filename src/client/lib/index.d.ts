@@ -1,0 +1,29 @@
+import debug from 'debug';
+import { Device, detectDevice } from './Device';
+import * as types from './types';
+import * as qos from './qos';
+/**
+ * Expose all types.
+ */
+export { types };
+/**
+ * Expose QoS module as an independent namespace.
+ */
+export { qos };
+/**
+ * Expose mediasoup-client version.
+ */
+export declare const version = "__MEDIASOUP_CLIENT_VERSION__";
+/**
+ * Expose Device class and detectDevice() helper.
+ */
+export { Device, detectDevice };
+/**
+ * Expose parseScalabilityMode() function.
+ */
+export { parse as parseScalabilityMode } from './scalabilityModes';
+/**
+ * Expose the debug module.
+ */
+export { debug };
+//# sourceMappingURL=index.d.ts.map

@@ -1,0 +1,42 @@
+{
+  "name": "publish_snapshot",
+  "roomId": "qos_harness_room",
+  "peerId": "alice",
+  "trackId": "camera-main",
+  "kind": "video",
+  "source": "camera",
+  "snapshots": [
+    {
+      "timestampMs": 1000,
+      "bytesSent": 1000,
+      "packetsSent": 100,
+      "packetsLost": 0,
+      "targetBitrateBps": 900000,
+      "configuredBitrateBps": 900000,
+      "roundTripTimeMs": 120,
+      "jitterMs": 8,
+      "frameWidth": 1280,
+      "frameHeight": 720,
+      "framesPerSecond": 30,
+      "qualityLimitationReason": "none"
+    },
+    {
+      "timestampMs": 2000,
+      "bytesSent": 2000,
+      "packetsSent": 220,
+      "packetsLost": 20,
+      "targetBitrateBps": 900000,
+      "configuredBitrateBps": 900000,
+      "roundTripTimeMs": 260,
+      "jitterMs": 24,
+      "frameWidth": 640,
+      "frameHeight": 360,
+      "framesPerSecond": 12,
+      "qualityLimitationReason": "bandwidth"
+    }
+  ],
+  "expect": {
+    "clientStatsSeq": 2,
+    "qosQuality": "excellent"
+  }
+}

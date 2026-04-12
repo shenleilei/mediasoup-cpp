@@ -271,7 +271,7 @@ TEST_F(QosRecordingAccuracyTest, TwentyPercentLossQosFile) {
 	auto qos = readQosFile(s.qosPath);
 	ASSERT_GE(qos.size(), 2u) << "Should have multiple QoS snapshots";
 
-	// Check last snapshot has loss data
+	// Check last snapshot has cumulative loss data.
 	auto& last = qos.back();
 	auto& pstats = last["stats"]["producers"];
 	ASSERT_FALSE(pstats.empty());
@@ -282,9 +282,24 @@ TEST_F(QosRecordingAccuracyTest, TwentyPercentLossQosFile) {
 	EXPECT_GT(lost, dropped * 0.3) << "packetsLost too low: " << lost << " vs dropped " << dropped;
 	EXPECT_LT(lost, dropped * 2.0) << "packetsLost too high: " << lost << " vs dropped " << dropped;
 
-	// fractionLost should be non-zero (RTCP 0-255 format)
-	double frac = pentry["stats"][0].value("fractionLost", 0.0);
-	EXPECT_GT(frac, 0) << "fractionLost should be non-zero with 20% loss";
+	// fractionLost is a recent-window metric and may drop back to 0 on later idle
+	// snapshots, so require that at least one recorded snapshot observed non-zero
+	// fractionLost during the loss window.
+	bool sawNonZeroFractionLost = false;
+	for (const auto& entry : qos) {
+		if (!entry.contains("stats")) continue;
+		const auto& producers = entry["stats"].value("producers", json::object());
+		if (producers.empty()) continue;
+		const auto& producerEntry = producers.begin().value();
+		if (!producerEntry.contains("stats") || producerEntry["stats"].empty()) continue;
+		double frac = producerEntry["stats"][0].value("fractionLost", 0.0);
+		if (frac > 0.0) {
+			sawNonZeroFractionLost = true;
+			break;
+		}
+	}
+	EXPECT_TRUE(sawNonZeroFractionLost)
+		<< "fractionLost should be non-zero in at least one QoS snapshot with 20% loss";
 }
 
 // ─── Test 3: QoS timestamps are monotonically increasing ───
