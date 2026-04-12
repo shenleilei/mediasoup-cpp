@@ -61,6 +61,7 @@ Notes:
   - matrix 运行时间最长，并且依赖浏览器 / netem 环境。
   - 可用环境变量 QOS_MATRIX_SPEED 调整 matrix 用时。
   - 失败任务会记录到 tests/qos_harness/artifacts/last-failures.txt
+  - full matrix 当前主报告写入 docs/generated/ 和 docs/；每次新结果都会按生成时间归档到 docs/archive/uplink-qos-runs/
 EOF
 }
 
@@ -545,7 +546,10 @@ done
 if ((GENERATE_CASE_REPORT)) && [[ -f "$CASE_REPORT_JSON" && -f "$CASE_REPORT_SCRIPT" ]]; then
   echo
   echo "==> [case-report]"
-  if node "$CASE_REPORT_SCRIPT"; then
+  if node \
+    "$CASE_REPORT_SCRIPT" \
+    "--input=$CASE_REPORT_JSON" \
+    "--output=$ROOT_DIR/docs/uplink-qos-case-results.md"; then
     echo "<== [case-report] PASS"
   else
     echo "<== [case-report] WARN (generation failed)" >&2

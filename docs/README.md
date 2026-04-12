@@ -46,7 +46,9 @@
 
 - [review_qos.md](/root/mediasoup-cpp/docs/review_qos.md) 不是“当前结论总表”，而是“原始 review 发现 + 后续有效项判定”的混合文档。
 - 当前签收口径，以 [uplink-qos-final-report.md](/root/mediasoup-cpp/docs/uplink-qos-final-report.md) 和 [uplink-qos-test-results-summary.md](/root/mediasoup-cpp/docs/uplink-qos-test-results-summary.md) 为准。
-- 当前保留的 targeted rerun 机器结果在 [generated/uplink-qos-matrix-report.json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.json)。
+- full matrix 当前机器结果在 [generated/uplink-qos-matrix-report.json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.json)。
+- targeted rerun 当前机器结果在 [generated/uplink-qos-matrix-report.targeted.json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.targeted.json)。
+- 每次报告生成的历史快照都归档在 [archive/uplink-qos-runs](/root/mediasoup-cpp/docs/archive/uplink-qos-runs)。
 
 ## 4. QoS 测试入口
 

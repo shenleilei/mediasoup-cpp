@@ -83,5 +83,5 @@ cd /root/mediasoup-cpp
 
 - [x] 需要补一份“单次串行 41 case”的 full-matrix 独立归档 artifact
   说明：这项工作已归入 P1 的“full matrix 稳定性固化与归档”。
-  当前 `run_matrix.mjs` 的 JSON 输出会被后续 targeted rerun 覆盖，因此仍需要补一份不被覆盖的独立产物；
+  当前 full matrix / targeted rerun / archive 快照已经拆分；执行后应确认本轮结果已同步到 `docs/archive/uplink-qos-runs/<generatedAt>/`，方便后续和上一轮直接对比；
   但这不影响本轮“自动化验证已收敛并可签收”的结论。
