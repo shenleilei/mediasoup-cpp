@@ -1,6 +1,6 @@
 # 上行 QoS 执行清单
 
-日期：`2026-04-11`
+日期：`2026-04-12`
 
 ## 0. 统一执行入口
 
@@ -79,7 +79,9 @@ cd /root/mediasoup-cpp
 - [x] 已新增 [uplink-qos-final-report.md](/root/mediasoup-cpp/docs/uplink-qos-final-report.md)
 - [x] 已新增 [README.md](/root/mediasoup-cpp/docs/README.md) 作为 docs 导航入口
 
-## 4. 仍需单独决定的事项
+## 4. 已决定的后续事项
 
-- [ ] 是否需要再产出一份“单次串行 41 case”的 full-matrix 归档 artifact
-  说明：当前 `run_matrix.mjs` 的 JSON 输出会被后续 targeted rerun 覆盖；本轮最终签收已通过分组复核完成。
+- [x] 需要补一份“单次串行 41 case”的 full-matrix 独立归档 artifact
+  说明：这项工作已归入 P1 的“full matrix 稳定性固化与归档”。
+  当前 `run_matrix.mjs` 的 JSON 输出会被后续 targeted rerun 覆盖，因此仍需要补一份不被覆盖的独立产物；
+  但这不影响本轮“自动化验证已收敛并可签收”的结论。

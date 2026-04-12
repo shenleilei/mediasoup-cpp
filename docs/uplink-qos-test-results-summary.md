@@ -65,10 +65,10 @@
   `browser -> real SFU signaling`
   `服务端集成测试`
   共同覆盖。
-- 如果后续管理层需要一份“单次串行 41 case、不经中途调试覆盖的 machine-generated artifact”，建议在独占环境上单独执行一次完整 matrix，并归档独立输出文件。
+- 已决定在后续 P1 阶段补一份“单次串行 41 case、不经中途调试覆盖的 machine-generated artifact”，并归档独立输出文件。
 
 ## 6. 上报建议口径
 
 建议对上使用下面这句：
 
-`2026-04-11 已完成 uplink QoS 自动化验证收敛。当前仓库内的服务端单测、服务端集成测试、client QoS 单测、Node/browser harness 以及弱网矩阵分组复核均已通过；当前剩余工作不在“修失败 case”层面，而是在是否需要补一份单次串行 full-matrix 归档产物。`
+`2026-04-12 已完成 uplink QoS 自动化验证收敛。当前仓库内的服务端单测、服务端集成测试、client QoS 单测、Node/browser harness 以及弱网矩阵分组复核均已通过；当前后续工作不在“修失败 case”层面，而是在按 P1 计划补齐单次串行 full-matrix 归档产物并固化长期 gate。`
