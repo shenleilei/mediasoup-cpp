@@ -5,12 +5,12 @@ import {
   applyNetemConfig,
   clearNetem,
   sleep,
-  stateRank,
 } from './loopback_runner.mjs';
 import {
-  analyzeResult,
+  deriveCaseEvaluation,
   extractTiming,
   getPhaseNetwork,
+  getImpairedStateForEvaluation,
   summarizePhaseState,
 } from './synthetic_sweep_shared.mjs';
 
@@ -39,28 +39,6 @@ function toNetemConfig(network = {}) {
   if (typeof network.loss === 'number') config.loss = network.loss;
   if (typeof network.jitter === 'number') config.jitter = network.jitter;
   return config;
-}
-
-function evaluateExpectation(state, expect = {}) {
-  const stateName = state?.state;
-  const level = typeof state?.level === 'number' ? state.level : undefined;
-
-  let stateMatch = true;
-  if (Array.isArray(expect.states)) {
-    stateMatch = expect.states.includes(stateName);
-  } else if (typeof expect.state === 'string') {
-    stateMatch = expect.state === stateName;
-  }
-
-  let levelMatch = true;
-  if (typeof expect.maxLevel === 'number' && typeof level === 'number') {
-    levelMatch = level <= expect.maxLevel && levelMatch;
-  }
-  if (typeof expect.minLevel === 'number' && typeof level === 'number') {
-    levelMatch = level >= expect.minLevel && levelMatch;
-  }
-
-  return { stateMatch, levelMatch };
 }
 
 async function runPhase(harness, config, durationMs) {
@@ -147,30 +125,19 @@ async function runCase(caseDef) {
       recovery.startMs,
       recovery.state
     );
-    const impairedStateForEvaluation =
-      caseDef.group === 'baseline'
-        ? impairmentSummary.current
-        : impairmentSummary.peak;
-    const analysis = analyzeResult(
+    const impairedStateForEvaluation = getImpairedStateForEvaluation(
+      caseDef,
+      impairmentSummary
+    );
+    const actionTypes = fullTrace
+      .map(entry => entry?.plannedAction?.type)
+      .filter(type => type && type !== 'noop');
+    const evaluation = deriveCaseEvaluation(
       caseDef,
       baselineSummary.current,
       impairedStateForEvaluation,
       recoverySummary.best
     );
-    const expectation = evaluateExpectation(impairedStateForEvaluation, caseDef.expect);
-    const recoveryPassed =
-      caseDef.group === 'baseline' ||
-      caseDef.expect?.recovery === false ||
-      stateRank(recoverySummary.best.state) <= stateRank(baselineSummary.current.state) ||
-      recoverySummary.best.level <= baselineSummary.current.level;
-    const actionTypes = fullTrace
-      .map(entry => entry?.plannedAction?.type)
-      .filter(type => type && type !== 'noop');
-    const passed =
-      expectation.stateMatch &&
-      expectation.levelMatch &&
-      analysis.verdict === '符合' &&
-      recoveryPassed;
 
     result.baseline = baseline;
     result.impairment = impairment;
@@ -181,20 +148,18 @@ async function runCase(caseDef) {
       recovery: recoverySummary,
     };
     result.timing = {
-      impairment: extractTiming(fullTrace, impairment.startMs),
+      impairment: extractTiming(fullTrace, impairment.startMs, recovery.startMs),
       recovery:
         caseDef.expect?.recovery === false
           ? {}
           : extractTiming(fullTrace, recovery.startMs),
     };
-    result.analysis = analysis;
+    result.analysis = evaluation.analysis;
     result.actionCount = actionTypes.length;
     result.actionTypes = actionTypes;
     result.verdict = {
-      passed,
-      reason: passed
-        ? 'expectation satisfied'
-        : `stateMatch=${expectation.stateMatch}, levelMatch=${expectation.levelMatch}, recoveryPassed=${recoveryPassed}, analysis=${analysis.verdict}`,
+      passed: evaluation.passed,
+      reason: evaluation.reason,
       expectation: caseDef.expect ?? {},
     };
     result.endTime = new Date().toISOString();

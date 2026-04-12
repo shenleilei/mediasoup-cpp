@@ -138,10 +138,57 @@ function getAllowedStates(expectation) {
   return ['stable'];
 }
 
-export function extractTiming(trace, phaseStartMs) {
+export function evaluateExpectation(state, expect = {}) {
+  const stateName = state?.state;
+  const level = typeof state?.level === 'number' ? state.level : undefined;
+
+  let stateMatch = true;
+  if (Array.isArray(expect.states)) {
+    stateMatch = expect.states.includes(stateName);
+  } else if (typeof expect.state === 'string') {
+    stateMatch = expect.state === stateName;
+  }
+
+  let levelMatch = true;
+  if (typeof expect.maxLevel === 'number' && typeof level === 'number') {
+    levelMatch = level <= expect.maxLevel && levelMatch;
+  }
+  if (typeof expect.minLevel === 'number' && typeof level === 'number') {
+    levelMatch = level >= expect.minLevel && levelMatch;
+  }
+
+  return { stateMatch, levelMatch };
+}
+
+export function getImpairedStateForEvaluation(caseDefn, impairmentSummary) {
+  return caseDefn.group === 'baseline'
+    ? impairmentSummary?.current
+    : impairmentSummary?.peak;
+}
+
+export function recoveryPassedForCase(caseDefn, baselineState, recoveredState) {
+  return (
+    caseDefn.group === 'baseline' ||
+    caseDefn.expect?.recovery === false ||
+    (
+      stateRank(recoveredState?.state) <= stateRank(baselineState?.state) &&
+      recoveredState?.level <= baselineState?.level
+    )
+  );
+}
+
+export function extractTiming(trace, phaseStartMs, phaseEndMs) {
   const timing = {};
   const find = predicate => {
-    const entry = trace.find(entry => entry.tsMs > phaseStartMs && predicate(entry));
+    const entry = trace.find(entry => {
+      if (entry.tsMs <= phaseStartMs) {
+        return false;
+      }
+      if (typeof phaseEndMs === 'number' && entry.tsMs > phaseEndMs) {
+        return false;
+      }
+      return predicate(entry);
+    });
     return entry ? entry.tsMs - phaseStartMs : null;
   };
 
@@ -253,5 +300,26 @@ export function analyzeResult(caseDefn, baseline, impaired, recovered) {
     actualRecoveredState: recovered.state,
     actualRecoveredLevel: recovered.level,
     verdict,
+  };
+}
+
+export function deriveCaseEvaluation(caseDefn, baselineState, impairedState, recoveredState) {
+  const analysis = analyzeResult(caseDefn, baselineState, impairedState, recoveredState);
+  const expectation = evaluateExpectation(impairedState, caseDefn.expect);
+  const recoveryPassed = recoveryPassedForCase(caseDefn, baselineState, recoveredState);
+  const passed =
+    expectation.stateMatch &&
+    expectation.levelMatch &&
+    analysis.verdict === '符合' &&
+    recoveryPassed;
+
+  return {
+    passed,
+    analysis,
+    expectation,
+    recoveryPassed,
+    reason: passed
+      ? 'expectation satisfied'
+      : `stateMatch=${expectation.stateMatch}, levelMatch=${expectation.levelMatch}, recoveryPassed=${recoveryPassed}, analysis=${analysis.verdict}`,
   };
 }

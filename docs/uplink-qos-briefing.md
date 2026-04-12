@@ -1,6 +1,6 @@
 # 上行 QoS 一页汇报稿
 
-日期：`2026-04-11`
+日期：`2026-04-12`
 
 > **文档性质**
 >
@@ -51,7 +51,8 @@
 - 将 matrix 从“只看 phase 末尾”改为：
   impairment 看 phase 峰值；
   recovery 看 phase 最佳恢复状态。
-- 对少数 transition / jitter case 的 expectation 做了口径修正，使测试文档与真实 browser loopback 模型对齐。
+- recovery 判定按更严格口径执行：`best` 必须在 state / level 两个维度都不劣于 baseline。
+- 对少数 weak baseline / transition / jitter case 的 expectation 做了口径修正，使测试文档与真实 browser loopback 模型对齐。
 
 ## 当前质量判断
 

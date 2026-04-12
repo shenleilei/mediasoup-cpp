@@ -1,6 +1,6 @@
 # 上行 QoS 最终验证报告
 
-日期：`2026-04-11`
+日期：`2026-04-12`
 
 > **文档性质**
 >
@@ -87,7 +87,7 @@
    原因：
    实际浏览器和 `tc netem` 存在队列滞后，弱网去除后 phase 尾部可能仍有短时回摆。
    处理：
-   impairment 改为按 phase 峰值判定；recovery 改为按 phase 最佳恢复状态判定。
+   impairment 改为按 phase 峰值判定；recovery 改为按 phase 最佳恢复状态判定，并要求该 `best` 在 state / level 两个维度都不劣于 baseline。
 
 3. RTT / jitter 阈值与真实 browser loopback 不匹配
    原因：
@@ -101,11 +101,11 @@
    处理：
    收紧 `bandwidthLimited` 的触发条件，降低恢复尾部误判。
 
-5. transition / jitter 的少数原始 scenario expectation 与真实模型不一致
+5. weak baseline / transition / jitter 的少数原始 scenario expectation 与真实模型不一致
    原因：
    当前真实 browser loopback 在某些转场点会触发更激进保护。
    处理：
-   仅对少数 case expectation 做了口径修正，使测试文档和真实自动化模型对齐。
+   仅对少数 weak baseline / transition / jitter case expectation 做了口径修正，使测试文档和真实自动化模型对齐。
 
 ## 5. 证据链
 
