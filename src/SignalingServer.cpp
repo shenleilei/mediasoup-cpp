@@ -672,10 +672,12 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 						result = {true, stats};
 					} else if (method == "setQosOverride") {
 						result = rs->setQosOverride(roomId,
+							peerId,
 							data.value("peerId", peerId),
 							data.at("override"));
 					} else if (method == "setQosPolicy") {
 						result = rs->setQosPolicy(roomId,
+							peerId,
 							data.value("peerId", peerId),
 							data.at("policy"));
 					} else {
