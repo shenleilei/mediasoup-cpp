@@ -1,14 +1,21 @@
 # 上行 QoS 逐 Case 最终结果
 
-生成时间：`2026-04-12T06:05:12.487Z`
+生成时间：`2026-04-12T08:12:22.359Z`
 
 ## 1. 汇总
 
 - 总 Case：`41`
 - 已执行：`41`
-- 通过：`41`
-- 失败：`0`
+- 通过：`39`
+- 失败：`2`
 - 错误：`0`
+
+### 1.1 失败 / 错误 Case
+
+| Case ID | 结果 | 说明 |
+|---|---|---|
+| `B3` | `FAIL` | stateMatch=false, levelMatch=false, recoveryPassed=true, analysis=过弱 |
+| `J3` | `FAIL` | stateMatch=false, levelMatch=false, recoveryPassed=true, analysis=过强 |
 
 ## 2. 逐 Case 结果
 
@@ -71,12 +78,12 @@
 | 预期 QoS 状态 | early_warning / congested |
 | 预期动作 | 应触发本地降级动作（以 setEncodingParameters 为主），允许进入 early_warning / congested，最高不超过 L4 |
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
-| 实际结果 | PASS（符合） |
-| 实际 QoS 状态 | baseline(current=early_warning/L1)；impairment(评估取 peak=early_warning/L1, current=early_warning/L1)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 37 次非 noop） |
+| 实际结果 | FAIL（stateMatch=false, levelMatch=false, recoveryPassed=true, analysis=过弱） |
+| 实际 QoS 状态 | baseline(current=congested/L4)；impairment(评估取 peak=congested/L4, current=stable/L0)；recovery(评估取 best=stable/L0, current=congested/L4) |
+| 实际动作 | setEncodingParameters（共 123 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
-| 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=219ms, congested=-, firstAction=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=351ms, congested=4851ms, firstAction=4851ms, L1=21851ms, L2=4851ms, L3=5374ms, L4=5851ms, audioOnly=- |
+| 重点分析 | 判定=过弱。预期={"states":["early_warning","congested"],"minLevel":1,"maxLevel":4}；实际 impairment 评估值=congested/L4，recovery 评估值=stable/L0；失败原因=stateMatch=false, levelMatch=false, recoveryPassed=true, analysis=过弱 |
+| 关键时间指标 | impairment: warning=-, congested=159ms, firstAction=159ms, L1=18659ms, L2=18159ms, L3=17660ms, L4=159ms, audioOnly=-；recovery: warning=756ms, congested=1256ms, firstAction=756ms, L1=756ms, L2=1256ms, L3=1756ms, L4=2255ms, audioOnly=- |
 
 ### BW1
 
@@ -116,11 +123,11 @@
 | 预期动作 | 应保持 stable 或轻度降级到 stable / early_warning，动作以 noop / setEncodingParameters 为主，最高不超过 L1 |
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
-| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=early_warning/L1, current=early_warning/L1)；recovery(评估取 best=stable/L0, current=stable/L0) |
+| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=stable/L0, current=stable/L0)；recovery(评估取 best=stable/L0, current=stable/L0) |
 | 实际动作 | setEncodingParameters（共 2 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
-| 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=2323ms, congested=-, firstAction=2323ms, L1=2323ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=39ms, congested=-, firstAction=14539ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=stable/L0，recovered=stable/L0。 |
+| 关键时间指标 | impairment: warning=-, congested=-, firstAction=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=2070ms, congested=-, firstAction=2070ms, L1=2070ms, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### BW3
 
@@ -139,10 +146,10 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=stable/L2)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 74 次非 noop） |
+| 实际动作 | setEncodingParameters（共 75 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=1340ms, congested=2340ms, firstAction=1340ms, L1=1340ms, L2=2340ms, L3=2840ms, L4=3340ms, audioOnly=-；recovery: warning=-, congested=881ms, firstAction=381ms, L1=17381ms, L2=16881ms, L3=16381ms, L4=881ms, audioOnly=- |
+| 关键时间指标 | impairment: warning=1855ms, congested=2355ms, firstAction=1855ms, L1=1855ms, L2=2355ms, L3=2855ms, L4=3355ms, audioOnly=-；recovery: warning=1872ms, congested=3372ms, firstAction=372ms, L1=1872ms, L2=3372ms, L3=3872ms, L4=4372ms, audioOnly=- |
 
 ### BW4
 
@@ -161,10 +168,10 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 67 次非 noop） |
+| 实际动作 | setEncodingParameters（共 70 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=2849ms, congested=3349ms, firstAction=2849ms, L1=2849ms, L2=3349ms, L3=3849ms, L4=4349ms, audioOnly=-；recovery: warning=2367ms, congested=2867ms, firstAction=367ms, L1=867ms, L2=367ms, L3=3367ms, L4=3867ms, audioOnly=- |
+| 关键时间指标 | impairment: warning=1384ms, congested=2884ms, firstAction=1384ms, L1=1384ms, L2=2884ms, L3=3384ms, L4=3884ms, audioOnly=-；recovery: warning=1944ms, congested=2944ms, firstAction=444ms, L1=1444ms, L2=944ms, L3=444ms, L4=3944ms, audioOnly=- |
 
 ### BW5
 
@@ -182,11 +189,11 @@
 | 预期动作 | 应触发本地降级动作（以 setEncodingParameters 为主），允许进入 congested，最高不超过 L4 |
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
-| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=congested/L4) |
-| 实际动作 | setEncodingParameters（共 93 次非 noop） |
+| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
+| 实际动作 | setEncodingParameters（共 78 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=3868ms, congested=4368ms, firstAction=3868ms, L1=3868ms, L2=4368ms, L3=4868ms, L4=5368ms, audioOnly=-；recovery: warning=23123ms, congested=123ms, firstAction=123ms, L1=21623ms, L2=21123ms, L3=20623ms, L4=123ms, audioOnly=- |
+| 关键时间指标 | impairment: warning=3860ms, congested=4360ms, firstAction=3860ms, L1=3860ms, L2=4360ms, L3=4860ms, L4=5360ms, audioOnly=-；recovery: warning=22572ms, congested=72ms, firstAction=72ms, L1=20072ms, L2=19572ms, L3=19072ms, L4=72ms, audioOnly=- |
 
 ### BW6
 
@@ -204,11 +211,11 @@
 | 预期动作 | 应触发本地降级动作（以 setEncodingParameters 为主），允许进入 congested，最高不超过 L4 |
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
-| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=recovering/L0)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 83 次非 noop） |
+| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=congested/L4) |
+| 实际动作 | setEncodingParameters（共 108 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=3833ms, congested=4333ms, firstAction=3833ms, L1=3833ms, L2=4333ms, L3=4833ms, L4=5333ms, audioOnly=-；recovery: warning=1349ms, congested=1849ms, firstAction=1349ms, L1=1349ms, L2=1849ms, L3=2349ms, L4=2849ms, audioOnly=- |
+| 关键时间指标 | impairment: warning=5339ms, congested=5839ms, firstAction=5339ms, L1=5339ms, L2=5839ms, L3=6339ms, L4=6839ms, audioOnly=-；recovery: warning=21928ms, congested=1446ms, firstAction=428ms, L1=928ms, L2=428ms, L3=19928ms, L4=1446ms, audioOnly=- |
 
 ### BW7
 
@@ -227,10 +234,10 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 154 次非 noop） |
+| 实际动作 | setEncodingParameters（共 164 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=4314ms, congested=4814ms, firstAction=4314ms, L1=4314ms, L2=4814ms, L3=5314ms, L4=5814ms, audioOnly=-；recovery: warning=22893ms, congested=393ms, firstAction=393ms, L1=20392ms, L2=19892ms, L3=19392ms, L4=393ms, audioOnly=- |
+| 关键时间指标 | impairment: warning=4339ms, congested=4840ms, firstAction=4339ms, L1=4339ms, L2=4840ms, L3=5340ms, L4=5839ms, audioOnly=-；recovery: warning=24054ms, congested=54ms, firstAction=54ms, L1=21555ms, L2=21055ms, L3=20554ms, L4=54ms, audioOnly=- |
 
 ### L1
 
@@ -315,10 +322,10 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=early_warning/L1, current=early_warning/L1)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 2 次非 noop） |
+| 实际动作 | setEncodingParameters（共 4 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=6823ms, congested=-, firstAction=6823ms, L1=6823ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=166ms, congested=-, firstAction=2666ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 关键时间指标 | impairment: warning=1847ms, congested=-, firstAction=1847ms, L1=1847ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=462ms, congested=-, firstAction=2962ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### L5
 
@@ -337,10 +344,10 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 68 次非 noop） |
+| 实际动作 | setEncodingParameters（共 42 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=2352ms, congested=3352ms, firstAction=2352ms, L1=2352ms, L2=3352ms, L3=3857ms, L4=4352ms, audioOnly=-；recovery: warning=7198ms, congested=198ms, firstAction=198ms, L1=5198ms, L2=4698ms, L3=4198ms, L4=198ms, audioOnly=- |
+| 关键时间指标 | impairment: warning=2860ms, congested=15860ms, firstAction=2860ms, L1=2860ms, L2=15860ms, L3=16360ms, L4=16860ms, audioOnly=-；recovery: warning=6709ms, congested=209ms, firstAction=209ms, L1=4709ms, L2=4209ms, L3=3709ms, L4=209ms, audioOnly=- |
 
 ### L6
 
@@ -359,10 +366,10 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 60 次非 noop） |
+| 实际动作 | setEncodingParameters（共 79 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=1883ms, congested=3383ms, firstAction=1883ms, L1=1883ms, L2=3383ms, L3=3884ms, L4=4383ms, audioOnly=-；recovery: warning=-, congested=229ms, firstAction=229ms, L1=11728ms, L2=11228ms, L3=10728ms, L4=229ms, audioOnly=- |
+| 关键时间指标 | impairment: warning=862ms, congested=2361ms, firstAction=862ms, L1=862ms, L2=2361ms, L3=2861ms, L4=3361ms, audioOnly=-；recovery: warning=10203ms, congested=202ms, firstAction=202ms, L1=8702ms, L2=8202ms, L3=7702ms, L4=202ms, audioOnly=- |
 
 ### L7
 
@@ -381,10 +388,10 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 80 次非 noop） |
+| 实际动作 | setEncodingParameters（共 83 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=1371ms, congested=3371ms, firstAction=1371ms, L1=1371ms, L2=3371ms, L3=3871ms, L4=4371ms, audioOnly=-；recovery: warning=-, congested=226ms, firstAction=226ms, L1=21726ms, L2=21226ms, L3=20726ms, L4=226ms, audioOnly=- |
+| 关键时间指标 | impairment: warning=3343ms, congested=3843ms, firstAction=3343ms, L1=3343ms, L2=3843ms, L3=4343ms, L4=4843ms, audioOnly=-；recovery: warning=24207ms, congested=207ms, firstAction=207ms, L1=22707ms, L2=22207ms, L3=21707ms, L4=207ms, audioOnly=- |
 
 ### L8
 
@@ -403,10 +410,10 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 81 次非 noop） |
+| 实际动作 | setEncodingParameters（共 83 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=3840ms, congested=4340ms, firstAction=3840ms, L1=3840ms, L2=4340ms, L3=4840ms, L4=5340ms, audioOnly=-；recovery: warning=-, congested=497ms, firstAction=497ms, L1=22997ms, L2=22497ms, L3=21997ms, L4=497ms, audioOnly=- |
+| 关键时间指标 | impairment: warning=2887ms, congested=3388ms, firstAction=2887ms, L1=2887ms, L2=3388ms, L3=3887ms, L4=4388ms, audioOnly=-；recovery: warning=-, congested=361ms, firstAction=361ms, L1=22360ms, L2=21861ms, L3=21361ms, L4=361ms, audioOnly=- |
 
 ### R1
 
@@ -447,10 +454,10 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=stable/L0, current=stable/L0)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | 无非 noop 动作 |
+| 实际动作 | setEncodingParameters（共 2 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=stable/L0，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=-, congested=-, firstAction=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, congested=-, firstAction=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 关键时间指标 | impairment: warning=-, congested=-, firstAction=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=3616ms, congested=-, firstAction=3616ms, L1=3616ms, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### R3
 
@@ -494,7 +501,7 @@
 | 实际动作 | setEncodingParameters（共 2 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=2789ms, congested=-, firstAction=2789ms, L1=2789ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=391ms, congested=-, firstAction=13891ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 关键时间指标 | impairment: warning=3285ms, congested=-, firstAction=3285ms, L1=3285ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=420ms, congested=-, firstAction=2420ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### R5
 
@@ -513,10 +520,10 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 75 次非 noop） |
+| 实际动作 | setEncodingParameters（共 74 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=2246ms, congested=5246ms, firstAction=2246ms, L1=2246ms, L2=5246ms, L3=5746ms, L4=6246ms, audioOnly=-；recovery: warning=7756ms, congested=256ms, firstAction=256ms, L1=5756ms, L2=5256ms, L3=4756ms, L4=256ms, audioOnly=- |
+| 关键时间指标 | impairment: warning=1737ms, congested=4237ms, firstAction=1737ms, L1=1737ms, L2=4237ms, L3=4737ms, L4=5237ms, audioOnly=-；recovery: warning=7258ms, congested=258ms, firstAction=258ms, L1=5758ms, L2=5258ms, L3=4758ms, L4=258ms, audioOnly=- |
 
 ### R6
 
@@ -535,10 +542,10 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 81 次非 noop） |
+| 实际动作 | setEncodingParameters（共 84 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=2213ms, congested=2713ms, firstAction=2213ms, L1=2213ms, L2=2713ms, L3=3213ms, L4=3713ms, audioOnly=-；recovery: warning=7554ms, congested=54ms, firstAction=54ms, L1=6054ms, L2=5554ms, L3=5054ms, L4=54ms, audioOnly=- |
+| 关键时间指标 | impairment: warning=1696ms, congested=2196ms, firstAction=1696ms, L1=1696ms, L2=2196ms, L3=2696ms, L4=3196ms, audioOnly=-；recovery: warning=6548ms, congested=48ms, firstAction=48ms, L1=5548ms, L2=5048ms, L3=4549ms, L4=48ms, audioOnly=- |
 
 ### J1
 
@@ -599,12 +606,12 @@
 | 预期 QoS 状态 | early_warning |
 | 预期动作 | 应保持 stable 或轻度降级到 early_warning，动作以 noop / setEncodingParameters 为主，最高不超过 L2 |
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
-| 实际结果 | PASS（符合） |
-| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=early_warning/L1, current=early_warning/L1)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 2 次非 noop） |
+| 实际结果 | FAIL（stateMatch=false, levelMatch=false, recoveryPassed=true, analysis=过强） |
+| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
+| 实际动作 | setEncodingParameters（共 76 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
-| 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=3360ms, congested=-, firstAction=3360ms, L1=3360ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=113ms, congested=-, firstAction=12113ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 重点分析 | 判定=过强。预期={"state":"early_warning","minLevel":1,"maxLevel":2}；实际 impairment 评估值=congested/L4，recovery 评估值=stable/L0；失败原因=stateMatch=false, levelMatch=false, recoveryPassed=true, analysis=过强 |
+| 关键时间指标 | impairment: warning=2370ms, congested=5370ms, firstAction=2370ms, L1=2370ms, L2=5370ms, L3=5870ms, L4=6370ms, audioOnly=-；recovery: warning=8152ms, congested=150ms, firstAction=150ms, L1=6650ms, L2=6151ms, L3=5650ms, L4=150ms, audioOnly=- |
 
 ### J4
 
@@ -622,11 +629,11 @@
 | 预期动作 | 应触发本地降级动作（以 setEncodingParameters 为主），允许进入 early_warning / congested，最高不超过 L4 |
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
-| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 70 次非 noop） |
+| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=early_warning/L1, current=early_warning/L1)；recovery(评估取 best=stable/L0, current=stable/L0) |
+| 实际动作 | setEncodingParameters（共 2 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
-| 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=2367ms, congested=5367ms, firstAction=2367ms, L1=2367ms, L2=5367ms, L3=5867ms, L4=6367ms, audioOnly=-；recovery: warning=9594ms, congested=79ms, firstAction=79ms, L1=8079ms, L2=7579ms, L3=7079ms, L4=79ms, audioOnly=- |
+| 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
+| 关键时间指标 | impairment: warning=3782ms, congested=-, firstAction=3782ms, L1=3782ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=359ms, congested=-, firstAction=15359ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### J5
 
@@ -644,11 +651,11 @@
 | 预期动作 | 应触发本地降级动作（以 setEncodingParameters 为主），允许进入 congested，最高不超过 L4 |
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
-| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 84 次非 noop） |
+| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=congested/L4) |
+| 实际动作 | setEncodingParameters（共 82 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=1256ms, congested=1756ms, firstAction=1256ms, L1=1256ms, L2=1756ms, L3=2256ms, L4=2756ms, audioOnly=-；recovery: warning=11116ms, congested=116ms, firstAction=116ms, L1=9616ms, L2=9116ms, L3=8616ms, L4=116ms, audioOnly=- |
+| 关键时间指标 | impairment: warning=1900ms, congested=4399ms, firstAction=1900ms, L1=1900ms, L2=4399ms, L3=4900ms, L4=5399ms, audioOnly=-；recovery: warning=14297ms, congested=297ms, firstAction=297ms, L1=8296ms, L2=7797ms, L3=7297ms, L4=297ms, audioOnly=- |
 
 ### T1
 
@@ -667,10 +674,10 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=stable/L0, current=stable/L0)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 2 次非 noop） |
+| 实际动作 | 无非 noop 动作 |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=stable/L0，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=-, congested=-, firstAction=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=1572ms, congested=-, firstAction=1572ms, L1=1572ms, L2=-, L3=-, L4=-, audioOnly=- |
+| 关键时间指标 | impairment: warning=-, congested=-, firstAction=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, congested=-, firstAction=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### T2
 
@@ -688,11 +695,11 @@
 | 预期动作 | 应触发本地降级动作（以 setEncodingParameters 为主），允许进入 congested，最高不超过 L4 |
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
-| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 57 次非 noop） |
+| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=stable/L0)；recovery(评估取 best=stable/L0, current=stable/L0) |
+| 实际动作 | setEncodingParameters（共 75 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=1862ms, congested=15862ms, firstAction=1862ms, L1=1862ms, L2=15862ms, L3=16362ms, L4=16862ms, audioOnly=-；recovery: warning=7935ms, congested=433ms, firstAction=433ms, L1=6932ms, L2=6433ms, L3=5933ms, L4=433ms, audioOnly=- |
+| 关键时间指标 | impairment: warning=2376ms, congested=2876ms, firstAction=2376ms, L1=2376ms, L2=2876ms, L3=3379ms, L4=3879ms, audioOnly=-；recovery: warning=1331ms, congested=1831ms, firstAction=1331ms, L1=1331ms, L2=1831ms, L3=2331ms, L4=2831ms, audioOnly=- |
 
 ### T3
 
@@ -711,10 +718,10 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 80 次非 noop） |
+| 实际动作 | setEncodingParameters（共 75 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=2339ms, congested=2838ms, firstAction=2339ms, L1=2339ms, L2=2838ms, L3=3338ms, L4=3839ms, audioOnly=-；recovery: warning=-, congested=124ms, firstAction=124ms, L1=20623ms, L2=20123ms, L3=19623ms, L4=124ms, audioOnly=- |
+| 关键时间指标 | impairment: warning=3354ms, congested=3854ms, firstAction=3354ms, L1=3354ms, L2=3854ms, L3=4354ms, L4=4854ms, audioOnly=-；recovery: warning=20067ms, congested=64ms, firstAction=64ms, L1=18066ms, L2=17567ms, L3=17066ms, L4=64ms, audioOnly=- |
 
 ### T4
 
@@ -733,10 +740,10 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=early_warning/L1, current=early_warning/L1)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 4 次非 noop） |
+| 实际动作 | setEncodingParameters（共 2 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=5140ms, congested=-, firstAction=5140ms, L1=5140ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=472ms, congested=-, firstAction=4472ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 关键时间指标 | impairment: warning=4868ms, congested=-, firstAction=4868ms, L1=4868ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=192ms, congested=-, firstAction=13692ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### T5
 
@@ -755,10 +762,10 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 59 次非 noop） |
+| 实际动作 | setEncodingParameters（共 75 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=2855ms, congested=4355ms, firstAction=2855ms, L1=2855ms, L2=4355ms, L3=4855ms, L4=5355ms, audioOnly=-；recovery: warning=12713ms, congested=213ms, firstAction=213ms, L1=11213ms, L2=10713ms, L3=10213ms, L4=213ms, audioOnly=- |
+| 关键时间指标 | impairment: warning=1142ms, congested=2142ms, firstAction=1142ms, L1=1142ms, L2=2142ms, L3=2642ms, L4=3142ms, audioOnly=-；recovery: warning=7054ms, congested=54ms, firstAction=54ms, L1=5554ms, L2=5058ms, L3=4554ms, L4=54ms, audioOnly=- |
 
 ### T6
 
@@ -780,7 +787,7 @@
 | 实际动作 | setEncodingParameters（共 2 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=3276ms, congested=-, firstAction=3276ms, L1=3276ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=370ms, congested=-, firstAction=14870ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 关键时间指标 | impairment: warning=3284ms, congested=-, firstAction=3284ms, L1=3284ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=392ms, congested=-, firstAction=15895ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### T7
 
@@ -802,7 +809,7 @@
 | 实际动作 | setEncodingParameters（共 2 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=5357ms, congested=-, firstAction=5357ms, L1=5357ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=205ms, congested=-, firstAction=6705ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 关键时间指标 | impairment: warning=3383ms, congested=-, firstAction=3383ms, L1=3383ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=206ms, congested=-, firstAction=15706ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### T8
 
@@ -821,10 +828,10 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=early_warning/L1)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=congested/L4, current=congested/L4) |
-| 实际动作 | setEncodingParameters（共 39 次非 noop） |
+| 实际动作 | setEncodingParameters（共 37 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=congested/L4。 |
-| 关键时间指标 | impairment: warning=138ms, congested=1638ms, firstAction=1638ms, L1=-, L2=1638ms, L3=2138ms, L4=2638ms, audioOnly=-；recovery: warning=-, congested=-, firstAction=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 关键时间指标 | impairment: warning=144ms, congested=2644ms, firstAction=2644ms, L1=-, L2=2644ms, L3=3144ms, L4=3644ms, audioOnly=-；recovery: warning=-, congested=-, firstAction=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### S1
 
@@ -843,10 +850,10 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=early_warning/L1, current=early_warning/L1)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 2 次非 noop） |
+| 实际动作 | setEncodingParameters（共 45 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=1865ms, congested=-, firstAction=1865ms, L1=1865ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=242ms, congested=-, firstAction=14742ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 关键时间指标 | impairment: warning=1333ms, congested=-, firstAction=1333ms, L1=1333ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=10990ms, congested=490ms, firstAction=490ms, L1=9490ms, L2=490ms, L3=990ms, L4=1490ms, audioOnly=- |
 
 ### S2
 
@@ -865,10 +872,10 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=congested/L4) |
-| 实际动作 | setEncodingParameters（共 93 次非 noop） |
+| 实际动作 | setEncodingParameters（共 95 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=2834ms, congested=3334ms, firstAction=2834ms, L1=2834ms, L2=3334ms, L3=3834ms, L4=4334ms, audioOnly=-；recovery: warning=24791ms, congested=285ms, firstAction=285ms, L1=21788ms, L2=21288ms, L3=20788ms, L4=285ms, audioOnly=- |
+| 关键时间指标 | impairment: warning=2834ms, congested=3334ms, firstAction=2834ms, L1=2834ms, L2=3334ms, L3=3834ms, L4=4334ms, audioOnly=-；recovery: warning=23382ms, congested=382ms, firstAction=382ms, L1=21382ms, L2=20882ms, L3=20382ms, L4=382ms, audioOnly=- |
 
 ### S3
 
@@ -887,10 +894,10 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=early_warning/L1, current=early_warning/L1)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 2 次非 noop） |
+| 实际动作 | setEncodingParameters（共 21 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=2272ms, congested=-, firstAction=2272ms, L1=2272ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=390ms, congested=-, firstAction=16390ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 关键时间指标 | impairment: warning=1745ms, congested=-, firstAction=1745ms, L1=1745ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=379ms, congested=2881ms, firstAction=2881ms, L1=11881ms, L2=2881ms, L3=3381ms, L4=3882ms, audioOnly=- |
 
 ### S4
 
@@ -912,5 +919,5 @@
 | 实际动作 | setEncodingParameters（共 2 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 关键时间指标 | impairment: warning=3358ms, congested=-, firstAction=3358ms, L1=3358ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=168ms, congested=-, firstAction=15668ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 关键时间指标 | impairment: warning=2843ms, congested=-, firstAction=2843ms, L1=2843ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=90ms, congested=-, firstAction=14590ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
