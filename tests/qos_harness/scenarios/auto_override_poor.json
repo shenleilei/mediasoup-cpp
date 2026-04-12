@@ -1,0 +1,32 @@
+{
+  "name": "auto_override_poor",
+  "roomId": "qos_harness_room_auto_override",
+  "peerId": "alice",
+  "snapshot": {
+    "schema": "mediasoup.qos.client.v1",
+    "seq": 77,
+    "tsMs": 1712736007777,
+    "peerState": {
+      "mode": "audio-video",
+      "quality": "poor",
+      "stale": false
+    },
+    "tracks": [
+      {
+        "localTrackId": "camera-main",
+        "kind": "video",
+        "source": "camera",
+        "state": "congested",
+        "reason": "network",
+        "quality": "poor",
+        "ladderLevel": 3,
+        "signals": {
+          "sendBitrateBps": 300000,
+          "targetBitrateBps": 900000,
+          "lossRate": 0.12,
+          "rttMs": 280
+        }
+      }
+    ]
+  }
+}

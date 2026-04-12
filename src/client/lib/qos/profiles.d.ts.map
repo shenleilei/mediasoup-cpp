@@ -1,0 +1,1 @@
+{"version":3,"file":"profiles.d.ts","sourceRoot":"","sources":["../../src/qos/profiles.ts"],"names":[],"mappings":"AAKA,OAAO,KAAK,EAAE,UAAU,EAAE,SAAS,EAAiB,MAAM,SAAS,CAAC;AAuLpE,wBAAgB,uBAAuB,IAAI,UAAU,CAEpD;AAED,wBAAgB,4BAA4B,IAAI,UAAU,CAEzD;AAED,wBAAgB,sBAAsB,IAAI,UAAU,CAEnD;AAED,wBAAgB,cAAc,CAC7B,MAAM,EAAE,SAAS,EACjB,QAAQ,CAAC,EAAE,OAAO,CAAC,UAAU,CAAC,GAC5B,UAAU,CAwCZ"}

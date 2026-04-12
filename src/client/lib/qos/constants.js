@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.QOS_MAX_TRACKS_PER_SNAPSHOT = exports.QOS_MAX_SEQ = exports.DEFAULT_TRACE_BUFFER_SIZE = exports.DEFAULT_RECOVERY_COOLDOWN_MS = exports.DEFAULT_SNAPSHOT_INTERVAL_MS = exports.DEFAULT_SAMPLE_INTERVAL_MS = exports.QOS_OVERRIDE_SCHEMA_V1 = exports.QOS_POLICY_SCHEMA_V1 = exports.QOS_CLIENT_SCHEMA_V1 = void 0;
+exports.QOS_CLIENT_SCHEMA_V1 = 'mediasoup.qos.client.v1';
+exports.QOS_POLICY_SCHEMA_V1 = 'mediasoup.qos.policy.v1';
+exports.QOS_OVERRIDE_SCHEMA_V1 = 'mediasoup.qos.override.v1';
+exports.DEFAULT_SAMPLE_INTERVAL_MS = 1000;
+exports.DEFAULT_SNAPSHOT_INTERVAL_MS = 2000;
+exports.DEFAULT_RECOVERY_COOLDOWN_MS = 8000;
+exports.DEFAULT_TRACE_BUFFER_SIZE = 256;
+exports.QOS_MAX_SEQ = Number.MAX_SAFE_INTEGER;
+exports.QOS_MAX_TRACKS_PER_SNAPSHOT = 32;

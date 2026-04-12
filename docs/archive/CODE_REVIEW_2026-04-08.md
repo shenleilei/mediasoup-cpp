@@ -2,6 +2,12 @@
 
 日期：2026-04-08
 
+> **文档性质**
+>
+> 这是 `2026-04-08` 的历史静态 code review 记录。
+> 它反映的是 review 当时的发现，不等于当前仓库状态。
+> 如需看当前结论，请优先参考 [DEVELOPMENT.md](/root/mediasoup-cpp/docs/DEVELOPMENT.md) 和相关专项最终报告。
+
 ## 范围与方法
 
 - 范围：`src/`、`tests/`、`CMakeLists.txt`、`generated/`
@@ -188,4 +194,3 @@
 2. 修复 `restartIce()` 返回旧参数的问题，这是明显的功能性缺陷。
 3. 把 `claimRoom()` 改成原子接管，避免多节点 split-brain。
 4. 清理 stats / recorder 路径上的无限等待和伪超时，保证控制线程可恢复。
-

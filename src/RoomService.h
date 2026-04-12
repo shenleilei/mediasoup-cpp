@@ -9,6 +9,11 @@
 #include "Recorder.h"
 #include "Constants.h"
 #include "Logger.h"
+#include "qos/QosAggregator.h"
+#include "qos/QosOverride.h"
+#include "qos/QosRoomAggregator.h"
+#include "qos/QosRegistry.h"
+#include "qos/QosValidator.h"
 #include <nlohmann/json.hpp>
 #include <deque>
 #include <functional>
@@ -70,6 +75,10 @@ public:
 	Result resumeProducer(const std::string& roomId, const std::string& producerId);
 	Result restartIce(const std::string& roomId, const std::string& peerId,
 		const std::string& transportId);
+	Result setQosOverride(const std::string& roomId, const std::string& targetPeerId,
+		const json& overrideData);
+	Result setQosPolicy(const std::string& roomId, const std::string& targetPeerId,
+		const json& policyData);
 
 	void checkRoomHealth();
 	void cleanIdleRooms(int idleSeconds = kIdleRoomTimeoutSec);
@@ -86,13 +95,28 @@ public:
 	json resolveRoom(const std::string& roomId, const std::string& clientIp = "");
 	// Multi-node: get node load info
 	json getNodeLoad() const;
+	json getDefaultQosPolicy() const;
 
 private:
+	struct AutoQosOverrideRecord {
+		std::string signature;
+		int64_t sentAtMs{ 0 };
+		uint32_t ttlMs{ 0u };
+	};
+
 	void autoRecord(const std::string& roomId, const std::string& peerId,
 		std::shared_ptr<Room> room, std::shared_ptr<Producer> producer);
 	void cleanupRoomResources(const std::string& roomId);
 	void broadcastStatsForRoom(const std::string& roomId);
 	void continueBroadcastStats();
+	void maybeSendAutomaticQosOverride(const std::string& roomId,
+		const std::string& peerId, const qos::PeerQosAggregate& aggregate);
+	void maybeNotifyConnectionQuality(const std::string& roomId,
+		const std::string& peerId, const qos::PeerQosAggregate& aggregate);
+	void maybeBroadcastRoomQosState(const std::string& roomId);
+	void maybeSendRoomPressureOverrides(const std::string& roomId,
+		const qos::RoomQosAggregate& aggregate);
+	void cleanupExpiredQosOverrides();
 
 	RoomManager& roomManager_;
 	RoomRegistry* registry_;
@@ -106,9 +130,13 @@ private:
 
 	std::unordered_map<std::string, std::shared_ptr<PeerRecorder>> recorders_;
 	std::unordered_map<std::string, std::shared_ptr<PlainTransport>> recorderTransports_;
-	std::unordered_map<std::string, json> clientStats_;
+	qos::QosRegistry qosRegistry_;
+	std::unordered_map<std::string, AutoQosOverrideRecord> autoQosOverrideRecords_;
+	std::unordered_map<std::string, std::string> lastConnectionQualitySignatures_;
+	std::unordered_map<std::string, std::string> lastRoomQosStateSignatures_;
 	std::deque<std::string> pendingStatsRooms_;
 	bool statsBroadcastActive_ = false;
+	int64_t lastOverrideCleanupMs_{ 0 };
 };
 
 } // namespace mediasoup

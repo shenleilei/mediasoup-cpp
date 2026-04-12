@@ -1,0 +1,40 @@
+{
+  "name": "manual_clear",
+  "caseId": "P5",
+  "group": "manual_clear",
+  "description": "Apply manual force-audio-only override and clear it with ttlMs=0 so the client returns to local QoS control.",
+  "roomId": "qos_harness_room_manual_clear",
+  "peerId": "alice",
+  "trackId": "camera-main",
+  "kind": "video",
+  "source": "camera",
+  "snapshot": {
+    "timestampMs": 1000,
+    "bytesSent": 1000,
+    "packetsSent": 100,
+    "packetsLost": 0,
+    "targetBitrateBps": 900000,
+    "configuredBitrateBps": 900000,
+    "roundTripTimeMs": 120,
+    "jitterMs": 8,
+    "frameWidth": 1280,
+    "frameHeight": 720,
+    "framesPerSecond": 30,
+    "qualityLimitationReason": "none"
+  },
+  "override": {
+    "schema": "mediasoup.qos.override.v1",
+    "scope": "peer",
+    "trackId": null,
+    "forceAudioOnly": true,
+    "ttlMs": 10000,
+    "reason": "manual_protection"
+  },
+  "clearOverride": {
+    "schema": "mediasoup.qos.override.v1",
+    "scope": "peer",
+    "trackId": null,
+    "ttlMs": 0,
+    "reason": "manual_clear"
+  }
+}

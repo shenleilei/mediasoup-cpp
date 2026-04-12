@@ -1,12 +1,17 @@
 # Development Notes — 2026-04-08
 
+> **文档性质**
+>
+> 这是阶段性开发记录，主要用于保留 `2026-04-08` 当天的背景和修复轨迹。
+> 当前项目开发入口仍以 [DEVELOPMENT.md](/root/mediasoup-cpp/docs/DEVELOPMENT.md) 为准。
+
 ## Changes Summary
 
 Two major areas of work: code review fixes and geo-aware routing.
 
 ## 1. Code Review Fixes
 
-Based on `docs/CODE_REVIEW_2026-04-08.md`, 5 original findings + issues discovered during review iterations.
+Based on `docs/archive/CODE_REVIEW_2026-04-08.md`, 5 original findings + issues discovered during review iterations.
 
 ### Original Findings Fixed
 

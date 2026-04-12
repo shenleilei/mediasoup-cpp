@@ -1,0 +1,94 @@
+import type { QosSignalChannel } from './adapters/signalChannel';
+import type { QosActionExecutionResult } from './executor';
+import { type QosStatsProvider } from './sampler';
+import type { QosClock } from './clock';
+import type { ClientQosSnapshot, PeerQosTrackState, PlannedQosAction, QosProfile, QosStateMachineContext, QosTrackKind } from './types';
+export type PublisherQosControllerActionExecutor = {
+    execute(action: PlannedQosAction): Promise<QosActionExecutionResult | boolean | void>;
+};
+export type PublisherQosControllerSignalChannel = {
+    publishSnapshot(snapshot: ClientQosSnapshot): Promise<void>;
+    onPolicy?: (listener: Parameters<QosSignalChannel['onPolicy']>[0]) => void;
+    onOverride?: (listener: Parameters<QosSignalChannel['onOverride']>[0]) => void;
+};
+export type PublisherQosControllerOptions = {
+    clock: QosClock;
+    profile: QosProfile;
+    statsProvider: QosStatsProvider;
+    actionExecutor: PublisherQosControllerActionExecutor;
+    signalChannel?: PublisherQosControllerSignalChannel;
+    trackId: string;
+    kind: QosTrackKind;
+    producerId?: string;
+    sampleIntervalMs?: number;
+    snapshotIntervalMs?: number;
+    traceCapacity?: number;
+    allowAudioOnly?: boolean;
+    allowVideoPause?: boolean;
+    initialLevel?: number;
+    initialAudioOnlyMode?: boolean;
+};
+export type PublisherQosCoordinationOverride = {
+    maxLevelClamp?: number;
+    disableRecovery?: boolean;
+    forceAudioOnly?: boolean;
+};
+export declare class PublisherQosController {
+    private readonly sampler;
+    private readonly trace;
+    private readonly clock;
+    private readonly profile;
+    private readonly signalChannel?;
+    private readonly actionExecutor;
+    private readonly trackId;
+    private readonly kind;
+    private readonly producerId?;
+    private readonly statsProvider;
+    private stateContext;
+    private previousSnapshot?;
+    private previousSignals?;
+    private seq;
+    private running;
+    private currentLevel;
+    private inAudioOnlyMode;
+    private cpuSampleCount;
+    private lastPublishedAtMs?;
+    private sampleIntervalMs;
+    private snapshotIntervalMs;
+    private allowAudioOnly;
+    private allowVideoPause;
+    private activeOverride?;
+    private coordinationOverride?;
+    private probeContext?;
+    private recoverySuppressedUntilMs?;
+    private lastAction?;
+    private lastSampleError?;
+    constructor(options: PublisherQosControllerOptions);
+    get isRunning(): boolean;
+    get level(): number;
+    get state(): QosStateMachineContext['state'];
+    getTraceEntries(): import("./types").QosTraceEntry[];
+    getLastSampleError(): Error | undefined;
+    getRuntimeSettings(): {
+        sampleIntervalMs: number;
+        snapshotIntervalMs: number;
+        allowAudioOnly: boolean;
+        allowVideoPause: boolean;
+        probeActive: boolean;
+    };
+    getCoordinationOverride(): PublisherQosCoordinationOverride | undefined;
+    getTrackState(): PeerQosTrackState;
+    setCoordinationOverride(override?: PublisherQosCoordinationOverride): void;
+    start(): void;
+    stop(): void;
+    sampleNow(): Promise<void>;
+    private handlePolicy;
+    private handleOverride;
+    private getActiveOverride;
+    private processSample;
+    private filterActions;
+    private executeActions;
+    private rollbackProbe;
+    private publishSnapshot;
+}
+//# sourceMappingURL=controller.d.ts.map
