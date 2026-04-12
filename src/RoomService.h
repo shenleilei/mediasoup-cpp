@@ -75,10 +75,10 @@ public:
 	Result resumeProducer(const std::string& roomId, const std::string& producerId);
 	Result restartIce(const std::string& roomId, const std::string& peerId,
 		const std::string& transportId);
-	Result setQosOverride(const std::string& roomId, const std::string& targetPeerId,
-		const json& overrideData);
-	Result setQosPolicy(const std::string& roomId, const std::string& targetPeerId,
-		const json& policyData);
+	Result setQosOverride(const std::string& roomId, const std::string& callerPeerId,
+		const std::string& targetPeerId, const json& overrideData);
+	Result setQosPolicy(const std::string& roomId, const std::string& callerPeerId,
+		const std::string& targetPeerId, const json& policyData);
 
 	void checkRoomHealth();
 	void cleanIdleRooms(int idleSeconds = kIdleRoomTimeoutSec);

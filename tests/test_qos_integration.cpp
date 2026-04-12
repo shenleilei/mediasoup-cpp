@@ -1303,6 +1303,46 @@ TEST_F(QosIntegrationTest, RoomLostPeerPressureOverride) {
 	EXPECT_TRUE(roomOverride["data"]["disableRecovery"].get<bool>());
 }
 
+TEST_F(QosIntegrationTest, SetQosOverrideDeniedForOtherPeer) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoom(testRoom_, "bob");
+	(void)alice.ws->waitNotification("qosPolicy", 3000);
+	(void)bob.ws->waitNotification("qosPolicy", 3000);
+
+	// Alice tries to set override on Bob → should be denied
+	auto resp = alice.ws->request("setQosOverride", {
+		{"peerId", "bob"},
+		{"override", {
+			{"schema", "mediasoup.qos.override.v1"},
+			{"scope", "peer"},
+			{"trackId", nullptr},
+			{"forceAudioOnly", true},
+			{"ttlMs", 10000},
+			{"reason", "manual"}
+		}}
+	});
+	EXPECT_FALSE(resp.value("ok", false));
+	EXPECT_NE(resp.value("error", "").find("permission denied"), std::string::npos);
+}
+
+TEST_F(QosIntegrationTest, SetQosPolicyDeniedForOtherPeer) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoom(testRoom_, "bob");
+	(void)alice.ws->waitNotification("qosPolicy", 3000);
+	(void)bob.ws->waitNotification("qosPolicy", 3000);
+
+	auto resp = alice.ws->request("setQosPolicy", {
+		{"peerId", "bob"},
+		{"policy", {
+			{"schema", "mediasoup.qos.policy.v1"},
+			{"snapshotIntervalMs", 2000},
+			{"allowAudioOnly", true}
+		}}
+	});
+	EXPECT_FALSE(resp.value("ok", false));
+	EXPECT_NE(resp.value("error", "").find("permission denied"), std::string::npos);
+}
+
 // ─── Test: clientStats in recording QoS file ───
 // Note: QoS snapshot passthrough to QoS file is implicitly tested by
 // test_qos_recording_accuracy.cpp (appendQosSnapshot writes full peer stats

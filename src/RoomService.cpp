@@ -410,8 +410,12 @@ RoomService::Result RoomService::restartIce(const std::string& roomId,
 }
 
 RoomService::Result RoomService::setQosOverride(
-	const std::string& roomId, const std::string& targetPeerId, const json& overrideData)
+	const std::string& roomId, const std::string& callerPeerId,
+	const std::string& targetPeerId, const json& overrideData)
 {
+	if (callerPeerId != targetPeerId)
+		return {false, {}, "", "permission denied: can only set QoS override for self"};
+
 	auto room = roomManager_.getRoom(roomId);
 	if (!room) return {false, {}, "", "room not found"};
 	auto peer = room->getPeer(targetPeerId);
@@ -432,8 +436,12 @@ RoomService::Result RoomService::setQosOverride(
 }
 
 RoomService::Result RoomService::setQosPolicy(
-	const std::string& roomId, const std::string& targetPeerId, const json& policyData)
+	const std::string& roomId, const std::string& callerPeerId,
+	const std::string& targetPeerId, const json& policyData)
 {
+	if (callerPeerId != targetPeerId)
+		return {false, {}, "", "permission denied: can only set QoS policy for self"};
+
 	auto room = roomManager_.getRoom(roomId);
 	if (!room) return {false, {}, "", "room not found"};
 	auto peer = room->getPeer(targetPeerId);
