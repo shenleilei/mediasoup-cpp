@@ -261,8 +261,8 @@ async function runScenario() {
     }
 
     if (
-      stateRank(bestRecovered.state) >= stateRank(peakImpaired.state) &&
-      bestRecovered.level >= peakImpaired.level
+      stateRank(bestRecovered.state) > stateRank(baseline.state) ||
+      bestRecovered.level > baseline.level
     ) {
       throw new Error(
         `browser loopback did not recover after netem removal: ${JSON.stringify({

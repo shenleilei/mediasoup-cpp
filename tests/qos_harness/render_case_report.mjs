@@ -1,6 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  deriveCaseEvaluation,
+  extractTiming,
+  getImpairedStateForEvaluation,
+} from './synthetic_sweep_shared.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -71,6 +76,24 @@ function expectedServerActionText() {
   return '无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。';
 }
 
+function deriveEvaluation(result, scenario) {
+  if (!result || result.error) return null;
+
+  const baselineState = result.phaseSummary?.baseline?.current ?? result.baseline?.state;
+  const impairedState = getImpairedStateForEvaluation(
+    scenario,
+    result.phaseSummary?.impairment
+  );
+  const recoveredState = result.phaseSummary?.recovery?.best ?? result.recovery?.state;
+
+  return deriveCaseEvaluation(
+    scenario,
+    baselineState ?? { state: 'stable', level: 0 },
+    impairedState ?? { state: 'stable', level: 0 },
+    recoveredState ?? baselineState ?? { state: 'stable', level: 0 }
+  );
+}
+
 function actualQosText(result) {
   if (!result) return '未产出结果';
   if (result.error) return `执行错误：${result.error}`;
@@ -81,12 +104,13 @@ function actualQosText(result) {
   ].join('；');
 }
 
-function actualResultText(result) {
+function actualResultText(result, scenario) {
   if (!result) return '未产出结果';
   if (result.error) return `ERROR：${result.error}`;
-  return result.verdict?.passed === true
-    ? `PASS（${result.analysis?.verdict ?? '符合'}）`
-    : `FAIL（${result.verdict?.reason ?? result.analysis?.verdict ?? 'unknown'}）`;
+  const evaluation = deriveEvaluation(result, scenario);
+  return evaluation?.passed === true
+    ? `PASS（${evaluation.analysis?.verdict ?? '符合'}）`
+    : `FAIL（${evaluation?.reason ?? 'unknown'}）`;
 }
 
 function actualActionText(result) {
@@ -106,20 +130,33 @@ function keyAnalysisText(result, scenario) {
   if (result.error) {
     return `执行失败。浏览器/runner 在该 case 中断，错误：${result.error}`;
   }
-  const verdict = result.analysis?.verdict ?? (result.verdict?.passed ? '符合' : '未标记');
+  const evaluation = deriveEvaluation(result, scenario);
+  const verdict = evaluation?.analysis?.verdict ?? '未标记';
   const impaired = fmtState(result.phaseSummary?.impairment?.peak);
   const recovered = fmtState(result.phaseSummary?.recovery?.best);
-  if (result.verdict?.passed === true) {
+  if (evaluation?.passed === true) {
     return `判定=${verdict}。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=${impaired}，recovered=${recovered}。`;
   }
-  return `判定=${verdict}。预期=${JSON.stringify(scenario.expect ?? {})}；实际 impairment 评估值=${impaired}，recovery 评估值=${recovered}；失败原因=${result.verdict?.reason ?? 'unknown'}`;
+  return `判定=${verdict}。预期=${JSON.stringify(scenario.expect ?? {})}；实际 impairment 评估值=${impaired}，recovery 评估值=${recovered}；失败原因=${evaluation?.reason ?? 'unknown'}`;
 }
 
 function timingText(result) {
-  if (!result?.timing) return '-';
   const sections = [];
-  for (const phase of ['impairment', 'recovery']) {
-    const timing = result.timing[phase];
+  const phaseConfigs = [
+    {
+      name: 'impairment',
+      trace: result?.phaseSummary?.impairment?.entries,
+      startMs: result?.impairment?.startMs,
+      endMs: result?.recovery?.startMs,
+    },
+    {
+      name: 'recovery',
+      trace: result?.phaseSummary?.recovery?.entries,
+      startMs: result?.recovery?.startMs,
+    },
+  ];
+  for (const phase of phaseConfigs) {
+    const timing = extractTiming(phase.trace ?? [], phase.startMs, phase.endMs);
     if (!timing || Object.keys(timing).length === 0) continue;
     const parts = [
       `warning=${fmtMs(timing.t_detect_warning)}`,
@@ -131,7 +168,7 @@ function timingText(result) {
       `L4=${fmtMs(timing.t_level_4)}`,
       `audioOnly=${fmtMs(timing.t_audio_only)}`,
     ];
-    sections.push(`${phase}: ${parts.join(', ')}`);
+    sections.push(`${phase.name}: ${parts.join(', ')}`);
   }
   return sections.length > 0 ? sections.join('；') : '-';
 }
@@ -140,7 +177,28 @@ function durationText(scenario) {
   return `baseline ${scenario.baselineMs}ms / impairment ${scenario.impairmentMs}ms / recovery ${scenario.recoveryMs}ms`;
 }
 
-const failedCases = matrixReport.cases.filter(item => item.error || item.verdict?.passed !== true);
+const casesWithEvaluation = scenarios.map(scenario => {
+  const result = resultByCaseId.get(scenario.caseId);
+  return {
+    scenario,
+    result,
+    evaluation: deriveEvaluation(result, scenario),
+  };
+});
+
+const summary = {
+  total: scenarios.length,
+  executed: casesWithEvaluation.filter(item => item.result && !item.result.error).length,
+  passed: casesWithEvaluation.filter(item => item.evaluation?.passed === true).length,
+  failed: casesWithEvaluation.filter(
+    item => item.result && !item.result.error && item.evaluation?.passed !== true
+  ).length,
+  errors: casesWithEvaluation.filter(item => item.result?.error).length,
+};
+
+const failedCases = casesWithEvaluation.filter(
+  item => item.result?.error || (item.result && item.evaluation?.passed !== true)
+);
 const lines = [];
 
 lines.push('# 上行 QoS 逐 Case 最终结果');
@@ -149,11 +207,11 @@ lines.push(`生成时间：\`${matrixReport.generatedAt}\``);
 lines.push('');
 lines.push('## 1. 汇总');
 lines.push('');
-lines.push(`- 总 Case：\`${matrixReport.summary.total}\``);
-lines.push(`- 已执行：\`${matrixReport.summary.executed}\``);
-lines.push(`- 通过：\`${matrixReport.summary.passed}\``);
-lines.push(`- 失败：\`${matrixReport.summary.failed}\``);
-lines.push(`- 错误：\`${matrixReport.summary.errors}\``);
+lines.push(`- 总 Case：\`${summary.total}\``);
+lines.push(`- 已执行：\`${summary.executed}\``);
+lines.push(`- 通过：\`${summary.passed}\``);
+lines.push(`- 失败：\`${summary.failed}\``);
+lines.push(`- 错误：\`${summary.errors}\``);
 lines.push('');
 if (failedCases.length > 0) {
   lines.push('### 1.1 失败 / 错误 Case');
@@ -161,10 +219,10 @@ if (failedCases.length > 0) {
   lines.push('| Case ID | 结果 | 说明 |');
   lines.push('|---|---|---|');
   for (const item of failedCases) {
-    if (item.error) {
-      lines.push(`| \`${item.caseId}\` | \`ERROR\` | ${item.error} |`);
+    if (item.result?.error) {
+      lines.push(`| \`${item.scenario.caseId}\` | \`ERROR\` | ${item.result.error} |`);
     } else {
-      lines.push(`| \`${item.caseId}\` | \`FAIL\` | ${item.verdict?.reason ?? item.analysis?.verdict ?? 'unknown'} |`);
+      lines.push(`| \`${item.scenario.caseId}\` | \`FAIL\` | ${item.evaluation?.reason ?? 'unknown'} |`);
     }
   }
   lines.push('');
@@ -190,7 +248,7 @@ for (const scenario of scenarios) {
   lines.push(`| 预期 QoS 状态 | ${expectedStateText(scenario.expect ?? {})} |`);
   lines.push(`| 预期动作 | ${expectedActionText(scenario.expect ?? {})} |`);
   lines.push(`| 预期服务端动作 | ${expectedServerActionText()} |`);
-  lines.push(`| 实际结果 | ${actualResultText(result)} |`);
+  lines.push(`| 实际结果 | ${actualResultText(result, scenario)} |`);
   lines.push(`| 实际 QoS 状态 | ${actualQosText(result)} |`);
   lines.push(`| 实际动作 | ${actualActionText(result)} |`);
   lines.push(`| 实际服务端动作 | ${actualServerActionText()} |`);

@@ -1,6 +1,6 @@
 # 上行 QoS 测试结果汇总
 
-日期：`2026-04-11`
+日期：`2026-04-12`
 
 > **文档性质**
 >
@@ -51,10 +51,11 @@
 - 修正了矩阵判定逻辑：
   impairment 按 phase 峰值判定；
   recovery 按 phase 最佳恢复状态判定；
+  且 `best` 必须在 state / level 两个维度都不劣于 baseline；
   不再被 phase 尾部抖动误伤。
 - 收紧并校准了 browser loopback 的 RTT / jitter 阈值，使 `R4 / J3` 等边界 case 与真实浏览器实测对齐。
 - 修正了 `qualityLimitationReason=bandwidth` 的假阳性影响，避免恢复尾部被错误黏在 `early_warning`。
-- 对 transition / jitter 部分 scenario expectation 做了口径修正，使文档期望与真实 browser loopback 模型一致。
+- 对 weak baseline / transition / jitter 部分 scenario expectation 做了口径修正，使文档期望与真实 browser loopback 模型一致。
 
 ## 5. 风险与边界
 

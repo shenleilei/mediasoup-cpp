@@ -11,6 +11,12 @@
 - Node harness / browser harness / browser matrix
 - 逐 case 结果文档与统一测试脚本
 
+补充进展：
+
+- `2026-04-12` 当前 `41` 个 browser matrix case 已全部 `PASS`
+- matrix 判定、逐 case 结果文档和 targeted rerun 产物已经完成对齐
+- matrix 已从“收敛目标”转为“长期稳定性 / 归档门禁”问题
+
 按“uplink QoS 单能力线”评估，当前大致可给到 `7/10`。  
 按“完整 RTC QoS 产品成熟度”评估，仍明显低于 LiveKit，主要差距在 subscriber/downlink QoS、长期生产磨损数据、跨端稳定性和运行时可观测性。
 
@@ -29,7 +35,7 @@
 
 | 排名 | 事项 | 原因 | 目标结果 |
 |---|---|---|---|
-| 3 | 全量 matrix 长期稳定全绿 | 当前 `R4/L8` 这类问题说明 runner 与策略还在收敛中 | 全量 41 case 稳定 PASS，可重复执行 |
+| 3 | full matrix 稳定性固化与归档 | 当前 `41 case` 已 PASS，但 machine-generated artifact 仍会被 targeted rerun 覆盖，且缺少连续多轮门禁 | 连续多轮可重复 PASS，并保留独立 full-matrix artifact / gate |
 | 4 | override 语义彻底收口 | manual / automatic / room pressure / TTL clear 虽已可用，但语义仍偏实现驱动 | 文档、测试、实现三者完全一致 |
 | 5 | 运行时 QoS 可观测性 | 现在测试侧可观测性比运行时强，线上排障仍偏弱 | 暴露 metrics / counters / current QoS state / override stats |
 
@@ -72,16 +78,16 @@
 - 增加 `1000 / 1001` 边界测试
 - 增加 refresh/reconnect 后 QoS 仍可继续上报的集成测试
 
-### 3. matrix 全绿
+### 3. full matrix 稳定性固化与归档
 
-这是“从可用走向稳定”的核心标志。  
-当前主链路已通，但只要 matrix 还有失败或错误，就不适合宣称完全收敛。
+这是“从当前一次收敛”走向“可长期维持”的核心标志。
+当前主链路已经实现 `41 case` 全绿，但如果没有连续多轮复现和独立归档 artifact，后续回归风险仍不够透明。
 
 建议产出：
 
-- 全量 41 case 连续多轮可复现 PASS
-- runner crash / browser target close 有明确分类
-- `uplink-qos-case-results.md` 自动同步更新
+- 全量 `41 case` 连续多轮可复现 `PASS`
+- full matrix 输出不再被 targeted rerun 覆盖，保留独立归档 artifact
+- 可以作为 nightly / pre-merge gate 长期运行
 
 ### 4. override 语义收口
 
@@ -120,7 +126,7 @@
 ### 可以合入主干继续迭代的前提
 
 - 明确标识为 QoS ongoing / experimental
-- 当前 matrix 结果和例外 case 透明可见
+- 当前 `41 case` full matrix 已全绿，且结果透明可见
 - 不把这套 QoS 宣称为 production-ready 默认能力
 
 ### 合入前必须补齐的最低条件
@@ -130,7 +136,7 @@
 
 ### 合入后第一阶段的验收目标
 
-- 全量 matrix 全绿
+- `41 case` full matrix 连续多轮稳定 PASS，并保留独立归档 artifact
 - override 语义完全稳定
 - 运行时可观测性补齐
 
@@ -140,6 +146,6 @@
 
 1. `setQosOverride` 权限控制
 2. `seq reset` 规则与边界测试
-3. `R4/L8` 这类 matrix 例外项收敛到全绿
+3. 把 `41 case` full matrix 固化为可重复、可归档的长期 gate
 4. override 语义文档化并锁定
 5. 启动 subscriber/downlink QoS 设计

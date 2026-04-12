@@ -1,6 +1,6 @@
 # 上行 QoS 逐 Case 预期与实测分析
 
-日期：`2026-04-11`
+日期：`2026-04-12`
 
 ## 1. 文档目的
 
@@ -30,6 +30,7 @@
 
 - `transition / burst` 组的 impairment 结果取该 phase 的 `peak`，即 phase 内出现过的最强保护状态。
 - recovery 结果取 recovery phase 的 `best`，即恢复窗口内达到过的最佳状态，而不是 recovery 结束瞬间。
+- 若 `expect.recovery !== false`，则 recovery 的 `best` 必须同时满足：state 不高于 baseline、level 不高于 baseline。
 - expectation 里的 `states` 是允许区间，不代表“必须达到列表里最差那个状态”。
 - expectation 里的 `maxLevel` 是上限约束，不代表“必须升到该 level”。
 - 若 `expect.recovery === false`，则不要求 recovery phase 回到 baseline。

@@ -6,9 +6,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 
 import {
-  analyzeResult,
+  deriveCaseEvaluation,
   extractTiming,
   getPhaseNetwork,
+  getImpairedStateForEvaluation,
+  summarizePhaseState,
   toSyntheticCondition,
 } from './synthetic_sweep_shared.mjs';
 
@@ -84,6 +86,7 @@ async function runCase(page, caseDefn) {
   await page.evaluate(condition => window.__qosSyntheticSweepHarness.setCondition(condition), impairedCond);
   await sleep(impairmentMs);
   const impaired = await page.evaluate(() => window.__qosSyntheticSweepHarness.getState());
+  const impairmentEndMs = await page.evaluate(() => Date.now());
 
   const recoveryNetwork = getPhaseNetwork(caseDefn, 'recovery');
   const recoveryCond = toSyntheticCondition(recoveryNetwork);
@@ -91,13 +94,42 @@ async function runCase(page, caseDefn) {
   await page.evaluate(condition => window.__qosSyntheticSweepHarness.setCondition(condition), recoveryCond);
   await sleep(recoveryMs);
   const recovered = await page.evaluate(() => window.__qosSyntheticSweepHarness.getState());
+  const recoveryEndMs = await page.evaluate(() => Date.now());
 
   const actions = await page.evaluate(() => window.__qosSyntheticSweepHarness.getActions());
   await page.evaluate(() => window.__qosSyntheticSweepHarness.stop());
 
-  const allTrace = [...(impaired.trace || []), ...(recovered.trace || [])];
-  const timing = extractTiming(allTrace, baselineEndMs);
-  const analysis = analyzeResult(caseDefn, baseline, impaired, recovered);
+  const allTrace = recovered.trace || impaired.trace || baseline.trace || [];
+  const baselineSummary = summarizePhaseState(allTrace, 0, baseline, baselineEndMs);
+  const impairmentSummary = summarizePhaseState(
+    allTrace,
+    baselineEndMs,
+    impaired,
+    impairmentEndMs
+  );
+  const recoverySummary = summarizePhaseState(
+    allTrace,
+    impairmentEndMs,
+    recovered,
+    recoveryEndMs
+  );
+  const impairedStateForEvaluation = getImpairedStateForEvaluation(
+    caseDefn,
+    impairmentSummary
+  );
+  const evaluation = deriveCaseEvaluation(
+    caseDefn,
+    baselineSummary.current,
+    impairedStateForEvaluation,
+    recoverySummary.best
+  );
+  const timing = {
+    impairment: extractTiming(allTrace, baselineEndMs, impairmentEndMs),
+    recovery:
+      caseDefn.expect?.recovery === false
+        ? {}
+        : extractTiming(allTrace, impairmentEndMs, recoveryEndMs),
+  };
 
   return {
     caseId,
@@ -113,11 +145,21 @@ async function runCase(page, caseDefn) {
     baselineCondition: baselineCond,
     impairedCondition: impairedCond,
     recoveryCondition: recoveryCond,
-    baseline: { state: baseline.state, level: baseline.level },
+    baseline: { state: baselineSummary.current.state, level: baselineSummary.current.level },
     impaired: { state: impaired.state, level: impaired.level },
     recovered: { state: recovered.state, level: recovered.level },
+    phaseSummary: {
+      baseline: baselineSummary,
+      impairment: impairmentSummary,
+      recovery: recoverySummary,
+    },
     timing,
-    analysis,
+    analysis: evaluation.analysis,
+    verdict: {
+      passed: evaluation.passed,
+      reason: evaluation.reason,
+      expectation: caseDefn.expect ?? {},
+    },
     actionCount: actions.length,
   };
 }
@@ -162,9 +204,9 @@ async function main() {
         await page.goto(serverUrl, { waitUntil: 'load' });
         const result = await runCase(page, caseDefn);
         results.push(result);
-        const mark = result.analysis.verdict === '符合' ? '✓' : '✗';
+        const mark = result.verdict?.passed === true ? '✓' : '✗';
         console.error(
-          `[${result.caseId}] ${mark} ${result.analysis.verdict} | impaired=${result.impaired.state}/L${result.impaired.level} recovered=${result.recovered.state}/L${result.recovered.level}`
+          `[${result.caseId}] ${mark} ${result.analysis.verdict} | impaired=${result.phaseSummary.impairment.peak.state}/L${result.phaseSummary.impairment.peak.level} recovered=${result.phaseSummary.recovery.best.state}/L${result.phaseSummary.recovery.best.level}`
         );
       } catch (error) {
         console.error(`[${caseDefn.caseId}] ERROR: ${error.message}`);
@@ -180,8 +222,8 @@ async function main() {
 
   console.log(JSON.stringify(results, null, 2));
 
-  const passed = results.filter(result => result.analysis?.verdict === '符合').length;
-  const failed = results.filter(result => result.analysis && result.analysis.verdict !== '符合').length;
+  const passed = results.filter(result => result.verdict?.passed === true).length;
+  const failed = results.filter(result => result.analysis && result.verdict?.passed !== true).length;
   const errors = results.filter(result => result.error).length;
 
   console.error(
