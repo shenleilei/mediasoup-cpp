@@ -2,6 +2,7 @@
 #include "qos/DownlinkQosTypes.h"
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 
 namespace mediasoup::qos {
 
@@ -34,8 +35,9 @@ private:
 	int degradeLevel_ = 0;
 	int stableCount_ = 0;
 	Thresholds thresholds_;
+	std::unordered_map<std::string, uint32_t> prevPacketsLostByConsumer_;
 
-	DownlinkHealth classify(const DownlinkSnapshot& snapshot) const;
+	DownlinkHealth classify(const DownlinkSnapshot& snapshot);
 };
 
 } // namespace mediasoup::qos

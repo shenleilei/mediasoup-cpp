@@ -1,19 +1,36 @@
 #include "qos/DownlinkHealthMonitor.h"
 #include <algorithm>
+#include <unordered_set>
 
 namespace mediasoup::qos {
 
-DownlinkHealth DownlinkHealthMonitor::classify(const DownlinkSnapshot& snapshot) const {
+DownlinkHealth DownlinkHealthMonitor::classify(const DownlinkSnapshot& snapshot) {
 	// Aggregate worst signals across all subscriptions
 	double worstFreeze = 0, worstJitter = 0, worstLoss = 0, lowestFps = 999;
+	std::unordered_set<std::string> activeConsumers;
+	activeConsumers.reserve(snapshot.subscriptions.size());
 	for (const auto& sub : snapshot.subscriptions) {
+		activeConsumers.insert(sub.consumerId);
+		auto prevIt = prevPacketsLostByConsumer_.find(sub.consumerId);
+		bool hasPrev = prevIt != prevPacketsLostByConsumer_.end();
+		uint32_t prevPacketsLost = hasPrev ? prevIt->second : sub.packetsLost;
+		prevPacketsLostByConsumer_[sub.consumerId] = sub.packetsLost;
+
 		if (!sub.visible) continue;
 		worstFreeze = std::max(worstFreeze, sub.freezeRate);
 		worstJitter = std::max(worstJitter, sub.jitter);
 		if (sub.framesPerSecond > 0) lowestFps = std::min(lowestFps, sub.framesPerSecond);
-		// Normalize packetsLost as a rate approximation (per snapshot interval)
-		double lossRate = sub.packetsLost > 0 ? std::min(1.0, sub.packetsLost / 100.0) : 0;
+		uint32_t lostDelta =
+			(hasPrev && sub.packetsLost >= prevPacketsLost) ? (sub.packetsLost - prevPacketsLost) : 0u;
+		// Normalize packetsLost delta as a rate approximation (per snapshot interval).
+		double lossRate = lostDelta > 0 ? std::min(1.0, static_cast<double>(lostDelta) / 100.0) : 0;
 		worstLoss = std::max(worstLoss, lossRate);
+	}
+	for (auto it = prevPacketsLostByConsumer_.begin(); it != prevPacketsLostByConsumer_.end();) {
+		if (activeConsumers.find(it->first) == activeConsumers.end())
+			it = prevPacketsLostByConsumer_.erase(it);
+		else
+			++it;
 	}
 	double rtt = snapshot.currentRoundTripTime;
 

@@ -1,4 +1,5 @@
 #include "qos/DownlinkAllocator.h"
+#include <unordered_set>
 
 namespace mediasoup::qos {
 
@@ -92,8 +93,11 @@ std::vector<DownlinkAction> DownlinkAllocator::ComputeDiff(
 	}
 
 	// Update lastState to reflect the full desired state (not just what was emitted).
+	std::unordered_set<std::string> activeConsumerIds;
+	activeConsumerIds.reserve(subscriptions.size());
 	for (size_t i = 0; i < subscriptions.size(); ++i) {
 		const auto& sub = subscriptions[i];
+		activeConsumerIds.insert(sub.consumerId);
 		uint8_t priority = ComputePriority(sub);
 		auto& st = lastState[sub.consumerId];
 		st.priority = priority;
@@ -121,6 +125,14 @@ std::vector<DownlinkAction> DownlinkAllocator::ComputeDiff(
 			st.temporalLayer = temporal;
 			(void)wasPaused; // used only by Compute for resume logic
 		}
+	}
+
+	// Prune stale entries for consumers that no longer exist in current snapshot.
+	for (auto it = lastState.begin(); it != lastState.end();) {
+		if (activeConsumerIds.find(it->first) == activeConsumerIds.end())
+			it = lastState.erase(it);
+		else
+			++it;
 	}
 
 	return filtered;

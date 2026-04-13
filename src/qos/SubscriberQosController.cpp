@@ -11,6 +11,12 @@ void SubscriberQosController::pruneStaleConsumers(
 		else
 			++it;
 	}
+	for (auto it = lastState_.begin(); it != lastState_.end(); ) {
+		if (consumers.find(it->first) == consumers.end())
+			it = lastState_.erase(it);
+		else
+			++it;
+	}
 }
 
 void SubscriberQosController::applyActions(const std::vector<DownlinkAction>& actions,
@@ -21,6 +27,7 @@ void SubscriberQosController::applyActions(const std::vector<DownlinkAction>& ac
 		if (it == consumers.end()) {
 			// Consumer gone — drop any stale paused state.
 			pausedConsumers_.erase(action.consumerId);
+			lastState_.erase(action.consumerId);
 			continue;
 		}
 		auto& consumer = it->second;

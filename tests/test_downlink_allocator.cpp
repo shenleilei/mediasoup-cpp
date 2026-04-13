@@ -184,3 +184,18 @@ TEST(DownlinkAllocatorTest, ComputeDiffEmitsKeyFrameOnResume) {
 		if (a.type == DownlinkAction::Type::kResume) hasResume = true;
 	EXPECT_TRUE(hasResume);
 }
+
+TEST(DownlinkAllocatorTest, ComputeDiffPrunesStaleLastStateEntries) {
+	std::vector<DownlinkSubscription> subs = {{
+		.consumerId = "c1", .visible = true, .targetWidth = 640
+	}};
+	std::unordered_map<std::string, ConsumerLastState> lastState;
+	lastState["c1"] = {.paused = false, .spatialLayer = 0, .temporalLayer = 0, .priority = 120};
+	lastState["stale"] = {.paused = true, .spatialLayer = 0, .temporalLayer = 0, .priority = 1};
+
+	DownlinkAllocator::ComputeDiff(subs, {false}, 0, lastState);
+
+	EXPECT_EQ(lastState.size(), 1u);
+	EXPECT_TRUE(lastState.find("c1") != lastState.end());
+	EXPECT_TRUE(lastState.find("stale") == lastState.end());
+}
