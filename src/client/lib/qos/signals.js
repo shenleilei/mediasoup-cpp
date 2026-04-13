@@ -16,6 +16,9 @@ const DEFAULT_CPU_REASON_MIN_SAMPLES = 2;
 function asFiniteOrZero(value) {
     return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
+function asFiniteOrUndefined(value) {
+    return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
 function clampToUnitRange(value) {
     if (value < 0) {
         return 0;
@@ -116,10 +119,20 @@ function deriveSignals(current, previous, previousSignals, options = {}) {
     const bitrateUtilization = computeBitrateUtilization(sendBitrateBps, targetBitrateBps, current.configuredBitrateBps);
     const lossRate = computeLossRate(packetsSentDelta, packetsLostDelta);
     const lossEwma = computeEwma(lossRate, previousSignals?.lossEwma, options.ewmaAlpha);
-    const rttMs = Math.max(0, asFiniteOrZero(current.roundTripTimeMs));
-    const rttEwma = computeEwma(rttMs, previousSignals?.rttEwma, options.ewmaAlpha);
-    const jitterMs = Math.max(0, asFiniteOrZero(current.jitterMs));
-    const jitterEwma = computeEwma(jitterMs, previousSignals?.jitterEwma, options.ewmaAlpha);
+    const currentRttMs = asFiniteOrUndefined(current.roundTripTimeMs);
+    const rttMs = typeof currentRttMs === 'number'
+        ? Math.max(0, currentRttMs)
+        : Math.max(0, asFiniteOrZero(previousSignals?.rttMs));
+    const rttEwma = typeof currentRttMs === 'number'
+        ? computeEwma(rttMs, previousSignals?.rttEwma, options.ewmaAlpha)
+        : asFiniteOrZero(previousSignals?.rttEwma);
+    const currentJitterMs = asFiniteOrUndefined(current.jitterMs);
+    const jitterMs = typeof currentJitterMs === 'number'
+        ? Math.max(0, currentJitterMs)
+        : Math.max(0, asFiniteOrZero(previousSignals?.jitterMs));
+    const jitterEwma = typeof currentJitterMs === 'number'
+        ? computeEwma(jitterMs, previousSignals?.jitterEwma, options.ewmaAlpha)
+        : asFiniteOrZero(previousSignals?.jitterEwma);
     const qualityReason = current.qualityLimitationReason ?? 'unknown';
     const cpuLimited = qualityReason === 'cpu';
     // Browsers may report "bandwidth" after our own local bitrate cap changes.

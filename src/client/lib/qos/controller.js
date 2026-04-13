@@ -38,11 +38,35 @@ function wasActionApplied(result) {
     }
     return true;
 }
+function isStrongRecoverySignal(signals, profile) {
+    const { thresholds } = profile;
+    const stableJitterMs = Number.isFinite(thresholds.stableJitterMs)
+        ? thresholds.stableJitterMs
+        : Infinity;
+    const warnJitterMs = Number.isFinite(thresholds.warnJitterMs)
+        ? thresholds.warnJitterMs
+        : stableJitterMs;
+    const recoveryJitterMs = Math.max(stableJitterMs, warnJitterMs);
+    const rawJitterMs = Number.isFinite(signals.jitterMs)
+        ? Math.max(0, signals.jitterMs)
+        : Number.POSITIVE_INFINITY;
+    const targetBitrateBps = Math.max(0, signals.targetBitrateBps ?? 0);
+    const sendReady = targetBitrateBps <= 0 ||
+        signals.sendBitrateBps >= targetBitrateBps * 0.85;
+    return (signals.lossEwma < thresholds.stableLossRate &&
+        signals.rttEwma < thresholds.stableRttMs &&
+        rawJitterMs < recoveryJitterMs &&
+        sendReady &&
+        !signals.bandwidthLimited &&
+        !signals.cpuLimited);
+}
 class PublisherQosController {
     constructor(options) {
         this.seq = 0;
         this.running = false;
         this.cpuSampleCount = 0;
+        this.recoveryProbeSuccessStreak = 0;
+        this.recoveryProbeGraceUntilMs = undefined;
         this.clock = options.clock;
         this.profile = options.profile;
         this.statsProvider = options.statsProvider;
@@ -251,33 +275,48 @@ class PublisherQosController {
         }
         return this.activeOverride.data;
     }
-    getTransitionSignals(signals, override) {
-        if (!this.inAudioOnlyMode || this.stateContext.state !== 'congested') {
-            return signals;
-        }
-        if (override?.forceAudioOnly === true ||
-            this.coordinationOverride?.forceAudioOnly === true) {
-            return signals;
-        }
+    getTransitionSignals(signals, override, nowMs) {
         const { thresholds } = this.profile;
+        const stableJitterMs = Number.isFinite(thresholds.stableJitterMs)
+            ? thresholds.stableJitterMs
+            : undefined;
         const networkRecovered = signals.lossEwma < thresholds.stableLossRate &&
             signals.rttEwma < thresholds.stableRttMs &&
             !signals.bandwidthLimited &&
             !signals.cpuLimited;
+        let transitionSignals = signals;
+        const recoveryProbeGraceActive = typeof this.recoveryProbeGraceUntilMs === 'number' &&
+            nowMs < this.recoveryProbeGraceUntilMs;
+        if ((this.probeContext?.active === true || recoveryProbeGraceActive) && networkRecovered) {
+            // Probe success ignores jitter-only spikes today. Keep state transitions
+            // aligned so a local bitrate relaxation does not immediately flap back to
+            // congested on encoder/BWE settling noise before the probe completes or
+            // immediately after a successful recovery upgrade settles.
+            transitionSignals = {
+                ...transitionSignals,
+                jitterEwma: typeof stableJitterMs === 'number'
+                    ? Math.min(transitionSignals.jitterEwma, Math.max(0, stableJitterMs - 0.001))
+                    : transitionSignals.jitterEwma,
+            };
+        }
+        if (!this.inAudioOnlyMode || this.stateContext.state !== 'congested') {
+            return transitionSignals;
+        }
+        if (override?.forceAudioOnly === true ||
+            this.coordinationOverride?.forceAudioOnly === true) {
+            return transitionSignals;
+        }
         if (!networkRecovered) {
-            return signals;
+            return transitionSignals;
         }
         // Audio-only pauses the upstream track, so bitrate utilization drops to zero.
         // Ignore that local pause effect for state transitions so recovery probing can begin.
-        const stableJitterMs = Number.isFinite(thresholds.stableJitterMs)
-            ? thresholds.stableJitterMs
-            : undefined;
         return {
-            ...signals,
-            bitrateUtilization: Math.max(signals.bitrateUtilization, thresholds.stableBitrateUtilization),
+            ...transitionSignals,
+            bitrateUtilization: Math.max(transitionSignals.bitrateUtilization, thresholds.stableBitrateUtilization),
             jitterEwma: typeof stableJitterMs === 'number'
-                ? Math.min(signals.jitterEwma, Math.max(0, stableJitterMs - 0.001))
-                : signals.jitterEwma,
+                ? Math.min(transitionSignals.jitterEwma, Math.max(0, stableJitterMs - 0.001))
+                : transitionSignals.jitterEwma,
         };
     }
     async processSample(snapshot) {
@@ -309,7 +348,7 @@ class PublisherQosController {
                 cpuSampleCount: this.cpuSampleCount,
             },
         });
-        const transitionSignals = this.getTransitionSignals(signals, override);
+        const transitionSignals = this.getTransitionSignals(signals, override, nowMs);
         const transition = (0, stateMachine_1.evaluateStateTransition)(this.stateContext, transitionSignals, this.profile, nowMs);
         this.stateContext = transition.context;
         if (this.probeContext) {
@@ -317,20 +356,37 @@ class PublisherQosController {
             if (probeEvaluation.result === 'failed') {
                 await this.rollbackProbe(signals, nowMs, stateBefore);
                 this.probeContext = undefined;
+                this.recoveryProbeSuccessStreak = 0;
+                this.recoveryProbeGraceUntilMs = undefined;
                 this.recoverySuppressedUntilMs =
                     nowMs + this.profile.recoveryCooldownMs;
                 return;
             }
             if (probeEvaluation.result === 'successful') {
+                const strongRecoveryProbe = isStrongRecoverySignal(signals, this.profile) &&
+                    (probeEvaluation.context?.badSamples ?? 0) === 0 &&
+                    (stateBefore === 'recovering' ||
+                        this.stateContext.state === 'recovering' ||
+                        this.recoveryProbeSuccessStreak > 0) &&
+                    this.currentLevel > 0;
+                this.recoveryProbeSuccessStreak = strongRecoveryProbe
+                    ? this.recoveryProbeSuccessStreak + 1
+                    : 0;
+                this.recoveryProbeGraceUntilMs = strongRecoveryProbe
+                    ? nowMs + this.sampleIntervalMs * 3
+                    : undefined;
                 this.probeContext = undefined;
             }
             else {
                 this.probeContext = probeEvaluation.context;
             }
         }
-        const recoveryProbeInProgress = this.stateContext.state === 'recovering' &&
-            this.probeContext?.active === true;
-        const plannedActions = recoveryProbeInProgress
+        if (this.probeContext?.active !== true &&
+            (this.stateContext.state === 'congested' || this.currentLevel === 0)) {
+            this.recoveryProbeSuccessStreak = 0;
+        }
+        const probeInProgress = this.probeContext?.active === true;
+        const plannedActions = probeInProgress
             ? [
                 {
                     type: 'noop',
@@ -483,11 +539,16 @@ class PublisherQosController {
                     : undefined,
             });
         }
-        if (stateAfter === 'recovering' &&
-            actions.some(action => action.type !== 'noop') &&
+        if (actions.some(action => action.type !== 'noop') &&
             (this.currentLevel < levelBeforeActions ||
                 (audioOnlyBeforeActions && !this.inAudioOnlyMode))) {
-            this.probeContext = (0, probe_1.beginProbe)(levelBeforeActions, this.currentLevel, nowMs, audioOnlyBeforeActions, this.inAudioOnlyMode);
+            const requiredHealthySamples = this.recoveryProbeSuccessStreak > 0 &&
+                isStrongRecoverySignal(signals, this.profile)
+                ? 2
+                : 3;
+            this.probeContext = (0, probe_1.beginProbe)(levelBeforeActions, this.currentLevel, nowMs, audioOnlyBeforeActions, this.inAudioOnlyMode, {
+                requiredHealthySamples,
+            });
         }
     }
     async rollbackProbe(signals, nowMs, stateBefore) {

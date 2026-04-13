@@ -16,7 +16,7 @@ function isProbeBad(signals, profile) {
         signals.rttEwma >= thresholds.congestedRttMs ||
         signals.cpuLimited);
 }
-function beginProbe(previousLevel, targetLevel, startedAtMs, previousAudioOnlyMode, targetAudioOnlyMode) {
+function beginProbe(previousLevel, targetLevel, startedAtMs, previousAudioOnlyMode, targetAudioOnlyMode, options = {}) {
     return {
         active: true,
         startedAtMs,
@@ -26,6 +26,8 @@ function beginProbe(previousLevel, targetLevel, startedAtMs, previousAudioOnlyMo
         targetAudioOnlyMode,
         healthySamples: 0,
         badSamples: 0,
+        requiredHealthySamples: Math.max(1, Math.floor(options.requiredHealthySamples ?? 3)),
+        requiredBadSamples: Math.max(1, Math.floor(options.requiredBadSamples ?? 2)),
     };
 }
 function evaluateProbe(context, signals, profile) {
@@ -47,13 +49,15 @@ function evaluateProbe(context, signals, profile) {
             badSamples: nextContext.badSamples + 1,
         };
     }
-    if (nextContext.badSamples >= 2) {
+    const requiredBadSamples = Math.max(1, Math.floor(nextContext.requiredBadSamples ?? 2));
+    const requiredHealthySamples = Math.max(1, Math.floor(nextContext.requiredHealthySamples ?? 3));
+    if (nextContext.badSamples >= requiredBadSamples) {
         return {
             context: nextContext,
             result: 'failed',
         };
     }
-    if (nextContext.healthySamples >= 3) {
+    if (nextContext.healthySamples >= requiredHealthySamples) {
         return {
             context: nextContext,
             result: 'successful',

@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 import {
   deriveCaseEvaluation,
   extractTiming,
+  getCaseExpectation,
+  getPhaseNetwork,
   getImpairedStateForEvaluation,
 } from './synthetic_sweep_shared.mjs';
 import {
@@ -14,11 +16,14 @@ import {
   getRunTypeForMatrixInput,
   getRunTypeFromSelectedCaseIds,
 } from './report_artifacts.mjs';
+import {
+  filterScenarioCatalog,
+  loadScenarioCatalog,
+} from './scenario_catalog.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..', '..');
-const scenariosPath = path.join(__dirname, 'scenarios', 'sweep_cases.json');
 const args = process.argv.slice(2);
 
 function resolvePathArg(value) {
@@ -34,8 +39,16 @@ const outputPath = outputArg
   ? resolvePathArg(outputArg.slice('--output='.length))
   : defaultCaseReportOutputPath(repoRoot, matrixReportPath);
 
-const scenarios = JSON.parse(fs.readFileSync(scenariosPath, 'utf8'));
 const matrixReport = JSON.parse(fs.readFileSync(matrixReportPath, 'utf8'));
+const allScenarios = loadScenarioCatalog();
+const scenarios = Array.isArray(matrixReport.includedCaseIds)
+  ? allScenarios.filter(scenario => matrixReport.includedCaseIds.includes(scenario.caseId))
+  : filterScenarioCatalog(allScenarios, {
+      selectedCaseIds: Array.isArray(matrixReport.selectedCaseIds)
+        ? new Set(matrixReport.selectedCaseIds)
+        : null,
+      includeExtended: matrixReport.includeExtended === true,
+    });
 const resultByCaseId = new Map((matrixReport.cases ?? []).map(entry => [entry.caseId, entry]));
 const inferredRunType =
   getRunTypeForMatrixInput(repoRoot, matrixReportPath) ??
@@ -47,6 +60,14 @@ const updatesKnownLatest =
 
 const baselineCases = scenarios.filter(item => item.group === 'baseline');
 const groupOrder = [...new Set(scenarios.map(item => item.group))];
+const REPORT_RUNNER = 'loopback';
+const LOOPBACK_DIAGNOSTIC_THRESHOLDS = {
+  stableLossRate: 0.03,
+  stableRttMs: 120,
+  warnJitterMs: 28,
+  stableJitterMs: 18,
+};
+const BITRATE_MILESTONES_BPS = [120000, 300000, 500000, 700000, 900000];
 
 function groupLabel(group) {
   return {
@@ -64,6 +85,10 @@ function fmtMs(value) {
   return typeof value === 'number' ? `${value}ms` : '-';
 }
 
+function fmtIso(value) {
+  return typeof value === 'number' ? new Date(value).toISOString() : '-';
+}
+
 function fmtState(state) {
   if (!state) return '-';
   return `${state.state}/L${state.level}`;
@@ -72,6 +97,21 @@ function fmtState(state) {
 function fmtNetem(netem) {
   if (!netem) return '-';
   return `${netem.bandwidth}kbps / RTT ${netem.rtt}ms / loss ${netem.loss}% / jitter ${netem.jitter}ms`;
+}
+
+function resolvePhaseNetem(result, scenario, phase) {
+  const phaseResult =
+    phase === 'baseline'
+      ? result?.baseline
+      : phase === 'impairment'
+        ? result?.impairment
+        : result?.recovery;
+
+  if (phaseResult?.netem) {
+    return phaseResult.netem;
+  }
+
+  return getPhaseNetwork(scenario, phase === 'impairment' ? 'impaired' : phase);
 }
 
 function caseAnchor(caseId) {
@@ -141,7 +181,8 @@ function deriveEvaluation(result, scenario) {
     scenario,
     baselineState ?? { state: 'stable', level: 0 },
     impairedState ?? { state: 'stable', level: 0 },
-    recoveredState ?? baselineState ?? { state: 'stable', level: 0 }
+    recoveredState ?? baselineState ?? { state: 'stable', level: 0 },
+    REPORT_RUNNER
   );
 }
 
@@ -185,10 +226,22 @@ function keyAnalysisText(result, scenario) {
   const verdict = evaluation?.analysis?.verdict ?? '未标记';
   const impaired = fmtState(result.phaseSummary?.impairment?.peak);
   const recovered = fmtState(result.phaseSummary?.recovery?.best);
+  const recoveryCurrent = fmtState(result.phaseSummary?.recovery?.current);
+  const expectation = getCaseExpectation(scenario, REPORT_RUNNER);
   if (evaluation?.passed === true) {
+    if (
+      result.phaseSummary?.recovery?.best &&
+      result.phaseSummary?.recovery?.current &&
+      (
+        result.phaseSummary.recovery.best.state !== result.phaseSummary.recovery.current.state ||
+        result.phaseSummary.recovery.best.level !== result.phaseSummary.recovery.current.level
+      )
+    ) {
+      return `判定=${verdict}。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=${impaired}，recovered=${recovered}。注意：recovery window 内最佳状态已恢复，但 case 结束时 current=${recoveryCurrent}，说明收尾阶段仍有波动。`;
+    }
     return `判定=${verdict}。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=${impaired}，recovered=${recovered}。`;
   }
-  return `判定=${verdict}。预期=${JSON.stringify(scenario.expect ?? {})}；实际 impairment 评估值=${impaired}，recovery 评估值=${recovered}；失败原因=${evaluation?.reason ?? 'unknown'}`;
+  return `判定=${verdict}。预期=${JSON.stringify(expectation)}；实际 impairment 评估值=${impaired}，recovery 评估值=${recovered}；失败原因=${evaluation?.reason ?? 'unknown'}`;
 }
 
 function timingText(result) {
@@ -211,8 +264,11 @@ function timingText(result) {
     if (!timing || Object.keys(timing).length === 0) continue;
     const parts = [
       `warning=${fmtMs(timing.t_detect_warning)}`,
+      `recovering=${fmtMs(timing.t_detect_recovering)}`,
+      `stable=${fmtMs(timing.t_detect_stable)}`,
       `congested=${fmtMs(timing.t_detect_congested)}`,
       `firstAction=${fmtMs(timing.t_first_action)}`,
+      `L0=${fmtMs(timing.t_level_0)}`,
       `L1=${fmtMs(timing.t_level_1)}`,
       `L2=${fmtMs(timing.t_level_2)}`,
       `L3=${fmtMs(timing.t_level_3)}`,
@@ -222,6 +278,139 @@ function timingText(result) {
     sections.push(`${phase.name}: ${parts.join(', ')}`);
   }
   return sections.length > 0 ? sections.join('；') : '-';
+}
+
+function recoveryMilestoneText(result) {
+  if (!result || result.error) return '-';
+
+  const startMs = result?.recovery?.startMs;
+  const trace = result?.phaseSummary?.recovery?.entries ?? [];
+  if (typeof startMs !== 'number') {
+    return '-';
+  }
+
+  const timing = extractTiming(trace, startMs);
+  const parts = [`start=${fmtIso(startMs)}`];
+
+  const milestones = [
+    ['firstRecovering', timing.t_detect_recovering],
+    ['firstStable', timing.t_detect_stable],
+    ['firstL0', timing.t_level_0],
+  ];
+
+  for (const [label, offsetMs] of milestones) {
+    if (typeof offsetMs !== 'number') {
+      parts.push(`${label}=-`);
+      continue;
+    }
+    parts.push(`${label}=${fmtMs(offsetMs)} (${fmtIso(startMs + offsetMs)})`);
+  }
+
+  return parts.join('；');
+}
+
+function findFirstRecoveryEntry(entries, startMs, predicate) {
+  if (!Array.isArray(entries) || typeof startMs !== 'number') {
+    return null;
+  }
+
+  const entry = entries.find(candidate => {
+    if (!candidate || typeof candidate.tsMs !== 'number' || candidate.tsMs <= startMs) {
+      return false;
+    }
+    return predicate(candidate);
+  });
+
+  return entry
+    ? {
+        offsetMs: entry.tsMs - startMs,
+        tsMs: entry.tsMs,
+        entry,
+      }
+    : null;
+}
+
+function fmtBps(value) {
+  return typeof value === 'number' ? `${Math.round(value / 1000)}kbps` : '-';
+}
+
+function recoveryDiagnosticsText(result) {
+  if (!result || result.error) return '-';
+
+  const startMs = result?.recovery?.startMs;
+  const trace = result?.phaseSummary?.recovery?.entries ?? [];
+  if (typeof startMs !== 'number' || trace.length === 0) {
+    return '-';
+  }
+
+  const rawChecks = [
+    [
+      'loss<3%',
+      findFirstRecoveryEntry(
+        trace,
+        startMs,
+        entry => typeof entry.signals?.lossRate === 'number' && entry.signals.lossRate < LOOPBACK_DIAGNOSTIC_THRESHOLDS.stableLossRate
+      ),
+    ],
+    [
+      'rtt<120ms',
+      findFirstRecoveryEntry(
+        trace,
+        startMs,
+        entry => typeof entry.signals?.rttMs === 'number' && entry.signals.rttMs < LOOPBACK_DIAGNOSTIC_THRESHOLDS.stableRttMs
+      ),
+    ],
+    [
+      'jitter<28ms',
+      findFirstRecoveryEntry(
+        trace,
+        startMs,
+        entry => typeof entry.signals?.jitterMs === 'number' && entry.signals.jitterMs < LOOPBACK_DIAGNOSTIC_THRESHOLDS.warnJitterMs
+      ),
+    ],
+    [
+      'jitter<18ms',
+      findFirstRecoveryEntry(
+        trace,
+        startMs,
+        entry => typeof entry.signals?.jitterMs === 'number' && entry.signals.jitterMs < LOOPBACK_DIAGNOSTIC_THRESHOLDS.stableJitterMs
+      ),
+    ],
+  ];
+
+  const bitrateChecks = BITRATE_MILESTONES_BPS.map(milestone => [
+    `target>=${fmtBps(milestone)}`,
+    findFirstRecoveryEntry(
+      trace,
+      startMs,
+      entry =>
+        typeof entry.signals?.targetBitrateBps === 'number' &&
+        entry.signals.targetBitrateBps >= milestone
+    ),
+  ]);
+
+  const sendChecks = BITRATE_MILESTONES_BPS.filter(milestone => milestone >= 300000).map(milestone => [
+    `send>=${fmtBps(milestone)}`,
+    findFirstRecoveryEntry(
+      trace,
+      startMs,
+      entry =>
+        typeof entry.signals?.sendBitrateBps === 'number' &&
+        entry.signals.sendBitrateBps >= milestone
+    ),
+  ]);
+
+  const fmtCheck = ([label, hit]) =>
+    typeof hit?.offsetMs === 'number'
+      ? `${label}=${fmtMs(hit.offsetMs)} (${fmtIso(hit.tsMs)})`
+      : `${label}=-`;
+
+  return [
+    `raw=${rawChecks.map(fmtCheck).join(', ')}`,
+    `target=${bitrateChecks.map(fmtCheck).join(', ')}`,
+    `send=${sendChecks.map(fmtCheck).join(', ')}`,
+    '注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。'
+  ].join('；');
 }
 
 function durationText(scenario) {
@@ -308,6 +497,7 @@ lines.push('');
 
 for (const scenario of scenarios) {
   const result = resultByCaseId.get(scenario.caseId);
+  const expectation = getCaseExpectation(scenario, REPORT_RUNNER);
   lines.push(`### ${scenario.caseId}`);
   lines.push('');
   lines.push('| 字段 | 内容 |');
@@ -315,19 +505,20 @@ for (const scenario of scenarios) {
   lines.push(`| Case ID | \`${scenario.caseId}\` |`);
   lines.push(`| 前置 Case | ${caseLink(findPrereqCase(result))} |`);
   lines.push(`| 类型 | \`${scenario.group}\` / priority \`${scenario.priority}\` |`);
-  lines.push(`| 上行带宽 | ${result?.impairment?.netem?.bandwidth ?? scenario.bandwidth} kbps |`);
-  lines.push(`| RTT | ${result?.impairment?.netem?.rtt ?? scenario.rtt} ms |`);
-  lines.push(`| 丢包率 | ${(result?.impairment?.netem?.loss ?? scenario.loss)}% |`);
-  lines.push(`| Jitter | ${result?.impairment?.netem?.jitter ?? scenario.jitter} ms |`);
+  lines.push(`| baseline 网络 | ${fmtNetem(resolvePhaseNetem(result, scenario, 'baseline'))} |`);
+  lines.push(`| impairment 网络 | ${fmtNetem(resolvePhaseNetem(result, scenario, 'impairment'))} |`);
+  lines.push(`| recovery 网络 | ${fmtNetem(resolvePhaseNetem(result, scenario, 'recovery'))} |`);
   lines.push(`| 持续时间 | ${durationText(scenario)} |`);
-  lines.push(`| 预期 QoS 状态 | ${expectedStateText(scenario.expect ?? {})} |`);
-  lines.push(`| 预期动作 | ${expectedActionText(scenario.expect ?? {})} |`);
+  lines.push(`| 预期 QoS 状态 | ${expectedStateText(expectation)} |`);
+  lines.push(`| 预期动作 | ${expectedActionText(expectation)} |`);
   lines.push(`| 预期服务端动作 | ${expectedServerActionText()} |`);
   lines.push(`| 实际结果 | ${actualResultText(result, scenario)} |`);
   lines.push(`| 实际 QoS 状态 | ${actualQosText(result)} |`);
   lines.push(`| 实际动作 | ${actualActionText(result)} |`);
   lines.push(`| 实际服务端动作 | ${actualServerActionText()} |`);
   lines.push(`| 重点分析 | ${keyAnalysisText(result, scenario)} |`);
+  lines.push(`| 恢复里程碑 | ${recoveryMilestoneText(result)} |`);
+  lines.push(`| 恢复诊断 | ${recoveryDiagnosticsText(result)} |`);
   lines.push(`| 关键时间指标 | ${timingText(result)} |`);
   lines.push('');
 }

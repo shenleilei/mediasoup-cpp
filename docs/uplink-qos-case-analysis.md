@@ -11,10 +11,16 @@
 - PASS/FAIL 的判定依据
 - 需要特别说明的口径差异
 
-当前可复核的 targeted rerun 机器数据来自 [generated/uplink-qos-matrix-report.targeted.json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.targeted.json)；
+最新 targeted rerun 机器数据来自 [generated/uplink-qos-matrix-report.targeted.json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.targeted.json)；
 历史 targeted / full matrix 快照会按 `generatedAt` 归档到 [archive/uplink-qos-runs](/root/mediasoup-cpp/docs/archive/uplink-qos-runs)。
 
-本文件当前只覆盖最后一次 targeted rerun 的 `8` 个 case：
+注意：
+
+- 最新 targeted rerun 目前只剩 `BW2` 一个 strict boundary sentinel；
+- 本文件保留的是 `2026-04-12` 较早一次 targeted 详细分析快照，用于解释 `T4 / T6 / T7 / T8 / S1 / S2 / S3 / S4` 的 case-level 判定；
+- 如果要看当前最新 targeted 状态，请以 [generated/uplink-qos-case-results.targeted.md](/root/mediasoup-cpp/docs/generated/uplink-qos-case-results.targeted.md) 为准。
+
+本文件当前覆盖的历史 targeted 集合是 `8` 个 case：
 
 - `T4`
 - `T6`
@@ -25,7 +31,7 @@
 - `S3`
 - `S4`
 
-因此，这份文档是“逐 case 详细分析补充件”，不是全量 `41` 个 matrix case 的完整归档。
+因此，这份文档是“历史 targeted 逐 case 详细分析补充件”，不是当前最新 targeted run 的完整归档，也不是全量 matrix case 的完整归档。
 
 ## 2. 判定口径
 

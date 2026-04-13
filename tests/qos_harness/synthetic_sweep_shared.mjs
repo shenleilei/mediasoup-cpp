@@ -114,15 +114,26 @@ export function toSyntheticCondition(network) {
   };
 }
 
-function expectsRecovery(caseDefn) {
-  if (caseDefn.expect?.recovery === false) {
+export function getCaseExpectation(caseDefn, runner = 'default') {
+  const runnerSpecific = caseDefn?.expectByRunner?.[runner];
+  if (runnerSpecific && typeof runnerSpecific === 'object') {
+    return runnerSpecific;
+  }
+
+  return caseDefn?.expect ?? {};
+}
+
+function expectsRecovery(caseDefn, runner = 'default') {
+  const expectation = getCaseExpectation(caseDefn, runner);
+
+  if (expectation?.recovery === false) {
     return false;
   }
 
   return (
     caseDefn.group === 'transition' ||
     caseDefn.group === 'burst' ||
-    caseDefn.expect?.recovery === true
+    expectation?.recovery === true
   );
 }
 
@@ -166,14 +177,14 @@ export function getImpairedStateForEvaluation(caseDefn, impairmentSummary) {
     : impairmentSummary?.peak;
 }
 
-export function recoveryPassedForCase(caseDefn, baselineState, recoveredState) {
+export function recoveryPassedForCase(caseDefn, baselineState, recoveredState, runner = 'default') {
+  if (!expectsRecovery(caseDefn, runner)) {
+    return true;
+  }
+
   return (
-    caseDefn.group === 'baseline' ||
-    caseDefn.expect?.recovery === false ||
-    (
-      stateRank(recoveredState?.state) <= stateRank(baselineState?.state) &&
-      recoveredState?.level <= baselineState?.level
-    )
+    stateRank(recoveredState?.state) <= stateRank(baselineState?.state) &&
+    recoveredState?.level <= baselineState?.level
   );
 }
 
@@ -193,12 +204,14 @@ export function extractTiming(trace, phaseStartMs, phaseEndMs) {
   };
 
   timing.t_detect_warning = find(entry => entry.stateAfter === 'early_warning');
+  timing.t_detect_recovering = find(entry => entry.stateAfter === 'recovering');
+  timing.t_detect_stable = find(entry => entry.stateAfter === 'stable');
   timing.t_detect_congested = find(entry => entry.stateAfter === 'congested');
   timing.t_first_action = find(
     entry => entry.plannedAction?.type && entry.plannedAction.type !== 'noop'
   );
 
-  for (let level = 1; level <= 4; level += 1) {
+  for (let level = 0; level <= 4; level += 1) {
     timing[`t_level_${level}`] = find(
       entry =>
         entry.plannedAction?.type &&
@@ -264,8 +277,8 @@ export function summarizePhaseState(trace, phaseStartMs, fallbackState, phaseEnd
   };
 }
 
-export function analyzeResult(caseDefn, baseline, impaired, recovered) {
-  const expectation = caseDefn.expect ?? {};
+export function analyzeResult(caseDefn, baseline, impaired, recovered, runner = 'default') {
+  const expectation = getCaseExpectation(caseDefn, runner);
   const allowedStates = getAllowedStates(expectation);
   const allowedRanks = allowedStates.map(stateRank).sort((left, right) => left - right);
   const impairedRank = stateRank(impaired.state);
@@ -283,7 +296,7 @@ export function analyzeResult(caseDefn, baseline, impaired, recovered) {
     verdict = '过强';
   } else if (
     verdict === '符合' &&
-    expectsRecovery(caseDefn) &&
+    expectsRecovery(caseDefn, runner) &&
     (stateRank(recovered.state) > stateRank(baseline.state) || recovered.level > baseline.level)
   ) {
     verdict = '恢复过慢';
@@ -303,23 +316,30 @@ export function analyzeResult(caseDefn, baseline, impaired, recovered) {
   };
 }
 
-export function deriveCaseEvaluation(caseDefn, baselineState, impairedState, recoveredState) {
-  const analysis = analyzeResult(caseDefn, baselineState, impairedState, recoveredState);
-  const expectation = evaluateExpectation(impairedState, caseDefn.expect);
-  const recoveryPassed = recoveryPassedForCase(caseDefn, baselineState, recoveredState);
+export function deriveCaseEvaluation(
+  caseDefn,
+  baselineState,
+  impairedState,
+  recoveredState,
+  runner = 'default'
+) {
+  const expectation = getCaseExpectation(caseDefn, runner);
+  const analysis = analyzeResult(caseDefn, baselineState, impairedState, recoveredState, runner);
+  const expectationMatch = evaluateExpectation(impairedState, expectation);
+  const recoveryPassed = recoveryPassedForCase(caseDefn, baselineState, recoveredState, runner);
   const passed =
-    expectation.stateMatch &&
-    expectation.levelMatch &&
+    expectationMatch.stateMatch &&
+    expectationMatch.levelMatch &&
     analysis.verdict === '符合' &&
     recoveryPassed;
 
   return {
     passed,
     analysis,
-    expectation,
+    expectation: expectationMatch,
     recoveryPassed,
     reason: passed
       ? 'expectation satisfied'
-      : `stateMatch=${expectation.stateMatch}, levelMatch=${expectation.levelMatch}, recoveryPassed=${recoveryPassed}, analysis=${analysis.verdict}`,
+      : `stateMatch=${expectationMatch.stateMatch}, levelMatch=${expectationMatch.levelMatch}, recoveryPassed=${recoveryPassed}, analysis=${analysis.verdict}`,
   };
 }

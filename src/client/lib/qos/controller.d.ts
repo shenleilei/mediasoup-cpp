@@ -60,6 +60,8 @@ export declare class PublisherQosController {
     private activeOverride?;
     private coordinationOverride?;
     private probeContext?;
+    private recoveryProbeSuccessStreak;
+    private recoveryProbeGraceUntilMs?;
     private recoverySuppressedUntilMs?;
     private lastAction?;
     private lastSampleError?;

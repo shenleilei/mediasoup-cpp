@@ -29,6 +29,8 @@ test('beginProbe initializes probe context', () => {
     expect(probe.targetLevel).toBe(2);
     expect(probe.healthySamples).toBe(0);
     expect(probe.badSamples).toBe(0);
+    expect(probe.requiredHealthySamples).toBe(3);
+    expect(probe.requiredBadSamples).toBe(2);
 });
 test('probe succeeds after three healthy samples', () => {
     const profile = (0, profiles_1.getDefaultCameraProfile)();
@@ -87,5 +89,16 @@ test('probe succeeds on low utilization alone when bandwidth pressure is absent'
     expect(evaluation.result).toBe('inconclusive');
     probe = evaluation.context;
     evaluation = (0, probe_1.evaluateProbe)(probe, lowUtilSignals, profile);
+    expect(evaluation.result).toBe('successful');
+});
+test('probe can succeed after two healthy samples when configured', () => {
+    const profile = (0, profiles_1.getDefaultCameraProfile)();
+    let probe = (0, probe_1.beginProbe)(3, 2, 1000, false, false, {
+        requiredHealthySamples: 2,
+    });
+    let evaluation = (0, probe_1.evaluateProbe)(probe, signals(), profile);
+    expect(evaluation.result).toBe('inconclusive');
+    probe = evaluation.context;
+    evaluation = (0, probe_1.evaluateProbe)(probe, signals(), profile);
     expect(evaluation.result).toBe('successful');
 });

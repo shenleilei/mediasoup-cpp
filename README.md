@@ -607,6 +607,15 @@ cd /root/mediasoup-cpp
 
 # run selected groups
 ./scripts/run_qos_tests.sh client-js cpp-unit
+
+# default browser matrix gate
+node tests/qos_harness/run_matrix.mjs
+
+# extended browser matrix (adds the remaining extended baseline cases)
+node tests/qos_harness/run_matrix.mjs --include-extended
+
+# targeted blind-spot rerun
+node tests/qos_harness/run_matrix.mjs --cases=T9,T10,T11
 ```
 
 Behavior:
@@ -616,6 +625,7 @@ Behavior:
 - `--resume` reruns only the last failed precise tasks
 - if `matrix` is executed, the script also regenerates the per-case report:
   [docs/uplink-qos-case-results.md](/root/mediasoup-cpp/docs/uplink-qos-case-results.md)
+- the default matrix now includes the blind-spot transition cases `T9/T10/T11`; the remaining `extended` set is currently the higher-bandwidth baseline calibration cases and can be added with `--include-extended`, or targeted explicitly via `--cases=...`
 
 ### Troubleshooting
 

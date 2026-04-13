@@ -35,7 +35,7 @@
 
 | 排名 | 事项 | 原因 | 目标结果 |
 |---|---|---|---|
-| 3 | full matrix 稳定性固化与归档 | 当前 `41 case` 已 PASS；full / targeted / archive 产物已拆分，但仍缺少连续多轮门禁 | 连续多轮可重复 PASS，并保留独立 full-matrix artifact / gate |
+| 3 | full matrix 稳定性固化与归档 | 当前 `44 case` 已 PASS；full / targeted / archive 产物已拆分，但仍缺少连续多轮门禁 | 连续多轮可重复 PASS，并保留独立 full-matrix artifact / gate |
 | 4 | override 语义彻底收口 | manual / automatic / room pressure / TTL clear 虽已可用，但语义仍偏实现驱动 | 文档、测试、实现三者完全一致 |
 | 5 | 运行时 QoS 可观测性 | 现在测试侧可观测性比运行时强，线上排障仍偏弱 | 暴露 metrics / counters / current QoS state / override stats |
 
@@ -81,11 +81,11 @@
 ### 3. full matrix 稳定性固化与归档
 
 这是“从当前一次收敛”走向“可长期维持”的核心标志。
-当前主链路已经实现 `41 case` 全绿，但如果没有连续多轮复现和独立归档 artifact，后续回归风险仍不够透明。
+当前主链路已经实现 `44 case` 全绿，但如果没有连续多轮复现和独立归档 artifact，后续回归风险仍不够透明。
 
 建议产出：
 
-- 全量 `41 case` 连续多轮可复现 `PASS`
+- 全量 `44 case` 连续多轮可复现 `PASS`
 - full matrix / targeted rerun / archive 快照继续保持隔离，避免后续回归再次串档
 - 可以作为 nightly / pre-merge gate 长期运行
 
@@ -126,7 +126,7 @@
 ### 可以合入主干继续迭代的前提
 
 - 明确标识为 QoS ongoing / experimental
-- 当前 `41 case` full matrix 已全绿，且结果透明可见
+- 当前 `44 case` full matrix 已全绿，且结果透明可见
 - 不把这套 QoS 宣称为 production-ready 默认能力
 
 ### 合入前必须补齐的最低条件
@@ -136,7 +136,7 @@
 
 ### 合入后第一阶段的验收目标
 
-- `41 case` full matrix 连续多轮稳定 PASS，并保留独立归档 artifact
+- `44 case` full matrix 连续多轮稳定 PASS，并保留独立归档 artifact
 - override 语义完全稳定
 - 运行时可观测性补齐
 
@@ -146,6 +146,6 @@
 
 1. `setQosOverride` 权限控制
 2. `seq reset` 规则与边界测试
-3. 把 `41 case` full matrix 固化为可重复、可归档的长期 gate
+3. 把 `44 case` full matrix 固化为可重复、可归档的长期 gate
 4. override 语义文档化并锁定
 5. 启动 subscriber/downlink QoS 设计

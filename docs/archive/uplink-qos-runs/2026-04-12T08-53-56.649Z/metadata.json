@@ -1,0 +1,19 @@
+{
+  "generatedAt": "2026-04-12T08:53:56.649Z",
+  "updatedAt": "2026-04-12T17:03:58.690Z",
+  "runTypes": [
+    "full"
+  ],
+  "sourceScripts": [
+    "tests/qos_harness/run_matrix.mjs",
+    "tests/qos_harness/render_case_report.mjs"
+  ],
+  "selectedCaseIds": [
+    "B3",
+    "J3"
+  ],
+  "artifacts": {
+    "matrixJson": "docs/generated/uplink-qos-matrix-report.json",
+    "caseMarkdown": "docs/uplink-qos-case-results.md"
+  }
+}

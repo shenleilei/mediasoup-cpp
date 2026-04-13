@@ -11,6 +11,13 @@ function readNumber(obj, key) {
     }
     return value;
 }
+function readString(obj, key) {
+    const value = obj[key];
+    if (typeof value !== 'string') {
+        return undefined;
+    }
+    return value;
+}
 function normalizeTimeToMs(value) {
     if (typeof value !== 'number' || !Number.isFinite(value)) {
         return undefined;
@@ -50,14 +57,46 @@ function snapshotFromBase(base) {
         timestampMs: Date.now(),
     };
 }
+function roundMetric(sum, count) {
+    return count > 0
+        ? Math.round((sum / count) * 1000) / 1000
+        : undefined;
+}
+function isSelectedCandidatePair(entry) {
+    const state = readString(entry, 'state');
+    return (entry.selected === true ||
+        (entry.nominated === true &&
+            (state === undefined || state === 'succeeded')));
+}
+function resolveCandidatePair(outbound, transportsById, candidatePairsById, selectedCandidatePairs) {
+    const transportId = readString(outbound, 'transportId');
+    if (transportId) {
+        const transport = transportsById.get(transportId);
+        const selectedCandidatePairId = readString(transport ?? {}, 'selectedCandidatePairId');
+        if (selectedCandidatePairId) {
+            const candidatePair = candidatePairsById.get(selectedCandidatePairId);
+            if (candidatePair) {
+                return candidatePair;
+            }
+        }
+    }
+    if (selectedCandidatePairs.length === 1) {
+        return selectedCandidatePairs[0];
+    }
+    return undefined;
+}
 class ProducerSenderStatsProvider {
     constructor(adapter) {
         this.adapter = adapter;
+        this.lastRemoteTimestampsMs = new Map();
     }
     async getSnapshot() {
         const base = this.adapter.getSnapshotBase();
         const report = await this.adapter.getStatsReport();
         const remoteById = new Map();
+        const candidatePairsById = new Map();
+        const selectedCandidatePairs = [];
+        const transportsById = new Map();
         const outbounds = [];
         report.forEach(entry => {
             if (!isObject(entry)) {
@@ -68,6 +107,23 @@ class ProducerSenderStatsProvider {
                 const id = typeof entry.id === 'string' ? entry.id : undefined;
                 if (id) {
                     remoteById.set(id, entry);
+                }
+                return;
+            }
+            if (type === 'candidate-pair') {
+                const id = readString(entry, 'id');
+                if (id) {
+                    candidatePairsById.set(id, entry);
+                }
+                if (isSelectedCandidatePair(entry)) {
+                    selectedCandidatePairs.push(entry);
+                }
+                return;
+            }
+            if (type === 'transport') {
+                const id = readString(entry, 'id');
+                if (id) {
+                    transportsById.set(id, entry);
                 }
                 return;
             }
@@ -94,10 +150,14 @@ class ProducerSenderStatsProvider {
         let framesPerSecond = 0;
         let qualityLimitationReason;
         const qualityLimitationDurationsSec = {};
-        let rttSumMs = 0;
-        let rttCount = 0;
+        let transportRttSumMs = 0;
+        let transportRttCount = 0;
+        let fallbackRttSumMs = 0;
+        let fallbackRttCount = 0;
         let jitterSumMs = 0;
         let jitterCount = 0;
+        const nextRemoteTimestampsMs = new Map(this.lastRemoteTimestampsMs);
+        const seenCandidatePairIds = new Set();
         for (const outbound of outbounds) {
             const statTimestamp = readNumber(outbound, 'timestamp');
             if (typeof statTimestamp === 'number' &&
@@ -117,25 +177,55 @@ class ProducerSenderStatsProvider {
                 qualityLimitationReason = readQualityLimitationReason(outbound.qualityLimitationReason);
             }
             appendQualityDurations(qualityLimitationDurationsSec, outbound.qualityLimitationDurations);
-            const remoteId = typeof outbound.remoteId === 'string' ? outbound.remoteId : undefined;
+            const candidatePair = resolveCandidatePair(outbound, transportsById, candidatePairsById, selectedCandidatePairs);
+            const candidatePairId = readString(candidatePair ?? {}, 'id');
+            if (!candidatePairId || !seenCandidatePairIds.has(candidatePairId)) {
+                const transportRttMs = normalizeTimeToMs(readNumber(candidatePair ?? {}, 'currentRoundTripTime'));
+                if (typeof transportRttMs === 'number') {
+                    transportRttSumMs += transportRttMs;
+                    transportRttCount++;
+                }
+                if (candidatePairId) {
+                    seenCandidatePairIds.add(candidatePairId);
+                }
+            }
+            const remoteId = readString(outbound, 'remoteId');
             const remote = remoteId ? remoteById.get(remoteId) : undefined;
             const lossFromRemote = remote
                 ? readNumber(remote, 'packetsLost')
                 : readNumber(outbound, 'packetsLost');
             packetsLost += lossFromRemote ?? 0;
-            const rttMs = normalizeTimeToMs((remote && readNumber(remote, 'roundTripTime')) ??
-                readNumber(outbound, 'roundTripTime'));
-            if (typeof rttMs === 'number') {
-                rttSumMs += rttMs;
-                rttCount++;
+            const remoteTimestampMs = readNumber(remote ?? {}, 'timestamp');
+            const previousRemoteTimestampMs = remoteId
+                ? this.lastRemoteTimestampsMs.get(remoteId)
+                : undefined;
+            const remoteMetricsFresh = Boolean(remote) &&
+                (typeof remoteTimestampMs !== 'number' ||
+                    previousRemoteTimestampMs === undefined ||
+                    remoteTimestampMs > previousRemoteTimestampMs);
+            if (remoteId && typeof remoteTimestampMs === 'number' && remoteMetricsFresh) {
+                nextRemoteTimestampsMs.set(remoteId, remoteTimestampMs);
             }
-            const jitterMs = normalizeTimeToMs((remote && readNumber(remote, 'jitter')) ??
-                readNumber(outbound, 'jitter'));
+            const fallbackRttMs = remoteMetricsFresh
+                ? normalizeTimeToMs(readNumber(remote ?? {}, 'roundTripTime'))
+                : remote
+                    ? undefined
+                    : normalizeTimeToMs(readNumber(outbound, 'roundTripTime'));
+            if (typeof fallbackRttMs === 'number') {
+                fallbackRttSumMs += fallbackRttMs;
+                fallbackRttCount++;
+            }
+            const jitterMs = remoteMetricsFresh
+                ? normalizeTimeToMs(readNumber(remote ?? {}, 'jitter'))
+                : remote
+                    ? undefined
+                    : normalizeTimeToMs(readNumber(outbound, 'jitter'));
             if (typeof jitterMs === 'number') {
                 jitterSumMs += jitterMs;
                 jitterCount++;
             }
         }
+        this.lastRemoteTimestampsMs = nextRemoteTimestampsMs;
         if (timestampMs <= 0) {
             timestampMs = Date.now();
         }
@@ -147,12 +237,8 @@ class ProducerSenderStatsProvider {
             packetsLost: packetsLost > 0 ? packetsLost : undefined,
             retransmittedPacketsSent: retransmittedPacketsSent > 0 ? retransmittedPacketsSent : undefined,
             targetBitrateBps: targetBitrateBps > 0 ? targetBitrateBps : undefined,
-            roundTripTimeMs: rttCount > 0
-                ? Math.round((rttSumMs / rttCount) * 1000) / 1000
-                : undefined,
-            jitterMs: jitterCount > 0
-                ? Math.round((jitterSumMs / jitterCount) * 1000) / 1000
-                : undefined,
+            roundTripTimeMs: roundMetric(transportRttCount > 0 ? transportRttSumMs : fallbackRttSumMs, transportRttCount > 0 ? transportRttCount : fallbackRttCount),
+            jitterMs: roundMetric(jitterSumMs, jitterCount),
             frameWidth: frameWidth > 0 ? frameWidth : undefined,
             frameHeight: frameHeight > 0 ? frameHeight : undefined,
             framesPerSecond: framesPerSecond > 0 ? framesPerSecond : undefined,

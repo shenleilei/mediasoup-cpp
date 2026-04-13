@@ -1,6 +1,6 @@
 # 上行 QoS 执行清单
 
-日期：`2026-04-12`
+日期：`2026-04-13`
 
 ## 0. 统一执行入口
 
@@ -47,7 +47,7 @@ cd /root/mediasoup-cpp
   范围：`B1-B3`
 
 - [x] browser matrix 带宽扫描组通过
-  范围：`BW1-BW7`
+  范围：`BW1`、`BW3-BW7`
 
 - [x] browser matrix 丢包扫描组通过
   范围：`L1-L8`
@@ -59,10 +59,14 @@ cd /root/mediasoup-cpp
   范围：`J1-J5`
 
 - [x] browser matrix transition 组通过
-  范围：`T1-T8`
+  范围：`T1-T11`
 
 - [x] browser matrix burst 组通过
   范围：`S1-S4`
+
+- [x] `BW2` 已隔离为 extended targeted sentinel
+  范围：`BW2`
+  说明：继续保留 strict default expectation；不纳入默认 blocking gate
 
 ## 2. 本轮关闭的问题类型
 
@@ -81,7 +85,7 @@ cd /root/mediasoup-cpp
 
 ## 4. 已决定的后续事项
 
-- [x] 需要补一份“单次串行 41 case”的 full-matrix 独立归档 artifact
+- [x] 需要补一份“主 gate rerun + extended sentinel rerun”都更易审计的独立归档 artifact
   说明：这项工作已归入 P1 的“full matrix 稳定性固化与归档”。
   当前 full matrix / targeted rerun / archive 快照已经拆分；执行后应确认本轮结果已同步到 `docs/archive/uplink-qos-runs/<generatedAt>/`，方便后续和上一轮直接对比；
-  但这不影响本轮“自动化验证已收敛并可签收”的结论。
+  但这不影响本轮“自动化主测试集已收敛并可签收”的结论。
