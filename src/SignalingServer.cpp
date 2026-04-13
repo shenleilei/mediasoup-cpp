@@ -13,6 +13,7 @@
 #include <thread>
 #include <random>
 #include <sstream>
+#include <chrono>
 #include <dirent.h>
 #include <sys/stat.h>
 
@@ -31,6 +32,7 @@ struct PerSocketData {
 };
 
 static std::atomic<uint64_t> g_nextSessionId{0};
+static std::atomic<uint64_t> g_nextResolveRequestId{1};
 
 static uint64_t initSessionIdBase() {
 	std::random_device rd;
@@ -329,17 +331,55 @@ void SignalingServer::stopRegistryWorker() {
 	}
 }
 
-void SignalingServer::enqueueRegistryTask(std::function<void()> task) {
+void SignalingServer::enqueueRegistryTask(std::function<void()> task, std::string label) {
 	if (!registry_) return;
 	if (stopRegistryThread_.load(std::memory_order_relaxed)) {
 		// Registry worker already stopped; execute inline to avoid losing task
+		const auto taskId = nextRegistryTaskId_.fetch_add(1, std::memory_order_relaxed);
+		spdlog::warn("registry task inline [id:{} label:{}]", taskId, label);
 		try { task(); } catch (...) {}
 		return;
 	}
+	const auto taskId = nextRegistryTaskId_.fetch_add(1, std::memory_order_relaxed);
+	const auto enqueuedAt = std::chrono::steady_clock::now();
+	const auto queuedLabel = label;
+	size_t queueDepth = 0;
 	{
 		std::lock_guard<std::mutex> lock(registryTaskMutex_);
-		registryTasks_.push(std::move(task));
+		queueDepth = registryTasks_.size() + 1;
+		registryTasks_.push([task = std::move(task), label = std::move(label), taskId, enqueuedAt]() mutable {
+			const auto startedAt = std::chrono::steady_clock::now();
+			const auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+				startedAt - enqueuedAt).count();
+			spdlog::warn("registry task start [id:{} label:{} waitMs:{}]",
+				taskId, label, waitMs);
+			try {
+				task();
+				const auto finishedAt = std::chrono::steady_clock::now();
+				const auto execMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+					finishedAt - startedAt).count();
+				const auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+					finishedAt - enqueuedAt).count();
+				spdlog::warn("registry task done [id:{} label:{} execMs:{} totalMs:{}]",
+					taskId, label, execMs, totalMs);
+			} catch (const std::exception& e) {
+				const auto failedAt = std::chrono::steady_clock::now();
+				const auto execMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+					failedAt - startedAt).count();
+				spdlog::error("registry task failed [id:{} label:{} execMs:{} error:{}]",
+					taskId, label, execMs, e.what());
+				throw;
+			} catch (...) {
+				const auto failedAt = std::chrono::steady_clock::now();
+				const auto execMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+					failedAt - startedAt).count();
+				spdlog::error("registry task failed [id:{} label:{} execMs:{} error:unknown]",
+					taskId, label, execMs);
+				throw;
+			}
+		});
 	}
+	spdlog::warn("registry task queued [id:{} label:{} queueDepth:{}]", taskId, queuedLabel, queueDepth);
 	registryTaskCv_.notify_one();
 }
 
@@ -421,7 +461,7 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 		});
 
 		wt->setRegistryTask([this](std::function<void()> task) {
-			enqueueRegistryTask(std::move(task));
+			enqueueRegistryTask(std::move(task), "worker.registryTask");
 		});
 		wt->setTaskPoster([wtRaw](std::function<void()> task) {
 			wtRaw->post(std::move(task));
@@ -807,6 +847,7 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 		}
 
 	}).get("/api/resolve", [this, loop](auto* res, auto* req) {
+		const auto requestId = g_nextResolveRequestId.fetch_add(1, std::memory_order_relaxed);
 		std::string roomId(req->getQuery("roomId"));
 		if (roomId.empty()) {
 			res->writeStatus("400 Bad Request")->writeHeader("Content-Type", "application/json")
@@ -822,6 +863,9 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 			}
 		}
 		if (clientIp.empty()) clientIp = std::string(res->getRemoteAddressAsText());
+		const auto requestStart = std::chrono::steady_clock::now();
+		spdlog::warn("api.resolve received [req:{} roomId:{} clientIp:{} registry:{}]",
+			requestId, roomId, clientIp, registry_ != nullptr);
 
 		if (!registry_) {
 			res->writeHeader("Content-Type", "application/json")
@@ -835,15 +879,24 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 			aborted->store(true, std::memory_order_relaxed);
 		});
 
-		enqueueRegistryTask([this, loop, res, aborted, roomId, clientIp] {
+		enqueueRegistryTask([this, loop, res, aborted, roomId, clientIp, requestId, requestStart] {
 			RoomRegistry::ResolveResult result{"", true};
+			const auto resolveStart = std::chrono::steady_clock::now();
+			spdlog::warn("api.resolve executing [req:{} roomId:{} clientIp:{}]",
+				requestId, roomId, clientIp);
 			try {
 				result = registry_->resolveRoom(roomId, clientIp);
 			} catch (const std::exception& e) {
-				spdlog::warn("resolveRoom failed: {}", e.what());
+				spdlog::warn("api.resolve failed [req:{} roomId:{} error:{}]",
+					requestId, roomId, e.what());
 			} catch (...) {
-				spdlog::warn("resolveRoom failed: unknown error");
+				spdlog::warn("api.resolve failed [req:{} roomId:{} error:unknown]",
+					requestId, roomId);
 			}
+			const auto resolveMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now() - resolveStart).count();
+			spdlog::warn("api.resolve resolved [req:{} roomId:{} wsUrl:{} isNew:{} resolveMs:{}]",
+				requestId, roomId, result.wsUrl, result.isNew, resolveMs);
 
 			json j;
 			if (!result.wsUrl.empty()) {
@@ -859,7 +912,11 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 					->writeHeader("Access-Control-Allow-Origin", "*")
 					->end(body);
 			});
-		});
+			const auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now() - requestStart).count();
+			spdlog::warn("api.resolve response scheduled [req:{} roomId:{} totalMs:{}]",
+				requestId, roomId, totalMs);
+		}, "api.resolve#" + std::to_string(requestId) + " room=" + roomId);
 
 	}).get("/api/node-load", [this](auto* res, auto*) {
 		auto snapshot = collectRuntimeSnapshot();
@@ -1032,7 +1089,7 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 						} catch (const std::exception& e) {
 							spdlog::error("registry heartbeat failed: {}", e.what());
 						}
-					});
+					}, "registry.heartbeat rooms=" + std::to_string(allRoomIds.size()));
 				}
 			}, kRedisHeartbeatIntervalSec * 1000, kRedisHeartbeatIntervalSec * 1000);
 

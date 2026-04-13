@@ -124,7 +124,7 @@ docker compose up -d
 
 ### Loki 告警（日志关键字）
 
-采集的日志文件：`/var/log/mediasoup-sfu.log`（Promtail job=`mediasoup-sfu`）
+采集的日志文件：`/var/log/mediasoup/*.log`（Promtail job=`mediasoup-sfu`）
 
 #### 单机维度（按 host 分组，互不干扰）
 

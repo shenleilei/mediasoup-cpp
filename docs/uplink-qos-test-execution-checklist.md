@@ -6,7 +6,7 @@
 
 当前 QoS 测试建议优先通过统一脚本执行：
 
-- [run_qos_tests.sh](/root/mediasoup-cpp/scripts/run_qos_tests.sh)
+- [run_qos_tests.sh](../scripts/run_qos_tests.sh)
 
 常用命令：
 
@@ -79,9 +79,9 @@ cd /root/mediasoup-cpp
 
 ## 3. 文档口径
 
-- [x] 已更新 [uplink-qos-test-results-summary.md](/root/mediasoup-cpp/docs/uplink-qos-test-results-summary.md)
-- [x] 已新增 [uplink-qos-final-report.md](/root/mediasoup-cpp/docs/uplink-qos-final-report.md)
-- [x] 已新增 [README.md](/root/mediasoup-cpp/docs/README.md) 作为 docs 导航入口
+- [x] 已更新 [uplink-qos-test-results-summary.md](./uplink-qos-test-results-summary.md)
+- [x] 已新增 [uplink-qos-final-report.md](./uplink-qos-final-report.md)
+- [x] 已新增 [README.md](./README.md) 作为 docs 导航入口
 
 ## 4. 已决定的后续事项
 

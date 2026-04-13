@@ -5,8 +5,8 @@
 > **文档性质**
 >
 > 这是结果汇总版，适合快速看覆盖面和最终口径。
-> 若需要正式汇报结论，请看 [uplink-qos-final-report.md](/root/mediasoup-cpp/docs/uplink-qos-final-report.md)；
-> 若需要逐 case 明细，请看 [uplink-qos-case-results.md](/root/mediasoup-cpp/docs/uplink-qos-case-results.md)。
+> 若需要正式汇报结论，请看 [uplink-qos-final-report.md](./uplink-qos-final-report.md)；
+> 若需要逐 case 明细，请看 [uplink-qos-case-results.md](./uplink-qos-case-results.md)。
 
 ## 1. 结论
 
@@ -44,9 +44,9 @@
 
 补充说明：
 
-- latest full matrix `generatedAt=2026-04-13T03:34:38.058Z`，当前重渲染结果见 [uplink-qos-case-results.md](/root/mediasoup-cpp/docs/uplink-qos-case-results.md)。
-- latest targeted 组合回归结果见 [generated/uplink-qos-case-results.targeted.md](/root/mediasoup-cpp/docs/generated/uplink-qos-case-results.targeted.md)。
-- full / targeted 的原始机器 artifact 仍分别保留在 [generated/uplink-qos-matrix-report.json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.json) 和 [generated/uplink-qos-matrix-report.targeted.json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.targeted.json)。
+- latest full matrix `generatedAt=2026-04-13T03:34:38.058Z`，当前重渲染结果见 [uplink-qos-case-results.md](./uplink-qos-case-results.md)。
+- latest targeted 组合回归结果见 [generated/uplink-qos-case-results.targeted.md](./generated/uplink-qos-case-results.targeted.md)。
+- full / targeted 的原始机器 artifact 仍分别保留在 [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json) 和 [generated/uplink-qos-matrix-report.targeted.json](./generated/uplink-qos-matrix-report.targeted.json)。
 - latest 组合 targeted regression 覆盖：
   `T9,T10,T11,J3,J4,J5,BW2,T1,S4`
   当前结果为 `9 / 9 PASS`。

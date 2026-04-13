@@ -13,5 +13,9 @@
   "isp": "",
   "country": "",
   "countryIsolation": true,
-  "geoDb": "./ip2region.xdb"
+  "geoDb": "./ip2region.xdb",
+  "logDir": "/var/log/mediasoup",
+  "logPrefix": "mediasoup-sfu",
+  "logLevel": "info",
+  "logRotateHours": 3
 }

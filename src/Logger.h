@@ -1,7 +1,9 @@
 #pragma once
+#include "IntervalFileSink.h"
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
-#include <spdlog/sinks/basic_file_sink.h>
+#include <unistd.h>
+#include <cstdio>
 #include <memory>
 #include <string>
 
@@ -20,11 +22,29 @@ public:
 		return spdlog::level::info;
 	}
 
-	static void Init(const std::string& logFile = "", const std::string& level = "info") {
+	static void Init(const std::string& logDir = "",
+		const std::string& level = "info",
+		bool alsoConsole = true,
+		int rotateHours = 3,
+		const std::string& logPrefix = "mediasoup-sfu",
+		int pid = -1) {
 		std::vector<spdlog::sink_ptr> sinks;
-		sinks.push_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
-		if (!logFile.empty()) {
-			auto fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logFile, true);
+		if (alsoConsole)
+			sinks.push_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
+		if (!logDir.empty()) {
+			if (pid <= 0) pid = spdlog::details::os::pid();
+			spdlog::file_event_handlers fileHandlers;
+			if (!alsoConsole) {
+				fileHandlers.after_open = [](const spdlog::filename_t&, std::FILE* fd) {
+					if (!fd) return;
+					std::fflush(stdout);
+					std::fflush(stderr);
+					::dup2(fileno(fd), STDOUT_FILENO);
+					::dup2(fileno(fd), STDERR_FILENO);
+				};
+			}
+			auto fileSink = std::make_shared<logging::interval_file_sink_mt>(
+				logDir, logPrefix, pid, rotateHours, false, fileHandlers);
 			sinks.push_back(fileSink);
 		}
 		auto defaultLogger = std::make_shared<spdlog::logger>("", sinks.begin(), sinks.end());
