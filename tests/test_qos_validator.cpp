@@ -50,3 +50,97 @@ TEST(QosValidatorTest, RejectsInvalidOverrideScope) {
 	EXPECT_FALSE(parsed.ok);
 	EXPECT_NE(parsed.error.find("scope"), std::string::npos);
 }
+
+// ── Downlink snapshot validation tests ──
+
+namespace {
+
+json MakeValidDownlinkSnapshot() {
+	return {
+		{"schema", "mediasoup.qos.downlink.client.v1"},
+		{"seq", 1},
+		{"tsMs", 1000},
+		{"subscriberPeerId", "peer1"},
+		{"transport", {{"availableIncomingBitrate", 1000000.0}, {"currentRoundTripTime", 0.05}}},
+		{"subscriptions", {{
+			{"consumerId", "c1"},
+			{"producerId", "p1"},
+			{"visible", true},
+			{"targetWidth", 640},
+			{"targetHeight", 480}
+		}}}
+	};
+}
+
+} // namespace
+
+TEST(QosValidatorTest, DownlinkAcceptsValidSnapshot) {
+	auto snap = MakeValidDownlinkSnapshot();
+	auto parsed = qos::QosValidator::ParseDownlinkSnapshot(snap);
+	EXPECT_TRUE(parsed.ok) << parsed.error;
+	EXPECT_EQ(parsed.value.subscriberPeerId, "peer1");
+	EXPECT_EQ(parsed.value.subscriptions.size(), 1u);
+}
+
+TEST(QosValidatorTest, DownlinkRejectsOverlongPeerId) {
+	auto snap = MakeValidDownlinkSnapshot();
+	snap["subscriberPeerId"] = std::string(200, 'x');
+	auto parsed = qos::QosValidator::ParseDownlinkSnapshot(snap);
+	EXPECT_FALSE(parsed.ok);
+	EXPECT_NE(parsed.error.find("too long"), std::string::npos);
+}
+
+TEST(QosValidatorTest, DownlinkRejectsOverlongConsumerId) {
+	auto snap = MakeValidDownlinkSnapshot();
+	snap["subscriptions"][0]["consumerId"] = std::string(200, 'y');
+	auto parsed = qos::QosValidator::ParseDownlinkSnapshot(snap);
+	EXPECT_FALSE(parsed.ok);
+	EXPECT_NE(parsed.error.find("id too long"), std::string::npos);
+}
+
+TEST(QosValidatorTest, DownlinkClampsFreezeRate) {
+	auto snap = MakeValidDownlinkSnapshot();
+	snap["subscriptions"][0]["freezeRate"] = 2.5;
+	auto parsed = qos::QosValidator::ParseDownlinkSnapshot(snap);
+	EXPECT_TRUE(parsed.ok) << parsed.error;
+	EXPECT_LE(parsed.value.subscriptions[0].freezeRate, 1.0);
+}
+
+TEST(QosValidatorTest, DownlinkClampsNegativeJitter) {
+	auto snap = MakeValidDownlinkSnapshot();
+	snap["subscriptions"][0]["jitter"] = -0.5;
+	auto parsed = qos::QosValidator::ParseDownlinkSnapshot(snap);
+	EXPECT_TRUE(parsed.ok) << parsed.error;
+	EXPECT_GE(parsed.value.subscriptions[0].jitter, 0.0);
+}
+
+TEST(QosValidatorTest, DownlinkRejectsTooManySubscriptions) {
+	auto snap = MakeValidDownlinkSnapshot();
+	json subs = json::array();
+	for (size_t i = 0; i <= qos::kDownlinkMaxSubscriptions; ++i) {
+		subs.push_back({
+			{"consumerId", "c" + std::to_string(i)},
+			{"producerId", "p" + std::to_string(i)}
+		});
+	}
+	snap["subscriptions"] = subs;
+	auto parsed = qos::QosValidator::ParseDownlinkSnapshot(snap);
+	EXPECT_FALSE(parsed.ok);
+	EXPECT_NE(parsed.error.find("too many"), std::string::npos);
+}
+
+TEST(QosValidatorTest, DownlinkClampsNegativeRtt) {
+	auto snap = MakeValidDownlinkSnapshot();
+	snap["transport"]["currentRoundTripTime"] = -1.0;
+	auto parsed = qos::QosValidator::ParseDownlinkSnapshot(snap);
+	EXPECT_TRUE(parsed.ok) << parsed.error;
+	EXPECT_GE(parsed.value.currentRoundTripTime, 0.0);
+}
+
+TEST(QosValidatorTest, DownlinkAcceptsLegacySchema) {
+	auto snap = MakeValidDownlinkSnapshot();
+	snap["schema"] = "mediasoup.downlink.v1";
+	auto parsed = qos::QosValidator::ParseDownlinkSnapshot(snap);
+	EXPECT_TRUE(parsed.ok) << parsed.error;
+	EXPECT_EQ(parsed.value.schema, "mediasoup.qos.downlink.client.v1");
+}
