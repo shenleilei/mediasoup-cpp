@@ -52,12 +52,12 @@ Options:
 
 Available groups:
   client-js         客户端 QoS JS 单测（test.qos.*.js）
-  cpp-unit          服务端 QoS 相关单测（mediasoup_tests 中 *Qos*）
-  cpp-integration   服务端 QoS 集成测试（mediasoup_qos_integration_tests）
+  cpp-unit          服务端 QoS 相关单测（包含 uplink/downlink QoS 单测）
+  cpp-integration   服务端 QoS 集成测试（包含 uplink/downlink QoS 集成测试）
   cpp-accuracy      QoS accuracy 测试
   cpp-recording     QoS recording accuracy 测试
   node-harness      Node QoS harness 场景
-  browser-harness   browser_server_signal + browser_loopback + stable downlink browser harnesses
+  browser-harness   browser_server_signal + browser_loopback + downlink browser harnesses
   matrix            browser loopback full matrix（run_matrix.mjs）
 
 Notes:
@@ -339,6 +339,8 @@ run_cpp_unit() {
   ensure_target_built \
     mediasoup_tests \
     "$BUILD_DIR/mediasoup_tests" \
+    "$ROOT_DIR/tests/test_downlink_allocator.cpp" \
+    "$ROOT_DIR/tests/test_downlink_health.cpp" \
     "$ROOT_DIR/tests/test_qos_protocol.cpp" \
     "$ROOT_DIR/tests/test_qos_validator.cpp" \
     "$ROOT_DIR/tests/test_qos_registry.cpp" \
@@ -349,7 +351,7 @@ run_cpp_unit() {
     "cpp-unit" \
     --cwd "$ROOT_DIR" \
     "$BUILD_DIR/mediasoup_tests" \
-    "--gtest_filter=QosProtocolTest.*:QosValidatorTest.*:QosRegistryTest.*:QosAggregatorTest.*:QosRoomAggregatorTest.*:QosOverrideBuilderTest.*"
+    "--gtest_filter=DownlinkAllocatorTest.*:DownlinkHealthMonitorTest.*:QosProtocolTest.*:QosValidatorTest.*:QosRegistryTest.*:QosAggregatorTest.*:QosRoomAggregatorTest.*:QosOverrideBuilderTest.*"
 }
 
 run_cpp_integration() {
@@ -363,7 +365,7 @@ run_cpp_integration() {
     "cpp-integration" \
     --cwd "$ROOT_DIR" \
     "$BUILD_DIR/mediasoup_qos_integration_tests" \
-    "--gtest_filter=QosIntegrationTest.ClientStatsQosStoredAndAggregated:QosIntegrationTest.ClientStatsQosInBroadcast:QosIntegrationTest.InvalidClientStatsRejected:QosIntegrationTest.OlderClientStatsSeqIsIgnored:QosIntegrationTest.JoinReceivesQosPolicyNotification:QosIntegrationTest.SetQosOverrideNotifiesTargetPeer:QosIntegrationTest.ManualQosOverrideClear:QosIntegrationTest.SetQosPolicyNotifiesTargetPeer:QosIntegrationTest.AutomaticQosOverrideOnPoorQuality:QosIntegrationTest.AutomaticQosOverrideOnLostQuality:QosIntegrationTest.AutomaticQosOverrideClearsWhenQualityRecovers:QosIntegrationTest.ConnectionQualityNotificationDelivered:QosIntegrationTest.RoomQosStateAndRoomPressureOverride:QosIntegrationTest.RoomLostPeerPressureOverride"
+    "--gtest_filter=QosIntegrationTest.ClientStatsQosStoredAndAggregated:QosIntegrationTest.ClientStatsQosInBroadcast:QosIntegrationTest.InvalidClientStatsRejected:QosIntegrationTest.OlderClientStatsSeqIsIgnored:QosIntegrationTest.JoinReceivesQosPolicyNotification:QosIntegrationTest.SetQosOverrideNotifiesTargetPeer:QosIntegrationTest.ManualQosOverrideClear:QosIntegrationTest.SetQosPolicyNotifiesTargetPeer:QosIntegrationTest.AutomaticQosOverrideOnPoorQuality:QosIntegrationTest.AutomaticQosOverrideOnLostQuality:QosIntegrationTest.AutomaticQosOverrideClearsWhenQualityRecovers:QosIntegrationTest.ConnectionQualityNotificationDelivered:QosIntegrationTest.RoomQosStateAndRoomPressureOverride:QosIntegrationTest.RoomLostPeerPressureOverride:QosIntegrationTest.DownlinkClientStatsStored:QosIntegrationTest.DownlinkClientStatsRejectsMalformedPayload:QosIntegrationTest.DownlinkClientStatsAcceptsLegacySchema:QosIntegrationTest.DownlinkClientStatsRejectsStaleSeq:QosIntegrationTest.DownlinkHiddenAutoPauses:QosIntegrationTest.DownlinkVisibleAutoResumes:QosIntegrationTest.DownlinkLargeSmallGetDifferentLayers:QosIntegrationTest.DownlinkStateCleanedOnLeave:QosIntegrationTest.DownlinkStateCleanedOnReconnect"
 }
 
 run_cpp_accuracy() {
@@ -417,6 +419,7 @@ run_browser_harness() {
   prepare_test_port 14012 "QoS browser harness SFU port 14012"
   prepare_test_port 14013 "Downlink control harness SFU port 14013"
   prepare_test_port 14014 "Downlink E2E harness SFU port 14014"
+  prepare_test_port 14015 "Downlink priority harness SFU port 14015"
   local failed=0
   if ! run_cmd \
     "browser-harness:server-signal" \
@@ -443,6 +446,13 @@ run_browser_harness() {
     "browser-harness:downlink-e2e" \
     --cwd "$ROOT_DIR" \
     node "$ROOT_DIR/tests/qos_harness/browser_downlink_e2e.mjs"; then
+    failed=1
+  fi
+
+  if ! run_cmd \
+    "browser-harness:downlink-priority" \
+    --cwd "$ROOT_DIR" \
+    node "$ROOT_DIR/tests/qos_harness/browser_downlink_priority.mjs"; then
     failed=1
   fi
   return "$failed"
