@@ -48,6 +48,10 @@ add_library(mediasoup_lib STATIC
     src/qos/DownlinkAllocator.cpp
     src/qos/SubscriberQosController.cpp
     src/qos/DownlinkHealthMonitor.cpp
+    src/qos/SubscriberBudgetAllocator.cpp
+    src/qos/ProducerDemandAggregator.cpp
+    src/qos/PublisherSupplyController.cpp
+    src/qos/RoomDownlinkPlanner.cpp
 )
 
 target_include_directories(mediasoup_lib PUBLIC

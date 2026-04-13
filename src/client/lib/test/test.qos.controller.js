@@ -1199,6 +1199,131 @@ test('manual clear exits override-driven audio-only and restores local control',
     expect(actionExecutor.execute.mock.calls.some(call => call[0].type === 'exitAudioOnly')).toBe(true);
     expect(controller.getTrackState().inAudioOnlyMode).toBe(false);
 });
+test('track-scoped override ignores other track id', () => {
+    const clock = new clock_1.ManualQosClock();
+    const controller = new controller_1.PublisherQosController({
+        clock,
+        profile: (0, profiles_1.getDefaultCameraProfile)(),
+        statsProvider: { getSnapshot: jest.fn(async () => createSnapshot(1000)) },
+        actionExecutor: { execute: jest.fn().mockResolvedValue(true) },
+        signalChannel: { publishSnapshot: jest.fn(), onPolicy: () => {} },
+        trackId: 'track-1',
+        kind: 'video',
+        sampleIntervalMs: 1000,
+        snapshotIntervalMs: 1000,
+    });
+    controller.handleOverride({
+        schema: 'mediasoup.qos.override.v1',
+        scope: 'track',
+        trackId: 'track-2',
+        reason: 'downlink_v2_room_demand',
+        ttlMs: 5000,
+        maxLevelClamp: 1,
+    });
+    expect(controller.getActiveOverride(clock.nowMs())).toBeUndefined();
+});
+test('track-scoped override applies on matching track id', () => {
+    const clock = new clock_1.ManualQosClock();
+    const controller = new controller_1.PublisherQosController({
+        clock,
+        profile: (0, profiles_1.getDefaultCameraProfile)(),
+        statsProvider: { getSnapshot: jest.fn(async () => createSnapshot(1000)) },
+        actionExecutor: { execute: jest.fn().mockResolvedValue(true) },
+        signalChannel: { publishSnapshot: jest.fn(), onPolicy: () => {} },
+        trackId: 'track-1',
+        kind: 'video',
+        sampleIntervalMs: 1000,
+        snapshotIntervalMs: 1000,
+    });
+    controller.handleOverride({
+        schema: 'mediasoup.qos.override.v1',
+        scope: 'track',
+        trackId: 'track-1',
+        reason: 'downlink_v2_room_demand',
+        ttlMs: 5000,
+        maxLevelClamp: 1,
+    });
+    const active = controller.getActiveOverride(clock.nowMs());
+    expect(active).toBeDefined();
+    expect(active.maxLevelClamp).toBe(1);
+    expect(active.reason).toBe('downlink_v2_room_demand');
+});
+test('track-scoped clear clears matching track clamp', () => {
+    const clock = new clock_1.ManualQosClock();
+    const controller = new controller_1.PublisherQosController({
+        clock,
+        profile: (0, profiles_1.getDefaultCameraProfile)(),
+        statsProvider: { getSnapshot: jest.fn(async () => createSnapshot(1000)) },
+        actionExecutor: { execute: jest.fn().mockResolvedValue(true) },
+        signalChannel: { publishSnapshot: jest.fn(), onPolicy: () => {} },
+        trackId: 'track-1',
+        kind: 'video',
+        sampleIntervalMs: 1000,
+        snapshotIntervalMs: 1000,
+    });
+    controller.handleOverride({
+        schema: 'mediasoup.qos.override.v1',
+        scope: 'track',
+        trackId: 'track-1',
+        reason: 'downlink_v2_room_demand',
+        ttlMs: 5000,
+        maxLevelClamp: 1,
+    });
+    expect(controller.getActiveOverride(clock.nowMs())).toBeDefined();
+    controller.handleOverride({
+        schema: 'mediasoup.qos.override.v1',
+        scope: 'track',
+        trackId: 'track-1',
+        reason: 'downlink_v2_demand_restored',
+        ttlMs: 0,
+    });
+    expect(controller.getActiveOverride(clock.nowMs())).toBeUndefined();
+});
+test('track-scoped clear preserves unrelated manual override', () => {
+    const clock = new clock_1.ManualQosClock();
+    const controller = new controller_1.PublisherQosController({
+        clock,
+        profile: (0, profiles_1.getDefaultCameraProfile)(),
+        statsProvider: { getSnapshot: jest.fn(async () => createSnapshot(1000)) },
+        actionExecutor: { execute: jest.fn().mockResolvedValue(true) },
+        signalChannel: { publishSnapshot: jest.fn(), onPolicy: () => {} },
+        trackId: 'track-1',
+        kind: 'video',
+        sampleIntervalMs: 1000,
+        snapshotIntervalMs: 1000,
+    });
+    controller.handleOverride({
+        schema: 'mediasoup.qos.override.v1',
+        scope: 'peer',
+        reason: 'manual_protection',
+        ttlMs: 10000,
+        forceAudioOnly: true,
+    });
+    controller.handleOverride({
+        schema: 'mediasoup.qos.override.v1',
+        scope: 'track',
+        trackId: 'track-1',
+        reason: 'downlink_v2_room_demand',
+        ttlMs: 5000,
+        maxLevelClamp: 1,
+    });
+    let active = controller.getActiveOverride(clock.nowMs());
+    expect(active).toBeDefined();
+    expect(active.forceAudioOnly).toBe(true);
+    expect(active.maxLevelClamp).toBe(1);
+    controller.handleOverride({
+        schema: 'mediasoup.qos.override.v1',
+        scope: 'track',
+        trackId: 'track-1',
+        reason: 'downlink_v2_demand_restored',
+        ttlMs: 0,
+    });
+    active = controller.getActiveOverride(clock.nowMs());
+    expect(active).toBeDefined();
+    expect(active.forceAudioOnly).toBe(true);
+    expect(active.maxLevelClamp).toBeUndefined();
+    expect(active.reason).toBe('manual_protection');
+});
 test('handlePolicy with profiles switches actual profile parameters', () => {
     const clock = new clock_1.ManualQosClock();
     let onPolicyHandler;

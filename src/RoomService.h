@@ -17,12 +17,18 @@
 #include "qos/DownlinkQosRegistry.h"
 #include "qos/DownlinkAllocator.h"
 #include "qos/SubscriberQosController.h"
+#include "qos/SubscriberBudgetAllocator.h"
+#include "qos/ProducerDemandAggregator.h"
+#include "qos/PublisherSupplyController.h"
+#include "qos/RoomDownlinkPlanner.h"
 #include <nlohmann/json.hpp>
 #include <deque>
 #include <functional>
+#include <optional>
 #include <string>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace mediasoup {
 
@@ -128,6 +134,25 @@ private:
 		const qos::RoomQosAggregate& aggregate);
 	void cleanupExpiredQosOverrides();
 
+	// ── downlink v2 planner ──
+	void markDownlinkRoomDirty(const std::string& roomId);
+	void continueDownlinkPlanning();
+	void runDownlinkPlanningForRoom(const std::string& roomId);
+	std::optional<std::string> resolveProducerOwnerPeerId(
+		const std::string& roomId, const std::string& producerId) const;
+	std::optional<std::string> resolvePublisherTrackId(
+		const std::string& roomId, const std::string& publisherPeerId,
+		const std::string& producerId) const;
+	void applyPublisherSupplyPlan(const std::string& roomId,
+		const std::vector<qos::ProducerDemandState>& demandStates);
+	void maybeSendTrackQosOverride(const std::string& roomId,
+		const std::string& targetPeerId, const qos::QosOverride& overrideData);
+	void cleanupExpiredTrackQosOverrides();
+	void cleanupPeerTrackQosOverrides(const std::string& roomId,
+		const std::string& peerId);
+	void cleanupPeerProducerDemandCache(const std::string& roomId,
+		const std::unordered_map<std::string, std::shared_ptr<Producer>>& producers);
+
 	RoomManager& roomManager_;
 	RoomRegistry* registry_;
 	std::string recordDir_;
@@ -149,6 +174,21 @@ private:
 	std::deque<std::string> pendingStatsRooms_;
 	bool statsBroadcastActive_ = false;
 	int64_t lastOverrideCleanupMs_{ 0 };
+
+	// ── downlink v2 planner state ──
+	struct TrackQosOverrideRecord {
+		std::string signature;
+		std::string roomId;
+		std::string peerId;
+		std::string trackId;
+		int64_t sentAtMs{ 0 };
+		uint32_t ttlMs{ 0u };
+	};
+	std::deque<std::string> pendingDownlinkRooms_;
+	std::unordered_set<std::string> dirtyDownlinkRooms_;
+	bool downlinkPlanningActive_{ false };
+	std::unordered_map<std::string, TrackQosOverrideRecord> trackQosOverrideRecords_;
+	std::unordered_map<std::string, std::unordered_map<std::string, qos::ProducerDemandState>> producerDemandCache_; // key: roomId -> producerId -> state
 };
 
 } // namespace mediasoup

@@ -126,4 +126,68 @@ std::vector<DownlinkAction> DownlinkAllocator::ComputeDiff(
 	return filtered;
 }
 
+std::vector<DownlinkAction> DownlinkAllocator::ComputeBudgetDiff(
+	const std::vector<DownlinkAction>& planActions,
+	std::unordered_map<std::string, ConsumerLastState>& lastState)
+{
+	std::vector<DownlinkAction> filtered;
+	filtered.reserve(planActions.size());
+
+	// Build desired end-state per consumer from the plan
+	std::unordered_map<std::string, ConsumerLastState> desired;
+	for (auto& a : planActions) {
+		auto& d = desired[a.consumerId];
+		switch (a.type) {
+		case DownlinkAction::Type::kPause:
+			d.paused = true; break;
+		case DownlinkAction::Type::kResume:
+			d.paused = false; break;
+		case DownlinkAction::Type::kSetLayers:
+			d.spatialLayer = a.spatialLayer;
+			d.temporalLayer = a.temporalLayer; break;
+		case DownlinkAction::Type::kSetPriority:
+			d.priority = a.priority; break;
+		case DownlinkAction::Type::kNone: break;
+		}
+	}
+
+	// Diff against lastState
+	for (auto& a : planActions) {
+		auto action = a;
+		auto it = lastState.find(a.consumerId);
+		if (it != lastState.end()) {
+			auto& prev = it->second;
+			auto desiredIt = desired.find(a.consumerId);
+			bool resumingFromPause =
+				desiredIt != desired.end() &&
+				prev.paused &&
+				!desiredIt->second.paused;
+
+			if (action.type == DownlinkAction::Type::kSetLayers && resumingFromPause)
+				action.requestKeyFrame = true;
+
+			switch (a.type) {
+			case DownlinkAction::Type::kPause:
+				if (prev.paused) continue; break;
+			case DownlinkAction::Type::kResume:
+				if (!prev.paused) continue; break;
+			case DownlinkAction::Type::kSetLayers:
+				if (!action.requestKeyFrame &&
+					prev.spatialLayer == action.spatialLayer &&
+					prev.temporalLayer == action.temporalLayer) continue; break;
+			case DownlinkAction::Type::kSetPriority:
+				if (prev.priority == action.priority) continue; break;
+			case DownlinkAction::Type::kNone: continue;
+			}
+		}
+		filtered.push_back(std::move(action));
+	}
+
+	// Update lastState to desired
+	for (auto& [cid, d] : desired)
+		lastState[cid] = d;
+
+	return filtered;
+}
+
 } // namespace mediasoup::qos
