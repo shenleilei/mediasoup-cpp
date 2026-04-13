@@ -2,7 +2,7 @@
 
 本仓库提供了一个可直接启动的“分层监控 + 统一告警 + 分级升级”模板，位于：
 
-- `deploy/monitoring`
+- [deploy/monitoring](../deploy/monitoring/)
 
 ## 1. 监控目标与分层
 
@@ -209,5 +209,5 @@ Grafana 是整个监控栈的可视化层，将 Prometheus 指标和 Loki 日志
 当前模板默认通过黑盒探活和系统/进程指标提供可观测性，不依赖应用内 `/metrics`。
 
 如果后续在 `mediasoup-sfu` 增加 Prometheus 原生指标，请在
-`deploy/monitoring/prometheus/prometheus.yml`
+[deploy/monitoring/prometheus/prometheus.yml](../deploy/monitoring/prometheus/prometheus.yml)
 中启用 `mediasoup-sfu` scrape job，并将业务指标接入 `Business KPI` 看板。

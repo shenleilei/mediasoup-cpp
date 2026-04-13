@@ -1,13 +1,13 @@
 # Monitoring Stack Scaffold
 
-Path: `deploy/monitoring` (relative to repository root)
+Path: [deploy/monitoring](.) (relative to repository root)
 
 ## Includes
 
-- Prometheus + alert rules (`prometheus/`)
-- Alertmanager routing (`alertmanager/`)
-- Grafana provisioning + dashboards (`grafana/`)
-- Loki + Promtail log pipeline (`loki/`, `promtail/`)
+- Prometheus + alert rules ([prometheus/](./prometheus/))
+- Alertmanager routing ([alertmanager/](./alertmanager/))
+- Grafana provisioning + dashboards ([grafana/](./grafana/))
+- Loki + Promtail log pipeline ([loki/](./loki/), [promtail/](./promtail/))
 - Node Exporter + Process Exporter + Blackbox Exporter
 
 ## Start
@@ -27,10 +27,10 @@ docker compose up -d
 
 Edit probe targets in:
 
-- `deploy/monitoring/prometheus/prometheus.yml`
+- [deploy/monitoring/prometheus/prometheus.yml](./prometheus/prometheus.yml)
 
 and webhook URLs in:
 
-- `deploy/monitoring/alertmanager/alertmanager.yml`
+- [deploy/monitoring/alertmanager/alertmanager.yml](./alertmanager/alertmanager.yml)
 
 before production rollout.
