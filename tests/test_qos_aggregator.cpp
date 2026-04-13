@@ -61,3 +61,29 @@ TEST(QosAggregatorTest, AggregateWithoutSnapshotReturnsEmpty) {
 	EXPECT_FALSE(aggregate.hasSnapshot);
 	EXPECT_TRUE(aggregate.data.is_null() || aggregate.data.empty());
 }
+
+TEST(QosAggregatorTest, AggregateAgeClampsToZeroWhenNowBeforeReceive) {
+	auto entry = MakeEntry(42u, 1000, 5000);
+	auto aggregate = qos::QosAggregator::Aggregate(&entry, 4000, 6000, 15000);
+
+	EXPECT_TRUE(aggregate.hasSnapshot);
+	EXPECT_EQ(aggregate.ageMs, 0);
+	EXPECT_FALSE(aggregate.stale);
+	EXPECT_FALSE(aggregate.lost);
+	EXPECT_EQ(aggregate.data["ageMs"], 0);
+}
+
+TEST(QosAggregatorTest, ThresholdsAreStrictlyGreaterThanCutoffs) {
+	auto entry = MakeEntry(43u, 1000, 1000);
+
+	auto atStaleBoundary = qos::QosAggregator::Aggregate(&entry, 7000, 6000, 15000);
+	EXPECT_EQ(atStaleBoundary.ageMs, 6000);
+	EXPECT_FALSE(atStaleBoundary.stale);
+	EXPECT_FALSE(atStaleBoundary.lost);
+
+	auto atLostBoundary = qos::QosAggregator::Aggregate(&entry, 16000, 6000, 15000);
+	EXPECT_EQ(atLostBoundary.ageMs, 15000);
+	EXPECT_TRUE(atLostBoundary.stale);
+	EXPECT_FALSE(atLostBoundary.lost);
+	EXPECT_EQ(atLostBoundary.quality, "poor");
+}
