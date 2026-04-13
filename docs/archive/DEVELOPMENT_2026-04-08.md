@@ -3,7 +3,7 @@
 > **文档性质**
 >
 > 这是阶段性开发记录，主要用于保留 `2026-04-08` 当天的背景和修复轨迹。
-> 当前项目开发入口仍以 [DEVELOPMENT.md](/root/mediasoup-cpp/docs/DEVELOPMENT.md) 为准。
+> 当前项目开发入口仍以 [DEVELOPMENT.md](../DEVELOPMENT.md) 为准。
 
 ## Changes Summary
 

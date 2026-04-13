@@ -41,7 +41,36 @@ static void notifyDaemonStartup(bool ok) {
 	g_daemonStartupFd = -1;
 }
 
-static int daemonize(const std::string& logFile, const std::string& pidFile) {
+static void applyLegacyLogFileSetting(
+	const std::string& value,
+	std::string& logDir,
+	std::string& logPrefix)
+{
+	if (value.empty()) return;
+	std::filesystem::path path(value);
+	if (path.has_filename()) {
+		logDir = path.parent_path().empty() ? "." : path.parent_path().string();
+		logPrefix = path.stem().string();
+	} else {
+		logDir = path.string();
+	}
+}
+
+static std::string currentLogPath(
+	const std::string& logDir,
+	const std::string& logPrefix,
+	int rotateHours,
+	pid_t pid)
+{
+	return logging::build_bucketed_log_filename(
+		logDir, logPrefix, static_cast<int>(pid), spdlog::details::os::now(), rotateHours);
+}
+
+static int daemonize(
+	const std::string& logDir,
+	const std::string& logPrefix,
+	int logRotateHours,
+	const std::string& pidFile) {
 	int startupPipe[2];
 	if (pipe(startupPipe) != 0) return -1;
 	(void)fcntl(startupPipe[0], F_SETFD, FD_CLOEXEC);
@@ -72,8 +101,9 @@ static int daemonize(const std::string& logFile, const std::string& pidFile) {
 	// Child: new session
 	setsid();
 	// Redirect stdout/stderr to log file
-	if (!logFile.empty()) {
-		FILE* f = fopen(logFile.c_str(), "a");
+	if (!logDir.empty()) {
+		std::string logPath = currentLogPath(logDir, logPrefix, logRotateHours, getpid());
+		FILE* f = fopen(logPath.c_str(), "a");
 		if (f) {
 			dup2(fileno(f), STDOUT_FILENO);
 			dup2(fileno(f), STDERR_FILENO);
@@ -111,9 +141,11 @@ int main(int argc, char* argv[]) {
 	std::string geoDbPath = "./ip2region.xdb";
 	bool geoDbPathExplicit = false;
 	bool noDaemon = false;
-	std::string logFile = "/var/log/mediasoup-sfu.log";
+	std::string logDir = "/var/log/mediasoup";
+	std::string logPrefix = "mediasoup-sfu";
 	std::string pidFile = "/var/run/mediasoup-sfu.pid";
 	std::string logLevel = "info";
+	int logRotateHours = 3;
 
 	// Load config file (--config=path or default config.json)
 	std::string configPath = "config.json";
@@ -144,9 +176,12 @@ int main(int argc, char* argv[]) {
 				if (cfg.contains("country"))        nodeCountry = cfg["country"].get<std::string>();
 				if (cfg.contains("countryIsolation")) countryIsolation = cfg["countryIsolation"].get<bool>();
 				if (cfg.contains("geoDb"))          { geoDbPath = cfg["geoDb"].get<std::string>(); geoDbPathExplicit = true; }
-				if (cfg.contains("logFile"))        logFile = cfg["logFile"].get<std::string>();
+				if (cfg.contains("logDir"))         logDir = cfg["logDir"].get<std::string>();
+				if (cfg.contains("logPrefix"))      logPrefix = cfg["logPrefix"].get<std::string>();
+				if (cfg.contains("logFile"))        applyLegacyLogFileSetting(cfg["logFile"].get<std::string>(), logDir, logPrefix);
 				if (cfg.contains("pidFile"))        pidFile = cfg["pidFile"].get<std::string>();
 				if (cfg.contains("logLevel"))       logLevel = cfg["logLevel"].get<std::string>();
+				if (cfg.contains("logRotateHours")) logRotateHours = cfg["logRotateHours"].get<int>();
 				if (cfg.contains("nodaemon"))        noDaemon = cfg["nodaemon"].get<bool>();
 				spdlog::info("Loaded config from {}", configPath);
 			} catch (const std::exception& e) {
@@ -177,19 +212,22 @@ int main(int argc, char* argv[]) {
 		else if (arg == "--countryIsolation")       countryIsolation = true;
 		else if (arg == "--noCountryIsolation")     countryIsolation = false;
 		else if (arg.find("--geoDb=") == 0)        { geoDbPath = arg.substr(8); geoDbPathExplicit = true; }
-		else if (arg.find("--logFile=") == 0)  logFile = arg.substr(10);
+		else if (arg.find("--logDir=") == 0) logDir = arg.substr(9);
+		else if (arg.find("--logPrefix=") == 0) logPrefix = arg.substr(12);
+		else if (arg.find("--logFile=") == 0)  applyLegacyLogFileSetting(arg.substr(10), logDir, logPrefix);
 		else if (arg.find("--pidFile=") == 0)  pidFile = arg.substr(10);
 		else if (arg.find("--logLevel=") == 0) logLevel = arg.substr(11);
+		else if (arg.find("--logRotateHours=") == 0) logRotateHours = std::stoi(arg.substr(17));
 		else if (arg == "--nodaemon")           noDaemon = true;
 	}
 
 	// Daemonize unless --nodaemon
 	if (!noDaemon) {
-		g_daemonStartupFd = daemonize(logFile, pidFile);
+		g_daemonStartupFd = daemonize(logDir, logPrefix, logRotateHours, pidFile);
 		if (g_daemonStartupFd < 0) return 1;
 	}
 
-	Logger::Init(noDaemon ? "" : logFile, logLevel);
+	Logger::Init(noDaemon ? "" : logDir, logLevel, noDaemon, logRotateHours, logPrefix, getpid());
 	spdlog::info("mediasoup-cpp SFU starting (new architecture: WorkerThread pool)...");
 
 	auto failExit = [&pidFile]() {

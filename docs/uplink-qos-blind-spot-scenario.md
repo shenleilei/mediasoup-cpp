@@ -9,8 +9,8 @@
 > 当前 QoS 系统理论上会怎么变化，实际 browser loopback matrix 又观察到了什么，
 > 以及我们最终是如何修正恢复逻辑的。
 >
-> 这份文档不替代 [uplink-qos-final-report.md](/root/mediasoup-cpp/docs/uplink-qos-final-report.md) 的签收口径；
-> 也不替代 [uplink-qos-boundaries.md](/root/mediasoup-cpp/docs/uplink-qos-boundaries.md) 的职责边界说明。
+> 这份文档不替代 [uplink-qos-final-report.md](./uplink-qos-final-report.md) 的签收口径；
+> 也不替代 [uplink-qos-boundaries.md](./uplink-qos-boundaries.md) 的职责边界说明。
 
 ## 1. 场景定义
 
@@ -29,11 +29,11 @@
 为了把这个场景落到自动化矩阵中，当前仓库新增了 3 个 blind-spot transition case，
 并且现在已经纳入默认 matrix 集合：
 
-- [sweep_cases.json](/root/mediasoup-cpp/tests/qos_harness/scenarios/sweep_cases.json#L46) `T9`
+- [sweep_cases.json](../tests/qos_harness/scenarios/sweep_cases.json#L46) `T9`
   baseline=`8Mbps / 20ms / 0.1% / 1ms`
-- [sweep_cases.json](/root/mediasoup-cpp/tests/qos_harness/scenarios/sweep_cases.json#L47) `T10`
+- [sweep_cases.json](../tests/qos_harness/scenarios/sweep_cases.json#L47) `T10`
   baseline=`15Mbps / 15ms / 0.1% / 1ms`
-- [sweep_cases.json](/root/mediasoup-cpp/tests/qos_harness/scenarios/sweep_cases.json#L48) `T11`
+- [sweep_cases.json](../tests/qos_harness/scenarios/sweep_cases.json#L48) `T11`
   baseline=`30Mbps / 10ms / 0.1% / 1ms`
 
 当前已实际执行并复核的是 `T9`。
@@ -47,15 +47,15 @@
 推导前提主要来自：
 
 - 默认策略下发：
-  [RoomService.cpp](/root/mediasoup-cpp/src/RoomService.cpp#L846)
+  [RoomService.cpp](../src/RoomService.cpp#L846)
   `sampleIntervalMs=1000`
   `snapshotIntervalMs=2000`
 - 默认 camera 阈值与 ladder：
-  [profiles.js](/root/mediasoup-cpp/src/client/lib/qos/profiles.js#L8)
-  [profiles.js](/root/mediasoup-cpp/src/client/lib/qos/profiles.js#L22)
+  [profiles.js](../src/client/lib/qos/profiles.js#L8)
+  [profiles.js](../src/client/lib/qos/profiles.js#L22)
 - 默认状态机 debounce / recovery 条件：
-  [stateMachine.js](/root/mediasoup-cpp/src/client/lib/qos/stateMachine.js#L83)
-  [constants.js](/root/mediasoup-cpp/src/client/lib/qos/constants.js#L7)
+  [stateMachine.js](../src/client/lib/qos/stateMachine.js#L83)
+  [constants.js](../src/client/lib/qos/constants.js#L7)
 
 核心参数是：
 
@@ -96,7 +96,7 @@
    - `lost` 会触发 `server_auto_lost`
 
    对应逻辑在：
-   [QosOverride.cpp](/root/mediasoup-cpp/src/qos/QosOverride.cpp#L48)
+   [QosOverride.cpp](../src/qos/QosOverride.cpp#L48)
 
 6. `t = 0s ~ 100s`
    在整段坏网期间，系统理论上会长期维持在重保护态，
@@ -133,9 +133,9 @@
 
 脚本中的 matrix 参数透传见：
 
-- [run_qos_tests.sh](/root/mediasoup-cpp/scripts/run_qos_tests.sh#L43)
-- [run_qos_tests.sh](/root/mediasoup-cpp/scripts/run_qos_tests.sh#L428)
-- [run_qos_tests.sh](/root/mediasoup-cpp/scripts/run_qos_tests.sh#L500)
+- [run_qos_tests.sh](../scripts/run_qos_tests.sh#L43)
+- [run_qos_tests.sh](../scripts/run_qos_tests.sh#L428)
+- [run_qos_tests.sh](../scripts/run_qos_tests.sh#L500)
 
 ### 3.2 `T9` 与生产默认策略的关键差异
 
@@ -143,17 +143,17 @@
 因此它和上面的理论推导有几个重要差异：
 
 1. 采样频率更高
-   [loopback-entry.js](/root/mediasoup-cpp/tests/qos_harness/browser/loopback-entry.js#L320)
+   [loopback-entry.js](../tests/qos_harness/browser/loopback-entry.js#L320)
    这里用的是：
    `sampleIntervalMs=500`
    `snapshotIntervalMs=5000`
 
 2. loopback 使用的是专门调过的 camera profile
-   [loopback-entry.js](/root/mediasoup-cpp/tests/qos_harness/browser/loopback-entry.js#L238)
+   [loopback-entry.js](../tests/qos_harness/browser/loopback-entry.js#L238)
    阈值与生产默认并不完全相同。
 
 3. loopback 的 `L4` 不是 `audio-only`
-   [loopback-entry.js](/root/mediasoup-cpp/tests/qos_harness/browser/loopback-entry.js#L291)
+   [loopback-entry.js](../tests/qos_harness/browser/loopback-entry.js#L291)
    当前 harness 的 `L4` 是
    `minimum video keepalive`
    即保留一个很低码率、低帧率、强降采样的视频生存态，
@@ -171,8 +171,8 @@
 
 归档结果见：
 
-- [第一次失败快照](/root/mediasoup-cpp/docs/archive/uplink-qos-runs/2026-04-12T11-47-26.985Z/docs/generated/uplink-qos-case-results.targeted.md)
-- [第一次失败 JSON](/root/mediasoup-cpp/docs/archive/uplink-qos-runs/2026-04-12T11-47-26.985Z/docs/generated/uplink-qos-matrix-report.targeted.json)
+- [第一次失败快照](./archive/uplink-qos-runs/2026-04-12T11-47-26.985Z/docs/generated/uplink-qos-case-results.targeted.md)
+- [第一次失败 JSON](./archive/uplink-qos-runs/2026-04-12T11-47-26.985Z/docs/generated/uplink-qos-matrix-report.targeted.json)
 
 当时的关键结论是：
 
@@ -225,11 +225,11 @@
 
 对应代码在：
 
-- [stateMachine.js](/root/mediasoup-cpp/src/client/lib/qos/stateMachine.js)
+- [stateMachine.js](../src/client/lib/qos/stateMachine.js)
 
 关键变化是：
 
-- [stateMachine.js](/root/mediasoup-cpp/src/client/lib/qos/stateMachine.js) 中新增了 `isRecoveryHealthy()`
+- [stateMachine.js](../src/client/lib/qos/stateMachine.js) 中新增了 `isRecoveryHealthy()`
 - `QosStateMachineContext` 新增了 `consecutiveRecoverySamples`
 - `congested -> recovering` 现在不再依赖 `consecutiveHealthySamples`
   而是依赖 `consecutiveRecoverySamples`
@@ -283,7 +283,7 @@
 
 对应代码在：
 
-- [controller.js](/root/mediasoup-cpp/src/client/lib/qos/controller.js)
+- [controller.js](../src/client/lib/qos/controller.js)
 
 这个修正的直接目标是：
 
@@ -295,11 +295,11 @@
 
 为这个改动补充了单测：
 
-- [test.qos.stateMachine.js](/root/mediasoup-cpp/src/client/lib/test/test.qos.stateMachine.js)
+- [test.qos.stateMachine.js](../src/client/lib/test/test.qos.stateMachine.js)
   新增了：
   - recovery jitter 门槛比 stable 门槛更宽松
   - `recovering` 不会因为宽松门槛直接跳回 `stable`
-- [test.qos.controller.js](/root/mediasoup-cpp/src/client/lib/test/test.qos.controller.js)
+- [test.qos.controller.js](../src/client/lib/test/test.qos.controller.js)
   新增 / 修正了：
   - audio-only 恢复用例
   - `stable` 态升级也必须跑完 probe，不能连续提档
@@ -319,15 +319,15 @@
 
 当前 targeted 结果见：
 
-- [当前 targeted case report](/root/mediasoup-cpp/docs/generated/uplink-qos-case-results.targeted.md)
-- [当前 targeted matrix json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.targeted.json)
+- [当前 targeted case report](./generated/uplink-qos-case-results.targeted.md)
+- [当前 targeted matrix json](./generated/uplink-qos-matrix-report.targeted.json)
 
 归档快照见：
 
-- [第一次修正后通过快照](/root/mediasoup-cpp/docs/archive/uplink-qos-runs/2026-04-12T12-16-10.821Z/docs/generated/uplink-qos-case-results.targeted.md)
-- [第一次修正后通过 JSON](/root/mediasoup-cpp/docs/archive/uplink-qos-runs/2026-04-12T12-16-10.821Z/docs/generated/uplink-qos-matrix-report.targeted.json)
-- [最新稳定收尾快照](/root/mediasoup-cpp/docs/archive/uplink-qos-runs/2026-04-12T12-55-55.178Z/docs/generated/uplink-qos-case-results.targeted.md)
-- [最新稳定收尾 JSON](/root/mediasoup-cpp/docs/archive/uplink-qos-runs/2026-04-12T12-55-55.178Z/docs/generated/uplink-qos-matrix-report.targeted.json)
+- [第一次修正后通过快照](./archive/uplink-qos-runs/2026-04-12T12-16-10.821Z/docs/generated/uplink-qos-case-results.targeted.md)
+- [第一次修正后通过 JSON](./archive/uplink-qos-runs/2026-04-12T12-16-10.821Z/docs/generated/uplink-qos-matrix-report.targeted.json)
+- [最新稳定收尾快照](./archive/uplink-qos-runs/2026-04-12T12-55-55.178Z/docs/generated/uplink-qos-case-results.targeted.md)
+- [最新稳定收尾 JSON](./archive/uplink-qos-runs/2026-04-12T12-55-55.178Z/docs/generated/uplink-qos-matrix-report.targeted.json)
 
 关键结果如下：
 
@@ -382,12 +382,12 @@
 
 这轮对应的代码点主要是：
 
-- [stateMachine.js](/root/mediasoup-cpp/src/client/lib/qos/stateMachine.js)
+- [stateMachine.js](../src/client/lib/qos/stateMachine.js)
   - 新增 `isFastRecoveryHealthy()`
   - `QosStateMachineContext` 增加 `consecutiveFastRecoverySamples`
-- [probe.js](/root/mediasoup-cpp/src/client/lib/qos/probe.js)
+- [probe.js](../src/client/lib/qos/probe.js)
   - probe 成功/失败 sample 数改为可配置
-- [controller.js](/root/mediasoup-cpp/src/client/lib/qos/controller.js)
+- [controller.js](../src/client/lib/qos/controller.js)
   - 新增 `isStrongRecoverySignal()`
   - recovery chain 连续成功后，对下一次 probe 启用更快的 `2 sample` 成功门槛
 
@@ -406,8 +406,8 @@ node tests/qos_harness/render_case_report.mjs --input=docs/generated/uplink-qos-
 
 latest targeted artifact 为：
 
-- [最新 targeted case report](/root/mediasoup-cpp/docs/generated/uplink-qos-case-results.targeted.md)
-- [最新 targeted matrix json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.targeted.json)
+- [最新 targeted case report](./generated/uplink-qos-case-results.targeted.md)
+- [最新 targeted matrix json](./generated/uplink-qos-matrix-report.targeted.json)
 
 这次的关键结果变成：
 
@@ -447,8 +447,8 @@ latest targeted artifact 为：
 
 对应 artifact 为：
 
-- [组合 targeted case report](/root/mediasoup-cpp/docs/generated/uplink-qos-case-results.targeted.md)
-- [组合 targeted matrix json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.targeted.json)
+- [组合 targeted case report](./generated/uplink-qos-case-results.targeted.md)
+- [组合 targeted matrix json](./generated/uplink-qos-matrix-report.targeted.json)
 
 这轮的关键信息是：
 
@@ -543,8 +543,8 @@ node tests/qos_harness/render_case_report.mjs --input=docs/generated/uplink-qos-
 
 对应 artifact 为：
 
-- [latest targeted case report](/root/mediasoup-cpp/docs/generated/uplink-qos-case-results.targeted.md)
-- [latest targeted matrix json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.targeted.json)
+- [latest targeted case report](./generated/uplink-qos-case-results.targeted.md)
+- [latest targeted matrix json](./generated/uplink-qos-matrix-report.targeted.json)
 
 这轮的关键信息是：
 

@@ -150,11 +150,11 @@ Current matrix exceptions:
 
 Source-of-truth links:
 
-- final summary: [docs/uplink-qos-final-report.md](/root/mediasoup-cpp/docs/uplink-qos-final-report.md)
-- result summary: [docs/uplink-qos-test-results-summary.md](/root/mediasoup-cpp/docs/uplink-qos-test-results-summary.md)
-- per-case final result: [docs/uplink-qos-case-results.md](/root/mediasoup-cpp/docs/uplink-qos-case-results.md)
-- generated matrix artifact: [docs/generated/uplink-qos-matrix-report.json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.json)
-- detailed review notes: [docs/review_qos.md](/root/mediasoup-cpp/docs/review_qos.md)
+- final summary: [docs/uplink-qos-final-report.md](./docs/uplink-qos-final-report.md)
+- result summary: [docs/uplink-qos-test-results-summary.md](./docs/uplink-qos-test-results-summary.md)
+- per-case final result: [docs/uplink-qos-case-results.md](./docs/uplink-qos-case-results.md)
+- generated matrix artifact: [docs/generated/uplink-qos-matrix-report.json](./docs/generated/uplink-qos-matrix-report.json)
+- detailed review notes: [docs/review_qos.md](./docs/review_qos.md)
 
 ## Core Runtime Model
 
@@ -489,7 +489,10 @@ cat > config.json <<'EOF'
   "announcedIp": "<public-ip>",
   "redisHost": "127.0.0.1",
   "redisPort": 6379,
-  "recordDir": "./recordings"
+  "recordDir": "./recordings",
+  "logDir": "/var/log/mediasoup",
+  "logPrefix": "mediasoup-sfu",
+  "logRotateHours": 3
 }
 EOF
 
@@ -509,6 +512,10 @@ Open `http://<server-ip>:3000`.
 | `--announcedIp` | auto-detect | public IP for ICE candidates |
 | `--workerBin` | `./mediasoup-worker` | worker binary path |
 | `--recordDir` | `./recordings` | recording output directory |
+| `--logDir` | `/var/log/mediasoup` | daemon log directory |
+| `--logPrefix` | `mediasoup-sfu` | daemon log file prefix |
+| `--logLevel` | `info` | log verbosity |
+| `--logRotateHours` | `3` | rotate daemon log every N hours into files like `mediasoup-sfu_2026041306_<pid>.log` (`0` disables rotation) |
 | `--nodaemon` | flag | run in foreground |
 | `--redisHost` | `127.0.0.1` | Redis host |
 | `--redisPort` | `6379` | Redis port |
@@ -624,7 +631,7 @@ Behavior:
 - failures are recorded to `tests/qos_harness/artifacts/last-failures.txt`
 - `--resume` reruns only the last failed precise tasks
 - if `matrix` is executed, the script also regenerates the per-case report:
-  [docs/uplink-qos-case-results.md](/root/mediasoup-cpp/docs/uplink-qos-case-results.md)
+  [docs/uplink-qos-case-results.md](./docs/uplink-qos-case-results.md)
 - the default matrix now includes the blind-spot transition cases `T9/T10/T11`; the remaining `extended` set is currently the higher-bandwidth baseline calibration cases and can be added with `--include-extended`, or targeted explicitly via `--cases=...`
 
 ### Troubleshooting

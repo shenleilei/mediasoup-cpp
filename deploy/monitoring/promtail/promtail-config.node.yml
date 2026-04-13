@@ -17,7 +17,7 @@ scrape_configs:
         labels:
           job: mediasoup-sfu
           host: ${HOSTNAME}
-          __path__: /var/log/mediasoup-sfu.log
+          __path__: /var/log/mediasoup/*.log
 
   - job_name: container-logs
     static_configs:

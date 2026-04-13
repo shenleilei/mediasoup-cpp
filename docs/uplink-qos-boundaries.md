@@ -41,7 +41,7 @@
 - 依赖底层媒体栈处理。
 - 在 stats 侧做观测和透出，不自己实现独立的 `NACK/PLI/FEC/RTX` 响应策略。
 
-一个直接证据是 [Producer.cpp](/root/mediasoup-cpp/src/Producer.cpp) 的 `getStats()` 会把底层统计暴露出来，例如：
+一个直接证据是 [Producer.cpp](../src/Producer.cpp) 的 `getStats()` 会把底层统计暴露出来，例如：
 
 - `nackCount`
 - `nackPacketCount`
@@ -60,9 +60,9 @@
 
 当前代码里可以看到：
 
-- [Producer.d.ts](/root/mediasoup-cpp/src/client/lib/Producer.d.ts) 暴露了 `opusFec?: boolean`。
-- [MediaSection.js](/root/mediasoup-cpp/src/client/lib/handlers/sdp/MediaSection.js) 会把 `opusFec` 映射为 SDP 参数 `useinbandfec=1/0`。
-- [supportedRtpCapabilities.h](/root/mediasoup-cpp/src/supportedRtpCapabilities.h) 也声明了 `audio/opus` 的 `useinbandfec=1` 默认能力。
+- [Producer.d.ts](../src/client/lib/Producer.d.ts) 暴露了 `opusFec?: boolean`。
+- [MediaSection.js](../src/client/lib/handlers/sdp/MediaSection.js) 会把 `opusFec` 映射为 SDP 参数 `useinbandfec=1/0`。
+- [supportedRtpCapabilities.h](../src/supportedRtpCapabilities.h) 也声明了 `audio/opus` 的 `useinbandfec=1` 默认能力。
 
 这说明当前仓库对 `Opus FEC` 的关系更接近：
 
@@ -72,8 +72,8 @@
 
 当前 QoS 动作模型本身也能侧面说明这一点：
 
-- [types.d.ts](/root/mediasoup-cpp/src/client/lib/qos/types.d.ts) 里的动作类型主要是 `setEncodingParameters`、`setMaxSpatialLayer`、`enterAudioOnly`、`pauseUpstream`、`resumeUpstream` 等。
-- [planner.js](/root/mediasoup-cpp/src/client/lib/qos/planner.js) 和 [executor.js](/root/mediasoup-cpp/src/client/lib/qos/executor.js) 也没有单独的 `FEC` 动作分支。
+- [types.d.ts](../src/client/lib/qos/types.d.ts) 里的动作类型主要是 `setEncodingParameters`、`setMaxSpatialLayer`、`enterAudioOnly`、`pauseUpstream`、`resumeUpstream` 等。
+- [planner.js](../src/client/lib/qos/planner.js) 和 [executor.js](../src/client/lib/qos/executor.js) 也没有单独的 `FEC` 动作分支。
 
 ## 4. 当前仓库新增或主线实现的 uplink QoS 能力
 
@@ -91,8 +91,8 @@
 
 主要入口：
 
-- [controller.js](/root/mediasoup-cpp/src/client/lib/qos/controller.js)
-- [stateMachine.js](/root/mediasoup-cpp/src/client/lib/qos/stateMachine.js)
+- [controller.js](../src/client/lib/qos/controller.js)
+- [stateMachine.js](../src/client/lib/qos/stateMachine.js)
 
 ### 4.2 server 侧策略能力
 
@@ -106,7 +106,7 @@
 
 主要入口：
 
-- [RoomService.cpp](/root/mediasoup-cpp/src/RoomService.cpp)
+- [RoomService.cpp](../src/RoomService.cpp)
 
 ## 5. 当前明确不覆盖或不主打的范围
 

@@ -4,21 +4,21 @@
 
 ## 1. 文档目的
 
-这份文档补足 [uplink-qos-final-report.md](/root/mediasoup-cpp/docs/uplink-qos-final-report.md) 和 [uplink-qos-test-results-summary.md](/root/mediasoup-cpp/docs/uplink-qos-test-results-summary.md) 的细节缺口，按当前仓库里保留的 targeted rerun artifact，逐条给出：
+这份文档补足 [uplink-qos-final-report.md](./uplink-qos-final-report.md) 和 [uplink-qos-test-results-summary.md](./uplink-qos-test-results-summary.md) 的细节缺口，按当前仓库里保留的 targeted rerun artifact，逐条给出：
 
 - case 预期
 - case 实测
 - PASS/FAIL 的判定依据
 - 需要特别说明的口径差异
 
-最新 targeted rerun 机器数据来自 [generated/uplink-qos-matrix-report.targeted.json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.targeted.json)；
-历史 targeted / full matrix 快照会按 `generatedAt` 归档到 [archive/uplink-qos-runs](/root/mediasoup-cpp/docs/archive/uplink-qos-runs)。
+最新 targeted rerun 机器数据来自 [generated/uplink-qos-matrix-report.targeted.json](./generated/uplink-qos-matrix-report.targeted.json)；
+历史 targeted / full matrix 快照会按 `generatedAt` 归档到 [archive/uplink-qos-runs](./archive/uplink-qos-runs)。
 
 注意：
 
 - 最新 targeted rerun 目前只剩 `BW2` 一个 strict boundary sentinel；
 - 本文件保留的是 `2026-04-12` 较早一次 targeted 详细分析快照，用于解释 `T4 / T6 / T7 / T8 / S1 / S2 / S3 / S4` 的 case-level 判定；
-- 如果要看当前最新 targeted 状态，请以 [generated/uplink-qos-case-results.targeted.md](/root/mediasoup-cpp/docs/generated/uplink-qos-case-results.targeted.md) 为准。
+- 如果要看当前最新 targeted 状态，请以 [generated/uplink-qos-case-results.targeted.md](./generated/uplink-qos-case-results.targeted.md) 为准。
 
 本文件当前覆盖的历史 targeted 集合是 `8` 个 case：
 

@@ -5,8 +5,8 @@
 > **文档性质**
 >
 > 这是对外/对上汇报的一页摘要版，不包含完整证据链。
-> 需要完整测试范围、结果和边界时，请看 [uplink-qos-final-report.md](/root/mediasoup-cpp/docs/uplink-qos-final-report.md)；
-> 需要内部技术边界说明时，请看 [uplink-qos-boundaries.md](/root/mediasoup-cpp/docs/uplink-qos-boundaries.md)。
+> 需要完整测试范围、结果和边界时，请看 [uplink-qos-final-report.md](./uplink-qos-final-report.md)；
+> 需要内部技术边界说明时，请看 [uplink-qos-boundaries.md](./uplink-qos-boundaries.md)。
 
 ## 一句话结论
 
@@ -95,7 +95,7 @@
 
 - 本轮签收的是“当前仓库内已落地的自动化主测试集”。
 - `BW2` 继续单独观察，但不影响当前主 gate 通过的结论。
-- 如果需要解释“哪些能力由 WebRTC/mediasoup 底层自动提供、哪些能力属于当前仓库 uplink QoS 主线”，请参考 [uplink-qos-boundaries.md](/root/mediasoup-cpp/docs/uplink-qos-boundaries.md)。
+- 如果需要解释“哪些能力由 WebRTC/mediasoup 底层自动提供、哪些能力属于当前仓库 uplink QoS 主线”，请参考 [uplink-qos-boundaries.md](./uplink-qos-boundaries.md)。
 
 ## 建议对上口径
 

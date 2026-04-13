@@ -11,6 +11,7 @@
 #include <poll.h>
 #include <fcntl.h>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <unordered_map>
 #include <hiredis/hiredis.h>
@@ -49,21 +50,46 @@ public:
 	}
 
 	void heartbeat() {
+		auto start = std::chrono::steady_clock::now();
+		MS_WARN(logger_, "heartbeat start [nodeId:{}]", nodeId_);
 		std::lock_guard<std::mutex> lock(cmdMutex_);
 		if (!ensureConnected()) return;
+		auto stepStart = std::chrono::steady_clock::now();
+		MS_WARN(logger_, "heartbeat registerNode start [nodeId:{}]", nodeId_);
 		registerNode();
+		MS_WARN(logger_, "heartbeat registerNode done [nodeId:{} ms:{}]",
+			nodeId_, std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now() - stepStart).count());
 		// Lightweight stale-node eviction: check if cached nodes still exist in Redis.
 		// Much cheaper than full syncAll (no KEYS room:*, no room GET).
+		stepStart = std::chrono::steady_clock::now();
+		MS_WARN(logger_, "heartbeat evictDeadNodes start [nodeId:{}]", nodeId_);
 		evictDeadNodes();
+		MS_WARN(logger_, "heartbeat evictDeadNodes done [nodeId:{} ms:{} totalMs:{}]",
+			nodeId_,
+			std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now() - stepStart).count(),
+			std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now() - start).count());
 	}
 
 		void updateLoad(size_t rooms, size_t maxRooms) {
+			auto start = std::chrono::steady_clock::now();
+			MS_WARN(logger_, "updateLoad start [nodeId:{} rooms:{} maxRooms:{}]",
+				nodeId_, rooms, maxRooms);
 			std::lock_guard<std::mutex> lock(cmdMutex_);
 			if (!ensureConnected()) return;
 			std::string val = buildNodeValue(rooms, maxRooms);
+			MS_WARN(logger_, "updateLoad redis SET start [nodeId:{} key:{}]",
+				nodeId_, (std::string(kKeyPrefixNode) + nodeId_));
 			auto* reply = (redisReply*)redisCommand(ctx_, "SET %s %s EX %d",
 			(std::string(kKeyPrefixNode) + nodeId_).c_str(), val.c_str(), nodeTTL_);
-		if (reply) freeReplyObject(reply);
+		if (reply) {
+			MS_WARN(logger_, "updateLoad redis SET done [nodeId:{} ms:{}]",
+				nodeId_, std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::steady_clock::now() - start).count());
+			freeReplyObject(reply);
+		}
 		else handleDisconnect();
 		// Update local cache for self
 			{
@@ -71,17 +97,29 @@ public:
 				nodeCache_[nodeId_] = parseNodeValue(val);
 			}
 			publishNodeUpdate(nodeId_, val);
+			MS_WARN(logger_, "updateLoad done [nodeId:{} totalMs:{}]",
+				nodeId_, std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::steady_clock::now() - start).count());
 		}
 
 	void refreshRooms(const std::vector<std::string>& roomIds) {
+		auto start = std::chrono::steady_clock::now();
+		MS_WARN(logger_, "refreshRooms start [count:{}]", roomIds.size());
 		std::lock_guard<std::mutex> lock(cmdMutex_);
 		if (!ensureConnected()) return;
 		for (auto& roomId : roomIds) {
+			MS_WARN(logger_, "refreshRooms redis EXPIRE start [roomId:{}]", roomId);
 			auto* reply = (redisReply*)redisCommand(ctx_, "EXPIRE %s %d",
 				(std::string(kKeyPrefixRoom) + roomId).c_str(), roomTTL_);
 			if (reply) freeReplyObject(reply);
 			else { handleDisconnect(); return; }
+			MS_WARN(logger_, "refreshRooms redis EXPIRE done [roomId:{} elapsedMs:{}]",
+				roomId, std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::steady_clock::now() - start).count());
 		}
+		MS_WARN(logger_, "refreshRooms done [count:{} totalMs:{}]",
+			roomIds.size(), std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now() - start).count());
 	}
 
 	struct ResolveResult {
@@ -90,19 +128,32 @@ public:
 	};
 
 	ResolveResult resolveRoom(const std::string& roomId, const std::string& clientIp = "") {
+		auto start = std::chrono::steady_clock::now();
+		MS_WARN(logger_, "resolveRoom start [roomId:{} clientIp:{}]", roomId, clientIp);
 		// Check local room cache first (no lock ordering issue — cacheMutex_ only)
 		{
 			std::lock_guard<std::mutex> cl(cacheMutex_);
 			auto it = roomCache_.find(roomId);
-			if (it != roomCache_.end() && !it->second.empty())
+			if (it != roomCache_.end() && !it->second.empty()) {
+				MS_WARN(logger_, "resolveRoom cache hit [roomId:{} wsUrl:{} totalMs:{}]",
+					roomId, it->second, std::chrono::duration_cast<std::chrono::milliseconds>(
+						std::chrono::steady_clock::now() - start).count());
 				return {it->second, false};
+			}
 		}
 
 		// Cache miss — check Redis. Lock order: cmdMutex_ first, cacheMutex_ inside.
 		{
 			std::lock_guard<std::mutex> lock(cmdMutex_);
 			if (ensureConnected()) {
+				auto getRoomStart = std::chrono::steady_clock::now();
+				MS_WARN(logger_, "resolveRoom redis GET room start [roomId:{} key:{}]",
+					roomId, (std::string(kKeyPrefixRoom) + roomId));
 				auto* reply = (redisReply*)redisCommand(ctx_, "GET %s", (std::string(kKeyPrefixRoom) + roomId).c_str());
+				MS_WARN(logger_, "resolveRoom redis GET room done [roomId:{} ms:{} replyType:{}]",
+					roomId, std::chrono::duration_cast<std::chrono::milliseconds>(
+						std::chrono::steady_clock::now() - getRoomStart).count(),
+					reply ? reply->type : -1);
 				if (reply && reply->type == REDIS_REPLY_STRING) {
 					std::string ownerNodeId = reply->str;
 					freeReplyObject(reply);
@@ -115,7 +166,15 @@ public:
 					}
 					// Cache miss for node — fall back to Redis GET
 					if (addr.empty()) {
+						auto getNodeStart = std::chrono::steady_clock::now();
+						MS_WARN(logger_, "resolveRoom redis GET node start [roomId:{} ownerNodeId:{} key:{}]",
+							roomId, ownerNodeId, (std::string(kKeyPrefixNode) + ownerNodeId));
 						auto* nr = (redisReply*)redisCommand(ctx_, "GET %s", (std::string(kKeyPrefixNode) + ownerNodeId).c_str());
+						MS_WARN(logger_, "resolveRoom redis GET node done [roomId:{} ownerNodeId:{} ms:{} replyType:{}]",
+							roomId, ownerNodeId,
+							std::chrono::duration_cast<std::chrono::milliseconds>(
+								std::chrono::steady_clock::now() - getNodeStart).count(),
+							nr ? nr->type : -1);
 						if (nr && nr->type == REDIS_REPLY_STRING) {
 							auto info = parseNodeValue(nr->str);
 							addr = info.address;
@@ -129,6 +188,10 @@ public:
 					if (!addr.empty()) {
 						std::lock_guard<std::mutex> cl(cacheMutex_);
 						roomCache_[roomId] = addr;
+						MS_WARN(logger_, "resolveRoom owner resolved [roomId:{} ownerNodeId:{} wsUrl:{} totalMs:{}]",
+							roomId, ownerNodeId, addr,
+							std::chrono::duration_cast<std::chrono::milliseconds>(
+								std::chrono::steady_clock::now() - start).count());
 						return {addr, false};
 					}
 					// Owner node truly gone — pick best available node, not just self
@@ -147,10 +210,22 @@ public:
 			if (shouldRefreshNodes) {
 				// Cache miss or self-only view — node may have just registered. Sync nodes and retry.
 				std::lock_guard<std::mutex> lock(cmdMutex_);
+				MS_WARN(logger_, "resolveRoom syncNodes start [roomId:{} clientIp:{}]", roomId, clientIp);
 				syncNodesUnlocked();
+				MS_WARN(logger_, "resolveRoom syncNodes done [roomId:{} elapsedMs:{}]",
+					roomId, std::chrono::duration_cast<std::chrono::milliseconds>(
+						std::chrono::steady_clock::now() - start).count());
 				best = findBestNodeCached(clientIp);
 			}
-			if (best.empty()) return {"", true};
+			if (best.empty()) {
+				MS_WARN(logger_, "resolveRoom no node found [roomId:{} totalMs:{}]",
+					roomId, std::chrono::duration_cast<std::chrono::milliseconds>(
+						std::chrono::steady_clock::now() - start).count());
+				return {"", true};
+			}
+		MS_WARN(logger_, "resolveRoom picked node [roomId:{} wsUrl:{} isNew:true totalMs:{}]",
+			roomId, best, std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now() - start).count());
 		return {best, true};
 	}
 

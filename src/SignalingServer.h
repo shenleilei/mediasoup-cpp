@@ -67,7 +67,7 @@ private:
 	// Remove room assignment (called when room is cleaned up).
 	void unassignRoom(const std::string& roomId);
 	void startRegistryWorker();
-	void enqueueRegistryTask(std::function<void()> task);
+	void enqueueRegistryTask(std::function<void()> task, std::string label = "registry.task");
 
 	int port_;
 	std::vector<std::unique_ptr<WorkerThread>>& workerThreads_;
@@ -85,6 +85,7 @@ private:
 	std::thread registryThread_;
 	std::atomic<bool> stopRegistryThread_{false};
 	std::atomic<bool> startupSucceeded_{false};
+	std::atomic<uint64_t> nextRegistryTaskId_{1};
 
 	std::atomic<uint64_t> staleRequestDrops_{0};
 	std::atomic<uint64_t> rejectedClientStats_{0};

@@ -5,8 +5,8 @@
 > **文档性质**
 >
 > 这是当前 QoS 自动化验证的主结论文档。
-> 若需要说明“底层 WebRTC 自动能力”和“本仓库 uplink QoS 策略能力”的边界，请继续查看 [uplink-qos-boundaries.md](/root/mediasoup-cpp/docs/uplink-qos-boundaries.md)。
-> 若需要逐 case 明细，请继续查看 [uplink-qos-case-results.md](/root/mediasoup-cpp/docs/uplink-qos-case-results.md)。
+> 若需要说明“底层 WebRTC 自动能力”和“本仓库 uplink QoS 策略能力”的边界，请继续查看 [uplink-qos-boundaries.md](./uplink-qos-boundaries.md)。
+> 若需要逐 case 明细，请继续查看 [uplink-qos-case-results.md](./uplink-qos-case-results.md)。
 
 ## 1. 执行结论
 
@@ -18,12 +18,12 @@
 
 这里的“主 gate 通过”指的是：
 
-- latest full matrix artifact [generated/uplink-qos-matrix-report.json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.json) 的 `generatedAt=2026-04-13T03:34:38.058Z`
-- 对应主报告 [uplink-qos-case-results.md](/root/mediasoup-cpp/docs/uplink-qos-case-results.md) 已同步重渲染为 `43 / 43 PASS`
+- latest full matrix artifact [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json) 的 `generatedAt=2026-04-13T03:34:38.058Z`
+- 对应主报告 [uplink-qos-case-results.md](./uplink-qos-case-results.md) 已同步重渲染为 `43 / 43 PASS`
 
 这里的“BW2 仍保留观察”指的是：
 
-- 历史 dedicated strict targeted artifact [generated/uplink-qos-matrix-report.targeted.json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.targeted.json) 在 `generatedAt=2026-04-12T15:33:19.265Z` 时曾明确显示 `BW2 FAIL`
+- 历史 dedicated strict targeted artifact [generated/uplink-qos-matrix-report.targeted.json](./generated/uplink-qos-matrix-report.targeted.json) 在 `generatedAt=2026-04-12T15:33:19.265Z` 时曾明确显示 `BW2 FAIL`
 - latest 组合 targeted regression 在 `generatedAt=2026-04-13T00:31:10.077Z` 时，对 `T9,T10,T11,J3,J4,J5,BW2,T1,S4` 这 `9` 个 case 得到 `9 / 9 PASS`
 - 由于 `BW2` 仍然存在跨轮次波动，当前更合理的口径是“历史证据混合，继续作为 extended sentinel 观察”，而不是直接回退进默认 blocking gate
 
@@ -111,7 +111,7 @@
    处理：
    `BW2` 继续保留为 `extended` + targeted sentinel；
    不把它放回默认 loopback blocking gate；
-   相关专项结论沉淀在 [uplink-qos-loopback-boundary-investigation.md](/root/mediasoup-cpp/docs/uplink-qos-loopback-boundary-investigation.md)。
+   相关专项结论沉淀在 [uplink-qos-loopback-boundary-investigation.md](./uplink-qos-loopback-boundary-investigation.md)。
 
 6. blind-spot long recovery 的启动过慢
    现象：
@@ -153,17 +153,17 @@
 - 服务端 QoS 集成测试实际执行结果：`12 / 12 PASS`
 - client JS 单测实际执行结果：`27 / 27 PASS`
 - Node/browser harness 实际执行结果：全部通过
-- full matrix 主 gate 当前重渲染结果：[uplink-qos-case-results.md](/root/mediasoup-cpp/docs/uplink-qos-case-results.md)
-- latest targeted 组合回归结果：[generated/uplink-qos-case-results.targeted.md](/root/mediasoup-cpp/docs/generated/uplink-qos-case-results.targeted.md)
+- full matrix 主 gate 当前重渲染结果：[uplink-qos-case-results.md](./uplink-qos-case-results.md)
+- latest targeted 组合回归结果：[generated/uplink-qos-case-results.targeted.md](./generated/uplink-qos-case-results.targeted.md)
 
 补充说明：
 
-- full matrix 原始机器输出保留在 [generated/uplink-qos-matrix-report.json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.json)。
-- targeted rerun 原始机器输出保留在 [generated/uplink-qos-matrix-report.targeted.json](/root/mediasoup-cpp/docs/generated/uplink-qos-matrix-report.targeted.json)。
-- 每次报告生成都会按 `generatedAt` 归档到 [archive/uplink-qos-runs](/root/mediasoup-cpp/docs/archive/uplink-qos-runs)。
+- full matrix 原始机器输出保留在 [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json)。
+- targeted rerun 原始机器输出保留在 [generated/uplink-qos-matrix-report.targeted.json](./generated/uplink-qos-matrix-report.targeted.json)。
+- 每次报告生成都会按 `generatedAt` 归档到 [archive/uplink-qos-runs](./archive/uplink-qos-runs)。
 - `T1 / S4` 的边界波动依据，来自至少两份不同 full matrix 快照的对比。
-- `BW2` 的边界结论来自 dedicated strict targeted fail、latest 组合 targeted regression pass，以及 [uplink-qos-loopback-boundary-investigation.md](/root/mediasoup-cpp/docs/uplink-qos-loopback-boundary-investigation.md) 中的专项排查。
-- `T9` 第二轮 fast-path 的实测改进、`T10/T11` 的 tail oscillation 复现、以及 latest tail-fix targeted rerun 的结果，见 [uplink-qos-blind-spot-scenario.md](/root/mediasoup-cpp/docs/uplink-qos-blind-spot-scenario.md) 与 latest targeted report。
+- `BW2` 的边界结论来自 dedicated strict targeted fail、latest 组合 targeted regression pass，以及 [uplink-qos-loopback-boundary-investigation.md](./uplink-qos-loopback-boundary-investigation.md) 中的专项排查。
+- `T9` 第二轮 fast-path 的实测改进、`T10/T11` 的 tail oscillation 复现、以及 latest tail-fix targeted rerun 的结果，见 [uplink-qos-blind-spot-scenario.md](./uplink-qos-blind-spot-scenario.md) 与 latest targeted report。
 
 ## 6. 建议对上口径
 
@@ -184,7 +184,7 @@
 本轮需要明确的边界只有两条：
 
 - 这次签收的是“当前仓库内已落地的自动化主验证集”，不是“所有 boundary case 都已静态收敛到单一 deterministic expectation”。
-- 关于“底层 `NACK / PLI / FIR / BWE` 自动能力”和“本仓库 uplink QoS 策略能力”的职责划分，请看 [uplink-qos-boundaries.md](/root/mediasoup-cpp/docs/uplink-qos-boundaries.md)。
+- 关于“底层 `NACK / PLI / FIR / BWE` 自动能力”和“本仓库 uplink QoS 策略能力”的职责划分，请看 [uplink-qos-boundaries.md](./uplink-qos-boundaries.md)。
 
 换句话说：
 
