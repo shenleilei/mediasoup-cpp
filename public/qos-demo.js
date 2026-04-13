@@ -950,6 +950,8 @@
   function renderServerPeer(peer) {
     const qos = peer.qos || {};
     const snapshot = peer.clientStats || {};
+    const downlinkSnapshot = peer.downlinkClientStats || {};
+    const downlinkQos = peer.downlinkQos || {};
     const tracks = snapshot.tracks || [];
     const stateName = qos.quality || 'unknown';
     let html =
@@ -964,6 +966,10 @@
       qosItem('Peer Quality', fmtValue(snapshot.peerState ? snapshot.peerState.quality : snapshot.peerQuality)) +
       qosItem('Stale', qos.stale ? 'yes' : 'no') +
       qosItem('Last Updated', fmtValue(qos.lastUpdatedMs || peer.qosLastUpdatedMs)) +
+      qosItem('DL Snapshot Seq', fmtValue(downlinkSnapshot.seq)) +
+      qosItem('DL Health', fmtValue(downlinkQos.health)) +
+      qosItem('DL Degrade', fmtValue(downlinkQos.degradeLevel)) +
+      qosItem('DL Last Updated', fmtValue(peer.downlinkLastUpdatedMs)) +
       qosItem('Send Transport', peer.sendTransport ? 'present' : 'none') +
       qosItem('Recv Transport', peer.recvTransport ? 'present' : 'none') +
       '</div>';

@@ -44,6 +44,10 @@ add_library(mediasoup_lib STATIC
     src/qos/QosAggregator.cpp
     src/qos/QosRoomAggregator.cpp
     src/qos/QosOverride.cpp
+    src/qos/DownlinkQosRegistry.cpp
+    src/qos/DownlinkAllocator.cpp
+    src/qos/SubscriberQosController.cpp
+    src/qos/DownlinkHealthMonitor.cpp
 )
 
 target_include_directories(mediasoup_lib PUBLIC

@@ -31,7 +31,8 @@
 | 角色 | 建议起点 |
 |---|---|
 | 新接手开发 | [DEVELOPMENT.md](./DEVELOPMENT.md) |
-| 做 QoS 改动 | [uplink-qos-final-report.md](./uplink-qos-final-report.md) → [uplink-qos-boundaries.md](./uplink-qos-boundaries.md) → [review_qos.md](./review_qos.md) → [run_qos_tests.sh](../scripts/run_qos_tests.sh) |
+| 做线上排障 | [troubleshooting_cn.md](./troubleshooting_cn.md) → [architecture_cn.md](./architecture_cn.md) → [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) |
+| 做 QoS 改动 | [uplink-qos-design_cn.md](./uplink-qos-design_cn.md) → [downlink-qos-design_cn.md](./downlink-qos-design_cn.md) → [uplink-qos-final-report.md](./uplink-qos-final-report.md) → [uplink-qos-boundaries.md](./uplink-qos-boundaries.md) → [review_qos.md](./review_qos.md) → [run_qos_tests.sh](../scripts/run_qos_tests.sh) |
 | 查 QoS 详细 case 结果 | [uplink-qos-case-analysis.md](./uplink-qos-case-analysis.md) |
 | 做上线 / 运维准备 | [PRODUCTION_CHECKLIST.md](./PRODUCTION_CHECKLIST.md) → [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) |
 | 查历史背景 | [archive/CODE_REVIEW_2026-04-08.md](./archive/CODE_REVIEW_2026-04-08.md) / [archive/DEVELOPMENT_2026-04-08.md](./archive/DEVELOPMENT_2026-04-08.md) |
@@ -40,6 +41,8 @@
 
 | 文档 | 用途 |
 |---|---|
+| [architecture_cn.md](./architecture_cn.md) | 运行时架构详解，覆盖线程/进程模型、关键时序、IPC、多节点与故障恢复。 |
+| [troubleshooting_cn.md](./troubleshooting_cn.md) | 运行时排障手册，覆盖 join/IPC/Redis/QoS/录制/worker crash 的定位路径。 |
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | 项目开发主文档，包含架构、线程模型、构建与测试入口。 |
 | [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) | 监控、告警与值班处理流程。 |
 | [PRODUCTION_CHECKLIST.md](./PRODUCTION_CHECKLIST.md) | 上线前检查项。 |
@@ -50,20 +53,28 @@
 推荐阅读顺序：
 
 1. [uplink-qos-briefing.md](./uplink-qos-briefing.md)
-2. [uplink-qos-final-report.md](./uplink-qos-final-report.md)
-3. [uplink-qos-boundaries.md](./uplink-qos-boundaries.md)
-4. [uplink-qos-blind-spot-scenario.md](./uplink-qos-blind-spot-scenario.md)
-5. [uplink-qos-test-results-summary.md](./uplink-qos-test-results-summary.md)
-6. [uplink-qos-case-results.md](./uplink-qos-case-results.md)
-7. [uplink-qos-priority-roadmap.md](./uplink-qos-priority-roadmap.md)
-8. [uplink-qos-case-analysis.md](./uplink-qos-case-analysis.md)
-9. [uplink-qos-test-execution-checklist.md](./uplink-qos-test-execution-checklist.md)
-10. [review_qos.md](./review_qos.md)
-11. [uplink-qos-loopback-boundary-investigation.md](./uplink-qos-loopback-boundary-investigation.md)
+2. [uplink-qos-design_cn.md](./uplink-qos-design_cn.md)
+3. [downlink-qos-design_cn.md](./downlink-qos-design_cn.md)
+4. [downlink-qos-worker-validation_cn.md](./downlink-qos-worker-validation_cn.md)
+5. [downlink-qos-implementation-plan_cn.md](./downlink-qos-implementation-plan_cn.md)
+6. [uplink-qos-final-report.md](./uplink-qos-final-report.md)
+7. [uplink-qos-boundaries.md](./uplink-qos-boundaries.md)
+8. [uplink-qos-blind-spot-scenario.md](./uplink-qos-blind-spot-scenario.md)
+9. [uplink-qos-test-results-summary.md](./uplink-qos-test-results-summary.md)
+10. [uplink-qos-case-results.md](./uplink-qos-case-results.md)
+11. [uplink-qos-priority-roadmap.md](./uplink-qos-priority-roadmap.md)
+12. [uplink-qos-case-analysis.md](./uplink-qos-case-analysis.md)
+13. [uplink-qos-test-execution-checklist.md](./uplink-qos-test-execution-checklist.md)
+14. [review_qos.md](./review_qos.md)
+15. [uplink-qos-loopback-boundary-investigation.md](./uplink-qos-loopback-boundary-investigation.md)
 
 说明：
 
 - [review_qos.md](./review_qos.md) 不是“当前结论总表”，而是“原始 review 发现 + 后续有效项判定”的混合文档。
+- [uplink-qos-design_cn.md](./uplink-qos-design_cn.md) 用中文说明当前 uplink QoS 的设计、控制链路和边界。
+- [downlink-qos-design_cn.md](./downlink-qos-design_cn.md) 用中文说明建议中的 subscriber/downlink QoS 设计方向。
+- [downlink-qos-worker-validation_cn.md](./downlink-qos-worker-validation_cn.md) 用中文整理正式做 downlink QoS 之前需要先补齐的 worker / API 黑盒验证项。
+- [downlink-qos-implementation-plan_cn.md](./downlink-qos-implementation-plan_cn.md) 用中文给出从当前状态推进到 downlink QoS v1 的分阶段实施计划。
 - 当前签收口径，以 [uplink-qos-final-report.md](./uplink-qos-final-report.md) 和 [uplink-qos-test-results-summary.md](./uplink-qos-test-results-summary.md) 为准。
 - [uplink-qos-boundaries.md](./uplink-qos-boundaries.md) 用来说明“底层 WebRTC 自动能力”和“本仓库 uplink QoS 策略能力”的职责边界。
 - [uplink-qos-blind-spot-scenario.md](./uplink-qos-blind-spot-scenario.md) 用来汇总“高质量网络突入长时盲区再恢复”这一类极端转场场景的理论时序和实测结果。

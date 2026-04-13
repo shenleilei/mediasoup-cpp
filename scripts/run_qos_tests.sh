@@ -57,7 +57,7 @@ Available groups:
   cpp-accuracy      QoS accuracy 测试
   cpp-recording     QoS recording accuracy 测试
   node-harness      Node QoS harness 场景
-  browser-harness   browser_server_signal + browser_loopback
+  browser-harness   browser_server_signal + browser_loopback + stable downlink browser harnesses
   matrix            browser loopback full matrix（run_matrix.mjs）
 
 Notes:
@@ -131,6 +131,9 @@ cleanup_test_processes_fallback() {
     "tests/qos_harness/run.mjs"
     "tests/qos_harness/browser_server_signal.mjs"
     "tests/qos_harness/browser_loopback.mjs"
+    "tests/qos_harness/browser_downlink_controls.mjs"
+    "tests/qos_harness/browser_downlink_e2e.mjs"
+    "tests/qos_harness/browser_downlink_priority.mjs"
     "tests/qos_harness/run_matrix.mjs"
   )
 
@@ -260,6 +263,10 @@ normalize_groups() {
         requested=("${ALL_GROUPS[@]}")
         break
       fi
+      if [[ "$group" == node-harness:* || "$group" == browser-harness:* ]]; then
+        requested+=("$group")
+        continue
+      fi
       case " ${ALL_GROUPS[*]} " in
         *" $group "*) requested+=("$group") ;;
         *) fail "unknown group: $group" ;;
@@ -275,7 +282,7 @@ normalize_groups() {
   if ((SKIP_BROWSER)); then
     local filtered=()
     for group in "${requested[@]}"; do
-      [[ "$group" == "browser-harness" || "$group" == "matrix" ]] && continue
+      [[ "$group" == "browser-harness" || "$group" == browser-harness:* || "$group" == "matrix" ]] && continue
       filtered+=("$group")
     done
     requested=("${filtered[@]}")
@@ -408,6 +415,8 @@ run_node_harness() {
 
 run_browser_harness() {
   prepare_test_port 14012 "QoS browser harness SFU port 14012"
+  prepare_test_port 14013 "Downlink control harness SFU port 14013"
+  prepare_test_port 14014 "Downlink E2E harness SFU port 14014"
   local failed=0
   if ! run_cmd \
     "browser-harness:server-signal" \
@@ -420,6 +429,20 @@ run_browser_harness() {
     "browser-harness:loopback" \
     --cwd "$ROOT_DIR" \
     node "$ROOT_DIR/tests/qos_harness/browser_loopback.mjs"; then
+    failed=1
+  fi
+
+  if ! run_cmd \
+    "browser-harness:downlink-controls" \
+    --cwd "$ROOT_DIR" \
+    node "$ROOT_DIR/tests/qos_harness/browser_downlink_controls.mjs"; then
+    failed=1
+  fi
+
+  if ! run_cmd \
+    "browser-harness:downlink-e2e" \
+    --cwd "$ROOT_DIR" \
+    node "$ROOT_DIR/tests/qos_harness/browser_downlink_e2e.mjs"; then
     failed=1
   fi
   return "$failed"
@@ -482,6 +505,27 @@ run_target() {
         "$target" \
         --cwd "$ROOT_DIR" \
         node "$ROOT_DIR/tests/qos_harness/browser_loopback.mjs"
+      ;;
+    browser-harness:downlink-controls)
+      prepare_test_port 14013 "Downlink control harness SFU port 14013"
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        node "$ROOT_DIR/tests/qos_harness/browser_downlink_controls.mjs"
+      ;;
+    browser-harness:downlink-e2e)
+      prepare_test_port 14014 "Downlink E2E harness SFU port 14014"
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        node "$ROOT_DIR/tests/qos_harness/browser_downlink_e2e.mjs"
+      ;;
+    browser-harness:downlink-priority)
+      prepare_test_port 14015 "Downlink priority harness SFU port 14015"
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        node "$ROOT_DIR/tests/qos_harness/browser_downlink_priority.mjs"
       ;;
     *)
       fail "unknown target: $target"

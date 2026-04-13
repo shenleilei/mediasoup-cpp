@@ -31,6 +31,8 @@ void Consumer::setPreferredLayers(uint8_t spatialLayer, uint8_t temporalLayer) {
 			auto reqOff = FBS::Consumer::CreateSetPreferredLayersRequest(builder, layersOff);
 			return reqOff.Union();
 		}, id_);
+	preferredSpatialLayer_ = spatialLayer;
+	preferredTemporalLayer_ = temporalLayer;
 }
 
 void Consumer::setPriority(uint8_t priority) {
@@ -41,6 +43,7 @@ void Consumer::setPriority(uint8_t priority) {
 			auto reqOff = FBS::Consumer::CreateSetPriorityRequest(builder, priority);
 			return reqOff.Union();
 		}, id_);
+	priority_ = priority;
 }
 
 void Consumer::requestKeyFrame() {

@@ -52,6 +52,22 @@ std::string SummarizePeerQosAggregate(const qos::PeerQosAggregate& aggregate)
 	return summary.str();
 }
 
+const char* DownlinkHealthToString(qos::DownlinkHealth health)
+{
+	switch (health) {
+	case qos::DownlinkHealth::kStable:
+		return "stable";
+	case qos::DownlinkHealth::kEarlyWarning:
+		return "early_warning";
+	case qos::DownlinkHealth::kCongested:
+		return "congested";
+	case qos::DownlinkHealth::kRecovering:
+		return "recovering";
+	default:
+		return "unknown";
+	}
+}
+
 } // namespace
 
 RoomService::RoomService(RoomManager& roomManager, RoomRegistry* registry,
@@ -134,6 +150,8 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 		qosRegistry_.ErasePeer(roomId, peerId);
 		autoQosOverrideRecords_.erase(key);
 		lastConnectionQualitySignatures_.erase(key);
+		downlinkQosRegistry_.ErasePeer(roomId, peerId);
+		subscriberControllers_.erase(key);
 	}
 
 	if (registry_) {
@@ -186,6 +204,8 @@ RoomService::Result RoomService::leave(const std::string& roomId, const std::str
 	qosRegistry_.ErasePeer(roomId, peerId);
 	autoQosOverrideRecords_.erase(roomId + "/" + peerId);
 	lastConnectionQualitySignatures_.erase(roomId + "/" + peerId);
+	downlinkQosRegistry_.ErasePeer(roomId, peerId);
+	subscriberControllers_.erase(roomId + "/" + peerId);
 
 	// Remove peer's producers from router before closing peer
 	auto peer = room->getPeer(peerId);
@@ -603,6 +623,11 @@ void RoomService::cleanupRoomResources(const std::string& roomId) {
 		}
 	}
 	qosRegistry_.EraseRoom(roomId);
+	downlinkQosRegistry_.EraseRoom(roomId);
+	for (auto it = subscriberControllers_.begin(); it != subscriberControllers_.end(); ) {
+		if (it->first.compare(0, prefix.size(), prefix) == 0) it = subscriberControllers_.erase(it);
+		else ++it;
+	}
 	for (auto it = autoQosOverrideRecords_.begin(); it != autoQosOverrideRecords_.end(); ) {
 		if (it->first.compare(0, prefix.size(), prefix) == 0) it = autoQosOverrideRecords_.erase(it);
 		else ++it;
@@ -701,6 +726,38 @@ void RoomService::setClientStats(const std::string& roomId, const std::string& p
 	maybeSendAutomaticQosOverride(roomId, peerId, aggregate);
 	maybeBroadcastRoomQosState(roomId);
 	cleanupExpiredQosOverrides();
+}
+
+void RoomService::setDownlinkClientStats(const std::string& roomId, const std::string& peerId,
+	const json& stats)
+{
+	auto parsed = qos::QosValidator::ParseDownlinkSnapshot(stats);
+	if (!parsed.ok) {
+		MS_WARN(logger_, "[{} {}] invalid downlink stats ignored: {}", roomId, peerId, parsed.error);
+		return;
+	}
+	if (parsed.value.subscriberPeerId != peerId) {
+		MS_WARN(logger_, "[{} {}] downlink subscriberPeerId mismatch: {}", roomId, peerId, parsed.value.subscriberPeerId);
+		return;
+	}
+	std::string rejectReason;
+	if (!downlinkQosRegistry_.Upsert(roomId, peerId, parsed.value, qos::NowMs(), &rejectReason)) {
+		MS_DEBUG(logger_, "[{} {}] dropped downlink stats [{}]", roomId, peerId, rejectReason);
+		return;
+	}
+
+	auto room = roomManager_.getRoom(roomId);
+	if (!room) return;
+	auto peer = room->getPeer(peerId);
+	if (!peer) return;
+
+	std::string ctrlKey = roomId + "/" + peerId;
+	auto& ctrl = subscriberControllers_[ctrlKey];
+	ctrl.healthMonitor().update(parsed.value);
+	auto pausedFlags = ctrl.getPausedFlags(parsed.value.subscriptions);
+	auto actions = qos::DownlinkAllocator::Compute(
+		parsed.value.subscriptions, pausedFlags, ctrl.healthMonitor().degradeLevel());
+	ctrl.applyActions(actions, peer->consumers);
 }
 
 json RoomService::collectPeerStats(const std::string& roomId, const std::string& peerId) {
@@ -807,6 +864,23 @@ json RoomService::collectPeerStats(const std::string& roomId, const std::string&
 		result["qos"] = qos::ToJson(aggregate);
 		result["qosStale"] = aggregate.stale;
 		result["qosLastUpdatedMs"] = aggregate.lastUpdatedMs;
+	}
+
+	auto downlinkEntry = downlinkQosRegistry_.Get(roomId, peerId);
+	if (downlinkEntry) {
+		const auto nowMs = qos::NowMs();
+		result["downlinkClientStats"] = qos::ToJson(downlinkEntry->snapshot);
+		result["downlinkLastUpdatedMs"] = downlinkEntry->receivedAtMs;
+		result["downlinkAgeMs"] = nowMs - downlinkEntry->receivedAtMs;
+
+		const auto ctrlIt = subscriberControllers_.find(roomId + "/" + peerId);
+		if (ctrlIt != subscriberControllers_.end()) {
+			const auto& monitor = ctrlIt->second.healthMonitor();
+			result["downlinkQos"] = {
+				{"health", DownlinkHealthToString(monitor.state())},
+				{"degradeLevel", monitor.degradeLevel()}
+			};
+		}
 	}
 
 	return result;
@@ -1177,6 +1251,86 @@ void RoomService::broadcastStatsForRoom(const std::string& roomId) {
 		if (it != recorders_.end() && it->second)
 			it->second->appendQosSnapshot(peerStats);
 	}
+}
+
+// ── consumer control ──
+
+RoomService::Result RoomService::pauseConsumer(const std::string& roomId,
+	const std::string& peerId, const std::string& consumerId)
+{
+	auto room = roomManager_.getRoom(roomId);
+	if (!room) return {false, {}, "", "room not found"};
+	auto peer = room->getPeer(peerId);
+	if (!peer) return {false, {}, "", "peer not found"};
+	auto it = peer->consumers.find(consumerId);
+	if (it == peer->consumers.end()) return {false, {}, "", "consumer not found"};
+	it->second->pause();
+	return {true, it->second->toJson()};
+}
+
+RoomService::Result RoomService::resumeConsumer(const std::string& roomId,
+	const std::string& peerId, const std::string& consumerId)
+{
+	auto room = roomManager_.getRoom(roomId);
+	if (!room) return {false, {}, "", "room not found"};
+	auto peer = room->getPeer(peerId);
+	if (!peer) return {false, {}, "", "peer not found"};
+	auto it = peer->consumers.find(consumerId);
+	if (it == peer->consumers.end()) return {false, {}, "", "consumer not found"};
+	it->second->resume();
+	return {true, it->second->toJson()};
+}
+
+RoomService::Result RoomService::getConsumerState(const std::string& roomId,
+	const std::string& peerId, const std::string& consumerId)
+{
+	auto room = roomManager_.getRoom(roomId);
+	if (!room) return {false, {}, "", "room not found"};
+	auto peer = room->getPeer(peerId);
+	if (!peer) return {false, {}, "", "peer not found"};
+	auto it = peer->consumers.find(consumerId);
+	if (it == peer->consumers.end()) return {false, {}, "", "consumer not found"};
+	return {true, it->second->toJson()};
+}
+
+RoomService::Result RoomService::setConsumerPreferredLayers(const std::string& roomId,
+	const std::string& peerId, const std::string& consumerId,
+	uint8_t spatialLayer, uint8_t temporalLayer)
+{
+	auto room = roomManager_.getRoom(roomId);
+	if (!room) return {false, {}, "", "room not found"};
+	auto peer = room->getPeer(peerId);
+	if (!peer) return {false, {}, "", "peer not found"};
+	auto it = peer->consumers.find(consumerId);
+	if (it == peer->consumers.end()) return {false, {}, "", "consumer not found"};
+	it->second->setPreferredLayers(spatialLayer, temporalLayer);
+	return {true, it->second->toJson()};
+}
+
+RoomService::Result RoomService::setConsumerPriority(const std::string& roomId,
+	const std::string& peerId, const std::string& consumerId, uint8_t priority)
+{
+	auto room = roomManager_.getRoom(roomId);
+	if (!room) return {false, {}, "", "room not found"};
+	auto peer = room->getPeer(peerId);
+	if (!peer) return {false, {}, "", "peer not found"};
+	auto it = peer->consumers.find(consumerId);
+	if (it == peer->consumers.end()) return {false, {}, "", "consumer not found"};
+	it->second->setPriority(priority);
+	return {true, it->second->toJson()};
+}
+
+RoomService::Result RoomService::requestConsumerKeyFrame(const std::string& roomId,
+	const std::string& peerId, const std::string& consumerId)
+{
+	auto room = roomManager_.getRoom(roomId);
+	if (!room) return {false, {}, "", "room not found"};
+	auto peer = room->getPeer(peerId);
+	if (!peer) return {false, {}, "", "peer not found"};
+	auto it = peer->consumers.find(consumerId);
+	if (it == peer->consumers.end()) return {false, {}, "", "consumer not found"};
+	it->second->requestKeyFrame();
+	return {true, it->second->toJson()};
 }
 
 } // namespace mediasoup
