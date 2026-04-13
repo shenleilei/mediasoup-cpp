@@ -123,12 +123,19 @@ There is also a dedicated Redis subscriber thread that listens for node and room
 
 ## QoS Status
 
-This repo now includes a full uplink QoS path across:
+This repo now includes:
 
-- client-side publisher QoS state machine and ladder control
-- server-side `clientStats` ingestion, validation, aggregation, and automatic override generation
-- browser/node harnesses for publish / stale-seq / policy-update / automatic override / manual clear
-- browser loopback weak-network matrix execution and case-by-case reporting
+- a full uplink QoS path across:
+  - client-side publisher QoS state machine and ladder control
+  - server-side `clientStats` ingestion, validation, aggregation, and automatic override generation
+  - browser/node harnesses for publish / stale-seq / policy-update / automatic override / manual clear
+  - browser loopback weak-network matrix execution and case-by-case reporting
+- a downlink QoS v1 path across:
+  - subscriber-side `downlinkClientStats` ingestion, validation, storage, and controller execution
+  - server-side hidden/pinned/size-based allocation, health-driven degrade/recovery, and priority handling
+  - browser harnesses for consumer control, downlink auto pause/resume, and priority competition under constrained downlink
+
+Current downlink scope is `v1` subscriber receive control. `dynacast` and room-level global bitrate budgeting remain follow-on work.
 
 ### Latest host-run result
 

@@ -31,7 +31,9 @@
     pendingConsumers: [],
     localStream: null,
     publishedProducers: new Map(),
+    remoteVideoConsumers: new Map(),
     qosBundle: null,
+    downlinkBundle: null,
     latestQosPolicy: null,
     latestQosOverride: null,
     latestConnectionQuality: null,
@@ -133,6 +135,15 @@
     state.latestRoomState = null;
     state.latestStatsReport = null;
     state.localDebugStats = null;
+  }
+
+  function supportsDownlinkQos() {
+    return (
+      qosLib &&
+      typeof qosLib.DownlinkHints === 'function' &&
+      typeof qosLib.DownlinkSampler === 'function' &&
+      typeof qosLib.DownlinkReporter === 'function'
+    );
   }
 
   function buildDemoQosPolicy(basePolicy) {
@@ -292,6 +303,7 @@
         state.ws = ws;
         ws.onmessage = handleMessage;
         ws.onclose = () => {
+          stopDownlinkReporting();
           setStatus('Disconnected', 'err');
           log('WebSocket closed');
         };
@@ -417,6 +429,7 @@
         const card = document.createElement('div');
         card.className = 'video-card';
         card.dataset.remoteProducerId = data.producerId;
+        card.dataset.consumerId = consumer.id;
 
         const frame = document.createElement('div');
         frame.className = 'video-frame';
@@ -434,6 +447,14 @@
         card.appendChild(frame);
         card.appendChild(meta);
         els.videos.appendChild(card);
+
+        registerRemoteVideoConsumer({
+          consumer,
+          producerId: data.producerId,
+          peerId: data.peerId || data.producerId,
+          element,
+          card,
+        });
       }
 
       log(`Subscribed ${data.kind} from ${data.peerId || data.producerId}`);
@@ -504,6 +525,129 @@
     if (state.debugStatsTimer) {
       clearInterval(state.debugStatsTimer);
       state.debugStatsTimer = null;
+    }
+  }
+
+  function removeRemoteVideoConsumer(consumerId) {
+    state.remoteVideoConsumers.delete(consumerId);
+    if (state.downlinkBundle) {
+      state.downlinkBundle.hints.remove(consumerId);
+      if (state.downlinkBundle.sampler && typeof state.downlinkBundle.sampler.removeHints === 'function') {
+        state.downlinkBundle.sampler.removeHints(consumerId);
+      }
+    }
+  }
+
+  function computeConsumerHint(entry) {
+    const target = entry.card || entry.element;
+    const rect = target && typeof target.getBoundingClientRect === 'function'
+      ? target.getBoundingClientRect()
+      : { width: 0, height: 0 };
+    const width = Math.round(rect.width || entry.element.clientWidth || entry.element.videoWidth || 0);
+    const height = Math.round(rect.height || entry.element.clientHeight || entry.element.videoHeight || 0);
+    const styles = target ? getComputedStyle(target) : null;
+    const visible = Boolean(
+      entry.element &&
+      entry.element.isConnected &&
+      target &&
+      target.isConnected &&
+      width > 8 &&
+      height > 8 &&
+      styles &&
+      styles.display !== 'none' &&
+      styles.visibility !== 'hidden'
+    );
+
+    return {
+      producerId: entry.producerId,
+      visible,
+      pinned: false,
+      activeSpeaker: false,
+      isScreenShare: false,
+      targetWidth: width,
+      targetHeight: height,
+    };
+  }
+
+  function refreshDownlinkHints() {
+    if (!state.downlinkBundle) {
+      return;
+    }
+
+    for (const [consumerId, entry] of state.remoteVideoConsumers) {
+      if (!entry.element || !entry.element.isConnected || entry.consumer.track.readyState === 'ended') {
+        removeRemoteVideoConsumer(consumerId);
+        continue;
+      }
+
+      state.downlinkBundle.hints.set(consumerId, computeConsumerHint(entry));
+    }
+  }
+
+  function stopDownlinkReporting() {
+    if (!state.downlinkBundle) {
+      return;
+    }
+
+    if (state.downlinkBundle.hintTimer) {
+      clearInterval(state.downlinkBundle.hintTimer);
+    }
+    try {
+      state.downlinkBundle.reporter.stop();
+    } catch {
+      // Ignore stop errors.
+    }
+
+    state.downlinkBundle = null;
+  }
+
+  function ensureDownlinkReporting() {
+    if (state.downlinkBundle || !state.recvTransport || !state.peerId) {
+      return;
+    }
+
+    if (!supportsDownlinkQos()) {
+      log('Downlink QoS reporter is not available in browser bundle');
+      return;
+    }
+
+    const hints = new qosLib.DownlinkHints();
+    const sampler = new qosLib.DownlinkSampler(state.recvTransport);
+    const reporter = new qosLib.DownlinkReporter({
+      sampler,
+      hints,
+      send: async (method, data) => {
+        await wsRequest(method, data);
+      },
+      peerId: state.peerId,
+      intervalMs: 2000,
+    });
+
+    state.downlinkBundle = {
+      hints,
+      sampler,
+      reporter,
+      hintTimer: setInterval(refreshDownlinkHints, 500),
+    };
+
+    refreshDownlinkHints();
+    reporter.start();
+    void reporter.reportNow();
+    log(`Downlink QoS reporter started for subscriber ${state.peerId}`);
+  }
+
+  function registerRemoteVideoConsumer(entry) {
+    state.remoteVideoConsumers.set(entry.consumer.id, entry);
+    try {
+      entry.consumer.on('transportclose', () => removeRemoteVideoConsumer(entry.consumer.id));
+      entry.consumer.on('trackended', () => removeRemoteVideoConsumer(entry.consumer.id));
+    } catch {
+      // Ignore consumer event binding failures.
+    }
+
+    if (state.downlinkBundle) {
+      state.downlinkBundle.hints.set(entry.consumer.id, computeConsumerHint(entry));
+      void state.downlinkBundle.reporter.reportNow();
     }
   }
 
@@ -687,6 +831,8 @@
   async function joinRoom() {
     const roomId = els.roomInput.value.trim() || 'test-room';
     const peerId = `peer-${Math.random().toString(36).slice(2, 8)}`;
+    stopDownlinkReporting();
+    state.remoteVideoConsumers.clear();
     state.roomId = roomId;
     state.peerId = peerId;
     updateMeta();
@@ -744,6 +890,8 @@
           errback(error);
         }
       });
+
+      ensureDownlinkReporting();
 
       const precreatedConsumers = recvData.consumers || [];
       for (const consumerData of precreatedConsumers) {
@@ -853,7 +1001,7 @@
     stopLegacyClientStatsReporting();
     els.stopBtn.disabled = true;
     els.publishBtn.disabled = !state.device;
-    log('QoS control stopped');
+    log('Local producer QoS control stopped');
     renderQosPanel();
   }
 
@@ -927,6 +1075,8 @@
       '<div class="qos-section">' +
       '<h3>Local Debug Stats</h3>' +
       '<div class="qos-grid">' +
+      qosItem('Downlink Reporter', state.downlinkBundle ? 'running' : 'off') +
+      qosItem('Remote Video Hints', String(state.remoteVideoConsumers.size)) +
       qosItem('Avail Outgoing', fmtBitrate(send.availableOutgoingBitrate)) +
       qosItem('Send RTT', fmtMs(send.currentRoundTripTime, 1000)) +
       qosItem('Avail Incoming', fmtBitrate(recv.availableIncomingBitrate)) +
