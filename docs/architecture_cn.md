@@ -27,45 +27,59 @@
 ## 2. 运行时拓扑
 
 ```mermaid
-flowchart LR
-    ClientA[Browser Client A]
-    ClientB[Browser Client B]
-
-    subgraph SFU[mediasoup-cpp 主进程]
-        Main[uWS 主线程\nSignalingServer]
-        WT0[WorkerThread 0]
-        WT1[WorkerThread 1]
-        Reg[Registry worker]
-        Sub[Redis subscriber]
-        Rec[Recorder thread(s)]
-    end
-
-    subgraph MW[mediasoup-worker 子进程]
-        MW0[worker 0]
-        MW1[worker 1]
-    end
-
+flowchart TD
+    Client[Browser Clients]
+    Main[uWS Main Thread\nSignalingServer]
+    Workers[WorkerThread Pool]
+    Media[mediasoup-worker Processes]
+    Reg[Registry Worker]
+    Sub[Redis Subscriber]
     Redis[(Redis)]
+    Rec[Recorder Threads]
 
-    ClientA <-->|WebSocket / HTTP| Main
-    ClientB <-->|WebSocket / HTTP| Main
-
-    Main -->|wt->post| WT0
-    Main -->|wt->post| WT1
-    WT0 -->|loop->defer| Main
-    WT1 -->|loop->defer| Main
-
-    WT0 <-->|FlatBuffers over pipe| MW0
-    WT1 <-->|FlatBuffers over pipe| MW1
-
+    Client -->|WebSocket / HTTP| Main
+    Main -->|wt->post| Workers
+    Workers -->|loop->defer| Main
+    Workers -->|FlatBuffers over Unix pipe| Media
     Main -->|registry task queue| Reg
-    WT0 -->|registry task queue| Reg
-    WT1 -->|registry task queue| Reg
-    Reg --> Redis
-    Sub <-->|SUBSCRIBE| Redis
+    Workers -->|registry task queue| Reg
+    Reg -->|SET / GET / EXPIRE / PUBLISH| Redis
+    Redis -->|pub-sub messages| Sub
+    Workers -->|PlainTransport / local UDP| Rec
+```
 
-    WT0 -->|PlainTransport -> UDP 127.0.0.1| Rec
-    WT1 -->|PlainTransport -> UDP 127.0.0.1| Rec
+如果当前渲染器仍然不支持 Mermaid，可以直接按下面的纯文本拓扑理解：
+
+```text
+Browser Clients
+    |
+    | WebSocket / HTTP
+    v
+uWS Main Thread (SignalingServer)
+    | \
+    |  \ registry task queue
+    |   \
+    |    v
+    |  Registry Worker ---------> Redis
+    |                                |
+    |                                | pub-sub
+    |                                v
+    |                          Redis Subscriber
+    |
+    | wt->post
+    v
+WorkerThread Pool
+    | \
+    |  \ FlatBuffers over Unix pipe
+    |   \
+    |    v
+    |  mediasoup-worker Processes
+    |
+    | PlainTransport / local UDP
+    v
+Recorder Threads
+
+WorkerThread Pool -- loop->defer --> uWS Main Thread
 ```
 
 ## 3. 线程与进程模型
