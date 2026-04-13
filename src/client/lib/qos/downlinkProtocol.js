@@ -21,6 +21,11 @@ function serializeDownlinkSnapshot({ seq, subscriberPeerId, transport, subscript
     const capped = subscriptions.length > exports.DOWNLINK_MAX_SUBSCRIPTIONS
         ? subscriptions.slice(0, exports.DOWNLINK_MAX_SUBSCRIPTIONS)
         : subscriptions;
+    if (capped !== subscriptions) {
+        console.warn(
+            `[downlinkProtocol] Truncated ${subscriptions.length} subscriptions to ${exports.DOWNLINK_MAX_SUBSCRIPTIONS}`
+        );
+    }
     return {
         schema: exports.DOWNLINK_SCHEMA_V1,
         seq,
