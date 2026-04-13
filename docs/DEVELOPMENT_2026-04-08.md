@@ -6,7 +6,7 @@ Two major areas of work: code review fixes and geo-aware routing.
 
 ## 1. Code Review Fixes
 
-Based on `docs/CODE_REVIEW_2026-04-08.md`, 5 original findings + issues discovered during review iterations.
+Based on [CODE_REVIEW_2026-04-08.md](./CODE_REVIEW_2026-04-08.md), 5 original findings + issues discovered during review iterations.
 
 ### Original Findings Fixed
 
