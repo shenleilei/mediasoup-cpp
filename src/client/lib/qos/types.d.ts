@@ -187,6 +187,8 @@ export type QosStateMachineContext = {
     lastCongestedAtMs?: number;
     lastRecoveryAtMs?: number;
     consecutiveHealthySamples: number;
+    consecutiveRecoverySamples: number;
+    consecutiveFastRecoverySamples?: number;
     consecutiveWarningSamples: number;
     consecutiveCongestedSamples: number;
 };
@@ -239,6 +241,8 @@ export type QosProbeContext = {
     targetAudioOnlyMode: boolean;
     healthySamples: number;
     badSamples: number;
+    requiredHealthySamples?: number;
+    requiredBadSamples?: number;
 };
 export type QosProbeResult = 'successful' | 'failed' | 'inconclusive';
 export type PeerQosTrackState = {

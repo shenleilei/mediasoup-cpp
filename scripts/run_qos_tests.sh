@@ -6,10 +6,11 @@ CLIENT_DIR="$ROOT_DIR/src/client"
 BUILD_DIR="$ROOT_DIR/build"
 JEST_BIN="$CLIENT_DIR/node_modules/.bin/jest"
 CASE_REPORT_SCRIPT="$ROOT_DIR/tests/qos_harness/render_case_report.mjs"
-CASE_REPORT_JSON="$ROOT_DIR/docs/generated/uplink-qos-matrix-report.json"
 ARTIFACTS_DIR="$ROOT_DIR/tests/qos_harness/artifacts"
 FAILURES_FILE="$ARTIFACTS_DIR/last-failures.txt"
 GENERATE_CASE_REPORT=0
+MATRIX_INCLUDE_EXTENDED=0
+MATRIX_CASES=""
 
 ALL_GROUPS=(
   client-js
@@ -42,6 +43,9 @@ Usage:
 Options:
   --skip-browser    跳过 browser harness 和 matrix
   --skip-matrix     跳过 matrix
+  --matrix-include-extended
+                    matrix 额外包含剩余 extended 场景（当前主要是高带宽 baseline）
+  --matrix-cases=... 只跑指定 matrix case，例如 T9,T10,T11
   --resume          只重跑上次失败的精确任务
   --list            列出可用分组
   -h, --help        显示帮助
@@ -60,6 +64,8 @@ Notes:
   - 默认会顺序执行所有分组。
   - matrix 运行时间最长，并且依赖浏览器 / netem 环境。
   - 可用环境变量 QOS_MATRIX_SPEED 调整 matrix 用时。
+  - 默认 matrix 已包含 `T9/T10/T11`；`--matrix-include-extended` 会额外加入剩余 extended 场景。
+  - `--matrix-cases=...` 会把 matrix 切为 targeted 运行，并产出 targeted 报告。
   - 失败任务会记录到 tests/qos_harness/artifacts/last-failures.txt
   - full matrix 当前主报告写入 docs/generated/ 和 docs/；每次新结果都会按生成时间归档到 docs/archive/uplink-qos-runs/
 EOF
@@ -421,10 +427,17 @@ run_browser_harness() {
 
 run_matrix() {
   prepare_test_port 14011 "QoS matrix loopback port 14011"
+  local matrix_args=()
+  if ((MATRIX_INCLUDE_EXTENDED)); then
+    matrix_args+=("--include-extended")
+  fi
+  if [[ -n "$MATRIX_CASES" ]]; then
+    matrix_args+=("--cases=$MATRIX_CASES")
+  fi
   run_cmd \
     "matrix" \
     --cwd "$ROOT_DIR" \
-    node "$ROOT_DIR/tests/qos_harness/run_matrix.mjs"
+    node "$ROOT_DIR/tests/qos_harness/run_matrix.mjs" "${matrix_args[@]}"
 }
 
 run_group() {
@@ -483,6 +496,13 @@ while (($# > 0)); do
       ;;
     --skip-matrix)
       SKIP_MATRIX=1
+      ;;
+    --matrix-include-extended)
+      MATRIX_INCLUDE_EXTENDED=1
+      ;;
+    --matrix-cases=*)
+      MATRIX_CASES="${1#--matrix-cases=}"
+      [[ -n "$MATRIX_CASES" ]] || fail "matrix cases cannot be empty"
       ;;
     --resume)
       RESUME_MODE=1
@@ -543,16 +563,29 @@ done
   fi
 } > "$FAILURES_FILE"
 
-if ((GENERATE_CASE_REPORT)) && [[ -f "$CASE_REPORT_JSON" && -f "$CASE_REPORT_SCRIPT" ]]; then
+if ((GENERATE_CASE_REPORT)) && [[ -f "$CASE_REPORT_SCRIPT" ]]; then
+  if [[ -n "$MATRIX_CASES" ]]; then
+    CASE_REPORT_JSON="$ROOT_DIR/docs/generated/uplink-qos-matrix-report.targeted.json"
+    CASE_REPORT_OUTPUT="$ROOT_DIR/docs/generated/uplink-qos-case-results.targeted.md"
+  else
+    CASE_REPORT_JSON="$ROOT_DIR/docs/generated/uplink-qos-matrix-report.json"
+    CASE_REPORT_OUTPUT="$ROOT_DIR/docs/uplink-qos-case-results.md"
+  fi
+
+  if [[ ! -f "$CASE_REPORT_JSON" ]]; then
+    echo
+    echo "<== [case-report] WARN (matrix json not found: $CASE_REPORT_JSON)" >&2
+  else
   echo
   echo "==> [case-report]"
   if node \
     "$CASE_REPORT_SCRIPT" \
     "--input=$CASE_REPORT_JSON" \
-    "--output=$ROOT_DIR/docs/uplink-qos-case-results.md"; then
+    "--output=$CASE_REPORT_OUTPUT"; then
     echo "<== [case-report] PASS"
   else
     echo "<== [case-report] WARN (generation failed)" >&2
+  fi
   fi
 fi
 

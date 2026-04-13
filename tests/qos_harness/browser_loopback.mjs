@@ -16,6 +16,7 @@ const repoRoot = path.resolve(__dirname, '..', '..');
 const chromiumPath = '/usr/lib64/chromium-browser/headless_shell';
 const tcPath = '/usr/sbin/tc';
 const RECOVERY_SETTLE_MS = 2000;
+const PUPPETEER_PROTOCOL_TIMEOUT_MS = 10 * 60 * 1000;
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -202,6 +203,7 @@ async function launchBrowser() {
   return puppeteer.launch({
     executablePath: chromiumPath,
     headless: true,
+    protocolTimeout: PUPPETEER_PROTOCOL_TIMEOUT_MS,
     args: [
       '--no-sandbox',
       '--autoplay-policy=no-user-gesture-required',

@@ -1,0 +1,28 @@
+{
+  "generatedAt": "2026-04-12T23:29:23.958Z",
+  "durationScale": 1,
+  "includeExtended": false,
+  "selectedCaseIds": [
+    "T9"
+  ],
+  "includedCaseIds": [
+    "T9"
+  ],
+  "summary": {
+    "total": 1,
+    "executed": 0,
+    "passed": 0,
+    "failed": 0,
+    "errors": 1,
+    "byGroup": {}
+  },
+  "cases": [
+    {
+      "caseId": "T9",
+      "group": "transition",
+      "priority": "P0",
+      "error": "peer connection did not connect, state=connecting",
+      "stack": "Error: peer connection did not connect, state=connecting\n    at #evaluate (/root/mediasoup-cpp/tests/qos_harness/node_modules/puppeteer-core/lib/cjs/puppeteer/cdp/ExecutionContext.js:391:56)\n    at async ExecutionContext.evaluate (/root/mediasoup-cpp/tests/qos_harness/node_modules/puppeteer-core/lib/cjs/puppeteer/cdp/ExecutionContext.js:277:16)\n    at async IsolatedWorld.evaluate (/root/mediasoup-cpp/tests/qos_harness/node_modules/puppeteer-core/lib/cjs/puppeteer/cdp/IsolatedWorld.js:100:16)\n    at async CdpFrame.evaluate (/root/mediasoup-cpp/tests/qos_harness/node_modules/puppeteer-core/lib/cjs/puppeteer/api/Frame.js:362:20)\n    at async CdpPage.evaluate (/root/mediasoup-cpp/tests/qos_harness/node_modules/puppeteer-core/lib/cjs/puppeteer/api/Page.js:830:20)\n    at async createLoopbackHarness (file:///root/mediasoup-cpp/tests/qos_harness/loopback_runner.mjs:147:3)\n    at async runCase (file:///root/mediasoup-cpp/tests/qos_harness/run_matrix.mjs:91:15)\n    at async runMatrix (file:///root/mediasoup-cpp/tests/qos_harness/run_matrix.mjs:244:18)\n    at <anonymous> (:2789:15)"
+    }
+  ]
+}

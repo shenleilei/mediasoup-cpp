@@ -9,6 +9,7 @@ import {
 import {
   deriveCaseEvaluation,
   extractTiming,
+  getCaseExpectation,
   getPhaseNetwork,
   getImpairedStateForEvaluation,
   summarizePhaseState,
@@ -19,16 +20,19 @@ import {
   getReportSetPaths,
   getRunTypeForSelectedCases,
 } from './report_artifacts.mjs';
+import {
+  filterScenarioCatalog,
+  loadScenarioCatalog,
+} from './scenario_catalog.mjs';
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 const repoRoot = path.resolve(__dirname, '..', '..');
-const scenariosPath = path.join(__dirname, 'scenarios', 'sweep_cases.json');
-
 const args = process.argv.slice(2);
 const caseArg = args.find(arg => arg.startsWith('--cases='));
 const selectedCases = caseArg
   ? new Set(caseArg.replace('--cases=', '').split(',').map(id => id.trim()).filter(Boolean))
   : null;
+const includeExtended = args.includes('--include-extended');
 const runType = getRunTypeForSelectedCases(selectedCases);
 const reportPaths = getReportSetPaths(repoRoot, runType);
 const outputPath = reportPaths.matrixJsonPath;
@@ -47,6 +51,13 @@ function toNetemConfig(network = {}) {
   if (typeof network.loss === 'number') config.loss = network.loss;
   if (typeof network.jitter === 'number') config.jitter = network.jitter;
   return config;
+}
+
+function fmtState(state) {
+  if (!state) {
+    return '-';
+  }
+  return `${state.state}/L${state.level}`;
 }
 
 async function runPhase(harness, config, durationMs) {
@@ -94,7 +105,7 @@ async function runCase(caseDef) {
     );
 
     let recovery;
-    if (caseDef.expect?.recovery === false) {
+    if (getCaseExpectation(caseDef, 'loopback')?.recovery === false) {
       recovery = {
         startMs: await harness.nowMs(),
         durationMs: 0,
@@ -144,7 +155,8 @@ async function runCase(caseDef) {
       caseDef,
       baselineSummary.current,
       impairedStateForEvaluation,
-      recoverySummary.best
+      recoverySummary.best,
+      'loopback'
     );
 
     result.baseline = baseline;
@@ -158,7 +170,7 @@ async function runCase(caseDef) {
     result.timing = {
       impairment: extractTiming(fullTrace, impairment.startMs, recovery.startMs),
       recovery:
-        caseDef.expect?.recovery === false
+        getCaseExpectation(caseDef, 'loopback')?.recovery === false
           ? {}
           : extractTiming(fullTrace, recovery.startMs),
     };
@@ -168,7 +180,7 @@ async function runCase(caseDef) {
     result.verdict = {
       passed: evaluation.passed,
       reason: evaluation.reason,
-      expectation: caseDef.expect ?? {},
+      expectation: getCaseExpectation(caseDef, 'loopback'),
     };
     result.endTime = new Date().toISOString();
     return result;
@@ -216,10 +228,11 @@ async function runMatrix() {
     sourceScript: 'tests/qos_harness/run_matrix.mjs',
   });
 
-  const rawCases = JSON.parse(fs.readFileSync(scenariosPath, 'utf8'));
-  const cases = selectedCases
-    ? rawCases.filter(caseDef => selectedCases.has(caseDef.caseId))
-    : rawCases;
+  const rawCases = loadScenarioCatalog();
+  const cases = filterScenarioCatalog(rawCases, {
+    selectedCaseIds: selectedCases,
+    includeExtended,
+  });
   const results = [];
 
   for (const caseDef of cases) {
@@ -246,6 +259,16 @@ async function runMatrix() {
       console.error(
         `[${caseDef.caseId}] ${status} impaired=${result.impairment.state.state}/L${result.impairment.state.level} recovered=${result.recovery.state.state}/L${result.recovery.state.level}`
       );
+      if (!result.verdict.passed) {
+        console.error(
+          `[${caseDef.caseId}] detail baseline(current=${fmtState(result.phaseSummary?.baseline?.current)}) ` +
+          `impairment(peak=${fmtState(result.phaseSummary?.impairment?.peak)}, current=${fmtState(result.phaseSummary?.impairment?.current)}) ` +
+          `recovery(best=${fmtState(result.phaseSummary?.recovery?.best)}, current=${fmtState(result.phaseSummary?.recovery?.current)})`
+        );
+        console.error(
+          `[${caseDef.caseId}] verdict reason=${result.verdict.reason} analysis=${result.analysis?.verdict ?? 'unknown'}`
+        );
+      }
     } else {
       console.error(`case ${caseDef.caseId} failed: ${lastError.message}`);
       results.push({
@@ -262,7 +285,9 @@ async function runMatrix() {
   const report = {
     generatedAt: new Date().toISOString(),
     durationScale,
+    includeExtended,
     selectedCaseIds: selectedCases ? [...selectedCases] : 'all',
+    includedCaseIds: cases.map(caseDef => caseDef.caseId),
     summary: buildSummary(results),
     cases: results,
   };

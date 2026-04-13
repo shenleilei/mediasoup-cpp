@@ -13,6 +13,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const chromiumPath = '/usr/lib64/chromium-browser/headless_shell';
 const tcPath = '/usr/sbin/tc';
+const PUPPETEER_PROTOCOL_TIMEOUT_MS = 10 * 60 * 1000;
+const HARNESS_WARMUP_MS = 2000;
 
 function runTc(args) {
   execFileSync(tcPath, args, { stdio: 'inherit' });
@@ -62,6 +64,7 @@ export async function launchBrowser() {
   return puppeteer.launch({
     executablePath: chromiumPath,
     headless: true,
+    protocolTimeout: PUPPETEER_PROTOCOL_TIMEOUT_MS,
     args: [
       '--no-sandbox',
       '--autoplay-policy=no-user-gesture-required',
@@ -84,8 +87,6 @@ export function applyNetemConfig(config = {}) {
   if (typeof loss === 'number' && loss > 0) {
     netemArgs.push('loss', `${loss}%`);
   }
-  runTc(netemArgs);
-
   if (typeof bandwidth === 'number' && bandwidth > 0) {
     const effectiveBandwidthKbps = Math.max(
       1,
@@ -144,6 +145,10 @@ export async function createLoopbackHarness() {
   );
   await page.addScriptTag({ content: bundleCode });
   await page.evaluate(() => window.__qosLoopbackHarness.init());
+  // Let the loopback pair and the first sender stats samples settle before the
+  // matrix baseline timer starts, otherwise startup transients bleed into mild
+  // boundary cases such as R3.
+  await sleep(HARNESS_WARMUP_MS);
 
   return {
     async nowMs() {

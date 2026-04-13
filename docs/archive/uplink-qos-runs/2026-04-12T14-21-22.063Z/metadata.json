@@ -1,0 +1,16 @@
+{
+  "generatedAt": "2026-04-12T14:21:22.063Z",
+  "updatedAt": "2026-04-12T14:23:00.398Z",
+  "runTypes": [
+    "targeted"
+  ],
+  "sourceScripts": [
+    "tests/qos_harness/run_matrix.mjs"
+  ],
+  "selectedCaseIds": [
+    "BW4"
+  ],
+  "artifacts": {
+    "matrixJson": "docs/generated/uplink-qos-matrix-report.targeted.json"
+  }
+}

@@ -8,6 +8,7 @@ import {
   deriveCaseEvaluation,
   extractTiming,
   analyzeResult,
+  getCaseExpectation,
   getPhaseNetwork,
   getImpairedStateForEvaluation,
   stateRank,
@@ -99,9 +100,36 @@ test('synthetic condition for B3 is no longer treated as a healthy default', () 
 test('B3 expectation stays aligned with degraded weak-baseline behavior', () => {
   const b3 = scenarios.find(caseDefn => caseDefn.caseId === 'B3');
 
-  assert.deepEqual(b3?.expect?.states, ['early_warning', 'congested']);
-  assert.equal(b3?.expect?.minLevel, 1);
-  assert.equal(b3?.expect?.maxLevel, 4);
+  const expectation = getCaseExpectation(b3);
+  assert.deepEqual(expectation?.states, ['early_warning', 'congested']);
+  assert.equal(expectation?.minLevel, 1);
+  assert.equal(expectation?.maxLevel, 4);
+});
+
+test('runner-specific expectation overrides default expectation when provided', () => {
+  const caseDefn = {
+    caseId: 'X1',
+    group: 'bw_sweep',
+    expect: {
+      state: 'stable',
+      maxLevel: 0,
+    },
+    expectByRunner: {
+      loopback: {
+        states: ['stable', 'early_warning'],
+        maxLevel: 1,
+      },
+    },
+  };
+
+  assert.deepEqual(getCaseExpectation(caseDefn), {
+    state: 'stable',
+    maxLevel: 0,
+  });
+  assert.deepEqual(getCaseExpectation(caseDefn, 'loopback'), {
+    states: ['stable', 'early_warning'],
+    maxLevel: 1,
+  });
 });
 
 test('analysis flags slow recovery for transition cases', () => {
@@ -141,6 +169,29 @@ test('analysis allows explicit recovery opt-out for transition cases', () => {
   assert.equal(analysis.verdict, '符合');
 });
 
+test('extended blind-spot transition preserves high-bandwidth baseline on recovery', () => {
+  const t9 = scenarios.find(caseDefn => caseDefn.caseId === 'T9');
+
+  assert.deepEqual(getPhaseNetwork(t9, 'baseline'), {
+    bandwidth: 8000,
+    rtt: 20,
+    loss: 0.1,
+    jitter: 1,
+  });
+  assert.deepEqual(getPhaseNetwork(t9, 'impaired'), {
+    bandwidth: 200,
+    rtt: 500,
+    loss: 20,
+    jitter: 50,
+  });
+  assert.deepEqual(getPhaseNetwork(t9, 'recovery'), {
+    bandwidth: 8000,
+    rtt: 20,
+    loss: 0.1,
+    jitter: 1,
+  });
+});
+
 test('analysis accepts allowed impaired state ranges', () => {
   const caseDefn = {
     caseId: 'R4',
@@ -158,6 +209,54 @@ test('analysis accepts allowed impaired state ranges', () => {
   const analysis = analyzeResult(caseDefn, baseline, impaired, recovered);
 
   assert.equal(analysis.verdict, '符合');
+});
+
+test('bandwidth sweeps do not fail only because recovery stays degraded', () => {
+  const caseDefn = {
+    caseId: 'BW6',
+    group: 'bw_sweep',
+    expect: {
+      state: 'congested',
+      maxLevel: 4,
+    },
+  };
+  const baseline = { state: 'stable', level: 0 };
+  const impaired = { state: 'congested', level: 4 };
+  const recovered = { state: 'congested', level: 4 };
+
+  const evaluation = deriveCaseEvaluation(caseDefn, baseline, impaired, recovered);
+
+  assert.equal(evaluation.recoveryPassed, true);
+  assert.equal(evaluation.passed, true);
+});
+
+test('runner-specific loopback expectation can widen accepted boundary behavior', () => {
+  const caseDefn = {
+    caseId: 'T1',
+    group: 'transition',
+    expect: {
+      states: ['stable', 'early_warning'],
+      maxLevel: 1,
+    },
+    expectByRunner: {
+      loopback: {
+        states: ['stable', 'early_warning', 'congested'],
+        maxLevel: 4,
+      },
+    },
+  };
+  const baseline = { state: 'stable', level: 0 };
+  const impaired = { state: 'congested', level: 4 };
+  const recovered = { state: 'stable', level: 0 };
+
+  assert.equal(
+    deriveCaseEvaluation(caseDefn, baseline, impaired, recovered).passed,
+    false
+  );
+  assert.equal(
+    deriveCaseEvaluation(caseDefn, baseline, impaired, recovered, 'loopback').passed,
+    true
+  );
 });
 
 test('phase summary uses peak impaired severity instead of only final state', () => {
@@ -187,6 +286,16 @@ test('phase summary uses peak impaired severity instead of only final state', ()
 test('extractTiming stays inside the requested phase window', () => {
   const trace = [
     {
+      tsMs: 1100,
+      stateAfter: 'recovering',
+      plannedAction: { type: 'setEncodingParameters', level: 3 },
+    },
+    {
+      tsMs: 1150,
+      stateAfter: 'stable',
+      plannedAction: { type: 'setEncodingParameters', level: 0 },
+    },
+    {
       tsMs: 1200,
       stateAfter: 'congested',
       plannedAction: { type: 'setEncodingParameters', level: 4 },
@@ -200,7 +309,10 @@ test('extractTiming stays inside the requested phase window', () => {
 
   const timing = extractTiming(trace, 1000, 3000);
 
+  assert.equal(timing.t_detect_recovering, 100);
+  assert.equal(timing.t_detect_stable, 150);
   assert.equal(timing.t_detect_congested, 200);
+  assert.equal(timing.t_level_0, 150);
   assert.equal(timing.t_level_4, 200);
   assert.equal(timing.t_detect_warning, null);
   assert.equal(timing.t_level_1, null);

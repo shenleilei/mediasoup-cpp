@@ -1,0 +1,28 @@
+{
+  "generatedAt": "2026-04-12T14:10:48.132Z",
+  "durationScale": 1,
+  "includeExtended": false,
+  "selectedCaseIds": [
+    "BW4"
+  ],
+  "includedCaseIds": [
+    "BW4"
+  ],
+  "summary": {
+    "total": 1,
+    "executed": 0,
+    "passed": 0,
+    "failed": 0,
+    "errors": 1,
+    "byGroup": {}
+  },
+  "cases": [
+    {
+      "caseId": "BW4",
+      "group": "bw_sweep",
+      "priority": "P1",
+      "error": "Failed to launch the browser process:  Code: null\n\nstderr:\n[0412/221048.038418:FATAL:sandbox_host_linux.cc(41)] Check failed: . shutdown: Operation not permitted (1)\n\nTROUBLESHOOTING: https://pptr.dev/troubleshooting\n",
+      "stack": "Error: Failed to launch the browser process:  Code: null\n\nstderr:\n[0412/221048.038418:FATAL:sandbox_host_linux.cc(41)] Check failed: . shutdown: Operation not permitted (1)\n\nTROUBLESHOOTING: https://pptr.dev/troubleshooting\n\n    at ChildProcess.onClose (/root/mediasoup-cpp/tests/qos_harness/node_modules/@puppeteer/browsers/lib/cjs/launch.js:350:24)\n    at ChildProcess.emit (node:events:536:35)\n    at ChildProcess._handle.onexit (node:internal/child_process:293:12)"
+    }
+  ]
+}

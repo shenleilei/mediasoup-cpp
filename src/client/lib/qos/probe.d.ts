@@ -3,6 +3,10 @@ export type QosProbeEvaluation = {
     context?: QosProbeContext;
     result: QosProbeResult;
 };
-export declare function beginProbe(previousLevel: number, targetLevel: number, startedAtMs: number, previousAudioOnlyMode: boolean, targetAudioOnlyMode: boolean): QosProbeContext;
+export type QosProbeOptions = {
+    requiredHealthySamples?: number;
+    requiredBadSamples?: number;
+};
+export declare function beginProbe(previousLevel: number, targetLevel: number, startedAtMs: number, previousAudioOnlyMode: boolean, targetAudioOnlyMode: boolean, options?: QosProbeOptions): QosProbeContext;
 export declare function evaluateProbe(context: QosProbeContext | undefined, signals: DerivedQosSignals, profile: QosProfile): QosProbeEvaluation;
 //# sourceMappingURL=probe.d.ts.map

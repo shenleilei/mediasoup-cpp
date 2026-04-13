@@ -190,6 +190,52 @@ test('deriveSignals ignores bandwidth limitation reason at moderate utilization'
     expect(derived.bitrateUtilization).toBeLessThan(0.85);
     expect(derived.bandwidthLimited).toBe(false);
 });
+test('deriveSignals keeps previous RTT/jitter EWMA when current snapshot omits fresh transport metrics', () => {
+    const previous = makeSnapshot({
+        timestampMs: 1000,
+        bytesSent: 1000,
+        packetsSent: 100,
+        packetsLost: 10,
+        retransmittedPacketsSent: 4,
+        roundTripTimeMs: 100,
+        jitterMs: 8,
+    });
+    const current = makeSnapshot({
+        timestampMs: 2000,
+        bytesSent: 21000,
+        packetsSent: 220,
+        packetsLost: 30,
+        retransmittedPacketsSent: 10,
+        targetBitrateBps: 1000000,
+        roundTripTimeMs: undefined,
+        jitterMs: undefined,
+        qualityLimitationReason: 'none',
+    });
+    const previousSignals = {
+        packetsSentDelta: 0,
+        packetsLostDelta: 0,
+        retransmittedPacketsSentDelta: 0,
+        sendBitrateBps: 0,
+        targetBitrateBps: 800000,
+        bitrateUtilization: 1,
+        lossRate: 0,
+        lossEwma: 0.02,
+        rttMs: 300,
+        rttEwma: 200,
+        jitterMs: 40,
+        jitterEwma: 30,
+        cpuLimited: false,
+        bandwidthLimited: false,
+        reason: 'unknown',
+    };
+    const derived = (0, signals_1.deriveSignals)(current, previous, previousSignals, {
+        ewmaAlpha: 0.5,
+    });
+    expect(derived.rttMs).toBe(300);
+    expect(derived.rttEwma).toBe(200);
+    expect(derived.jitterMs).toBe(40);
+    expect(derived.jitterEwma).toBe(30);
+});
 test('deriveSignals guards missing counters and negative deltas', () => {
     const previous = makeSnapshot({
         timestampMs: 2000,

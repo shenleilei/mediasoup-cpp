@@ -37,6 +37,45 @@ function isHealthy(signals, profile) {
         !signals.bandwidthLimited &&
         !signals.cpuLimited);
 }
+function isRecoveryHealthy(signals, profile) {
+    const { thresholds } = profile;
+    const stableJitterMs = Number.isFinite(thresholds.stableJitterMs)
+        ? thresholds.stableJitterMs
+        : Infinity;
+    const warnJitterMs = Number.isFinite(thresholds.warnJitterMs)
+        ? thresholds.warnJitterMs
+        : stableJitterMs;
+    // Use a wider jitter gate to start recovery probing while keeping the
+    // stricter stable threshold for the final recovering -> stable transition.
+    const recoveryJitterMs = Math.max(stableJitterMs, warnJitterMs);
+    return (signals.lossEwma < thresholds.stableLossRate &&
+        signals.rttEwma < thresholds.stableRttMs &&
+        signals.jitterEwma < recoveryJitterMs &&
+        !signals.bandwidthLimited &&
+        !signals.cpuLimited);
+}
+function isFastRecoveryHealthy(signals, profile) {
+    const { thresholds } = profile;
+    const stableJitterMs = Number.isFinite(thresholds.stableJitterMs)
+        ? thresholds.stableJitterMs
+        : Infinity;
+    const warnJitterMs = Number.isFinite(thresholds.warnJitterMs)
+        ? thresholds.warnJitterMs
+        : stableJitterMs;
+    const recoveryJitterMs = Math.max(stableJitterMs, warnJitterMs);
+    const rawJitterMs = Number.isFinite(signals.jitterMs)
+        ? Math.max(0, signals.jitterMs)
+        : Number.POSITIVE_INFINITY;
+    const targetBitrateBps = Math.max(0, signals.targetBitrateBps ?? 0);
+    const sendReady = targetBitrateBps <= 0 ||
+        signals.sendBitrateBps >= targetBitrateBps * 0.85;
+    return (signals.lossEwma < thresholds.stableLossRate &&
+        signals.rttEwma < thresholds.stableRttMs &&
+        rawJitterMs < recoveryJitterMs &&
+        sendReady &&
+        !signals.bandwidthLimited &&
+        !signals.cpuLimited);
+}
 function nextCounter(current, matched) {
     return matched ? current + 1 : 0;
 }
@@ -45,6 +84,8 @@ function createInitialQosStateMachineContext(nowMs) {
         state: 'stable',
         enteredAtMs: nowMs,
         consecutiveHealthySamples: 0,
+        consecutiveRecoverySamples: 0,
+        consecutiveFastRecoverySamples: 0,
         consecutiveWarningSamples: 0,
         consecutiveCongestedSamples: 0,
     };
@@ -70,11 +111,16 @@ function mapStateToQuality(state, signals) {
 }
 function evaluateStateTransition(context, signals, profile, nowMs) {
     const healthy = isHealthy(signals, profile);
+    const recoveryHealthy = isRecoveryHealthy(signals, profile);
+    const fastRecoveryHealthy = !recoveryHealthy &&
+        isFastRecoveryHealthy(signals, profile);
     const warning = isWarning(signals, profile);
     const congested = isCongested(signals, profile);
     let nextContext = {
         ...context,
         consecutiveHealthySamples: nextCounter(context.consecutiveHealthySamples, healthy),
+        consecutiveRecoverySamples: nextCounter(context.consecutiveRecoverySamples ?? 0, recoveryHealthy),
+        consecutiveFastRecoverySamples: nextCounter(context.consecutiveFastRecoverySamples ?? 0, fastRecoveryHealthy),
         consecutiveWarningSamples: nextCounter(context.consecutiveWarningSamples, warning),
         consecutiveCongestedSamples: nextCounter(context.consecutiveCongestedSamples, congested),
     };
@@ -99,7 +145,9 @@ function evaluateStateTransition(context, signals, profile, nowMs) {
         case 'congested': {
             const congestedSinceMs = context.lastCongestedAtMs ?? context.enteredAtMs;
             const cooldownElapsed = nowMs - congestedSinceMs >= profile.recoveryCooldownMs;
-            if (cooldownElapsed && nextContext.consecutiveHealthySamples >= 5) {
+            const regularRecoveryReady = nextContext.consecutiveRecoverySamples >= 5;
+            const fastRecoveryReady = nextContext.consecutiveFastRecoverySamples >= 2;
+            if (cooldownElapsed && (regularRecoveryReady || fastRecoveryReady)) {
                 nextState = 'recovering';
             }
             break;

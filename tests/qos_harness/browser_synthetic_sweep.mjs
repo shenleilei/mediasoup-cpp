@@ -8,11 +8,16 @@ import { createRequire } from 'node:module';
 import {
   deriveCaseEvaluation,
   extractTiming,
+  getCaseExpectation,
   getPhaseNetwork,
   getImpairedStateForEvaluation,
   summarizePhaseState,
   toSyntheticCondition,
 } from './synthetic_sweep_shared.mjs';
+import {
+  filterScenarioCatalog,
+  loadScenarioCatalog,
+} from './scenario_catalog.mjs';
 
 const require = createRequire(import.meta.url);
 const esbuild = require('esbuild');
@@ -21,6 +26,7 @@ const puppeteer = require('puppeteer-core');
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const chromiumPath = '/usr/lib64/chromium-browser/headless_shell';
+const PUPPETEER_PROTOCOL_TIMEOUT_MS = 10 * 60 * 1000;
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -61,6 +67,7 @@ async function launchBrowser() {
   return puppeteer.launch({
     executablePath: chromiumPath,
     headless: true,
+    protocolTimeout: PUPPETEER_PROTOCOL_TIMEOUT_MS,
     args: ['--no-sandbox'],
   });
 }
@@ -121,12 +128,13 @@ async function runCase(page, caseDefn) {
     caseDefn,
     baselineSummary.current,
     impairedStateForEvaluation,
-    recoverySummary.best
+    recoverySummary.best,
+    'synthetic'
   );
   const timing = {
     impairment: extractTiming(allTrace, baselineEndMs, impairmentEndMs),
     recovery:
-      caseDefn.expect?.recovery === false
+      getCaseExpectation(caseDefn, 'synthetic')?.recovery === false
         ? {}
         : extractTiming(allTrace, impairmentEndMs, recoveryEndMs),
   };
@@ -158,7 +166,7 @@ async function runCase(page, caseDefn) {
     verdict: {
       passed: evaluation.passed,
       reason: evaluation.reason,
-      expectation: caseDefn.expect ?? {},
+      expectation: getCaseExpectation(caseDefn, 'synthetic'),
     },
     actionCount: actions.length,
   };
@@ -167,27 +175,31 @@ async function runCase(page, caseDefn) {
 async function main() {
   const args = process.argv.slice(2);
   let caseFilter = 'P0';
+  let includeExtended = false;
   for (const arg of args) {
     if (arg.startsWith('--cases=')) {
       caseFilter = arg.slice(8);
+    } else if (arg === '--include-extended') {
+      includeExtended = true;
     }
   }
 
-  const allCases = JSON.parse(
-    fs.readFileSync(path.join(__dirname, 'scenarios', 'sweep_cases.json'), 'utf8')
-  );
+  const allCases = loadScenarioCatalog();
 
   let cases;
   if (caseFilter === 'all') {
-    cases = allCases;
+    cases = filterScenarioCatalog(allCases, { includeExtended });
   } else if (caseFilter === 'P0') {
-    cases = allCases.filter(caseDefn => caseDefn.priority === 'P0');
+    cases = filterScenarioCatalog(allCases, { includeExtended })
+      .filter(caseDefn => caseDefn.priority === 'P0');
   } else {
     const ids = new Set(caseFilter.split(','));
-    cases = allCases.filter(caseDefn => ids.has(caseDefn.caseId));
+    cases = filterScenarioCatalog(allCases, { selectedCaseIds: ids, includeExtended });
   }
 
-  console.error(`Running ${cases.length} synthetic cases (filter=${caseFilter})`);
+  console.error(
+    `Running ${cases.length} synthetic cases (filter=${caseFilter}, includeExtended=${includeExtended})`
+  );
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qos-synthetic-sweep-'));
   const bundlePath = buildBundle(tmpDir);

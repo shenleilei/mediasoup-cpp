@@ -134,6 +134,65 @@ test('congested -> recovering requires cooldown and five healthy samples', () =>
     expect(result.transitioned).toBe(true);
     expect(result.context.lastRecoveryAtMs).toBe(9000);
 });
+test('congested -> recovering uses wider recovery jitter gate than final stable gate', () => {
+    const baseProfile = makeProfile();
+    const profile = {
+        ...baseProfile,
+        thresholds: {
+            ...baseProfile.thresholds,
+            warnJitterMs: 28,
+            stableJitterMs: 18,
+        },
+        recoveryCooldownMs: 8000,
+    };
+    let context = {
+        ...(0, stateMachine_1.createInitialQosStateMachineContext)(0),
+        state: 'congested',
+        lastCongestedAtMs: 1000,
+    };
+    const recoveryCandidateSignals = makeSignals({
+        jitterMs: 24,
+        jitterEwma: 24,
+    });
+    context = (0, stateMachine_1.evaluateStateTransition)(context, recoveryCandidateSignals, profile, 5000).context;
+    context = (0, stateMachine_1.evaluateStateTransition)(context, recoveryCandidateSignals, profile, 6000).context;
+    context = (0, stateMachine_1.evaluateStateTransition)(context, recoveryCandidateSignals, profile, 7000).context;
+    context = (0, stateMachine_1.evaluateStateTransition)(context, recoveryCandidateSignals, profile, 8000).context;
+    const result = (0, stateMachine_1.evaluateStateTransition)(context, recoveryCandidateSignals, profile, 9000);
+    expect(result.context.state).toBe('recovering');
+    expect(result.transitioned).toBe(true);
+    expect(result.context.consecutiveHealthySamples).toBe(0);
+    expect(result.context.consecutiveRecoverySamples).toBe(5);
+});
+test('congested -> recovering can use raw-jitter fast path when ewma tail lags', () => {
+    const baseProfile = makeProfile();
+    const profile = {
+        ...baseProfile,
+        thresholds: {
+            ...baseProfile.thresholds,
+            warnJitterMs: 28,
+            stableJitterMs: 18,
+        },
+        recoveryCooldownMs: 8000,
+    };
+    let context = {
+        ...(0, stateMachine_1.createInitialQosStateMachineContext)(0),
+        state: 'congested',
+        lastCongestedAtMs: 1000,
+    };
+    const fastRecoverySignals = makeSignals({
+        jitterMs: 24,
+        jitterEwma: 36,
+        targetBitrateBps: 120000,
+        sendBitrateBps: 120000,
+    });
+    context = (0, stateMachine_1.evaluateStateTransition)(context, fastRecoverySignals, profile, 9000).context;
+    const result = (0, stateMachine_1.evaluateStateTransition)(context, fastRecoverySignals, profile, 10000);
+    expect(result.context.state).toBe('recovering');
+    expect(result.transitioned).toBe(true);
+    expect(result.context.consecutiveRecoverySamples).toBe(0);
+    expect(result.context.consecutiveFastRecoverySamples).toBe(2);
+});
 test('recovering -> stable after five healthy samples', () => {
     const profile = makeProfile();
     let context = {
@@ -148,6 +207,34 @@ test('recovering -> stable after five healthy samples', () => {
     const result = (0, stateMachine_1.evaluateStateTransition)(context, healthySignals, profile, 5000);
     expect(result.context.state).toBe('stable');
     expect(result.transitioned).toBe(true);
+});
+test('recovering stays recovering until jitter reaches strict stable threshold', () => {
+    const baseProfile = makeProfile();
+    const profile = {
+        ...baseProfile,
+        thresholds: {
+            ...baseProfile.thresholds,
+            warnJitterMs: 28,
+            stableJitterMs: 18,
+        },
+    };
+    let context = {
+        ...(0, stateMachine_1.createInitialQosStateMachineContext)(0),
+        state: 'recovering',
+    };
+    const recoveryCandidateSignals = makeSignals({
+        jitterMs: 24,
+        jitterEwma: 24,
+    });
+    context = (0, stateMachine_1.evaluateStateTransition)(context, recoveryCandidateSignals, profile, 1000).context;
+    context = (0, stateMachine_1.evaluateStateTransition)(context, recoveryCandidateSignals, profile, 2000).context;
+    context = (0, stateMachine_1.evaluateStateTransition)(context, recoveryCandidateSignals, profile, 3000).context;
+    context = (0, stateMachine_1.evaluateStateTransition)(context, recoveryCandidateSignals, profile, 4000).context;
+    const result = (0, stateMachine_1.evaluateStateTransition)(context, recoveryCandidateSignals, profile, 5000);
+    expect(result.context.state).toBe('recovering');
+    expect(result.transitioned).toBe(false);
+    expect(result.context.consecutiveHealthySamples).toBe(0);
+    expect(result.context.consecutiveRecoverySamples).toBe(5);
 });
 test('recovering -> congested after two congested samples', () => {
     const profile = makeProfile();
