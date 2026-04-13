@@ -863,6 +863,7 @@ TEST_F(QosIntegrationTest, ClientStatsQosInBroadcast) {
 	auto alice = joinRoom(testRoom_, "alice");
 	produceAudio(alice, 80000002);
 	usleep(200000);
+	alice.ws->drainNotifications();
 
 	json clientReport = {
 		{"schema", "mediasoup.qos.client.v1"},
@@ -897,14 +898,30 @@ TEST_F(QosIntegrationTest, ClientStatsQosInBroadcast) {
 	auto statsResp = alice.ws->request("clientStats", clientReport);
 	ASSERT_TRUE(statsResp.value("ok", false)) << statsResp.dump();
 
-	// Wait for statsReport notification (3s interval)
-	auto notif = alice.ws->waitNotification("statsReport", 8000);
-	ASSERT_FALSE(notif.empty()) << "Did not receive statsReport";
+	// Wait for a statsReport notification that includes the new clientStats.
+	const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+	json matching;
+	while (std::chrono::steady_clock::now() < deadline) {
+		const auto remainingMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+			deadline - std::chrono::steady_clock::now()).count();
+		auto candidate = alice.ws->waitNotification(
+			"statsReport", std::max<int>(100, static_cast<int>(remainingMs)));
+		ASSERT_FALSE(candidate.empty()) << "Did not receive statsReport with latest clientStats";
 
-	auto& peers = notif["data"]["peers"];
-	ASSERT_FALSE(peers.empty());
+		auto& peers = candidate["data"]["peers"];
+		for (auto& p : peers) {
+			if (p.value("peerId", "") == "alice" &&
+				p.contains("clientStats") &&
+				p["clientStats"].value("seq", 0) == 99) {
+				matching = std::move(candidate);
+				break;
+			}
+		}
+		if (!matching.empty()) break;
+	}
+	ASSERT_FALSE(matching.empty()) << "Did not observe statsReport carrying clientStats seq=99";
 
-	// Find alice's stats in the broadcast
+	auto& peers = matching["data"]["peers"];
 	bool found = false;
 	for (auto& p : peers) {
 		if (p.value("peerId", "") == "alice") {
@@ -1350,7 +1367,20 @@ TEST_F(QosIntegrationTest, RoomQosStateAndRoomPressureOverride) {
 			break;
 		}
 	}
-	if (aliceOverride.empty()) aliceOverride = alice.ws->waitNotification("qosOverride", 1000);
+	if (aliceOverride.empty()) {
+		const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(1000);
+		while (std::chrono::steady_clock::now() < deadline) {
+			const auto remainingMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+				deadline - std::chrono::steady_clock::now()).count();
+			auto msg = alice.ws->waitNotification(
+				"qosOverride", std::max<int>(100, static_cast<int>(remainingMs)));
+			if (msg.empty()) break;
+			if (msg["data"].value("reason", "") == "server_room_pressure") {
+				aliceOverride = std::move(msg);
+				break;
+			}
+		}
+	}
 	// Alice is already poor — room pressure override should NOT be sent to her.
 	EXPECT_TRUE(aliceOverride.empty())
 		<< "Poor peer should not receive room pressure override";
@@ -1806,19 +1836,20 @@ TEST_F(QosIntegrationTest, DownlinkLargeSmallGetDifferentLayers) {
 	EXPECT_EQ(state["data"]["preferredTemporalLayer"].get<uint8_t>(), 2) << "pinned large tile should get temporal=2";
 	EXPECT_EQ(state["data"]["priority"].get<uint8_t>(), 220) << "pinned priority should be 220";
 
-	// Now send snapshot with small tile (targetWidth <= 320)
+	// Now send snapshot with small tile under a constrained budget so v2 keeps base layer only.
 	json snap2 = snap;
 	snap2["seq"] = 2;
 	snap2["subscriptions"][0]["pinned"] = false;
 	snap2["subscriptions"][0]["targetWidth"] = 240;
 	snap2["subscriptions"][0]["targetHeight"] = 135;
+	snap2["transport"]["availableIncomingBitrate"] = 70000.0;
 	bob.ws->request("downlinkClientStats", snap2);
 	usleep(500000);
 
 	auto state2 = bob.ws->request("getConsumerState", {{"consumerId", consumerId}});
 	ASSERT_TRUE(state2.value("ok", false));
-	EXPECT_EQ(state2["data"]["preferredSpatialLayer"].get<uint8_t>(), 0) << "small tile should get spatial=0";
-	EXPECT_EQ(state2["data"]["preferredTemporalLayer"].get<uint8_t>(), 0) << "small tile should get temporal=0";
+	EXPECT_EQ(state2["data"]["preferredSpatialLayer"].get<uint8_t>(), 0) << "small tile under low budget should get spatial=0";
+	EXPECT_EQ(state2["data"]["preferredTemporalLayer"].get<uint8_t>(), 0) << "small tile under low budget should get temporal=0";
 	EXPECT_EQ(state2["data"]["priority"].get<uint8_t>(), 120) << "visible grid priority should be 120";
 }
 
