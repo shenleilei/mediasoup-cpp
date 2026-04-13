@@ -207,6 +207,14 @@ class PublisherQosController {
                 const reason = override.reason || '';
                 if (reason === 'server_ttl_expired') {
                     this.activeOverrides.clear();
+                } else if (reason.startsWith('downlink_v2_')) {
+                    // Server-generated downlink v2 track clears must only remove
+                    // their own coordination overrides, not unrelated app/manual ones.
+                    for (const key of [...this.activeOverrides.keys()]) {
+                        if (key.startsWith('downlink_v2_')) {
+                            this.activeOverrides.delete(key);
+                        }
+                    }
                 } else if (!reason.startsWith('server_')) {
                     // Manual clear semantics: ttlMs=0 from app/manual control should
                     // clear all non-server overrides, regardless of the exact reason

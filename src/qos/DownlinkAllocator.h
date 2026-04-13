@@ -51,6 +51,12 @@ public:
 		const std::vector<bool>& currentlyPaused,
 		int degradeLevel,
 		std::unordered_map<std::string, ConsumerLastState>& lastState);
+
+	/// Diff a pre-computed budget plan against lastState, suppressing
+	/// redundant actions.  lastState is updated to reflect the plan.
+	static std::vector<DownlinkAction> ComputeBudgetDiff(
+		const std::vector<DownlinkAction>& planActions,
+		std::unordered_map<std::string, ConsumerLastState>& lastState);
 };
 
 } // namespace mediasoup::qos

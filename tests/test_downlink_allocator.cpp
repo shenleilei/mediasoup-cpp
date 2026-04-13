@@ -184,3 +184,25 @@ TEST(DownlinkAllocatorTest, ComputeDiffEmitsKeyFrameOnResume) {
 		if (a.type == DownlinkAction::Type::kResume) hasResume = true;
 	EXPECT_TRUE(hasResume);
 }
+
+TEST(DownlinkAllocatorTest, ComputeBudgetDiffEmitsKeyFrameOnResume) {
+	std::vector<DownlinkAction> planActions = {
+		{DownlinkAction::Type::kResume, "c1"},
+		{DownlinkAction::Type::kSetLayers, "c1", 0, 0, false, 0},
+		{DownlinkAction::Type::kSetPriority, "c1", 0, 0, false, DownlinkAllocator::kPriorityPinned},
+	};
+	std::unordered_map<std::string, ConsumerLastState> lastState;
+	lastState["c1"] = {.paused = true, .spatialLayer = 0, .temporalLayer = 0, .priority = 1};
+
+	auto actions = DownlinkAllocator::ComputeBudgetDiff(planActions, lastState);
+
+	bool hasResume = false;
+	bool hasKeyFrameLayers = false;
+	for (auto& a : actions) {
+		if (a.type == DownlinkAction::Type::kResume) hasResume = true;
+		if (a.type == DownlinkAction::Type::kSetLayers && a.requestKeyFrame)
+			hasKeyFrameLayers = true;
+	}
+	EXPECT_TRUE(hasResume);
+	EXPECT_TRUE(hasKeyFrameLayers);
+}

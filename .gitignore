@@ -22,6 +22,7 @@ compile_commands.json
 node_modules/
 package.json
 package-lock.json
+src/client/.cache/
 
 # Python
 __pycache__/
