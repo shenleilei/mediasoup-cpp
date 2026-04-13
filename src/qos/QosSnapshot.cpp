@@ -12,6 +12,10 @@ json ToJson(const ClientQosSnapshot& snapshot) {
 	return snapshot.raw;
 }
 
+json ToJson(const DownlinkSnapshot& snapshot) {
+	return snapshot.raw;
+}
+
 json ToJson(const QosPolicy& policy) {
 	return policy.raw;
 }

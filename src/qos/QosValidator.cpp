@@ -2,6 +2,11 @@
 #include <algorithm>
 
 namespace mediasoup::qos {
+
+namespace {
+constexpr const char* kCanonicalDownlinkSchema = "mediasoup.qos.downlink.client.v1";
+constexpr const char* kLegacyDownlinkSchema = "mediasoup.downlink.v1";
+}
 namespace {
 
 template<typename T>
@@ -375,6 +380,81 @@ ParseResult<QosOverride> QosValidator::ParseOverride(const json& payload) {
 	}
 
 	return MakeSuccess(std::move(overrideData));
+}
+
+ParseResult<DownlinkSnapshot> QosValidator::ParseDownlinkSnapshot(const json& payload) {
+	ParseResult<DownlinkSnapshot> result;
+	try {
+		if (!payload.is_object()) {
+			result.error = "payload must be object";
+			return result;
+		}
+		auto& v = result.value;
+		v.schema = payload.value("schema", "");
+		if (v.schema != kCanonicalDownlinkSchema && v.schema != kLegacyDownlinkSchema) {
+			result.error = "unsupported schema: " + v.schema;
+			return result;
+		}
+		if (v.schema == kLegacyDownlinkSchema) {
+			v.schema = kCanonicalDownlinkSchema;
+		}
+		v.seq = payload.value("seq", uint64_t(0));
+		if (v.seq > kDownlinkMaxSeq) {
+			result.error = "seq out of range";
+			return result;
+		}
+		v.tsMs = payload.value("tsMs", int64_t(0));
+		v.subscriberPeerId = payload.value("subscriberPeerId", "");
+		if (v.subscriberPeerId.empty()) {
+			result.error = "subscriberPeerId is required";
+			return result;
+		}
+		if (!payload.contains("subscriptions") || !payload["subscriptions"].is_array()) {
+			result.error = "subscriptions array is required";
+			return result;
+		}
+		if (payload.contains("transport") && payload["transport"].is_object()) {
+			auto& t = payload["transport"];
+			v.availableIncomingBitrate = t.value("availableIncomingBitrate", 0.0);
+			v.currentRoundTripTime = t.value("currentRoundTripTime", 0.0);
+		}
+		if (payload["subscriptions"].size() > kDownlinkMaxSubscriptions) {
+			result.error = "too many subscriptions";
+			return result;
+		}
+		for (auto& s : payload["subscriptions"]) {
+			if (!s.is_object()) {
+				result.error = "subscription entry must be object";
+				return result;
+			}
+			DownlinkSubscription sub;
+			sub.consumerId = s.value("consumerId", "");
+			sub.producerId = s.value("producerId", "");
+			if (sub.consumerId.empty() || sub.producerId.empty()) {
+				result.error = "subscription consumerId and producerId are required";
+				return result;
+			}
+			sub.visible = s.value("visible", true);
+			sub.pinned = s.value("pinned", false);
+			sub.activeSpeaker = s.value("activeSpeaker", false);
+			sub.isScreenShare = s.value("isScreenShare", false);
+			sub.targetWidth = s.value("targetWidth", 0u);
+			sub.targetHeight = s.value("targetHeight", 0u);
+			sub.packetsLost = s.value("packetsLost", 0u);
+			sub.jitter = s.value("jitter", 0.0);
+			sub.framesPerSecond = s.value("framesPerSecond", 0.0);
+			sub.frameWidth = s.value("frameWidth", 0u);
+			sub.frameHeight = s.value("frameHeight", 0u);
+			sub.freezeRate = s.value("freezeRate", 0.0);
+			v.subscriptions.push_back(std::move(sub));
+		}
+		v.raw = payload;
+		v.raw["schema"] = v.schema;
+		result.ok = true;
+	} catch (const std::exception& e) {
+		result.error = e.what();
+	}
+	return result;
 }
 
 } // namespace mediasoup::qos

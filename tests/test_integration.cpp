@@ -997,3 +997,80 @@ TEST_F(IntegrationTest, WorkerRespawnAllowsNewRooms) {
 	EXPECT_TRUE(sendResp.value("ok", false))
 		<< "createTransport failed after worker respawn: " << sendResp.dump();
 }
+
+// ─── Downlink QoS Phase 1: Consumer control tests ───
+
+TEST_F(IntegrationTest, PauseResumeConsumerControl) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoom(testRoom_, "bob");
+
+	auto bobRecv = bob.ws->request("createWebRtcTransport", {{"producing", false}, {"consuming", true}});
+	ASSERT_TRUE(bobRecv.value("ok", false));
+
+	auto aliceSend = alice.ws->request("createWebRtcTransport", {{"producing", true}, {"consuming", false}});
+	ASSERT_TRUE(aliceSend.value("ok", false));
+
+	json rtpParams = {{"codecs", {{{"mimeType", "audio/opus"}, {"clockRate", 48000}, {"channels", 2}, {"payloadType", 100}}}},
+		{"encodings", {{{"ssrc", 55550001}}}}, {"mid", "0"}};
+	auto prod = alice.ws->request("produce", {{"transportId", aliceSend["data"]["id"]}, {"kind", "audio"}, {"rtpParameters", rtpParams}});
+	ASSERT_TRUE(prod.value("ok", false));
+
+	auto notif = bob.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(notif.empty());
+	std::string consumerId = notif["data"]["id"];
+
+	auto pauseResp = bob.ws->request("pauseConsumer", {{"consumerId", consumerId}});
+	ASSERT_TRUE(pauseResp.value("ok", false)) << pauseResp.dump();
+	EXPECT_TRUE(pauseResp["data"]["paused"].get<bool>());
+
+	auto resumeResp = bob.ws->request("resumeConsumer", {{"consumerId", consumerId}});
+	ASSERT_TRUE(resumeResp.value("ok", false)) << resumeResp.dump();
+	EXPECT_FALSE(resumeResp["data"]["paused"].get<bool>());
+}
+
+TEST_F(IntegrationTest, SetConsumerPriorityControl) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoom(testRoom_, "bob");
+
+	auto bobRecv = bob.ws->request("createWebRtcTransport", {{"producing", false}, {"consuming", true}});
+	ASSERT_TRUE(bobRecv.value("ok", false));
+
+	auto aliceSend = alice.ws->request("createWebRtcTransport", {{"producing", true}, {"consuming", false}});
+	ASSERT_TRUE(aliceSend.value("ok", false));
+
+	json rtpParams = {{"codecs", {{{"mimeType", "audio/opus"}, {"clockRate", 48000}, {"channels", 2}, {"payloadType", 100}}}},
+		{"encodings", {{{"ssrc", 55550002}}}}, {"mid", "0"}};
+	auto prod = alice.ws->request("produce", {{"transportId", aliceSend["data"]["id"]}, {"kind", "audio"}, {"rtpParameters", rtpParams}});
+	ASSERT_TRUE(prod.value("ok", false));
+
+	auto notif = bob.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(notif.empty());
+	std::string consumerId = notif["data"]["id"];
+
+	auto resp = bob.ws->request("setConsumerPriority", {{"consumerId", consumerId}, {"priority", 200}});
+	ASSERT_TRUE(resp.value("ok", false)) << resp.dump();
+	EXPECT_EQ(resp["data"]["priority"].get<uint8_t>(), 200);
+}
+
+TEST_F(IntegrationTest, RequestConsumerKeyFrameControl) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoom(testRoom_, "bob");
+
+	auto bobRecv = bob.ws->request("createWebRtcTransport", {{"producing", false}, {"consuming", true}});
+	ASSERT_TRUE(bobRecv.value("ok", false));
+
+	auto aliceSend = alice.ws->request("createWebRtcTransport", {{"producing", true}, {"consuming", false}});
+	ASSERT_TRUE(aliceSend.value("ok", false));
+
+	json rtpParams = {{"codecs", {{{"mimeType", "video/VP8"}, {"clockRate", 90000}, {"payloadType", 101}}}},
+		{"encodings", {{{"ssrc", 55550003}}}}, {"mid", "0"}};
+	auto prod = alice.ws->request("produce", {{"transportId", aliceSend["data"]["id"]}, {"kind", "video"}, {"rtpParameters", rtpParams}});
+	ASSERT_TRUE(prod.value("ok", false));
+
+	auto notif = bob.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(notif.empty());
+	std::string consumerId = notif["data"]["id"];
+
+	auto resp = bob.ws->request("requestConsumerKeyFrame", {{"consumerId", consumerId}});
+	ASSERT_TRUE(resp.value("ok", false)) << resp.dump();
+}

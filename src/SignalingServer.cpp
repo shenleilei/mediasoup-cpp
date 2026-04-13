@@ -575,6 +575,49 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 				return;
 			}
 
+			// downlinkClientStats — parse-then-respond, same as clientStats
+			if (method == "downlinkClientStats") {
+				if (roomId.empty() || peerId.empty() || sessionId == kInvalidSessionId) {
+					json resp = {{"response", true}, {"id", id}, {"ok", false},
+						{"error", "downlinkClientStats requires joined session"}};
+					ws->send(resp.dump(), uWS::OpCode::TEXT);
+					return;
+				}
+				{
+					auto mapKey = WsMap::key(roomId, peerId);
+					auto it = wsMap->peers.find(mapKey);
+					bool validSession = (it != wsMap->peers.end() && it->second == ws &&
+						it->second->getUserData()->sessionId == sessionId);
+					if (!validSession) {
+						staleRequestDrops_.fetch_add(1, std::memory_order_relaxed);
+						json resp = {{"response", true}, {"id", id}, {"ok", false},
+							{"error", "stale session"}};
+						ws->send(resp.dump(), uWS::OpCode::TEXT);
+						return;
+					}
+				}
+				auto* wt = getWorkerThread(roomId, false);
+				if (!wt || !wt->roomService()) {
+					json resp = {{"response", true}, {"id", id}, {"ok", false},
+						{"error", "room not assigned"}};
+					ws->send(resp.dump(), uWS::OpCode::TEXT);
+					return;
+				}
+				auto dlParse = qos::QosValidator::ParseDownlinkSnapshot(data);
+				if (!dlParse.ok) {
+					json resp = {{"response", true}, {"id", id}, {"ok", false},
+						{"error", "invalid downlinkClientStats: " + dlParse.error}};
+					ws->send(resp.dump(), uWS::OpCode::TEXT);
+					return;
+				}
+				wt->post([wt, roomId, peerId, data] {
+					wt->roomService()->setDownlinkClientStats(roomId, peerId, data);
+				});
+				json resp = {{"response", true}, {"id", id}, {"ok", true}, {"data", json::object()}};
+				ws->send(resp.dump(), uWS::OpCode::TEXT);
+				return;
+			}
+
 			// For join, extract params now (before ws might change)
 			std::string joinRoomId, joinPeerId, joinDisplayName, joinClientIp;
 			json joinRtpCaps;
@@ -720,6 +763,27 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 							peerId,
 							data.value("peerId", peerId),
 							data.at("policy"));
+					} else if (method == "pauseConsumer") {
+						result = rs->pauseConsumer(roomId, peerId,
+							data.at("consumerId").get<std::string>());
+					} else if (method == "resumeConsumer") {
+						result = rs->resumeConsumer(roomId, peerId,
+							data.at("consumerId").get<std::string>());
+					} else if (method == "getConsumerState") {
+						result = rs->getConsumerState(roomId, peerId,
+							data.at("consumerId").get<std::string>());
+					} else if (method == "setConsumerPreferredLayers") {
+						result = rs->setConsumerPreferredLayers(roomId, peerId,
+							data.at("consumerId").get<std::string>(),
+							data.at("spatialLayer").get<uint8_t>(),
+							data.at("temporalLayer").get<uint8_t>());
+					} else if (method == "setConsumerPriority") {
+						result = rs->setConsumerPriority(roomId, peerId,
+							data.at("consumerId").get<std::string>(),
+							data.at("priority").get<uint8_t>());
+					} else if (method == "requestConsumerKeyFrame") {
+						result = rs->requestConsumerKeyFrame(roomId, peerId,
+							data.at("consumerId").get<std::string>());
 					} else {
 						result = {false, {}, "", "unknown method: " + method};
 					}

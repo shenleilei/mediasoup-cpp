@@ -14,6 +14,9 @@
 #include "qos/QosRoomAggregator.h"
 #include "qos/QosRegistry.h"
 #include "qos/QosValidator.h"
+#include "qos/DownlinkQosRegistry.h"
+#include "qos/DownlinkAllocator.h"
+#include "qos/SubscriberQosController.h"
 #include <nlohmann/json.hpp>
 #include <deque>
 #include <functional>
@@ -79,6 +82,12 @@ public:
 		const std::string& targetPeerId, const json& overrideData);
 	Result setQosPolicy(const std::string& roomId, const std::string& callerPeerId,
 		const std::string& targetPeerId, const json& policyData);
+	Result pauseConsumer(const std::string& roomId, const std::string& peerId, const std::string& consumerId);
+	Result resumeConsumer(const std::string& roomId, const std::string& peerId, const std::string& consumerId);
+	Result getConsumerState(const std::string& roomId, const std::string& peerId, const std::string& consumerId);
+	Result setConsumerPreferredLayers(const std::string& roomId, const std::string& peerId, const std::string& consumerId, uint8_t spatialLayer, uint8_t temporalLayer);
+	Result setConsumerPriority(const std::string& roomId, const std::string& peerId, const std::string& consumerId, uint8_t priority);
+	Result requestConsumerKeyFrame(const std::string& roomId, const std::string& peerId, const std::string& consumerId);
 
 	void checkRoomHealth();
 	void cleanIdleRooms(int idleSeconds = kIdleRoomTimeoutSec);
@@ -87,6 +96,7 @@ public:
 	std::shared_ptr<Room> getRoom(const std::string& roomId) { return roomManager_.getRoom(roomId); }
 	void cleanOldRecordings(uint64_t maxBytes = kMaxRecordingDirBytes);
 	void setClientStats(const std::string& roomId, const std::string& peerId, const json& stats);
+	void setDownlinkClientStats(const std::string& roomId, const std::string& peerId, const json& stats);
 	json collectPeerStats(const std::string& roomId, const std::string& peerId);
 	void broadcastStats();
 	void heartbeatRegistry();
@@ -131,6 +141,8 @@ private:
 	std::unordered_map<std::string, std::shared_ptr<PeerRecorder>> recorders_;
 	std::unordered_map<std::string, std::shared_ptr<PlainTransport>> recorderTransports_;
 	qos::QosRegistry qosRegistry_;
+	qos::DownlinkQosRegistry downlinkQosRegistry_;
+	std::unordered_map<std::string, qos::SubscriberQosController> subscriberControllers_; // key: roomId/peerId
 	std::unordered_map<std::string, AutoQosOverrideRecord> autoQosOverrideRecords_;
 	std::unordered_map<std::string, std::string> lastConnectionQualitySignatures_;
 	std::unordered_map<std::string, std::string> lastRoomQosStateSignatures_;
