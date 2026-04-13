@@ -753,10 +753,12 @@ void RoomService::setDownlinkClientStats(const std::string& roomId, const std::s
 
 	std::string ctrlKey = roomId + "/" + peerId;
 	auto& ctrl = subscriberControllers_[ctrlKey];
+	ctrl.pruneStaleConsumers(peer->consumers);
 	ctrl.healthMonitor().update(parsed.value);
 	auto pausedFlags = ctrl.getPausedFlags(parsed.value.subscriptions);
-	auto actions = qos::DownlinkAllocator::Compute(
-		parsed.value.subscriptions, pausedFlags, ctrl.healthMonitor().degradeLevel());
+	auto actions = qos::DownlinkAllocator::ComputeDiff(
+		parsed.value.subscriptions, pausedFlags, ctrl.healthMonitor().degradeLevel(),
+		ctrl.lastState());
 	ctrl.applyActions(actions, peer->consumers);
 }
 

@@ -16,6 +16,11 @@ exports.parseDownlinkSnapshot = parseDownlinkSnapshot;
  * @returns {object}
  */
 function serializeDownlinkSnapshot({ seq, subscriberPeerId, transport, subscriptions }) {
+    // Enforce client-side cap to avoid wasting bandwidth on oversized payloads
+    // that the server would reject anyway.
+    const capped = subscriptions.length > exports.DOWNLINK_MAX_SUBSCRIPTIONS
+        ? subscriptions.slice(0, exports.DOWNLINK_MAX_SUBSCRIPTIONS)
+        : subscriptions;
     return {
         schema: exports.DOWNLINK_SCHEMA_V1,
         seq,
@@ -25,7 +30,7 @@ function serializeDownlinkSnapshot({ seq, subscriberPeerId, transport, subscript
             availableIncomingBitrate: transport.availableIncomingBitrate || 0,
             currentRoundTripTime: transport.currentRoundTripTime || 0,
         },
-        subscriptions: subscriptions.map(s => ({
+        subscriptions: capped.map(s => ({
             consumerId: s.consumerId,
             producerId: s.producerId,
             visible: !!s.visible,

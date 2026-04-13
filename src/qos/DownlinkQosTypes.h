@@ -38,5 +38,7 @@ struct DownlinkSnapshot {
 
 constexpr uint64_t kDownlinkMaxSeq = 9007199254740991ULL;
 constexpr size_t kDownlinkMaxSubscriptions = 64u;
+constexpr size_t kDownlinkMaxIdLength = 128u;
+constexpr size_t kDownlinkMaxRawPayloadBytes = 64u * 1024u; // 64 KiB
 
 } // namespace mediasoup::qos
