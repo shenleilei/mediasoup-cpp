@@ -8,6 +8,7 @@ JEST_BIN="$CLIENT_DIR/node_modules/.bin/jest"
 CASE_REPORT_SCRIPT="$ROOT_DIR/tests/qos_harness/render_case_report.mjs"
 ARTIFACTS_DIR="$ROOT_DIR/tests/qos_harness/artifacts"
 FAILURES_FILE="$ARTIFACTS_DIR/last-failures.txt"
+DOWNLINK_REPORT_FILE="$ROOT_DIR/docs/downlink-qos-test-results.md"
 GENERATE_CASE_REPORT=0
 MATRIX_INCLUDE_EXTENDED=0
 MATRIX_CASES=""
@@ -28,6 +29,8 @@ SKIP_BROWSER=0
 SKIP_MATRIX=0
 FAILED_GROUPS=()
 FAILED_TASKS=()
+declare -A TASK_RESULTS=()
+declare -A TASK_DURATIONS=()
 RESUME_MODE=0
 
 mkdir -p "$ARTIFACTS_DIR"
@@ -240,12 +243,78 @@ run_cmd() {
   end="$(date +%s)"
   elapsed=$((end - start))
   if ((rc == 0)); then
+    TASK_RESULTS["$label"]="PASS"
+    TASK_DURATIONS["$label"]="${elapsed}s"
     echo "<== [$label] PASS (${elapsed}s)"
   else
+    TASK_RESULTS["$label"]="FAIL"
+    TASK_DURATIONS["$label"]="${elapsed}s"
     echo "<== [$label] FAIL (${elapsed}s, rc=$rc)" >&2
     record_failed_task "$label"
   fi
   return "$rc"
+}
+
+join_targets_for_markdown() {
+  local joined=""
+  local item
+  for item in "$@"; do
+    if [[ -n "$joined" ]]; then
+      joined+=", "
+    fi
+    joined+="\`$item\`"
+  done
+  printf '%s\n' "$joined"
+}
+
+write_downlink_report() {
+  local labels=(
+    "cpp-unit"
+    "cpp-integration"
+    "browser-harness:downlink-controls"
+    "browser-harness:downlink-e2e"
+    "browser-harness:downlink-priority"
+  )
+  local generated_at
+  generated_at="$(date '+%Y-%m-%d %H:%M:%S %Z')"
+  local selected_targets
+  selected_targets="$(join_targets_for_markdown "${GROUPS_TO_RUN[@]}")"
+  local executed=0
+  local passed=0
+  local failed=0
+  local label status duration
+
+  {
+    echo "# Downlink QoS Test Results"
+    echo
+    echo "- generated: $generated_at"
+    echo "- script: \`scripts/run_qos_tests.sh\`"
+    echo "- selected targets: ${selected_targets:-none}"
+    echo
+    echo "| Task | Status | Duration |"
+    echo "|---|---|---|"
+    for label in "${labels[@]}"; do
+      status="${TASK_RESULTS[$label]:-NOT_RUN}"
+      duration="${TASK_DURATIONS[$label]:--}"
+      if [[ "$status" != "NOT_RUN" ]]; then
+        ((executed += 1))
+        if [[ "$status" == "PASS" ]]; then
+          ((passed += 1))
+        else
+          ((failed += 1))
+        fi
+      fi
+      echo "| \`$label\` | $status | $duration |"
+    done
+    echo
+    if ((executed == 0)); then
+      echo "No downlink-specific QoS tasks ran in this invocation."
+    else
+      echo "- downlink tasks executed: $executed"
+      echo "- pass: $passed"
+      echo "- fail: $failed"
+    fi
+  } > "$DOWNLINK_REPORT_FILE"
 }
 
 normalize_groups() {
@@ -641,6 +710,14 @@ if ((GENERATE_CASE_REPORT)) && [[ -f "$CASE_REPORT_SCRIPT" ]]; then
     echo "<== [case-report] WARN (generation failed)" >&2
   fi
   fi
+fi
+
+echo
+echo "==> [downlink-report]"
+if write_downlink_report; then
+  echo "<== [downlink-report] PASS ($DOWNLINK_REPORT_FILE)"
+else
+  echo "<== [downlink-report] WARN (generation failed)" >&2
 fi
 
 echo
