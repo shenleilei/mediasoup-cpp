@@ -389,6 +389,16 @@ ParseResult<DownlinkSnapshot> QosValidator::ParseDownlinkSnapshot(const json& pa
 			result.error = "payload must be object";
 			return result;
 		}
+
+		// Guard against oversized payloads to prevent memory/bandwidth amplification.
+		{
+			const auto dumpSize = payload.dump(-1, ' ', false, json::error_handler_t::replace).size();
+			if (dumpSize > kDownlinkMaxRawPayloadBytes) {
+				result.error = "payload too large";
+				return result;
+			}
+		}
+
 		auto& v = result.value;
 		v.schema = payload.value("schema", "");
 		if (v.schema != kCanonicalDownlinkSchema && v.schema != kLegacyDownlinkSchema) {
@@ -409,6 +419,10 @@ ParseResult<DownlinkSnapshot> QosValidator::ParseDownlinkSnapshot(const json& pa
 			result.error = "subscriberPeerId is required";
 			return result;
 		}
+		if (v.subscriberPeerId.size() > kDownlinkMaxIdLength) {
+			result.error = "subscriberPeerId too long";
+			return result;
+		}
 		if (!payload.contains("subscriptions") || !payload["subscriptions"].is_array()) {
 			result.error = "subscriptions array is required";
 			return result;
@@ -417,6 +431,10 @@ ParseResult<DownlinkSnapshot> QosValidator::ParseDownlinkSnapshot(const json& pa
 			auto& t = payload["transport"];
 			v.availableIncomingBitrate = t.value("availableIncomingBitrate", 0.0);
 			v.currentRoundTripTime = t.value("currentRoundTripTime", 0.0);
+			// Clamp to sane ranges
+			if (v.availableIncomingBitrate < 0.0) v.availableIncomingBitrate = 0.0;
+			if (v.currentRoundTripTime < 0.0) v.currentRoundTripTime = 0.0;
+			if (v.currentRoundTripTime > 60.0) v.currentRoundTripTime = 60.0;
 		}
 		if (payload["subscriptions"].size() > kDownlinkMaxSubscriptions) {
 			result.error = "too many subscriptions";
@@ -434,6 +452,11 @@ ParseResult<DownlinkSnapshot> QosValidator::ParseDownlinkSnapshot(const json& pa
 				result.error = "subscription consumerId and producerId are required";
 				return result;
 			}
+			if (sub.consumerId.size() > kDownlinkMaxIdLength ||
+				sub.producerId.size() > kDownlinkMaxIdLength) {
+				result.error = "subscription id too long";
+				return result;
+			}
 			sub.visible = s.value("visible", true);
 			sub.pinned = s.value("pinned", false);
 			sub.activeSpeaker = s.value("activeSpeaker", false);
@@ -441,11 +464,11 @@ ParseResult<DownlinkSnapshot> QosValidator::ParseDownlinkSnapshot(const json& pa
 			sub.targetWidth = s.value("targetWidth", 0u);
 			sub.targetHeight = s.value("targetHeight", 0u);
 			sub.packetsLost = s.value("packetsLost", 0u);
-			sub.jitter = s.value("jitter", 0.0);
-			sub.framesPerSecond = s.value("framesPerSecond", 0.0);
+			sub.jitter = std::max(0.0, s.value("jitter", 0.0));
+			sub.framesPerSecond = std::max(0.0, s.value("framesPerSecond", 0.0));
 			sub.frameWidth = s.value("frameWidth", 0u);
 			sub.frameHeight = s.value("frameHeight", 0u);
-			sub.freezeRate = s.value("freezeRate", 0.0);
+			sub.freezeRate = std::clamp(s.value("freezeRate", 0.0), 0.0, 1.0);
 			v.subscriptions.push_back(std::move(sub));
 		}
 		v.raw = payload;

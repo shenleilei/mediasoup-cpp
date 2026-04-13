@@ -2,12 +2,27 @@
 
 namespace mediasoup::qos {
 
+void SubscriberQosController::pruneStaleConsumers(
+	const std::unordered_map<std::string, std::shared_ptr<mediasoup::Consumer>>& consumers)
+{
+	for (auto it = pausedConsumers_.begin(); it != pausedConsumers_.end(); ) {
+		if (consumers.find(*it) == consumers.end())
+			it = pausedConsumers_.erase(it);
+		else
+			++it;
+	}
+}
+
 void SubscriberQosController::applyActions(const std::vector<DownlinkAction>& actions,
 	const std::unordered_map<std::string, std::shared_ptr<mediasoup::Consumer>>& consumers)
 {
 	for (const auto& action : actions) {
 		auto it = consumers.find(action.consumerId);
-		if (it == consumers.end()) continue;
+		if (it == consumers.end()) {
+			// Consumer gone — drop any stale paused state.
+			pausedConsumers_.erase(action.consumerId);
+			continue;
+		}
 		auto& consumer = it->second;
 
 		try {

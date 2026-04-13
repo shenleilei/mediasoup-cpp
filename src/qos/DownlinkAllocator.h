@@ -2,6 +2,7 @@
 #include "qos/DownlinkQosTypes.h"
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace mediasoup::qos {
@@ -16,6 +17,15 @@ struct DownlinkAction {
 	uint8_t priority{ 0 };
 };
 
+/// Tracks the last-applied state per consumer so that unchanged
+/// actions can be suppressed to reduce control-plane noise.
+struct ConsumerLastState {
+	bool paused{ false };
+	uint8_t spatialLayer{ 0 };
+	uint8_t temporalLayer{ 0 };
+	uint8_t priority{ 0 };
+};
+
 class DownlinkAllocator {
 public:
 	static constexpr uint32_t kSmallTileMaxWidth = 320;
@@ -27,10 +37,20 @@ public:
 
 	static uint8_t ComputePriority(const DownlinkSubscription& sub);
 
+	/// Compute the full set of actions (always emitted regardless of prior state).
 	static std::vector<DownlinkAction> Compute(
 		const std::vector<DownlinkSubscription>& subscriptions,
 		const std::vector<bool>& currentlyPaused,
 		int degradeLevel = 0);
+
+	/// Compute actions, but suppress any that would be redundant
+	/// given the previously-applied state tracked in |lastState|.
+	/// The map is updated in-place to reflect what was actually emitted.
+	static std::vector<DownlinkAction> ComputeDiff(
+		const std::vector<DownlinkSubscription>& subscriptions,
+		const std::vector<bool>& currentlyPaused,
+		int degradeLevel,
+		std::unordered_map<std::string, ConsumerLastState>& lastState);
 };
 
 } // namespace mediasoup::qos
