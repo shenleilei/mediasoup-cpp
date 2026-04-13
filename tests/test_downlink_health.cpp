@@ -84,3 +84,19 @@ TEST(DownlinkHealthMonitorTest, DegradeLevelClampsAllocatorLayers) {
 	ASSERT_NE(a3, nullptr);
 	EXPECT_EQ(a3->spatialLayer, 0);
 }
+
+TEST(DownlinkHealthMonitorTest, LossUsesDeltaNotCumulativeTotal) {
+	DownlinkHealthMonitor mon;
+
+	// First sample seeds baseline; cumulative lost should not trigger loss on first observation.
+	auto first = makeSnapshot(0.0, 0.0, 50, 0.0);
+	mon.update(first);
+	EXPECT_EQ(mon.state(), DownlinkHealth::kStable);
+	EXPECT_EQ(mon.degradeLevel(), 0);
+
+	// Same cumulative value means zero delta and should remain stable.
+	auto second = makeSnapshot(0.0, 0.0, 50, 0.0);
+	mon.update(second);
+	EXPECT_EQ(mon.state(), DownlinkHealth::kStable);
+	EXPECT_EQ(mon.degradeLevel(), 0);
+}

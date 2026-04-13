@@ -22,7 +22,7 @@ class DownlinkReporter {
      * @param {string} opts.peerId  subscriber peer id
      * @param {number} [opts.intervalMs=2000]
      */
-    constructor({ sampler, hints, send, peerId, intervalMs = 2000 }) {
+    constructor({ sampler, hints, send, peerId, intervalMs = 2000, logger = console }) {
         this._sampler = sampler;
         this._hints = hints;
         this._send = send;
@@ -31,6 +31,8 @@ class DownlinkReporter {
         this._seq = 0;
         this._timerId = null;
         this._reporting = false;
+        this._logger = logger;
+        this._consecutiveErrors = 0;
     }
 
     get running() { return this._timerId !== null; }
@@ -67,8 +69,14 @@ class DownlinkReporter {
                 subscriptions,
             });
             await this._send('downlinkClientStats', snapshot);
+            this._consecutiveErrors = 0;
         } catch (e) {
-            // fail-soft: swallow and retry next tick
+            this._consecutiveErrors++;
+            if (this._consecutiveErrors <= 3 || this._consecutiveErrors % 10 === 0) {
+                this._logger.warn(
+                    `[DownlinkReporter] tick failed (count=${this._consecutiveErrors}): ${e.message || e}`
+                );
+            }
         } finally {
             this._reporting = false;
         }

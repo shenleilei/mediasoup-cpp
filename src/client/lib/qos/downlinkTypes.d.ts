@@ -1,6 +1,9 @@
 export interface DownlinkSubscriptionHint {
     consumerId: string;
     producerId: string;
+    ssrc?: number;
+    trackId?: string;
+    mid?: string;
     visible: boolean;
     pinned: boolean;
     activeSpeaker: boolean;

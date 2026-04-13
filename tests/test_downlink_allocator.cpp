@@ -135,3 +135,67 @@ TEST(DownlinkAllocatorTest, MixedPriorityAllocation) {
 	EXPECT_GT(priorities["screen"], priorities["pinned"]);
 	EXPECT_GT(priorities["pinned"], priorities["hidden"]);
 }
+
+// ── ComputeDiff tests ──
+
+TEST(DownlinkAllocatorTest, ComputeDiffSuppressesRedundantActions) {
+	std::vector<DownlinkSubscription> subs = {{
+		.consumerId = "c1", .visible = true, .pinned = true, .targetWidth = 1280
+	}};
+	std::unordered_map<std::string, ConsumerLastState> lastState;
+
+	// First call — everything is new, so all actions should be emitted.
+	auto first = DownlinkAllocator::ComputeDiff(subs, {false}, 0, lastState);
+	EXPECT_FALSE(first.empty());
+
+	// Second call with identical input — should emit nothing.
+	auto second = DownlinkAllocator::ComputeDiff(subs, {false}, 0, lastState);
+	EXPECT_TRUE(second.empty());
+}
+
+TEST(DownlinkAllocatorTest, ComputeDiffEmitsOnStateChange) {
+	std::vector<DownlinkSubscription> subs = {{
+		.consumerId = "c1", .visible = true, .pinned = true, .targetWidth = 1280
+	}};
+	std::unordered_map<std::string, ConsumerLastState> lastState;
+
+	// Seed the state.
+	DownlinkAllocator::ComputeDiff(subs, {false}, 0, lastState);
+
+	// Change degradeLevel from 0 → 2 — layers should change.
+	auto actions = DownlinkAllocator::ComputeDiff(subs, {false}, 2, lastState);
+	bool hasLayers = false;
+	for (auto& a : actions)
+		if (a.type == DownlinkAction::Type::kSetLayers) hasLayers = true;
+	EXPECT_TRUE(hasLayers);
+}
+
+TEST(DownlinkAllocatorTest, ComputeDiffEmitsKeyFrameOnResume) {
+	std::vector<DownlinkSubscription> subs = {{
+		.consumerId = "c1", .visible = true, .pinned = true, .targetWidth = 960
+	}};
+	std::unordered_map<std::string, ConsumerLastState> lastState;
+	// Seed as paused.
+	lastState["c1"] = {.paused = true, .spatialLayer = 0, .temporalLayer = 0, .priority = 1};
+
+	auto actions = DownlinkAllocator::ComputeDiff(subs, {true}, 0, lastState);
+	bool hasResume = false;
+	for (auto& a : actions)
+		if (a.type == DownlinkAction::Type::kResume) hasResume = true;
+	EXPECT_TRUE(hasResume);
+}
+
+TEST(DownlinkAllocatorTest, ComputeDiffPrunesStaleLastStateEntries) {
+	std::vector<DownlinkSubscription> subs = {{
+		.consumerId = "c1", .visible = true, .targetWidth = 640
+	}};
+	std::unordered_map<std::string, ConsumerLastState> lastState;
+	lastState["c1"] = {.paused = false, .spatialLayer = 0, .temporalLayer = 0, .priority = 120};
+	lastState["stale"] = {.paused = true, .spatialLayer = 0, .temporalLayer = 0, .priority = 1};
+
+	DownlinkAllocator::ComputeDiff(subs, {false}, 0, lastState);
+
+	EXPECT_EQ(lastState.size(), 1u);
+	EXPECT_TRUE(lastState.find("c1") != lastState.end());
+	EXPECT_TRUE(lastState.find("stale") == lastState.end());
+}

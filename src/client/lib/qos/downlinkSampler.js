@@ -63,18 +63,41 @@ class DownlinkSampler {
         }
 
         const subscriptions = [];
+        const matchedReportIds = new Set();
         for (const [consumerId, hint] of this._hints) {
-            // Try to find matching inbound-rtp by iterating (consumer mid matching
-            // is complex; fall back to order-based or first available).
-            // For simplicity, collect all video inbound stats and match by index
-            // or let caller provide ssrc mapping. Here we use a best-effort approach.
             let stats = null;
-            for (const report of inboundBySSRC.values()) {
-                // mediasoup consumer mid is set on the transceiver; match via trackIdentifier
-                // if available, otherwise take first unmatched.
-                if (!report._matched) {
+            const hintSsrc = Number(hint?.ssrc);
+            if (Number.isFinite(hintSsrc) && inboundBySSRC.has(hintSsrc)) {
+                const direct = inboundBySSRC.get(hintSsrc);
+                if (direct?.id) matchedReportIds.add(direct.id);
+                stats = direct;
+            }
+
+            if (!stats && hint?.trackId) {
+                for (const report of inboundBySSRC.values()) {
+                    if (report.trackIdentifier === hint.trackId) {
+                        if (report?.id) matchedReportIds.add(report.id);
+                        stats = report;
+                        break;
+                    }
+                }
+            }
+
+            if (!stats && hint?.mid) {
+                for (const report of inboundBySSRC.values()) {
+                    if (String(report.mid ?? '') === String(hint.mid)) {
+                        if (report?.id) matchedReportIds.add(report.id);
+                        stats = report;
+                        break;
+                    }
+                }
+            }
+
+            if (!stats) {
+                for (const report of inboundBySSRC.values()) {
+                    if (report?.id && matchedReportIds.has(report.id)) continue;
+                    if (report?.id) matchedReportIds.add(report.id);
                     stats = report;
-                    report._matched = true;
                     break;
                 }
             }
@@ -95,11 +118,6 @@ class DownlinkSampler {
                 frameHeight: stats?.frameHeight || 0,
                 freezeRate: computeFreezeRate(stats),
             });
-        }
-
-        // Clear _matched flags
-        for (const report of inboundBySSRC.values()) {
-            delete report._matched;
         }
 
         return {
