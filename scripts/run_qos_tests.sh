@@ -8,7 +8,7 @@ JEST_BIN="$CLIENT_DIR/node_modules/.bin/jest"
 CASE_REPORT_SCRIPT="$ROOT_DIR/tests/qos_harness/render_case_report.mjs"
 ARTIFACTS_DIR="$ROOT_DIR/tests/qos_harness/artifacts"
 FAILURES_FILE="$ARTIFACTS_DIR/last-failures.txt"
-DOWNLINK_REPORT_FILE="$ROOT_DIR/docs/downlink-qos-test-results.md"
+DOWNLINK_REPORT_FILE="$ROOT_DIR/docs/downlink-qos-case-results.md"
 GENERATE_CASE_REPORT=0
 MATRIX_INCLUDE_EXTENDED=0
 MATRIX_CASES=""
@@ -137,6 +137,7 @@ cleanup_test_processes_fallback() {
     "tests/qos_harness/browser_downlink_controls.mjs"
     "tests/qos_harness/browser_downlink_e2e.mjs"
     "tests/qos_harness/browser_downlink_priority.mjs"
+    "tests/qos_harness/browser_downlink_v2.mjs"
     "tests/qos_harness/run_matrix.mjs"
   )
 
@@ -267,53 +268,185 @@ join_targets_for_markdown() {
   printf '%s\n' "$joined"
 }
 
+downlink_report_labels() {
+  printf '%s\n' \
+    "cpp-unit" \
+    "cpp-integration" \
+    "browser-harness:downlink-controls" \
+    "browser-harness:downlink-e2e" \
+    "browser-harness:downlink-priority" \
+    "browser-harness:downlink-v2"
+}
+
+downlink_task_category() {
+  local label="$1"
+  case "$label" in
+    cpp-*) printf 'server\n' ;;
+    browser-harness:*) printf 'browser\n' ;;
+    *) printf 'other\n' ;;
+  esac
+}
+
+downlink_task_description() {
+  local label="$1"
+  case "$label" in
+    cpp-unit)
+      printf '服务端 downlink QoS 相关单测（allocator / planner / aggregator / publisher supply）\n'
+      ;;
+    cpp-integration)
+      printf '服务端 downlink QoS 集成测试（consumer state、publisher clamp、stale snapshot 回归）\n'
+      ;;
+    browser-harness:downlink-controls)
+      printf '浏览器信令控制验证：pause / resume / requestKeyFrame 基本控制链路\n'
+      ;;
+    browser-harness:downlink-e2e)
+      printf '浏览器端到端验证：downlinkClientStats -> consumer pause/resume / priority\n'
+      ;;
+    browser-harness:downlink-priority)
+      printf '浏览器弱网竞争验证：高优先级 subscriber 分配优于低优先级\n'
+      ;;
+    browser-harness:downlink-v2)
+      printf '浏览器 v2 验证：subscriber demand -> track-scoped publisher clamp / clear / zero-demand hold\n'
+      ;;
+    *)
+      printf '%s\n' "$label"
+      ;;
+  esac
+}
+
+downlink_task_command() {
+  local label="$1"
+  case "$label" in
+    cpp-unit)
+      printf './build/mediasoup_tests --gtest_filter=*Downlink*:*ProducerDemand*:*PublisherSupply*:*SubscriberBudgetAllocator*\n'
+      ;;
+    cpp-integration)
+      printf './build/mediasoup_qos_integration_tests --gtest_filter=QosIntegrationTest.Downlink*\n'
+      ;;
+    browser-harness:downlink-controls)
+      printf 'node tests/qos_harness/browser_downlink_controls.mjs\n'
+      ;;
+    browser-harness:downlink-e2e)
+      printf 'node tests/qos_harness/browser_downlink_e2e.mjs\n'
+      ;;
+    browser-harness:downlink-priority)
+      printf 'node tests/qos_harness/browser_downlink_priority.mjs\n'
+      ;;
+    browser-harness:downlink-v2)
+      printf 'node tests/qos_harness/browser_downlink_v2.mjs\n'
+      ;;
+    *)
+      printf '-\n'
+      ;;
+  esac
+}
+
+markdown_anchor() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//'
+}
+
+join_markdown_links() {
+  local joined=""
+  local item
+  for item in "$@"; do
+    [[ -n "$item" ]] || continue
+    local anchor
+    anchor="$(markdown_anchor "$item")"
+    local link="[$item](#$anchor)"
+    if [[ -n "$joined" ]]; then
+      joined+="、"
+    fi
+    joined+="$link"
+  done
+  printf '%s\n' "${joined:-无}"
+}
+
 write_downlink_report() {
-  local labels=(
-    "cpp-unit"
-    "cpp-integration"
-    "browser-harness:downlink-controls"
-    "browser-harness:downlink-e2e"
-    "browser-harness:downlink-priority"
-  )
+  mapfile -t labels < <(downlink_report_labels)
   local generated_at
-  generated_at="$(date '+%Y-%m-%d %H:%M:%S %Z')"
+  generated_at="$(date -u '+%Y-%m-%dT%H:%M:%S.%3NZ')"
   local selected_targets
   selected_targets="$(join_targets_for_markdown "${GROUPS_TO_RUN[@]}")"
-  local executed=0
-  local passed=0
-  local failed=0
-  local label status duration
+  local total=${#labels[@]}
+  local executed=0 passed=0 failed=0 not_run=0
+  local failed_labels=()
+  local server_labels=()
+  local browser_labels=()
+  local label status duration category
 
+  for label in "${labels[@]}"; do
+    status="${TASK_RESULTS[$label]:-NOT_RUN}"
+    case "$status" in
+      PASS) ((executed += 1)); ((passed += 1)) ;;
+      FAIL) ((executed += 1)); ((failed += 1)); failed_labels+=("$label") ;;
+      *) ((not_run += 1)) ;;
+    esac
+
+    category="$(downlink_task_category "$label")"
+    case "$category" in
+      server) server_labels+=("$label") ;;
+      browser) browser_labels+=("$label") ;;
+    esac
+  done
+
+  mkdir -p "$(dirname "$DOWNLINK_REPORT_FILE")"
   {
-    echo "# Downlink QoS Test Results"
+    echo "# 下行 QoS 逐项最终结果"
     echo
-    echo "- generated: $generated_at"
-    echo "- script: \`scripts/run_qos_tests.sh\`"
-    echo "- selected targets: ${selected_targets:-none}"
+    echo "生成时间：\`$generated_at\`"
     echo
-    echo "| Task | Status | Duration |"
-    echo "|---|---|---|"
+    echo "## 1. 汇总"
+    echo
+    echo "- 总任务：\`$total\`"
+    echo "- 已执行：\`$executed\`"
+    echo "- 通过：\`$passed\`"
+    echo "- 失败：\`$failed\`"
+    echo "- 未执行：\`$not_run\`"
+    echo "- 执行脚本：\`scripts/run_qos_tests.sh\`"
+    echo "- 本次选择目标：${selected_targets:-无}"
+    echo
+    if ((${#failed_labels[@]} > 0)); then
+      echo "### 1.1 失败任务"
+      echo
+      echo "| 任务 | 结果 | 耗时 |"
+      echo "|---|---|---|"
+      for label in "${failed_labels[@]}"; do
+        duration="${TASK_DURATIONS[$label]:--}"
+        echo "| [\`$label\`](#$(markdown_anchor "$label")) | \`${TASK_RESULTS[$label]}\` | \`${duration}\` |"
+      done
+      echo
+    else
+      echo "### 1.1 失败任务"
+      echo
+      echo "- 无"
+      echo
+    fi
+
+    echo "## 2. 快速跳转"
+    echo
+    echo "- 失败任务：$(join_markdown_links "${failed_labels[@]}")"
+    echo "- server：$(join_markdown_links "${server_labels[@]}")"
+    echo "- browser：$(join_markdown_links "${browser_labels[@]}")"
+    echo
+    echo "## 3. 逐项结果"
+    echo
+
     for label in "${labels[@]}"; do
       status="${TASK_RESULTS[$label]:-NOT_RUN}"
       duration="${TASK_DURATIONS[$label]:--}"
-      if [[ "$status" != "NOT_RUN" ]]; then
-        ((executed += 1))
-        if [[ "$status" == "PASS" ]]; then
-          ((passed += 1))
-        else
-          ((failed += 1))
-        fi
-      fi
-      echo "| \`$label\` | $status | $duration |"
+      category="$(downlink_task_category "$label")"
+      echo "### $label"
+      echo
+      echo "| 字段 | 内容 |"
+      echo "|---|---|"
+      echo "| 任务 ID | \`$label\` |"
+      echo "| 类别 | \`$category\` |"
+      echo "| 说明 | $(downlink_task_description "$label") |"
+      echo "| 状态 | \`$status\` |"
+      echo "| 耗时 | \`$duration\` |"
+      echo "| 对应命令 | \`$(downlink_task_command "$label")\` |"
+      echo
     done
-    echo
-    if ((executed == 0)); then
-      echo "No downlink-specific QoS tasks ran in this invocation."
-    else
-      echo "- downlink tasks executed: $executed"
-      echo "- pass: $passed"
-      echo "- fail: $failed"
-    fi
   } > "$DOWNLINK_REPORT_FILE"
 }
 
@@ -489,6 +622,7 @@ run_browser_harness() {
   prepare_test_port 14013 "Downlink control harness SFU port 14013"
   prepare_test_port 14014 "Downlink E2E harness SFU port 14014"
   prepare_test_port 14015 "Downlink priority harness SFU port 14015"
+  prepare_test_port 14016 "Downlink v2 harness SFU port 14016"
   local failed=0
   if ! run_cmd \
     "browser-harness:server-signal" \
@@ -522,6 +656,13 @@ run_browser_harness() {
     "browser-harness:downlink-priority" \
     --cwd "$ROOT_DIR" \
     node "$ROOT_DIR/tests/qos_harness/browser_downlink_priority.mjs"; then
+    failed=1
+  fi
+
+  if ! run_cmd \
+    "browser-harness:downlink-v2" \
+    --cwd "$ROOT_DIR" \
+    node "$ROOT_DIR/tests/qos_harness/browser_downlink_v2.mjs"; then
     failed=1
   fi
   return "$failed"
@@ -605,6 +746,13 @@ run_target() {
         "$target" \
         --cwd "$ROOT_DIR" \
         node "$ROOT_DIR/tests/qos_harness/browser_downlink_priority.mjs"
+      ;;
+    browser-harness:downlink-v2)
+      prepare_test_port 14016 "Downlink v2 harness SFU port 14016"
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        node "$ROOT_DIR/tests/qos_harness/browser_downlink_v2.mjs"
       ;;
     *)
       fail "unknown target: $target"
