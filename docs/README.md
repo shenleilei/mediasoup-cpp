@@ -36,6 +36,7 @@
 | 查 QoS 详细 case 结果 | [uplink-qos-case-analysis.md](./uplink-qos-case-analysis.md) |
 | 查 QoS 测试覆盖地图 | [qos-test-coverage_cn.md](./qos-test-coverage_cn.md) |
 | 做上线 / 运维准备 | [PRODUCTION_CHECKLIST.md](./PRODUCTION_CHECKLIST.md) → [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) |
+| 做商业化排期 | [commercialization-plan_cn.md](./commercialization-plan_cn.md) → [q1.md](./q1.md) |
 | 查历史背景 | [archive/CODE_REVIEW_2026-04-08.md](./archive/CODE_REVIEW_2026-04-08.md) / [archive/DEVELOPMENT_2026-04-08.md](./archive/DEVELOPMENT_2026-04-08.md) |
 
 ## 2. 当前主文档
@@ -47,6 +48,8 @@
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | 项目开发主文档，包含架构、线程模型、构建与测试入口。 |
 | [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) | 监控、告警与值班处理流程。 |
 | [PRODUCTION_CHECKLIST.md](./PRODUCTION_CHECKLIST.md) | 上线前检查项。 |
+| [commercialization-plan_cn.md](./commercialization-plan_cn.md) | 商业化路线图，回答三个月可商用与十二个月领先要补什么。 |
+| [q1.md](./q1.md) | 截止 `2026-07-14` 的执行版计划，按 `2026-07-01` 上线和 `2026-07-14` QoS 强化拆分。 |
 | [REDIS_KEY_GUIDELINES.md](./REDIS_KEY_GUIDELINES.md) | Redis key 设计和约束。 |
 
 ## 3. QoS 专项文档
