@@ -39,8 +39,15 @@ subscriber 侧 `bytesReceived` 在 pause 后不再增长。
 2. 记录从 resume 到 subscriber 侧 `framesDecoded` 开始增长的时间
 
 结论：resume 后首帧恢复时间取决于下一个关键帧到达。
-典型值 100-500ms（取决于 publisher 的关键帧间隔）。
-如果在 resume 后立即调用 `requestConsumerKeyFrame`，可以缩短到 50-200ms。
+如果在 resume 后立即调用 `requestConsumerKeyFrame`，可以加速恢复。
+这里需要区分两类时间：
+
+- 媒体恢复时间：看 subscriber 侧 `framesDecoded` / `bytesReceived`
+- 控制面延迟：看 downlink matrix D8 case 的 `pauseLatencyMs` / `resumeLatencyMs`
+
+当前 matrix D8 只覆盖控制面延迟和振荡检测，不直接测量首帧恢复时间。
+对应数据见：
+[docs/generated/downlink-qos-matrix-report.json](../docs/generated/downlink-qos-matrix-report.json)
 
 #### 3. pauseUpstream 对 producer 的影响
 
@@ -59,7 +66,10 @@ subscriber 侧 `bytesReceived` 在 pause 后不再增长。
 3. 记录从 resume 到 subscriber 侧收到首帧的时间
 
 结论：恢复时间 = 客户端编码器重启时间 + 首帧传输时间。
-典型值 200-800ms，取决于编码器实现和网络条件。
+当前 matrix D8 提供的是 `resumeUpstream` override 到达时间和振荡检测，
+不直接等同于 subscriber 首帧恢复时间。
+真正的媒体恢复仍需结合 `browser_downlink_controls.mjs` 里的 browser stats 观察。
+注：实际恢复时间受编码器实现影响，不同浏览器差异较大。
 
 ## 关键发现
 
@@ -98,8 +108,8 @@ subscriber 侧 `bytesReceived` 在 pause 后不再增长。
 | pauseConsumer RTP 停发 | `browser_downlink_controls.mjs` case 1 |
 | resumeConsumer 恢复 | `browser_downlink_controls.mjs` case 2 |
 | requestConsumerKeyFrame | `browser_downlink_controls.mjs` case 3 |
-| pauseUpstream 触发 | `browser_downlink_v3.mjs` case 1 |
-| resumeUpstream 触发 | `browser_downlink_v3.mjs` case 2 |
-| flicker 防抖 | `browser_downlink_v3.mjs` case 3 |
+| pauseUpstream 触发 | `browser_downlink_v3.mjs` case 1, downlink matrix D8 `pauseLatencyMs` |
+| resumeUpstream 触发 | `browser_downlink_v3.mjs` case 2, downlink matrix D8 `resumeLatencyMs` |
+| flicker 防抖 | `browser_downlink_v3.mjs` case 3, downlink matrix D8 `oscillation` |
 | zero-demand 集成 | `QosIntegrationTest.DownlinkV3SustainedZeroDemandTriggersPauseUpstream` |
 | demand-restored 集成 | `QosIntegrationTest.DownlinkV3DemandRestoredAfterPauseTriggersClearOrResume` |

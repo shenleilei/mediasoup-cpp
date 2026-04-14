@@ -129,13 +129,18 @@ async function runScenario() {
     // ── Case 1: sustained zero-demand → pauseUpstream ──
     // Send hidden stats repeatedly to sustain zero-demand past kPauseConfirmMs (4s)
     console.log('[case 1] sending sustained hidden demand...');
+    const pauseStartMs = Date.now();
     for (let i = 0; i < 12; i++) {
       await page.evaluate(() => window.__downlinkV3Harness.sendDownlinkStats({ visible: false }));
       await sleep(500);
     }
     // Should have received pauseUpstream by now (4s zero-demand + margin)
-    const pause = await page.evaluate(() =>
-      window.__downlinkV3Harness.waitForTrackOverrideWithReason('downlink_v3_zero_demand_pause', 3000));
+    const pause = await page.evaluate((afterTsMs) =>
+      window.__downlinkV3Harness.waitForOverride(
+        { reasonPrefix: 'downlink_v3_zero_demand_pause', pauseUpstream: true },
+        3000,
+        afterTsMs,
+      ), pauseStartMs);
     if (!pause) {
       throw new Error('case 1 failed: no pauseUpstream received after sustained hidden');
     }
@@ -147,6 +152,7 @@ async function runScenario() {
     // ── Case 2: demand restored → resumeUpstream ──
     console.log('[case 2] restoring visible demand...');
     await page.evaluate(() => window.__downlinkV3Harness.drainPublisherNotifications());
+    const resumeStartMs = Date.now();
     for (let i = 0; i < 4; i++) {
       await page.evaluate(() => window.__downlinkV3Harness.sendDownlinkStats({
         visible: true, pinned: true,
@@ -155,8 +161,12 @@ async function runScenario() {
       }));
       await sleep(500);
     }
-    const resume = await page.evaluate(() =>
-      window.__downlinkV3Harness.waitForTrackOverrideWithReason('downlink_v3_demand_resumed', 3000));
+    const resume = await page.evaluate((afterTsMs) =>
+      window.__downlinkV3Harness.waitForOverride(
+        { reasonPrefix: 'downlink_v3_demand_resumed', resumeUpstream: true },
+        3000,
+        afterTsMs,
+      ), resumeStartMs);
     if (!resume) {
       throw new Error('case 2 failed: no resumeUpstream received after demand recovery');
     }
@@ -168,6 +178,7 @@ async function runScenario() {
     // ── Case 3: rapid hide/show flicker does NOT cause pause ──
     console.log('[case 3] rapid hide/show flicker...');
     await page.evaluate(() => window.__downlinkV3Harness.drainPublisherNotifications());
+    const flickerStartMs = Date.now();
     for (let i = 0; i < 10; i++) {
       await page.evaluate((vis) => window.__downlinkV3Harness.sendDownlinkStats({
         visible: vis, pinned: vis,
@@ -183,8 +194,12 @@ async function runScenario() {
       targetWidth: 1280, targetHeight: 720,
     }));
     await sleep(500);
-    const spuriousPause = await page.evaluate(() =>
-      window.__downlinkV3Harness.waitForTrackOverrideWithReason('downlink_v3_zero_demand_pause', 1000));
+    const spuriousPause = await page.evaluate((afterTsMs) =>
+      window.__downlinkV3Harness.waitForOverride(
+        { reasonPrefix: 'downlink_v3_zero_demand_pause', pauseUpstream: true },
+        1000,
+        afterTsMs,
+      ), flickerStartMs);
     if (spuriousPause) {
       throw new Error('case 3 failed: rapid flicker caused spurious pauseUpstream');
     }

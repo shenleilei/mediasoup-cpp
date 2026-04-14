@@ -171,10 +171,11 @@ export function evaluateExpectation(state, expect = {}) {
   return { stateMatch, levelMatch };
 }
 
-export function getImpairedStateForEvaluation(caseDefn, impairmentSummary) {
-  return caseDefn.group === 'baseline'
-    ? impairmentSummary?.current
-    : impairmentSummary?.peak;
+export function getImpairedStateForEvaluation(caseDefn, impairmentSummary, baselineSummary = null) {
+  if (caseDefn.group === 'baseline') {
+    return baselineSummary?.current ?? impairmentSummary?.current;
+  }
+  return impairmentSummary?.peak;
 }
 
 export function recoveryPassedForCase(caseDefn, baselineState, recoveredState, runner = 'default') {

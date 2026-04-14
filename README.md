@@ -130,12 +130,14 @@ This repo now includes:
   - server-side `clientStats` ingestion, validation, aggregation, and automatic override generation
   - browser/node harnesses for publish / stale-seq / policy-update / automatic override / manual clear
   - browser loopback weak-network matrix execution and case-by-case reporting
-- a downlink QoS v1 path across:
+- a downlink QoS path across:
   - subscriber-side `downlinkClientStats` ingestion, validation, storage, and controller execution
   - server-side hidden/pinned/size-based allocation, health-driven degrade/recovery, and priority handling
+  - producer-side zero-demand `pauseUpstream` / `resumeUpstream` coordination for sustained all-hidden cases
   - browser harnesses for consumer control, downlink auto pause/resume, and priority competition under constrained downlink
 
-Current downlink scope is `v1` subscriber receive control. `dynacast` and room-level global bitrate budgeting remain follow-on work.
+Current downlink scope is subscriber receive control plus zero-demand publisher pause/resume coordination.
+`dynacast` and room-level global bitrate budgeting remain follow-on work.
 
 ### Latest host-run result
 
@@ -160,6 +162,7 @@ Source-of-truth links:
 - final summary: [docs/uplink-qos-final-report.md](./docs/uplink-qos-final-report.md)
 - result summary: [docs/uplink-qos-test-results-summary.md](./docs/uplink-qos-test-results-summary.md)
 - per-case final result: [docs/uplink-qos-case-results.md](./docs/uplink-qos-case-results.md)
+- test coverage map: [docs/qos-test-coverage_cn.md](./docs/qos-test-coverage_cn.md)
 - generated matrix artifact: [docs/generated/uplink-qos-matrix-report.json](./docs/generated/uplink-qos-matrix-report.json)
 - detailed review notes: [docs/review_qos.md](./docs/review_qos.md)
 

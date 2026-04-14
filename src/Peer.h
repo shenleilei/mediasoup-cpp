@@ -23,12 +23,16 @@ struct Peer {
 	std::unordered_map<std::string, std::shared_ptr<Consumer>> consumers;
 
 	void close() {
-		for (auto& [_, p] : producers) p->close();
-		producers.clear();
-		for (auto& [_, c] : consumers) c->close();
-		consumers.clear();
+		// Close transports first so mediasoup-worker tears down attached producers/consumers
+		// in one path, which avoids double-close noise during disconnect cleanup.
 		if (sendTransport) { sendTransport->close(); sendTransport.reset(); }
 		if (recvTransport) { recvTransport->close(); recvTransport.reset(); }
+		for (auto& [_, p] : producers)
+			if (p && !p->closed()) p->close();
+		producers.clear();
+		for (auto& [_, c] : consumers)
+			if (c && !c->closed()) c->close();
+		consumers.clear();
 	}
 
 	std::shared_ptr<Transport> getTransport(const std::string& tid) {

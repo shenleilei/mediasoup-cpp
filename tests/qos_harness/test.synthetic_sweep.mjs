@@ -283,6 +283,42 @@ test('phase summary uses peak impaired severity instead of only final state', ()
   assert.deepEqual(phase.best, { state: 'stable', level: 0 });
 });
 
+test('baseline cases evaluate against the settled baseline state', () => {
+  const caseDefn = {
+    caseId: 'B3',
+    group: 'baseline',
+    expect: {
+      states: ['early_warning', 'congested'],
+      minLevel: 1,
+      maxLevel: 4,
+    },
+  };
+  const baselineSummary = {
+    current: { state: 'early_warning', level: 1 },
+  };
+  const impairmentSummary = {
+    current: { state: 'stable', level: 0 },
+    peak: { state: 'congested', level: 4 },
+  };
+
+  const impairedState = getImpairedStateForEvaluation(
+    caseDefn,
+    impairmentSummary,
+    baselineSummary
+  );
+
+  assert.deepEqual(impairedState, { state: 'early_warning', level: 1 });
+  assert.equal(
+    deriveCaseEvaluation(
+      caseDefn,
+      baselineSummary.current,
+      impairedState,
+      { state: 'stable', level: 0 }
+    ).passed,
+    true
+  );
+});
+
 test('extractTiming stays inside the requested phase window', () => {
   const trace = [
     {

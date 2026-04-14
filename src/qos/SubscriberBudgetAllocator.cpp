@@ -164,6 +164,11 @@ SubscriberBudgetPlan SubscriberBudgetAllocator::Allocate(
 			a.type = DownlinkAction::Type::kPause;
 			a.consumerId = sub.consumerId;
 			plan.actions.push_back(a);
+			DownlinkAction priorityAction;
+			priorityAction.type = DownlinkAction::Type::kSetPriority;
+			priorityAction.consumerId = sub.consumerId;
+			priorityAction.priority = DownlinkAllocator::ComputePriority(sub);
+			plan.actions.push_back(priorityAction);
 			continue;
 		}
 		// Resume + set layers + set priority
