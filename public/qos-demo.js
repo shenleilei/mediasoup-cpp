@@ -191,6 +191,8 @@
   }
 
   function clearRemoteConsumersByPeer(peerId) {
+    const leavingProducerIds = new Set();
+
     for (const [consumerId, entry] of state.remoteConsumers.entries()) {
       if (entry.peerId === peerId) {
         clearRemoteConsumerEntry(consumerId);
@@ -199,12 +201,21 @@
 
     for (const [producerId, ownerPeerId] of state.remoteProducerPeerMap.entries()) {
       if (ownerPeerId === peerId) {
+        leavingProducerIds.add(producerId);
         clearRemoteConsumersByProducer(producerId);
         state.remoteProducerPeerMap.delete(producerId);
       }
     }
 
-    state.pendingConsumers = state.pendingConsumers.filter(item => item.peerId !== peerId);
+    state.pendingConsumers = state.pendingConsumers.filter(item => {
+      if (item.peerId === peerId) {
+        return false;
+      }
+      if (item.producerId && leavingProducerIds.has(item.producerId)) {
+        return false;
+      }
+      return true;
+    });
   }
 
   function clearAllRemoteConsumers() {
@@ -497,6 +508,7 @@
 
     try {
       if (state.remoteConsumers.has(data.id)) {
+        log(`Skipped duplicate consumer ${data.id} from ${data.peerId || data.producerId}`);
         return;
       }
 
