@@ -193,7 +193,7 @@
   function clearRemoteConsumersByPeer(peerId) {
     const leavingProducerIds = new Set();
 
-    for (const [consumerId, entry] of state.remoteConsumers.entries()) {
+    for (const [consumerId, entry] of [...state.remoteConsumers.entries()]) {
       if (entry.peerId === peerId) {
         clearRemoteConsumerEntry(consumerId);
       }
@@ -530,6 +530,14 @@
       element.srcObject = new MediaStream([consumer.track]);
       element.play().catch(() => {});
 
+      const consumerEntry = {
+        consumer,
+        producerId: data.producerId,
+        peerId: data.peerId || '',
+        mediaElement: element,
+        cardElement: null,
+      };
+
       if (consumer.kind === 'video') {
         const card = document.createElement('div');
         card.className = 'video-card';
@@ -554,23 +562,10 @@
         card.appendChild(frame);
         card.appendChild(meta);
         els.videos.appendChild(card);
-
-        state.remoteConsumers.set(consumer.id, {
-          consumer,
-          producerId: data.producerId,
-          peerId: data.peerId || '',
-          mediaElement: element,
-          cardElement: card,
-        });
-      } else {
-        state.remoteConsumers.set(consumer.id, {
-          consumer,
-          producerId: data.producerId,
-          peerId: data.peerId || '',
-          mediaElement: element,
-          cardElement: null,
-        });
+        consumerEntry.cardElement = card;
       }
+
+      state.remoteConsumers.set(consumer.id, consumerEntry);
 
       if (data.producerId) {
         if (!state.remoteProducerConsumers.has(data.producerId)) {
