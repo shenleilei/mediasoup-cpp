@@ -142,7 +142,7 @@ async function runScenario() {
     console.log('[PASS] case 2: visible=true → consumer resumed');
 
     // Case 3: verify priority is set correctly
-    // Send hidden again and check priority=0
+    // Send hidden again and check priority=1
     await page.evaluate(() => window.__downlinkE2eHarness.sendDownlinkStats(false, 3));
     await new Promise(r => setTimeout(r, 200));
     const hiddenState = await page.evaluate(() => window.__downlinkE2eHarness.getConsumerState());

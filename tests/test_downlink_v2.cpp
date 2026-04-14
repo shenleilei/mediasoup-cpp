@@ -58,9 +58,16 @@ TEST(SubscriberBudgetAllocatorTest, HiddenGetsPaused) {
 	});
 	auto plan = alloc.Allocate(snap, 0);
 	bool c2Paused = false;
+	bool c2HiddenPriority = false;
 	for (auto& a : plan.actions)
 		if (a.consumerId == "c2" && a.type == DownlinkAction::Type::kPause) c2Paused = true;
+	for (auto& a : plan.actions)
+		if (a.consumerId == "c2" &&
+			a.type == DownlinkAction::Type::kSetPriority &&
+			a.priority == DownlinkAllocator::kPriorityHidden)
+			c2HiddenPriority = true;
 	EXPECT_TRUE(c2Paused);
+	EXPECT_TRUE(c2HiddenPriority);
 }
 
 TEST(SubscriberBudgetAllocatorTest, PinnedGetsUpgradeBeforeGrid) {

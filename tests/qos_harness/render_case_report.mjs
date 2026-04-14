@@ -173,7 +173,8 @@ function deriveEvaluation(result, scenario) {
   const baselineState = result.phaseSummary?.baseline?.current ?? result.baseline?.state;
   const impairedState = getImpairedStateForEvaluation(
     scenario,
-    result.phaseSummary?.impairment
+    result.phaseSummary?.impairment,
+    result.phaseSummary?.baseline
   );
   const recoveredState = result.phaseSummary?.recovery?.best ?? result.recovery?.state;
 

@@ -15,6 +15,7 @@
     "expect": {
       "consumerPaused": false,
       "preferredSpatialLayer": 2,
+      "recoveryPreferredSpatialLayer": 2,
       "pauseUpstream": false
     }
   },
@@ -34,6 +35,7 @@
     "expect": {
       "consumerPaused": false,
       "maxSpatialLayer": 0,
+      "recoveryPreferredSpatialLayer": 2,
       "pauseUpstream": false,
       "recovers": true
     }
@@ -53,7 +55,8 @@
     },
     "expect": {
       "consumerPaused": false,
-      "maxSpatialLayer": 1,
+      "maxSpatialLayer": 0,
+      "recoveryPreferredSpatialLayer": 2,
       "pauseUpstream": false,
       "recovers": true
     }
@@ -73,7 +76,8 @@
     },
     "expect": {
       "consumerPaused": false,
-      "maxSpatialLayer": 1,
+      "maxSpatialLayer": 0,
+      "recoveryPreferredSpatialLayer": 2,
       "pauseUpstream": false,
       "recovers": true
     }
@@ -93,7 +97,8 @@
     },
     "expect": {
       "consumerPaused": false,
-      "maxSpatialLayer": 1,
+      "maxSpatialLayer": 0,
+      "recoveryPreferredSpatialLayer": 2,
       "pauseUpstream": false,
       "recovers": true
     }
@@ -113,6 +118,7 @@
     },
     "expect": {
       "consumerPaused": false,
+      "recoveryPreferredSpatialLayer": 2,
       "pauseUpstream": false,
       "recovers": true
     }
@@ -121,7 +127,7 @@
     "caseId": "D7",
     "group": "competition",
     "priority": "P1",
-    "description": "two subscribers, high-priority gets better layer under constrained bw",
+    "description": "one subscriber with two consumers, pinned tile keeps better layer under constrained bw",
     "baselineMs": 10000,
     "impairmentMs": 15000,
     "recoveryMs": 15000,
@@ -152,6 +158,7 @@
     "expect": {
       "pauseUpstream": true,
       "resumeUpstream": true,
+      "recoveryPreferredSpatialLayer": 2,
       "recovers": true
     }
   }

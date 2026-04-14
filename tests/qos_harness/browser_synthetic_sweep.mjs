@@ -122,7 +122,8 @@ async function runCase(page, caseDefn) {
   );
   const impairedStateForEvaluation = getImpairedStateForEvaluation(
     caseDefn,
-    impairmentSummary
+    impairmentSummary,
+    baselineSummary
   );
   const evaluation = deriveCaseEvaluation(
     caseDefn,

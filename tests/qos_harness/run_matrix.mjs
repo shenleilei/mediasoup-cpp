@@ -146,7 +146,8 @@ async function runCase(caseDef) {
     );
     const impairedStateForEvaluation = getImpairedStateForEvaluation(
       caseDef,
-      impairmentSummary
+      impairmentSummary,
+      baselineSummary
     );
     const actionTypes = fullTrace
       .map(entry => entry?.plannedAction?.type)
