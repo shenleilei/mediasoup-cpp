@@ -36,3 +36,7 @@ log/
 recordings/
 *.pid
 config.json
+
+# Local QoS run artifacts
+/docs/archive/*-qos-runs/20*/
+/run_d1_test.sh
