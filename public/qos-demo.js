@@ -41,6 +41,9 @@
     debugStatsTimer: null,
     legacyStatsTimer: null,
     usingFallbackStream: false,
+    remoteConsumers: new Map(),
+    remoteProducerConsumers: new Map(),
+    remoteProducerPeerMap: new Map(),
   };
 
   const qosLib = window.mediasoupClient && window.mediasoupClient.qos;
@@ -133,6 +136,85 @@
     state.latestRoomState = null;
     state.latestStatsReport = null;
     state.localDebugStats = null;
+  }
+
+  function clearRemoteConsumerEntry(consumerId) {
+    const entry = state.remoteConsumers.get(consumerId);
+    if (!entry) {
+      return;
+    }
+
+    state.remoteConsumers.delete(consumerId);
+
+    if (entry.producerId) {
+      const producerConsumers = state.remoteProducerConsumers.get(entry.producerId);
+      if (producerConsumers) {
+        producerConsumers.delete(consumerId);
+        if (producerConsumers.size === 0) {
+          state.remoteProducerConsumers.delete(entry.producerId);
+        }
+      }
+    }
+
+    try {
+      if (entry.consumer && !entry.consumer.closed) {
+        entry.consumer.close();
+      }
+    } catch {
+      // Ignore close errors during demo cleanup.
+    }
+
+    if (entry.mediaElement) {
+      try {
+        entry.mediaElement.pause();
+      } catch {
+        // Ignore pause errors.
+      }
+      entry.mediaElement.srcObject = null;
+      entry.mediaElement.remove();
+    }
+
+    if (entry.cardElement) {
+      entry.cardElement.remove();
+    }
+  }
+
+  function clearRemoteConsumersByProducer(producerId) {
+    const consumerIds = state.remoteProducerConsumers.get(producerId);
+    if (!consumerIds || consumerIds.size === 0) {
+      return;
+    }
+
+    for (const consumerId of Array.from(consumerIds)) {
+      clearRemoteConsumerEntry(consumerId);
+    }
+  }
+
+  function clearRemoteConsumersByPeer(peerId) {
+    for (const [consumerId, entry] of Array.from(state.remoteConsumers.entries())) {
+      if (entry.peerId === peerId) {
+        clearRemoteConsumerEntry(consumerId);
+      }
+    }
+
+    for (const [producerId, ownerPeerId] of Array.from(state.remoteProducerPeerMap.entries())) {
+      if (ownerPeerId === peerId) {
+        clearRemoteConsumersByProducer(producerId);
+        state.remoteProducerPeerMap.delete(producerId);
+      }
+    }
+
+    state.pendingConsumers = state.pendingConsumers.filter(item => item.peerId !== peerId);
+  }
+
+  function clearAllRemoteConsumers() {
+    for (const consumerId of Array.from(state.remoteConsumers.keys())) {
+      clearRemoteConsumerEntry(consumerId);
+    }
+    state.remoteProducerConsumers.clear();
+    state.remoteProducerPeerMap.clear();
+    state.pendingConsumers = [];
+    els.videos.innerHTML = '';
   }
 
   function buildDemoQosPolicy(basePolicy) {
@@ -374,7 +456,11 @@
     }
 
     if (message.method === 'newProducer') {
-      void consumeProducer(message.data.producerId, message.data.kind);
+      void consumeProducer(
+        message.data.producerId,
+        message.data.kind,
+        message.data.peerId || message.data.producerPeerId || ''
+      );
       return;
     }
 
@@ -385,6 +471,7 @@
 
     if (message.method === 'peerLeft') {
       log(`Peer left: ${message.data.peerId}`);
+      clearRemoteConsumersByPeer(message.data.peerId);
       return;
     }
 
@@ -392,6 +479,13 @@
   }
 
   async function handleNewConsumer(data) {
+    if (data.producerId && data.peerId) {
+      state.remoteProducerPeerMap.set(data.producerId, data.peerId);
+    }
+    if (!data.peerId && data.producerId && state.remoteProducerPeerMap.has(data.producerId)) {
+      data.peerId = state.remoteProducerPeerMap.get(data.producerId);
+    }
+
     if (!state.recvTransport) {
       state.pendingConsumers.push(data);
       log(`Queued consumer ${data.kind} from ${data.peerId || data.producerId} until recv transport is ready`);
@@ -399,6 +493,14 @@
     }
 
     try {
+      if (state.remoteConsumers.has(data.id)) {
+        return;
+      }
+
+      if (data.producerId) {
+        clearRemoteConsumersByProducer(data.producerId);
+      }
+
       const consumer = await state.recvTransport.consume({
         id: data.id,
         producerId: data.producerId,
@@ -417,6 +519,9 @@
         const card = document.createElement('div');
         card.className = 'video-card';
         card.dataset.remoteProducerId = data.producerId;
+        if (data.peerId) {
+          card.dataset.remotePeerId = data.peerId;
+        }
 
         const frame = document.createElement('div');
         frame.className = 'video-frame';
@@ -434,6 +539,29 @@
         card.appendChild(frame);
         card.appendChild(meta);
         els.videos.appendChild(card);
+
+        state.remoteConsumers.set(consumer.id, {
+          consumer,
+          producerId: data.producerId,
+          peerId: data.peerId || '',
+          mediaElement: element,
+          cardElement: card,
+        });
+      } else {
+        state.remoteConsumers.set(consumer.id, {
+          consumer,
+          producerId: data.producerId,
+          peerId: data.peerId || '',
+          mediaElement: element,
+          cardElement: null,
+        });
+      }
+
+      if (data.producerId) {
+        if (!state.remoteProducerConsumers.has(data.producerId)) {
+          state.remoteProducerConsumers.set(data.producerId, new Set());
+        }
+        state.remoteProducerConsumers.get(data.producerId).add(consumer.id);
       }
 
       log(`Subscribed ${data.kind} from ${data.peerId || data.producerId}`);
@@ -442,9 +570,13 @@
     }
   }
 
-  async function consumeProducer(producerId, kind) {
+  async function consumeProducer(producerId, kind, producerPeerId = '') {
     if (!state.recvTransport || !state.device) {
       return;
+    }
+
+    if (producerPeerId) {
+      state.remoteProducerPeerMap.set(producerId, producerPeerId);
     }
 
     try {
@@ -459,6 +591,7 @@
         producerId: response.producerId,
         kind: response.kind || kind,
         rtpParameters: response.rtpParameters,
+        peerId: producerPeerId || state.remoteProducerPeerMap.get(response.producerId) || '',
       });
     } catch (error) {
       log(`Consume error: ${error.message}`);
@@ -685,6 +818,7 @@
   }
 
   async function joinRoom() {
+    clearAllRemoteConsumers();
     const roomId = els.roomInput.value.trim() || 'test-room';
     const peerId = `peer-${Math.random().toString(36).slice(2, 8)}`;
     state.roomId = roomId;
@@ -761,7 +895,11 @@
       const precreatedProducerIds = new Set(precreatedConsumers.map(item => item.producerId));
       for (const producerInfo of joinResponse.existingProducers || []) {
         if (!precreatedProducerIds.has(producerInfo.producerId)) {
-          await consumeProducer(producerInfo.producerId, producerInfo.kind);
+          await consumeProducer(
+            producerInfo.producerId,
+            producerInfo.kind,
+            producerInfo.producerPeerId || producerInfo.peerId || ''
+          );
         }
       }
 
