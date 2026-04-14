@@ -10,9 +10,8 @@
     publishBtn: document.getElementById('publishBtn'),
     stopBtn: document.getElementById('stopBtn'),
     log: document.getElementById('log'),
-    videos: document.getElementById('videos'),
-    localVideo: document.getElementById('localVideo'),
-    localVideoBadge: document.getElementById('localVideoBadge'),
+    localVideos: document.getElementById('localVideos'),
+    remoteVideos: document.getElementById('remoteVideos'),
     qosContent: document.getElementById('qos-content'),
     metaRoom: document.getElementById('metaRoom'),
     metaPeer: document.getElementById('metaPeer'),
@@ -29,10 +28,12 @@
     reqId: 0,
     pending: new Map(),
     pendingConsumers: [],
-    localStream: null,
+    localCaptureStreams: [],
+    localVideoEntries: [],
+    localAudioActive: false,
     publishedProducers: new Map(),
     remoteVideoConsumers: new Map(),
-    qosBundle: null,
+    qosSession: null,
     downlinkBundle: null,
     latestQosPolicy: null,
     latestQosOverride: null,
@@ -56,7 +57,7 @@
 
   function setStatus(text, level = 'warn') {
     els.status.className = `status ${level}`;
-    els.status.innerHTML = `<strong>Status:</strong> ${text}`;
+    els.status.innerHTML = `<strong>状态：</strong> ${text}`;
   }
 
   function escapeHtml(value) {
@@ -102,6 +103,13 @@
     return `${(value * scale).toFixed(0)} ms`;
   }
 
+  function fmtBool(value) {
+    if (value === undefined || value === null) {
+      return '-';
+    }
+    return value ? 'yes' : 'no';
+  }
+
   function pillClass(stateName) {
     if (!stateName) {
       return 'stable';
@@ -116,6 +124,489 @@
       `<span class="value">${escapeHtml(value)}</span>` +
       '</div>'
     );
+  }
+
+  function summaryItem(label, value) {
+    return (
+      '<div class="mini-item">' +
+      `<span class="label">${escapeHtml(label)}</span>` +
+      `<span class="value">${escapeHtml(value)}</span>` +
+      '</div>'
+    );
+  }
+
+  function hasActiveLocalPublish() {
+    return Boolean(
+      state.sendTransport ||
+      state.publishedProducers.size > 0 ||
+      state.localCaptureStreams.length > 0
+    );
+  }
+
+  function updateControls() {
+    els.publishBtn.disabled = !state.device || hasActiveLocalPublish();
+    els.stopBtn.disabled = !state.qosSession && !state.legacyStatsTimer;
+  }
+
+  function createVideoCard({ title, subtitle, badgeText, stream, muted = false }) {
+    const card = document.createElement('div');
+    card.className = 'video-card';
+
+    const frame = document.createElement('div');
+    frame.className = 'video-frame';
+
+    if (stream) {
+      const element = document.createElement('video');
+      element.autoplay = true;
+      element.playsInline = true;
+      element.muted = Boolean(muted);
+      element.srcObject = stream;
+      element.play().catch(() => {});
+      frame.appendChild(element);
+    } else {
+      const empty = document.createElement('div');
+      empty.className = 'video-empty';
+      empty.textContent = subtitle || 'No media';
+      frame.appendChild(empty);
+    }
+
+    const meta = document.createElement('div');
+    meta.className = 'video-meta';
+    meta.innerHTML =
+      '<div>' +
+      `<div class="video-title">${escapeHtml(title)}</div>` +
+      `<div class="video-subtitle">${escapeHtml(subtitle)}</div>` +
+      '</div>' +
+      `<div class="badge">${escapeHtml(badgeText)}</div>`;
+
+    card.appendChild(frame);
+    card.appendChild(meta);
+    return card;
+  }
+
+  function formatRemoteServerSummary(serverState) {
+    if (!serverState) {
+      return '等待 statsReport';
+    }
+
+    const mode = serverState.paused ? '暂停' : '活动';
+    return `${mode} · S${fmtValue(serverState.preferredSpatialLayer, 0)} / T${fmtValue(serverState.preferredTemporalLayer, 0)} / P${fmtValue(serverState.priority, 0)}`;
+  }
+
+  function getCurrentPeerStats() {
+    if (!Array.isArray(state.latestStatsReport?.peers)) {
+      return null;
+    }
+    return state.latestStatsReport.peers.find(peer => peer.peerId === state.peerId) || null;
+  }
+
+  function getCurrentQosDecision() {
+    if (!state.qosSession || typeof state.qosSession.getDecision !== 'function') {
+      return null;
+    }
+    return state.qosSession.getDecision();
+  }
+
+  function buildLocalBundleMap() {
+    const map = new Map();
+    const bundles = Array.isArray(state.qosSession?.bundles) ? state.qosSession.bundles : [];
+
+    for (const bundle of bundles) {
+      const snapshotBase = bundle?.producerAdapter?.getSnapshotBase?.();
+      if (snapshotBase?.producerId) {
+        map.set(snapshotBase.producerId, bundle);
+      }
+    }
+
+    return map;
+  }
+
+  function latestProducerScore(producerStats) {
+    const scores = Array.isArray(producerStats?.scores) ? producerStats.scores : [];
+    if (scores.length === 0) {
+      return '-';
+    }
+    return fmtValue(scores[scores.length - 1]?.score, '-');
+  }
+
+  function createLocalVideoCard(entry, index) {
+    const card = createVideoCard({
+      title: `Local Camera ${index + 1}`,
+      subtitle: entry.label,
+      badgeText: 'publishing',
+      stream: entry.previewStream,
+      muted: true,
+    });
+
+    const inspector = document.createElement('div');
+    inspector.className = 'video-controls';
+
+    const clientSummary = document.createElement('div');
+    clientSummary.className = 'video-summary';
+
+    const serverSummary = document.createElement('div');
+    serverSummary.className = 'video-summary';
+
+    const metricsGrid = document.createElement('div');
+    metricsGrid.className = 'qos-grid';
+
+    const errorSummary = document.createElement('div');
+    errorSummary.className = 'video-summary is-alert';
+
+    inspector.appendChild(clientSummary);
+    inspector.appendChild(serverSummary);
+    inspector.appendChild(metricsGrid);
+    inspector.appendChild(errorSummary);
+    card.appendChild(inspector);
+
+    entry.card = card;
+    entry.titleEl = card.querySelector('.video-title');
+    entry.subtitleEl = card.querySelector('.video-subtitle');
+    entry.badgeEl = card.querySelector('.badge');
+    entry.clientSummaryEl = clientSummary;
+    entry.serverSummaryEl = serverSummary;
+    entry.metricsGridEl = metricsGrid;
+    entry.errorSummaryEl = errorSummary;
+
+    return card;
+  }
+
+  function updateLocalVideoCardUI(entry, index) {
+    if (!entry || !entry.card) {
+      return;
+    }
+
+    const bundle = entry.qosBundle;
+    const controller = bundle?.controller;
+    const trackState = controller?.getTrackState?.();
+    const runtime = controller?.getRuntimeSettings?.();
+    const trace = controller?.getTraceEntries?.() || [];
+    const latestTrace = trace[trace.length - 1];
+    const lastError = controller?.getLastSampleError?.();
+    const serverTrack = entry.serverTrack || null;
+    const serverProducer = entry.serverProducer || null;
+
+    if (entry.titleEl) {
+      entry.titleEl.textContent = `Local Camera ${index + 1}`;
+    }
+    if (entry.subtitleEl) {
+      entry.subtitleEl.textContent = state.localAudioActive && index === 0
+        ? `${entry.label} · microphone active`
+        : entry.label;
+    }
+    if (entry.badgeEl) {
+      entry.badgeEl.textContent = trackState
+        ? `${trackState.quality} / ${trackState.state}`
+        : 'publishing';
+    }
+    if (entry.clientSummaryEl) {
+      entry.clientSummaryEl.innerHTML = trackState
+        ? `<strong>Client</strong> ${escapeHtml(`${trackState.quality} / ${trackState.state} / L${trackState.level} · ${latestTrace?.plannedAction?.type || 'idle'}`)}`
+        : '<strong>Client</strong> waiting for local QoS session';
+    }
+    if (entry.serverSummaryEl) {
+      entry.serverSummaryEl.innerHTML = serverTrack
+        ? `<strong>Server</strong> ${escapeHtml(`${serverTrack.quality || '-'} / ${serverTrack.state || '-'} / L${fmtValue(serverTrack.ladderLevel, 0)} · score ${latestProducerScore(serverProducer)}`)}`
+        : `<strong>Server</strong> waiting for statsReport for producer ${escapeHtml(shortId(entry.producer?.id))}`;
+    }
+    if (entry.metricsGridEl) {
+      entry.metricsGridEl.innerHTML = [
+        qosItem('Producer', shortId(entry.producer?.id)),
+        qosItem('Track', shortId(entry.track?.id)),
+        qosItem('Sample Interval', runtime ? `${runtime.sampleIntervalMs} ms` : '-'),
+        qosItem('Snapshot Interval', runtime ? `${runtime.snapshotIntervalMs} ms` : '-'),
+        qosItem('Send Bitrate', latestTrace ? fmtBitrate(latestTrace.signals.sendBitrateBps) : '-'),
+        qosItem('Target Bitrate', latestTrace ? fmtBitrate(latestTrace.signals.targetBitrateBps) : '-'),
+        qosItem('Loss', latestTrace ? fmtLoss(latestTrace.signals.lossRate) : '-'),
+        qosItem('RTT', latestTrace ? fmtMs(latestTrace.signals.rttMs) : '-'),
+        qosItem('Jitter', latestTrace ? fmtMs(latestTrace.signals.jitterMs) : '-'),
+        qosItem('Last Action', latestTrace ? latestTrace.plannedAction.type : '-'),
+        qosItem('Server Reason', serverTrack ? fmtValue(serverTrack.reason) : '-'),
+        qosItem('Producer Score', latestProducerScore(serverProducer)),
+      ].join('');
+    }
+    if (entry.errorSummaryEl) {
+      if (lastError) {
+        entry.errorSummaryEl.style.display = '';
+        entry.errorSummaryEl.innerHTML = `<strong>Error</strong> ${escapeHtml(lastError.message)}`;
+      } else {
+        entry.errorSummaryEl.style.display = 'none';
+        entry.errorSummaryEl.textContent = '';
+      }
+    }
+  }
+
+  function syncLocalVideoEntries() {
+    const currentPeerStats = getCurrentPeerStats();
+    const bundleMap = buildLocalBundleMap();
+    const serverTracks = Array.isArray(currentPeerStats?.clientStats?.tracks)
+      ? currentPeerStats.clientStats.tracks
+      : [];
+    const serverProducers = currentPeerStats?.producers || {};
+
+    state.localVideoEntries.forEach((entry, index) => {
+      const producerId = entry.producer?.id;
+      const trackId = entry.track?.id;
+      entry.qosBundle = producerId ? bundleMap.get(producerId) || null : null;
+      entry.serverTrack = serverTracks.find(track =>
+        (producerId && track.producerId === producerId) ||
+        (trackId && track.localTrackId === trackId)
+      ) || null;
+      entry.serverProducer = producerId ? serverProducers[producerId] || null : null;
+      if (!entry.card) {
+        createLocalVideoCard(entry, index);
+      }
+      updateLocalVideoCardUI(entry, index);
+    });
+  }
+
+  function renderLocalPreviewCards(cameraEntries = state.localVideoEntries, hasAudioTrack = state.localAudioActive) {
+    els.localVideos.innerHTML = '';
+
+    if (!cameraEntries || cameraEntries.length === 0) {
+      els.localVideos.appendChild(createVideoCard({
+        title: '本地发布',
+        subtitle: '发布麦克风和所有检测到的摄像头。',
+        badgeText: '空闲',
+      }));
+      return;
+    }
+
+    cameraEntries.forEach((entry, index) => {
+      if (!entry.card) {
+        createLocalVideoCard(entry, index);
+      }
+      updateLocalVideoCardUI(entry, index, hasAudioTrack);
+      els.localVideos.appendChild(entry.card);
+    });
+  }
+
+  function clearRemoteVideoCards() {
+    els.remoteVideos.innerHTML = '';
+    state.remoteVideoConsumers.clear();
+  }
+
+  function updateRemoteCardUI(entry) {
+    if (!entry || !entry.card || !entry.serverSummaryEl || !entry.metricsGridEl) {
+      return;
+    }
+
+    const serverState = entry.serverState || {};
+    const serverSub = entry.serverSubscription || {};
+    const recvRttMs = state.localDebugStats?.recv?.currentRoundTripTime;
+    entry.serverSummaryEl.innerHTML = `<strong>远端 QoS</strong> ${escapeHtml(formatRemoteServerSummary(entry.serverState))}`;
+    entry.metricsGridEl.innerHTML = [
+      qosItem('Consumer', shortId(entry.consumer?.id)),
+      qosItem('Producer', shortId(entry.producerId)),
+      qosItem('状态', serverState.paused ? '暂停' : '活动'),
+      qosItem('Producer 暂停', fmtBool(serverState.producerPaused)),
+      qosItem('空间层', fmtValue(serverState.preferredSpatialLayer, 0)),
+      qosItem('时间层', fmtValue(serverState.preferredTemporalLayer, 0)),
+      qosItem('优先级', fmtValue(serverState.priority, 0)),
+      qosItem('Consumer 分数', fmtValue(serverState.score, 0)),
+      qosItem('Producer 分数', fmtValue(serverState.producerScore, 0)),
+      qosItem('可见', fmtBool(serverSub.visible)),
+      qosItem('置顶', fmtBool(serverSub.pinned)),
+      qosItem('主讲', fmtBool(serverSub.activeSpeaker)),
+      qosItem('共享屏幕', fmtBool(serverSub.isScreenShare)),
+      qosItem('目标尺寸', fmtDimensions(serverSub.targetWidth, serverSub.targetHeight)),
+      qosItem('渲染尺寸', fmtDimensions(serverSub.frameWidth, serverSub.frameHeight)),
+      qosItem('RTT', fmtMs(recvRttMs, 1000)),
+      qosItem('帧率', fmtValue(serverSub.framesPerSecond)),
+      qosItem('丢包', fmtValue(serverSub.packetsLost)),
+      qosItem('抖动', fmtMs(serverSub.jitter, 1000)),
+      qosItem('卡顿率', fmtValue(serverSub.freezeRate)),
+    ].join('');
+  }
+
+  function createRemoteVideoControls(entry) {
+    const controls = document.createElement('div');
+    controls.className = 'video-controls';
+
+    const serverSummary = document.createElement('div');
+    serverSummary.className = 'video-summary';
+
+    const metricsGrid = document.createElement('div');
+    metricsGrid.className = 'qos-grid';
+    controls.appendChild(serverSummary);
+    controls.appendChild(metricsGrid);
+    entry.serverSummaryEl = serverSummary;
+    entry.metricsGridEl = metricsGrid;
+
+    updateRemoteCardUI(entry);
+    return controls;
+  }
+
+  function syncRemoteConsumerServerState() {
+    if (!Array.isArray(state.latestStatsReport?.peers)) {
+      return;
+    }
+
+    const localPeerStats = state.latestStatsReport.peers.find(peer => peer.peerId === state.peerId);
+    if (!localPeerStats) {
+      return;
+    }
+
+    const consumers = localPeerStats.consumers || {};
+    const subscriptions = Array.isArray(localPeerStats.downlinkClientStats?.subscriptions)
+      ? localPeerStats.downlinkClientStats.subscriptions
+      : [];
+    const subscriptionByConsumerId = new Map(
+      subscriptions
+        .filter(item => item && item.consumerId)
+        .map(item => [item.consumerId, item])
+    );
+
+    for (const entry of state.remoteVideoConsumers.values()) {
+      entry.serverState = consumers[entry.consumer.id] || null;
+      entry.serverSubscription = subscriptionByConsumerId.get(entry.consumer.id) || null;
+      updateRemoteCardUI(entry);
+    }
+  }
+
+  function stopMediaStream(stream) {
+    if (!stream) {
+      return;
+    }
+
+    for (const track of stream.getTracks()) {
+      try {
+        track.stop();
+      } catch {
+        // Ignore stop errors.
+      }
+    }
+
+    if (typeof stream.__demoCleanup === 'function') {
+      try {
+        stream.__demoCleanup();
+      } catch {
+        // Ignore stream cleanup errors.
+      }
+    }
+  }
+
+  function getTrackCameraKey(track) {
+    const settings = typeof track.getSettings === 'function' ? track.getSettings() : {};
+    if (settings.groupId && track.label) {
+      return `${settings.groupId}::${track.label}`;
+    }
+    return settings.deviceId || track.label || '';
+  }
+
+  function getDeviceCameraKey(device) {
+    if (device.groupId && device.label) {
+      return `${device.groupId}::${device.label}`;
+    }
+    return device.deviceId || device.label || '';
+  }
+
+  async function captureAllLocalMedia() {
+    const primaryStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+    const captureStreams = [primaryStream];
+    const cameraEntries = [];
+    const claimedCameraKeys = new Set();
+    const audioTrack = primaryStream.getAudioTracks()[0] || null;
+    const primaryVideoTrack = primaryStream.getVideoTracks()[0] || null;
+
+    if (primaryVideoTrack) {
+      const primaryKey = getTrackCameraKey(primaryVideoTrack) || `camera-${cameraEntries.length + 1}`;
+      claimedCameraKeys.add(primaryKey);
+      cameraEntries.push({
+        track: primaryVideoTrack,
+        previewStream: new MediaStream([primaryVideoTrack]),
+        label: primaryVideoTrack.label || 'Default camera',
+      });
+    }
+
+    if (navigator.mediaDevices && typeof navigator.mediaDevices.enumerateDevices === 'function') {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      for (const device of devices) {
+        if (device.kind !== 'videoinput') {
+          continue;
+        }
+
+        const deviceKey = getDeviceCameraKey(device);
+        if (deviceKey && claimedCameraKeys.has(deviceKey)) {
+          continue;
+        }
+
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: device.deviceId ? { deviceId: { exact: device.deviceId } } : true,
+          });
+          const track = stream.getVideoTracks()[0];
+          if (!track) {
+            stopMediaStream(stream);
+            continue;
+          }
+
+          const trackKey = getTrackCameraKey(track) || deviceKey || `camera-${cameraEntries.length + 1}`;
+          if (claimedCameraKeys.has(trackKey)) {
+            stopMediaStream(stream);
+            continue;
+          }
+
+          claimedCameraKeys.add(trackKey);
+          captureStreams.push(stream);
+          cameraEntries.push({
+            track,
+            previewStream: new MediaStream([track]),
+            label: track.label || device.label || `Camera ${cameraEntries.length + 1}`,
+          });
+        } catch (error) {
+          log(`Skipping camera ${device.label || device.deviceId || 'unknown'}: ${error.message}`);
+        }
+      }
+    }
+
+    return {
+      audioTrack,
+      cameraEntries,
+      captureStreams,
+    };
+  }
+
+  function resetLocalPublishState() {
+    stopLegacyClientStatsReporting();
+    stopLocalQosSession();
+
+    if (state.sendTransport) {
+      try {
+        state.sendTransport.close();
+      } catch {
+        // Ignore transport close errors.
+      }
+      state.sendTransport = null;
+    }
+
+    state.publishedProducers.clear();
+
+    for (const stream of state.localCaptureStreams) {
+      stopMediaStream(stream);
+    }
+    state.localCaptureStreams = [];
+    state.localVideoEntries = [];
+    state.localAudioActive = false;
+    renderLocalPreviewCards([]);
+    updateControls();
+  }
+
+  function resetRemoteMediaState() {
+    stopDownlinkReporting();
+
+    if (state.recvTransport) {
+      try {
+        state.recvTransport.close();
+      } catch {
+        // Ignore transport close errors.
+      }
+      state.recvTransport = null;
+    }
+
+    state.pendingConsumers = [];
+    clearRemoteVideoCards();
   }
 
   function updateMeta() {
@@ -303,6 +794,10 @@
         state.ws = ws;
         ws.onmessage = handleMessage;
         ws.onclose = () => {
+          if (state.ws !== ws) {
+            return;
+          }
+          state.ws = null;
           stopDownlinkReporting();
           setStatus('Disconnected', 'err');
           log('WebSocket closed');
@@ -322,9 +817,9 @@
   function dispatchQosNotification(message) {
     const normalizedMessage = normalizeIncomingQosMessage(message);
 
-    if (state.qosBundle) {
+    if (state.qosSession) {
       try {
-        state.qosBundle.handleNotification(normalizedMessage);
+        state.qosSession.handleNotification(normalizedMessage);
       } catch (error) {
         log(`QoS notification dispatch failed: ${error.message}`);
       }
@@ -376,6 +871,7 @@
 
     if (message.method === 'statsReport') {
       state.latestStatsReport = message.data;
+      syncRemoteConsumerServerState();
       renderQosPanel();
       return;
     }
@@ -426,35 +922,33 @@
       element.play().catch(() => {});
 
       if (consumer.kind === 'video') {
-        const card = document.createElement('div');
-        card.className = 'video-card';
+        const card = createVideoCard({
+          title: '远端视频',
+          subtitle: data.peerId || data.producerId,
+          badgeText: '已订阅',
+          stream: new MediaStream([consumer.track]),
+        });
+        const renderedElement = card.querySelector('video');
         card.dataset.remoteProducerId = data.producerId;
         card.dataset.consumerId = consumer.id;
 
-        const frame = document.createElement('div');
-        frame.className = 'video-frame';
-        frame.appendChild(element);
-
-        const meta = document.createElement('div');
-        meta.className = 'video-meta';
-        meta.innerHTML =
-          '<div>' +
-          `<div class="video-title">Remote Video</div>` +
-          `<div class="video-subtitle">${escapeHtml(data.peerId || data.producerId)}</div>` +
-          '</div>' +
-          '<div class="badge">subscribed</div>';
-
-        card.appendChild(frame);
-        card.appendChild(meta);
-        els.videos.appendChild(card);
-
-        registerRemoteVideoConsumer({
+        const entry = {
           consumer,
           producerId: data.producerId,
           peerId: data.peerId || data.producerId,
-          element,
+          element: renderedElement,
           card,
-        });
+          serverState: null,
+          serverSubscription: null,
+          serverSummaryEl: null,
+          metricsGridEl: null,
+        };
+        const controls = createRemoteVideoControls(entry);
+
+        card.appendChild(controls);
+        els.remoteVideos.appendChild(card);
+
+        registerRemoteVideoConsumer(entry);
       }
 
       log(`Subscribed ${data.kind} from ${data.peerId || data.producerId}`);
@@ -492,7 +986,7 @@
     canvas.height = 540;
     const ctx = canvas.getContext('2d');
     let frame = 0;
-    setInterval(() => {
+    const frameTimer = setInterval(() => {
       frame += 1;
       ctx.fillStyle = `hsl(${(frame * 4) % 360}, 70%, 50%)`;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -511,6 +1005,15 @@
     oscillator.connect(destination);
     oscillator.start();
     stream.addTrack(destination.stream.getAudioTracks()[0]);
+    stream.__demoCleanup = () => {
+      clearInterval(frameTimer);
+      try {
+        oscillator.stop();
+      } catch {
+        // Ignore oscillator stop errors.
+      }
+      return audioContext.close();
+    };
     return stream;
   }
 
@@ -529,6 +1032,10 @@
   }
 
   function removeRemoteVideoConsumer(consumerId) {
+    const entry = state.remoteVideoConsumers.get(consumerId);
+    if (entry && entry.card && typeof entry.card.remove === 'function') {
+      entry.card.remove();
+    }
     state.remoteVideoConsumers.delete(consumerId);
     if (state.downlinkBundle) {
       state.downlinkBundle.hints.remove(consumerId);
@@ -557,15 +1064,22 @@
       styles.display !== 'none' &&
       styles.visibility !== 'hidden'
     );
+    let hintVisible = visible;
+    let targetWidth = width;
+    let targetHeight = height;
+    if (!hintVisible) {
+      targetWidth = 0;
+      targetHeight = 0;
+    }
 
     return {
       producerId: entry.producerId,
-      visible,
+      visible: hintVisible,
       pinned: false,
       activeSpeaker: false,
       isScreenShare: false,
-      targetWidth: width,
-      targetHeight: height,
+      targetWidth,
+      targetHeight,
     };
   }
 
@@ -581,6 +1095,7 @@
       }
 
       state.downlinkBundle.hints.set(consumerId, computeConsumerHint(entry));
+      updateRemoteCardUI(entry);
     }
   }
 
@@ -649,6 +1164,9 @@
       state.downlinkBundle.hints.set(entry.consumer.id, computeConsumerHint(entry));
       void state.downlinkBundle.reporter.reportNow();
     }
+
+    syncRemoteConsumerServerState();
+    updateRemoteCardUI(entry);
   }
 
   async function collectLocalDebugStats() {
@@ -756,38 +1274,8 @@
     }, 2000);
   }
 
-  function stopQosController() {
-    if (!state.qosBundle) {
-      return;
-    }
-
-    try {
-      state.qosBundle.controller.stop();
-    } catch {
-      // Ignore stop errors.
-    }
-
-    state.qosBundle = null;
-    renderQosPanel();
-  }
-
-  function setupQosController(producer) {
-    if (useLegacyQos) {
-      log('Legacy QoS mode enabled via query parameter');
-      startLegacyClientStatsReporting();
-      return;
-    }
-
-    if (!qosLib || typeof qosLib.createMediasoupProducerQosController !== 'function') {
-      log('QoS library is not available in browser bundle, falling back to legacy stats uploader');
-      startLegacyClientStatsReporting();
-      return;
-    }
-
-    stopLegacyClientStatsReporting();
-    stopQosController();
-
-    state.qosBundle = qosLib.createMediasoupProducerQosController({
+  function createSingleProducerQosSession(producer) {
+    const bundle = qosLib.createMediasoupProducerQosController({
       producer,
       source: 'camera',
       profile: state.usingFallbackStream ? buildFallbackCameraProfile() : undefined,
@@ -798,41 +1286,145 @@
       },
     });
 
+    return {
+      bundles: [bundle],
+      startAll() {
+        bundle.controller.start();
+      },
+      stopAll() {
+        bundle.controller.stop();
+      },
+      async sampleAllNow() {
+        await bundle.controller.sampleNow();
+      },
+      handleNotification(message) {
+        bundle.handleNotification(message);
+      },
+      getDecision() {
+        const track = bundle.controller.getTrackState();
+        return {
+          peerQuality: track.quality,
+          prioritizedTrackIds: [track.trackId],
+          sacrificialTrackIds: [],
+          keepAudioAlive: true,
+          preferScreenShare: false,
+          allowVideoRecovery: true,
+        };
+      },
+    };
+  }
+
+  function stopLocalQosSession() {
+    if (!state.qosSession) {
+      return;
+    }
+
+    try {
+      state.qosSession.stopAll();
+    } catch {
+      // Ignore stop errors.
+    }
+
+    state.qosSession = null;
+    state.localVideoEntries.forEach(entry => {
+      entry.qosBundle = null;
+    });
+    renderLocalPreviewCards();
+    renderQosPanel();
+    updateControls();
+  }
+
+  function createLocalQosSession(videoProducers) {
+    if (!qosLib || videoProducers.length === 0) {
+      return null;
+    }
+
+    if (typeof qosLib.createMediasoupPeerQosSession === 'function') {
+      return qosLib.createMediasoupPeerQosSession({
+        producers: videoProducers.map(producer => ({
+          producer,
+          source: 'camera',
+          profile: state.usingFallbackStream ? buildFallbackCameraProfile() : undefined,
+        })),
+        sendRequest: async (method, data) => {
+          await wsRequest(method, data);
+        },
+        allowAudioOnly: shouldUseLocalNoPausePolicy() ? false : undefined,
+        allowVideoPause: shouldUseLocalNoPausePolicy() ? false : undefined,
+      });
+    }
+
+    if (typeof qosLib.createMediasoupProducerQosController === 'function') {
+      if (videoProducers.length > 1) {
+        log('Peer QoS session API missing, falling back to the first video producer only');
+      }
+      return createSingleProducerQosSession(videoProducers[0]);
+    }
+
+    return null;
+  }
+
+  function setupLocalQosSession(videoProducers) {
+    if (useLegacyQos) {
+      log('Legacy QoS mode enabled via query parameter');
+      startLegacyClientStatsReporting();
+      updateControls();
+      return;
+    }
+
+    const session = createLocalQosSession(videoProducers);
+    if (!session) {
+      log('QoS library is not available in browser bundle, falling back to legacy stats uploader');
+      startLegacyClientStatsReporting();
+      updateControls();
+      return;
+    }
+
+    stopLegacyClientStatsReporting();
+    stopLocalQosSession();
+    state.qosSession = session;
+
     if (state.latestQosPolicy) {
-      state.qosBundle.handleNotification({
+      state.qosSession.handleNotification({
         method: 'qosPolicy',
         data: state.latestQosPolicy,
       });
     }
     if (state.latestQosOverride) {
-      state.qosBundle.handleNotification({
+      state.qosSession.handleNotification({
         method: 'qosOverride',
         data: state.latestQosOverride,
       });
     }
     if (state.latestConnectionQuality) {
-      state.qosBundle.handleNotification({
+      state.qosSession.handleNotification({
         method: 'qosConnectionQuality',
         data: state.latestConnectionQuality,
       });
     }
     if (state.latestRoomState) {
-      state.qosBundle.handleNotification({
+      state.qosSession.handleNotification({
         method: 'qosRoomState',
         data: state.latestRoomState,
       });
     }
 
-    state.qosBundle.controller.start();
-    log(`QoS controller started for producer ${producer.id}`);
+    state.qosSession.startAll();
+    void state.qosSession.sampleAllNow?.();
+    syncLocalVideoEntries();
+    renderLocalPreviewCards();
+    log(`QoS session started for ${videoProducers.length} video producer(s)`);
     renderQosPanel();
+    updateControls();
   }
 
   async function joinRoom() {
     const roomId = els.roomInput.value.trim() || 'test-room';
     const peerId = `peer-${Math.random().toString(36).slice(2, 8)}`;
-    stopDownlinkReporting();
-    state.remoteVideoConsumers.clear();
+
+    state.device = null;
+    resetLocalPublishState();
+    resetRemoteMediaState();
     state.roomId = roomId;
     state.peerId = peerId;
     updateMeta();
@@ -913,38 +1505,57 @@
         }
       }
 
-      els.publishBtn.disabled = false;
-      els.stopBtn.disabled = true;
       setStatus(`Joined room ${roomId}`, 'ok');
       log(`Joined room ${roomId} as ${peerId}`);
       startDebugStatsTimer();
       renderQosPanel();
+      updateControls();
     } catch (error) {
       setStatus('Join failed', 'err');
       log(`Join failed: ${error.message}`);
+      updateControls();
     }
   }
 
   async function publishMedia() {
-    if (!state.device) {
+    if (!state.device || hasActiveLocalPublish()) {
       return;
     }
 
     try {
-      let stream;
+      let audioTrack = null;
+      let cameraEntries = [];
+      let captureStreams = [];
+
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        const capture = await captureAllLocalMedia();
+        audioTrack = capture.audioTrack;
+        cameraEntries = capture.cameraEntries;
+        captureStreams = capture.captureStreams;
         state.usingFallbackStream = false;
-        log('Using camera + microphone');
+        log(`Using ${cameraEntries.length} camera(s)${audioTrack ? ' + microphone' : ''}`);
       } catch (error) {
         state.usingFallbackStream = true;
         log(`getUserMedia failed (${error.message}), using fallback canvas stream`);
-        stream = buildFallbackStream();
+        const fallbackStream = buildFallbackStream();
+        audioTrack = fallbackStream.getAudioTracks()[0] || null;
+        const fallbackVideoTrack = fallbackStream.getVideoTracks()[0] || null;
+        captureStreams = [fallbackStream];
+        cameraEntries = fallbackVideoTrack
+          ? [{
+              track: fallbackVideoTrack,
+              previewStream: new MediaStream([fallbackVideoTrack]),
+              label: 'Fallback canvas stream',
+            }]
+          : [];
       }
 
-      state.localStream = stream;
-      els.localVideo.srcObject = stream;
-      els.localVideoBadge.textContent = 'publishing';
+      if (cameraEntries.length === 0) {
+        throw new Error('no camera tracks available');
+      }
+
+      state.localCaptureStreams = captureStreams;
+      renderLocalPreviewCards(cameraEntries, Boolean(audioTrack));
 
       const sendData = await wsRequest('createWebRtcTransport', {
         producing: true,
@@ -976,94 +1587,90 @@
         }
       });
 
-      for (const track of stream.getTracks()) {
-        const producer = await state.sendTransport.produce({ track });
-        state.publishedProducers.set(producer.id, producer);
-        log(`Producing ${track.kind} [${producer.id}]`);
-        if (track.kind === 'video') {
-          setupQosController(producer);
-        }
+      if (audioTrack) {
+        const audioProducer = await state.sendTransport.produce({ track: audioTrack });
+        state.publishedProducers.set(audioProducer.id, audioProducer);
+        log(`Producing audio [${audioProducer.id}]`);
       }
 
-      els.publishBtn.disabled = true;
-      els.stopBtn.disabled = false;
-      setStatus(`Publishing in ${state.roomId}`, 'ok');
+      const videoProducers = [];
+      for (const [index, entry] of cameraEntries.entries()) {
+        const producer = await state.sendTransport.produce({ track: entry.track });
+        state.publishedProducers.set(producer.id, producer);
+        videoProducers.push(producer);
+        log(`Producing video #${index + 1} (${entry.label}) [${producer.id}]`);
+      }
+
+      state.localAudioActive = Boolean(audioTrack);
+      state.localVideoEntries = cameraEntries.map((entry, index) => ({
+        ...entry,
+        producer: videoProducers[index] || null,
+        qosBundle: null,
+        serverTrack: null,
+        serverProducer: null,
+        card: null,
+        titleEl: null,
+        subtitleEl: null,
+        badgeEl: null,
+        clientSummaryEl: null,
+        serverSummaryEl: null,
+        metricsGridEl: null,
+        errorSummaryEl: null,
+      }));
+      setupLocalQosSession(videoProducers);
+      syncLocalVideoEntries();
+      renderLocalPreviewCards();
+      setStatus(`Publishing ${cameraEntries.length} camera(s) in ${state.roomId}`, 'ok');
       startDebugStatsTimer();
       renderQosPanel();
+      updateControls();
     } catch (error) {
+      resetLocalPublishState();
       setStatus('Publish failed', 'err');
       log(`Publish failed: ${error.message}`);
+      renderQosPanel();
+      updateControls();
     }
   }
 
   function stopQos() {
-    stopQosController();
+    stopLocalQosSession();
     stopLegacyClientStatsReporting();
-    els.stopBtn.disabled = true;
-    els.publishBtn.disabled = !state.device;
     log('Local producer QoS control stopped');
     renderQosPanel();
+    updateControls();
   }
 
-  function renderLocalQosSection() {
-    const parts = ['<div class="qos-section"><h3>Local QoS Controller</h3>'];
+  function renderOverviewSection() {
+    const currentPeerStats = getCurrentPeerStats();
+    const decision = getCurrentQosDecision();
+    const downlinkQos = currentPeerStats?.downlinkQos || {};
+    const peerQos = currentPeerStats?.qos || {};
 
-    if (!state.qosBundle) {
-      parts.push('<div class="hint">No active video QoS controller. Publish a video track to enable uplink QoS.</div></div>');
-      return parts.join('');
-    }
-
-    const controller = state.qosBundle.controller;
-    const trackState = controller.getTrackState();
-    const runtime = controller.getRuntimeSettings();
-    const trace = controller.getTraceEntries();
-    const latestTrace = trace[trace.length - 1];
-    const lastError = controller.getLastSampleError();
-
-    parts.push(
-      '<div class="track-card">' +
-      '<div class="track-header">' +
-      `<div class="track-title">${escapeHtml(trackState.source)} / ${escapeHtml(trackState.kind)}</div>` +
-      `<div class="pill ${pillClass(trackState.state)}">${escapeHtml(trackState.state)} L${trackState.level}</div>` +
+    return (
+      '<div class="qos-section">' +
+      '<h3>Current Peer</h3>' +
+      '<div class="mini-grid">' +
+      summaryItem('Peer Quality', fmtValue(peerQos.quality)) +
+      summaryItem('Downlink Health', fmtValue(downlinkQos.health)) +
+      summaryItem('Connection', state.latestConnectionQuality ? state.latestConnectionQuality.quality : 'none') +
+      summaryItem('Room State', state.latestRoomState ? state.latestRoomState.quality : 'none') +
+      summaryItem('Local Cameras', String(state.localVideoEntries.length)) +
+      summaryItem('Remote Videos', String(state.remoteVideoConsumers.size)) +
+      summaryItem('Policy Camera', state.latestQosPolicy ? state.latestQosPolicy.profiles?.camera || 'received' : 'none') +
+      summaryItem('Override', state.latestQosOverride ? state.latestQosOverride.reason || 'received' : 'none') +
+      summaryItem('Priority Tracks', decision ? String(decision.prioritizedTrackIds.length) : '-') +
+      summaryItem('Sacrificial', decision ? String(decision.sacrificialTrackIds.length) : '-') +
+      summaryItem('Recovery', decision ? fmtBool(decision.allowVideoRecovery) : '-') +
+      summaryItem('Keep Audio', decision ? fmtBool(decision.keepAudioAlive) : '-') +
       '</div>' +
-      '<div class="qos-grid">' +
-      qosItem('Quality', trackState.quality) +
-      qosItem('Audio-only', trackState.inAudioOnlyMode ? 'yes' : 'no') +
-      qosItem('Sample Interval', `${runtime.sampleIntervalMs} ms`) +
-      qosItem('Snapshot Interval', `${runtime.snapshotIntervalMs} ms`) +
-      qosItem('Recovery Probe', runtime.probeActive ? 'active' : 'idle') +
-      qosItem('Last Action', latestTrace ? latestTrace.plannedAction.type : '-') +
-      qosItem('Send Bitrate', latestTrace ? fmtBitrate(latestTrace.signals.sendBitrateBps) : '-') +
-      qosItem('Target Bitrate', latestTrace ? fmtBitrate(latestTrace.signals.targetBitrateBps) : '-') +
-      qosItem('Loss', latestTrace ? fmtLoss(latestTrace.signals.lossRate) : '-') +
-      qosItem('RTT', latestTrace ? fmtMs(latestTrace.signals.rttMs) : '-') +
-      qosItem('Jitter', latestTrace ? fmtMs(latestTrace.signals.jitterMs) : '-') +
-      qosItem('Trace Entries', String(trace.length)) +
-      '</div>' +
-      (lastError ? `<div class="hint" style="margin-top:8px;color:#fca5a5;">Last error: ${escapeHtml(lastError.message)}</div>` : '') +
       '</div>'
     );
-
-    parts.push('<div class="qos-grid">');
-    parts.push(qosItem('Latest Policy', state.latestQosPolicy ? state.latestQosPolicy.profiles?.camera || 'received' : 'none'));
-    parts.push(qosItem('Policy Allow Audio-only', state.latestQosPolicy ? fmtBool(state.latestQosPolicy.allowAudioOnly) : '-'));
-    parts.push(qosItem('Policy Allow Video Pause', state.latestQosPolicy ? fmtBool(state.latestQosPolicy.allowVideoPause) : '-'));
-    parts.push(qosItem('Latest Override', state.latestQosOverride ? state.latestQosOverride.reason || 'received' : 'none'));
-    parts.push(qosItem('Override Force Audio-only', state.latestQosOverride ? fmtBool(state.latestQosOverride.forceAudioOnly) : '-'));
-    parts.push(qosItem('Override Max Level Clamp', state.latestQosOverride ? fmtValue(state.latestQosOverride.maxLevelClamp) : '-'));
-    parts.push(qosItem('Override Disable Recovery', state.latestQosOverride ? fmtBool(state.latestQosOverride.disableRecovery) : '-'));
-    parts.push(qosItem('Override TTL', state.latestQosOverride ? fmtValue(state.latestQosOverride.ttlMs) : '-'));
-    parts.push(qosItem('Connection Quality', state.latestConnectionQuality ? state.latestConnectionQuality.quality : 'none'));
-    parts.push(qosItem('Connection Stale', state.latestConnectionQuality ? fmtBool(state.latestConnectionQuality.stale) : '-'));
-    parts.push(qosItem('Connection Lost', state.latestConnectionQuality ? fmtBool(state.latestConnectionQuality.lost) : '-'));
-    parts.push(qosItem('Room State', state.latestRoomState ? state.latestRoomState.quality : 'none'));
-    parts.push('</div></div>');
-    return parts.join('');
   }
 
-  function renderLocalDebugSection() {
+  function renderTransportDebugSection() {
     if (!state.localDebugStats || Object.keys(state.localDebugStats).length === 0) {
-      return '<div class="qos-section"><h3>Local Debug Stats</h3><div class="hint">No local browser stats collected yet.</div></div>';
+      return '<div class="qos-section"><h3>Transport Debug</h3><div class="hint">No local browser transport stats collected yet.</div></div>';
     }
 
     const send = state.localDebugStats.send || {};
@@ -1073,100 +1680,108 @@
 
     return (
       '<div class="qos-section">' +
-      '<h3>Local Debug Stats</h3>' +
-      '<div class="qos-grid">' +
-      qosItem('Downlink Reporter', state.downlinkBundle ? 'running' : 'off') +
-      qosItem('Remote Video Hints', String(state.remoteVideoConsumers.size)) +
-      qosItem('Avail Outgoing', fmtBitrate(send.availableOutgoingBitrate)) +
-      qosItem('Send RTT', fmtMs(send.currentRoundTripTime, 1000)) +
-      qosItem('Avail Incoming', fmtBitrate(recv.availableIncomingBitrate)) +
-      qosItem('Recv RTT', fmtMs(recv.currentRoundTripTime, 1000)) +
-      qosItem('Inbound Video Jitter', fmtMs(inboundVideo.jitter, 1000)) +
-      qosItem('Inbound Video Lost', fmtValue(inboundVideo.packetsLost)) +
-      qosItem('Inbound Audio Jitter', fmtMs(inboundAudio.jitter, 1000)) +
-      qosItem('Inbound Audio Lost', fmtValue(inboundAudio.packetsLost)) +
-      qosItem(
-        'Inbound Resolution',
+      '<h3>Transport Debug</h3>' +
+      '<div class="mini-grid">' +
+      summaryItem('Downlink Reporter', state.downlinkBundle ? 'running' : 'off') +
+      summaryItem('Remote Hints', String(state.remoteVideoConsumers.size)) +
+      summaryItem('Avail Out', fmtBitrate(send.availableOutgoingBitrate)) +
+      summaryItem('Send RTT', fmtMs(send.currentRoundTripTime, 1000)) +
+      summaryItem('Avail In', fmtBitrate(recv.availableIncomingBitrate)) +
+      summaryItem('Recv RTT', fmtMs(recv.currentRoundTripTime, 1000)) +
+      summaryItem(
+        'Inbound Size',
         inboundVideo.frameWidth && inboundVideo.frameHeight
           ? `${inboundVideo.frameWidth}x${inboundVideo.frameHeight}`
           : '-'
       ) +
-      qosItem('Inbound FPS', fmtValue(inboundVideo.framesPerSecond)) +
+      summaryItem('Inbound FPS', fmtValue(inboundVideo.framesPerSecond)) +
+      summaryItem('Video Loss', fmtValue(inboundVideo.packetsLost)) +
+      summaryItem('Video Jitter', fmtMs(inboundVideo.jitter, 1000)) +
+      summaryItem('Audio Loss', fmtValue(inboundAudio.packetsLost)) +
+      summaryItem('Audio Jitter', fmtMs(inboundAudio.jitter, 1000)) +
       '</div>' +
       '</div>'
     );
   }
 
-  function renderServerPeer(peer) {
+  function shortId(value, size = 8) {
+    if (value === undefined || value === null || value === '') {
+      return '-';
+    }
+
+    const text = String(value);
+    if (text.length <= size) {
+      return text;
+    }
+    return `${text.slice(0, size)}...`;
+  }
+
+  function fmtDimensions(width, height) {
+    if (!width || !height) {
+      return '-';
+    }
+    return `${width}x${height}`;
+  }
+
+  function renderPeerOverviewCard(peer) {
     const qos = peer.qos || {};
     const snapshot = peer.clientStats || {};
     const downlinkSnapshot = peer.downlinkClientStats || {};
     const downlinkQos = peer.downlinkQos || {};
     const tracks = snapshot.tracks || [];
+    const consumers = peer.consumers || {};
+    const producers = peer.producers || {};
+    const subscriptionByConsumerId = new Map(
+      (Array.isArray(downlinkSnapshot.subscriptions) ? downlinkSnapshot.subscriptions : [])
+        .filter(item => item && item.consumerId)
+        .map(item => [item.consumerId, item])
+    );
     const stateName = qos.quality || 'unknown';
-    let html =
-      '<div class="peer-card">' +
-      '<div class="peer-header">' +
-      `<div class="peer-title">${escapeHtml(peer.peerId || 'peer')}</div>` +
-      `<div class="pill quality-${pillClass(stateName)}">${escapeHtml(stateName)}</div>` +
+    const visibleCount = Array.from(subscriptionByConsumerId.values()).filter(item => item.visible).length;
+    const pinnedCount = Array.from(subscriptionByConsumerId.values()).filter(item => item.pinned).length;
+    return (
+      '<div class="peer-row">' +
+      '<div class="peer-row-head">' +
+      '<div>' +
+      `<div class="peer-row-title">${escapeHtml(peer.peerId || 'peer')}</div>` +
+      `<div class="peer-row-subtitle">tracks ${tracks.length} · producers ${Object.keys(producers).length} · consumers ${Object.keys(consumers).length} · visible ${visibleCount} · pinned ${pinnedCount}</div>` +
       '</div>' +
-      '<div class="qos-grid">' +
-      qosItem('Snapshot Seq', fmtValue(snapshot.seq)) +
-      qosItem('Peer Mode', fmtValue(snapshot.peerState ? snapshot.peerState.mode : snapshot.peerMode)) +
-      qosItem('Peer Quality', fmtValue(snapshot.peerState ? snapshot.peerState.quality : snapshot.peerQuality)) +
-      qosItem('Stale', qos.stale ? 'yes' : 'no') +
-      qosItem('Last Updated', fmtValue(qos.lastUpdatedMs || peer.qosLastUpdatedMs)) +
-      qosItem('DL Snapshot Seq', fmtValue(downlinkSnapshot.seq)) +
-      qosItem('DL Health', fmtValue(downlinkQos.health)) +
-      qosItem('DL Degrade', fmtValue(downlinkQos.degradeLevel)) +
-      qosItem('DL Last Updated', fmtValue(peer.downlinkLastUpdatedMs)) +
-      qosItem('Send Transport', peer.sendTransport ? 'present' : 'none') +
-      qosItem('Recv Transport', peer.recvTransport ? 'present' : 'none') +
-      '</div>';
-
-    for (const track of tracks) {
-      const signals = track.signals || {};
-      html +=
-        '<div class="track-card">' +
-        '<div class="track-header">' +
-        `<div class="track-title">${escapeHtml(track.source || track.kind || 'track')}</div>` +
-        `<div class="pill ${pillClass(track.state)}">${escapeHtml(track.state)} L${fmtValue(track.ladderLevel, 0)}</div>` +
-        '</div>' +
-        '<div class="qos-grid">' +
-        qosItem('Reason', fmtValue(track.reason)) +
-        qosItem('Quality', fmtValue(track.quality)) +
-        qosItem('Send Bitrate', fmtBitrate(signals.sendBitrateBps)) +
-        qosItem('Target Bitrate', fmtBitrate(signals.targetBitrateBps)) +
-        qosItem('Loss', fmtLoss(signals.lossRate)) +
-        qosItem('RTT', fmtMs(signals.rttMs)) +
-        qosItem('Jitter', fmtMs(signals.jitterMs)) +
-        qosItem('Last Action', track.lastAction ? track.lastAction.type : '-') +
-        '</div>' +
-        '</div>';
-    }
-
-    html += '</div>';
-    return html;
+      `<div class="pill quality-${pillClass(stateName)}">${escapeHtml(peer.peerId === state.peerId ? `${stateName} · you` : stateName)}</div>` +
+      '</div>' +
+      '<div class="mini-grid">' +
+      summaryItem('Mode', fmtValue(snapshot.peerState ? snapshot.peerState.mode : snapshot.peerMode)) +
+      summaryItem('Stale', fmtBool(qos.stale)) +
+      summaryItem('DL Health', fmtValue(downlinkQos.health)) +
+      summaryItem('DL Degrade', fmtValue(downlinkQos.degradeLevel)) +
+      summaryItem('QoS Updated', fmtValue(qos.lastUpdatedMs || peer.qosLastUpdatedMs)) +
+      summaryItem('DL Updated', fmtValue(peer.downlinkLastUpdatedMs)) +
+      summaryItem('DL Age', fmtMs(peer.downlinkAgeMs)) +
+      summaryItem('Recv Transport', peer.recvTransport ? 'present' : 'none') +
+      '</div>' +
+      '</div>'
+    );
   }
 
-  function renderServerRoomSection() {
+  function renderPeerOverviewSection() {
     if (!state.latestStatsReport || !Array.isArray(state.latestStatsReport.peers)) {
-      return '<div class="qos-section"><h3>Server Aggregate View</h3><div class="hint">Waiting for statsReport notification.</div></div>';
+      return '<div class="qos-section"><h3>Room Peers</h3><div class="hint">Waiting for statsReport notification.</div></div>';
     }
 
     return (
       '<div class="qos-section">' +
-      '<h3>Server Aggregate View</h3>' +
-      state.latestStatsReport.peers.map(renderServerPeer).join('') +
+      '<h3>Room Peers</h3>' +
+      state.latestStatsReport.peers.map(renderPeerOverviewCard).join('') +
       '</div>'
     );
   }
 
   function renderQosPanel() {
+    syncLocalVideoEntries();
+    renderLocalPreviewCards();
     const sections = [
-      renderLocalQosSection(),
-      renderLocalDebugSection(),
-      renderServerRoomSection(),
+      renderOverviewSection(),
+      renderTransportDebugSection(),
+      renderPeerOverviewSection(),
     ];
     els.qosContent.innerHTML = `<div class="qos-layout">${sections.join('')}</div>`;
   }
@@ -1180,7 +1795,9 @@
     });
     els.stopBtn.addEventListener('click', stopQos);
     updateMeta();
+    renderLocalPreviewCards([]);
     renderQosPanel();
+    updateControls();
 
     if (!window.mediasoupClient) {
       setStatus('mediasoup client bundle missing', 'err');

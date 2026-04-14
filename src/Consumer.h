@@ -27,6 +27,9 @@ public:
 	bool closed() const { return closed_; }
 	bool paused() const { return paused_; }
 	bool producerPaused() const { return producerPaused_; }
+	uint8_t preferredSpatialLayer() const { return preferredSpatialLayer_; }
+	uint8_t preferredTemporalLayer() const { return preferredTemporalLayer_; }
+	uint8_t priority() const { return priority_; }
 	EventEmitter& emitter() { return emitter_; }
 
 	void pause();
