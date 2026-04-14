@@ -15361,6 +15361,8 @@ var mediasoupClient = (() => {
         });
         const forceAudioOnly = optionalBoolean(obj, "forceAudioOnly", "qosOverride");
         const disableRecovery = optionalBoolean(obj, "disableRecovery", "qosOverride");
+        const pauseUpstream = optionalBoolean(obj, "pauseUpstream", "qosOverride");
+        const resumeUpstream = optionalBoolean(obj, "resumeUpstream", "qosOverride");
         const ttlMs = asNonNegativeInt(obj.ttlMs, "qosOverride.ttlMs");
         const reason = asNonEmptyString(obj.reason, "qosOverride.reason");
         return {
@@ -15370,6 +15372,8 @@ var mediasoupClient = (() => {
           maxLevelClamp,
           forceAudioOnly,
           disableRecovery,
+          pauseUpstream,
+          resumeUpstream,
           ttlMs,
           reason
         };
@@ -17278,6 +17282,12 @@ var mediasoupClient = (() => {
           if (override.forceAudioOnly === true) {
             normalized.forceAudioOnly = true;
           }
+          if (override.pauseUpstream === true) {
+            normalized.pauseUpstream = true;
+          }
+          if (override.resumeUpstream === true) {
+            normalized.resumeUpstream = true;
+          }
           this.coordinationOverride = Object.keys(normalized).length > 0 ? normalized : void 0;
         }
         start() {
@@ -17329,6 +17339,12 @@ var mediasoupClient = (() => {
               const reason = override.reason || "";
               if (reason === "server_ttl_expired") {
                 this.activeOverrides.clear();
+              } else if (reason.startsWith("downlink_v2_") || reason.startsWith("downlink_v3_")) {
+                for (const key of [...this.activeOverrides.keys()]) {
+                  if (key.startsWith("downlink_v2_") || key.startsWith("downlink_v3_")) {
+                    this.activeOverrides.delete(key);
+                  }
+                }
               } else if (!reason.startsWith("server_")) {
                 for (const key of [...this.activeOverrides.keys()]) {
                   if (!key.startsWith("server_")) {
@@ -17372,6 +17388,8 @@ var mediasoupClient = (() => {
             }
             if (entry.data.forceAudioOnly === true) merged.forceAudioOnly = true;
             if (entry.data.disableRecovery === true) merged.disableRecovery = true;
+            if (entry.data.pauseUpstream === true) merged.pauseUpstream = true;
+            if (entry.data.resumeUpstream === true) merged.resumeUpstream = true;
             merged._expiresAtMs = Math.min(merged._expiresAtMs, entry.expiresAtMs);
           }
           if (!merged) return void 0;
@@ -17509,6 +17527,14 @@ var mediasoupClient = (() => {
             }
             filtered.push(action);
           }
+          const pauseUpstreamActive = override?.pauseUpstream === true || this.coordinationOverride?.pauseUpstream === true;
+          const resumeUpstreamActive = override?.resumeUpstream === true || this.coordinationOverride?.resumeUpstream === true;
+          if (pauseUpstreamActive && this.inAudioOnlyMode !== true && this.profile.source === "camera" && audioOnlyAllowed) {
+            filtered.unshift({ type: "enterAudioOnly", level: this.currentLevel, reason: "downlink_v3_zero_demand_pause" });
+          }
+          if (resumeUpstreamActive && this.inAudioOnlyMode === true && this.profile.source === "camera" && audioOnlyAllowed && !pauseUpstreamActive) {
+            filtered.unshift({ type: "exitAudioOnly", level: this.currentLevel, reason: "downlink_v3_demand_resumed" });
+          }
           if (audioOnlyAllowed && override?.forceAudioOnly && this.inAudioOnlyMode !== true) {
             if (this.profile.source === "camera") {
               filtered.unshift({
@@ -17525,7 +17551,7 @@ var mediasoupClient = (() => {
           }
           const forceAudioOnlyActive = override?.forceAudioOnly === true || this.coordinationOverride?.forceAudioOnly === true;
           const overrideDrivenAudioOnly = this.profile.source === "camera" && this.inAudioOnlyMode === true && this.currentLevel < maxLevel;
-          if (audioOnlyAllowed && overrideDrivenAudioOnly && !forceAudioOnlyActive && !filtered.some((action) => action.type === "exitAudioOnly")) {
+          if (audioOnlyAllowed && overrideDrivenAudioOnly && !forceAudioOnlyActive && !pauseUpstreamActive && !filtered.some((action) => action.type === "exitAudioOnly")) {
             filtered.unshift({
               type: "exitAudioOnly",
               level: this.currentLevel

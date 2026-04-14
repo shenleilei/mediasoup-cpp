@@ -51,6 +51,15 @@ TEST(QosValidatorTest, RejectsInvalidOverrideScope) {
 	EXPECT_NE(parsed.error.find("scope"), std::string::npos);
 }
 
+TEST(QosValidatorTest, RejectsInvalidPauseUpstreamType) {
+	auto fixture = LoadFixture("valid_override_v1");
+	fixture["pauseUpstream"] = "yes";
+
+	auto parsed = qos::QosValidator::ParseOverride(fixture);
+	EXPECT_FALSE(parsed.ok);
+	EXPECT_NE(parsed.error.find("pauseUpstream"), std::string::npos);
+}
+
 // ── Downlink snapshot validation tests ──
 
 namespace {

@@ -44,6 +44,7 @@ public:
 	using RoomLifecycleFn = std::function<void(const std::string&, bool)>;
 	using RegistryTaskFn = std::function<void(std::function<void()>)>;
 	using TaskPosterFn = std::function<void(std::function<void()>)>;
+	using DelayedTaskPosterFn = std::function<void(std::function<void()>, uint32_t)>;
 
 	RoomService(RoomManager& roomManager, RoomRegistry* registry,
 		const std::string& recordDir = "");
@@ -53,6 +54,7 @@ public:
 	void setRoomLifecycle(RoomLifecycleFn fn) { roomLifecycle_ = std::move(fn); }
 	void setRegistryTask(RegistryTaskFn fn) { registryTask_ = std::move(fn); }
 	void setTaskPoster(TaskPosterFn fn) { taskPoster_ = std::move(fn); }
+	void setDelayedTaskPoster(DelayedTaskPosterFn fn) { delayedTaskPoster_ = std::move(fn); }
 
 	void postRegistryTask(std::function<void()> task) {
 		if (registryTask_) registryTask_(std::move(task));
@@ -137,6 +139,7 @@ private:
 	// ── downlink v2 planner ──
 	void markDownlinkRoomDirty(const std::string& roomId);
 	void continueDownlinkPlanning();
+	void scheduleDownlinkPlanning(uint32_t delayMs);
 	void runDownlinkPlanningForRoom(const std::string& roomId);
 	std::optional<std::string> resolveProducerOwnerPeerId(
 		const std::string& roomId, const std::string& producerId) const;
@@ -161,6 +164,7 @@ private:
 	RoomLifecycleFn roomLifecycle_;
 	RegistryTaskFn registryTask_;
 	TaskPosterFn taskPoster_;
+	DelayedTaskPosterFn delayedTaskPoster_;
 	std::shared_ptr<spdlog::logger> logger_;
 
 	std::unordered_map<std::string, std::shared_ptr<PeerRecorder>> recorders_;
@@ -184,9 +188,17 @@ private:
 		int64_t sentAtMs{ 0 };
 		uint32_t ttlMs{ 0u };
 	};
+	struct DownlinkRoomPlanState {
+		int64_t lastPlannedAtMs{ 0 };
+		int64_t nextEligiblePlanAtMs{ 0 };
+	};
 	std::deque<std::string> pendingDownlinkRooms_;
 	std::unordered_set<std::string> dirtyDownlinkRooms_;
 	bool downlinkPlanningActive_{ false };
+	int64_t downlinkPlanningNextWakeAtMs_{ 0 };
+	uint64_t downlinkPlanningScheduleToken_{ 0 };
+	int64_t downlinkPlanningIntervalMs_{ 100 };
+	std::unordered_map<std::string, DownlinkRoomPlanState> downlinkRoomPlanStates_;
 	std::unordered_map<std::string, TrackQosOverrideRecord> trackQosOverrideRecords_;
 	std::unordered_map<std::string, std::unordered_map<std::string, qos::ProducerDemandState>> producerDemandCache_; // key: roomId -> producerId -> state
 };

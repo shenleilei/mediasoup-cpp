@@ -1,8 +1,8 @@
-# 下行 QoS 设计方案
+# 下行 QoS v1 设计方案
 
 ## 1. 文档目的
 
-这份文档给出当前仓库的 `subscriber/downlink QoS` 设计方案。
+这份文档给出当前仓库 `subscriber/downlink QoS v1` 的设计方案。
 
 当前仓库的 QoS 主线仍然是上行 / publisher 侧：
 
@@ -12,17 +12,11 @@
 
 下一阶段最值得投入的能力，不是继续只调 uplink 阈值，而是补齐 subscriber/downlink QoS。
 
-本设计参考 LiveKit 的两个核心思路：
+本文只覆盖 `v1`。
 
-- `adaptive stream`
-  根据 subscriber 视图尺寸和可见性，只接收最合适的视频层
-- `dynacast`
-  当没有 subscriber 消费某些发布层时，反向减少 publisher 发送的层
+如果要看 `v2` 的房间级 demand 聚合、publisher 供给回收和显式 bitrate allocator，请看：
 
-但当前文档只覆盖 `v1`：
-
-- 先做 `per-subscriber downlink QoS`
-- 暂时不做 dynacast
+- [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md)
 
 ## 2. 为什么现在该做下行 QoS
 
@@ -99,12 +93,11 @@
 - 根据真实下行健康度做降档和恢复
 - 在恢复升档时请求关键帧
 
-`v1` 暂时不做：
+`v1` 暂时不做更高一层的房间级供需闭环。
 
-- dynacast
-- publisher 侧编码层回收
-- 跨整个房间的全局最优带宽求解
-- 完整 LiveKit 级别 stream allocator
+这部分统一见：
+
+- [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md)
 
 ## 5. 总体模型
 
@@ -275,39 +268,15 @@
 
 这个优先级足够支撑 `v1`，而且和用户感知价值基本一致。
 
-## 11. 和 LiveKit 的对齐点
+## 11. v2 另见
 
-这版设计和 LiveKit 对齐的是：
+本文不展开 `v2`。
 
-- 尺寸感知订阅层选择
-- hidden 视频暂停
-- subscriber 侧优先级控制
-- dynacast 作为后续阶段优化
+`v2` 的设计统一见：
 
-对照关系：
+- [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md)
 
-- LiveKit `adaptive stream`
-  -> `visible + targetWidth/Height -> setPreferredLayers / pause`
-- LiveKit `dynacast`
-  -> 后续做房间级 aggregate demand，再反向裁剪 publisher layer supply
-
-## 12. V2：Dynacast
-
-等 `v1` 稳定后，再补一个房间级 demand 聚合器：
-
-1. 聚合所有 subscriber 对某个 producer 的最高需求层
-2. 识别长期没人消费的高层
-3. 通知 publisher 侧减少或停止发送这些层
-
-这样才形成完整闭环：
-
-- subscriber demand
-- room-level aggregation
-- publisher layer supply adjustment
-
-这一步建议放到 `v1` 稳定以后，不要一开始就一起做。
-
-## 13. 需要新增 / 修改的文件
+## 12. 需要新增 / 修改的文件
 
 ### 新增文件
 
@@ -332,9 +301,9 @@
 - [qos-demo.js](../public/qos-demo.js)
   先作为 downlink QoS 的首个 demo 入口
 
-## 14. 测试计划
+## 13. 测试计划
 
-### 14.1 单测
+### 13.1 单测
 
 - hidden consumer -> `pauseConsumer`
 - pinned consumer 优先级高于 grid consumer
@@ -342,21 +311,21 @@
 - 恢复时一层一层升档
 - screenshare 始终最高优先级
 
-### 14.2 集成测试
+### 13.2 集成测试
 
 - 两个 subscriber 请求不同目标尺寸，收到不同 preferred layers
 - hidden 视频被服务端暂停
 - 升档时触发 keyframe
 - 带宽紧张时，低优先级 consumer 先降
 
-### 14.3 Browser harness
+### 13.3 Browser harness
 
 - 一个大窗 + 一个小窗
 - 一个 pinned + 一个普通宫格
 - hidden/offscreen 转场
 - 下行弱网 + freeze 场景
 
-## 15. 建议实施顺序
+## 14. 建议实施顺序
 
 1. 定义 downlink snapshot schema
 2. 在浏览器侧跑通上报
@@ -369,9 +338,9 @@
    - recovery
    - keyframe
    - priority
-7. 最后再进入 dynacast 设计
+7. `v1` 稳定后，再进入 [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md)
 
-## 16. V1 验收标准
+## 15. V1 验收标准
 
 `v1` 至少应满足：
 
@@ -381,12 +350,8 @@
 - freeze / loss / jitter 触发的降档是稳定可观测的
 - 恢复不是振荡式来回跳
 
-## 17. 总结
+## 16. 总结
 
-当前收益最大的方向不是继续只调 uplink，而是：
+当前收益最大的方向不是继续只调 uplink，而是先把 `subscriber/downlink QoS v1` 做稳。
 
-- 先做 `subscriber/downlink QoS v1`
-- 再做更完整的 `adaptive stream`
-- 最后做 `dynacast`
-
-这样才能把当前“uplink-focused QoS”逐步推进成更完整的双向 RTC QoS 体系。
+`v1` 稳定以后，再进入 [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md) 定义的房间级下行闭环能力。

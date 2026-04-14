@@ -298,6 +298,8 @@ function parseQosOverride(payload) {
     });
     const forceAudioOnly = optionalBoolean(obj, 'forceAudioOnly', 'qosOverride');
     const disableRecovery = optionalBoolean(obj, 'disableRecovery', 'qosOverride');
+    const pauseUpstream = optionalBoolean(obj, 'pauseUpstream', 'qosOverride');
+    const resumeUpstream = optionalBoolean(obj, 'resumeUpstream', 'qosOverride');
     const ttlMs = asNonNegativeInt(obj.ttlMs, 'qosOverride.ttlMs');
     const reason = asNonEmptyString(obj.reason, 'qosOverride.reason');
     return {
@@ -307,6 +309,8 @@ function parseQosOverride(payload) {
         maxLevelClamp,
         forceAudioOnly,
         disableRecovery,
+        pauseUpstream,
+        resumeUpstream,
         ttlMs,
         reason,
     };

@@ -42,6 +42,45 @@ void ProducerDemandAggregator::addSubscriberPlan(
 	}
 }
 
+ProducerSupplyState ProducerDemandAggregator::advanceSupplyState(
+	const ProducerDemandState& state, bool zeroDemand, int64_t nowMs)
+{
+	auto prev = state.supplyState;
+
+	if (!zeroDemand) {
+		// Demand is present
+		if (prev == ProducerSupplyState::kPaused)
+			return ProducerSupplyState::kResumeWarmup;
+		if (prev == ProducerSupplyState::kResumeWarmup) {
+			if (state.resumeEligibleAtMs > 0 && nowMs >= state.resumeEligibleAtMs)
+				return state.maxSpatialLayer < 2
+					? ProducerSupplyState::kLowClamped
+					: ProducerSupplyState::kActive;
+			return ProducerSupplyState::kResumeWarmup;
+		}
+		return state.maxSpatialLayer < 2
+			? ProducerSupplyState::kLowClamped
+			: ProducerSupplyState::kActive;
+	}
+
+	// Zero demand
+	switch (prev) {
+	case ProducerSupplyState::kActive:
+	case ProducerSupplyState::kLowClamped:
+		return ProducerSupplyState::kZeroDemandHold;
+	case ProducerSupplyState::kZeroDemandHold:
+		if (state.pauseEligibleAtMs > 0 && nowMs >= state.pauseEligibleAtMs)
+			return ProducerSupplyState::kPaused;
+		return ProducerSupplyState::kZeroDemandHold;
+	case ProducerSupplyState::kPaused:
+		return ProducerSupplyState::kPaused;
+	case ProducerSupplyState::kResumeWarmup:
+		// Was warming up but demand dropped again
+		return ProducerSupplyState::kZeroDemandHold;
+	}
+	return ProducerSupplyState::kZeroDemandHold;
+}
+
 std::vector<ProducerDemandState> ProducerDemandAggregator::finalize(
 	int64_t nowMs,
 	const std::unordered_map<std::string, ProducerDemandState>& prev)
@@ -62,13 +101,47 @@ std::vector<ProducerDemandState> ProducerDemandAggregator::finalize(
 
 		bool zeroDemand = (acc.visibleSubscriberCount == 0);
 		auto prevIt = prev.find(pid);
+
+		// Carry forward v3 state from previous cycle
+		if (prevIt != prev.end()) {
+			state.supplyState = prevIt->second.supplyState;
+			state.lastNonZeroDemandAtMs = prevIt->second.lastNonZeroDemandAtMs;
+			state.pauseEligibleAtMs = prevIt->second.pauseEligibleAtMs;
+			state.resumeEligibleAtMs = prevIt->second.resumeEligibleAtMs;
+			state.lastPauseSentAtMs = prevIt->second.lastPauseSentAtMs;
+			state.lastResumeSentAtMs = prevIt->second.lastResumeSentAtMs;
+		}
+
 		if (zeroDemand) {
 			if (prevIt != prev.end() && prevIt->second.zeroDemandSinceMs > 0)
 				state.zeroDemandSinceMs = prevIt->second.zeroDemandSinceMs;
 			else
 				state.zeroDemandSinceMs = nowMs;
 			state.holdUntilMs = state.zeroDemandSinceMs + kHoldMs;
+
+			// Set pause eligibility on first zero-demand entry
+			if (state.pauseEligibleAtMs == 0)
+				state.pauseEligibleAtMs = state.zeroDemandSinceMs + kPauseConfirmMs;
+		} else {
+			state.lastNonZeroDemandAtMs = nowMs;
+			state.zeroDemandSinceMs = 0;
+			state.holdUntilMs = 0;
+			state.pauseEligibleAtMs = 0;
+
+			// Set resume eligibility when transitioning from paused
+			if (prevIt != prev.end() &&
+				prevIt->second.supplyState == ProducerSupplyState::kPaused &&
+				state.resumeEligibleAtMs == 0)
+			{
+				state.resumeEligibleAtMs = nowMs + kResumeWarmupMs;
+			}
 		}
+
+		state.supplyState = advanceSupplyState(state, zeroDemand, nowMs);
+
+		// Clear resume timer once warmup completes
+		if (state.supplyState != ProducerSupplyState::kResumeWarmup)
+			state.resumeEligibleAtMs = 0;
 
 		result.push_back(std::move(state));
 	}
@@ -85,8 +158,21 @@ std::vector<ProducerDemandState> ProducerDemandAggregator::finalize(
 			prevState.zeroDemandSinceMs > 0 ? prevState.zeroDemandSinceMs : nowMs;
 		state.holdUntilMs = state.zeroDemandSinceMs + kHoldMs;
 
-		if (state.holdUntilMs > nowMs)
+		// Carry forward v3 state
+		state.supplyState = prevState.supplyState;
+		state.lastNonZeroDemandAtMs = prevState.lastNonZeroDemandAtMs;
+		state.lastPauseSentAtMs = prevState.lastPauseSentAtMs;
+		state.lastResumeSentAtMs = prevState.lastResumeSentAtMs;
+		if (state.pauseEligibleAtMs == 0)
+			state.pauseEligibleAtMs = state.zeroDemandSinceMs + kPauseConfirmMs;
+		state.supplyState = advanceSupplyState(state, /*zeroDemand=*/true, nowMs);
+
+		// Keep in result if still in hold or paused (paused producers stay until explicitly removed)
+		if (state.holdUntilMs > nowMs ||
+			state.supplyState == ProducerSupplyState::kPaused)
+		{
 			result.push_back(std::move(state));
+		}
 	}
 	return result;
 }

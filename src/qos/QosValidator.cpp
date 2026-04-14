@@ -378,6 +378,20 @@ ParseResult<QosOverride> QosValidator::ParseOverride(const json& payload) {
 		overrideData.hasDisableRecovery = true;
 		overrideData.disableRecovery = payload["disableRecovery"].get<bool>();
 	}
+	if (payload.contains("pauseUpstream")) {
+		if (!payload["pauseUpstream"].is_boolean()) {
+			return MakeError<QosOverride>("invalid pauseUpstream");
+		}
+		overrideData.hasPauseUpstream = true;
+		overrideData.pauseUpstream = payload["pauseUpstream"].get<bool>();
+	}
+	if (payload.contains("resumeUpstream")) {
+		if (!payload["resumeUpstream"].is_boolean()) {
+			return MakeError<QosOverride>("invalid resumeUpstream");
+		}
+		overrideData.hasResumeUpstream = true;
+		overrideData.resumeUpstream = payload["resumeUpstream"].get<bool>();
+	}
 
 	return MakeSuccess(std::move(overrideData));
 }

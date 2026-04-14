@@ -56,6 +56,10 @@ struct QosOverride {
 	bool forceAudioOnly{ false };
 	bool hasDisableRecovery{ false };
 	bool disableRecovery{ false };
+	bool hasPauseUpstream{ false };
+	bool pauseUpstream{ false };
+	bool hasResumeUpstream{ false };
+	bool resumeUpstream{ false };
 	uint32_t ttlMs{ 0u };
 	std::string reason;
 	json raw;

@@ -1,0 +1,6 @@
+{
+  "generatedAt": "2026-04-14T04:02:36.953Z",
+  "runType": "full",
+  "selectedCaseIds": "all",
+  "sourceScript": "tests/qos_harness/run_downlink_matrix.mjs"
+}

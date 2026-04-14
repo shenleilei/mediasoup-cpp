@@ -102,6 +102,17 @@
 - “客户端本地标记 pause 了”
 - “worker 仍在向下游 / 上游保持某些行为”
 
+这里需要明确一点：
+
+- `v3` 不是原则上禁止改 worker
+- `mediasoup-cpp` 目录下本身就有 worker 相关代码入口，例如：
+  - [src/Worker.cpp](../src/Worker.cpp)
+  - [src/Worker.h](../src/Worker.h)
+  - 仓库根目录下的 `mediasoup-worker`
+
+也就是说，`v3` 完全可以把“修改 worker 源代码”纳入正式范围；
+只是这件事应该在证据驱动的前提下进入，而不是一开始就默认它是第一步。
+
 ### 3.4 还没有和 uplink 对齐的 downlink matrix
 
 当前 `uplink QoS` 已经有：
@@ -161,6 +172,16 @@
 1. 现有 `qosOverride` / client controller 是否足够表达 `pauseUpstream / resumeUpstream`
 2. 现有 producer adapter 是否能无歧义执行
 3. 只有确认 data plane 还缺关键能力时，再考虑 worker 改造
+
+这里的“worker 改造”，明确包括：
+
+- `mediasoup-cpp` 目录下的 worker 相关 C++ 代码
+- 如有必要，仓库中实际使用的 `mediasoup-worker` 源码 / 构建入口
+
+所以 `v3` 的结论不应该是“永远不改 worker”，而应该是：
+
+- 先用 control plane + browser / integration 验证把问题收敛
+- 再决定是否需要修改 worker 源代码来支撑真正的数据面 pause / resume
 
 ### 5.3 planner 必须从“事件驱动”升级到“时钟驱动”
 
@@ -339,6 +360,13 @@
    - 再决定是否需要 worker 侧额外支持
 
 这一步的结论应该单独沉淀成验证文档，而不是直接把 worker 改掉。
+
+但要明确：
+
+- 如果黑盒验证表明现有 control plane 无法保证“真正停发 / 真正恢复”
+- 或者 pause / resume 后的数据面行为与预期不一致
+
+那么 `v3` 后续阶段就应该正式进入 worker 源代码修改，而不是继续停留在外围绕行。
 
 ## 8. 测试设计
 

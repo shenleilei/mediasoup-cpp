@@ -38,6 +38,40 @@ QosOverride MakeTrackClear(const std::string& trackId, const std::string& reason
 	return o;
 }
 
+QosOverride MakeTrackPause(const std::string& trackId, uint32_t ttlMs) {
+	QosOverride o;
+	o.schema = "mediasoup.qos.override.v1";
+	o.scope = "track";
+	o.trackId = trackId;
+	o.hasTrackId = true;
+	o.hasPauseUpstream = true;
+	o.pauseUpstream = true;
+	o.ttlMs = ttlMs;
+	o.reason = "downlink_v3_zero_demand_pause";
+	o.raw = {
+		{"schema", o.schema}, {"scope", "track"}, {"trackId", trackId},
+		{"pauseUpstream", true}, {"ttlMs", ttlMs}, {"reason", o.reason}
+	};
+	return o;
+}
+
+QosOverride MakeTrackResume(const std::string& trackId, uint32_t ttlMs) {
+	QosOverride o;
+	o.schema = "mediasoup.qos.override.v1";
+	o.scope = "track";
+	o.trackId = trackId;
+	o.hasTrackId = true;
+	o.hasResumeUpstream = true;
+	o.resumeUpstream = true;
+	o.ttlMs = ttlMs;
+	o.reason = "downlink_v3_demand_resumed";
+	o.raw = {
+		{"schema", o.schema}, {"scope", "track"}, {"trackId", trackId},
+		{"resumeUpstream", true}, {"ttlMs", ttlMs}, {"reason", o.reason}
+	};
+	return o;
+}
+
 } // namespace
 
 bool PublisherSupplyController::shouldClamp(const ProducerDemandState& state) const {
@@ -56,14 +90,30 @@ std::vector<TargetedOverride> PublisherSupplyController::BuildOverrides(
 		if (!resolved) continue;
 		auto& [peerId, trackId] = *resolved;
 
-		if (shouldClamp(state)) {
-			overrides.push_back({ peerId, MakeTrackClamp(
-				trackId, state.maxSpatialLayer, 5000u, "downlink_v2_room_demand") });
-		} else if (state.visibleSubscriberCount == 0 && state.holdUntilMs > 0 && nowMs < state.holdUntilMs) {
+		switch (state.supplyState) {
+		case ProducerSupplyState::kPaused:
+			// Clear any lingering resume override first, then send pause
+			overrides.push_back({ peerId, MakeTrackClear(trackId, "downlink_v3_demand_resumed") });
+			overrides.push_back({ peerId, MakeTrackPause(trackId, 5000u) });
+			break;
+		case ProducerSupplyState::kResumeWarmup:
+			// Clear the old pause override first, then send resume
+			overrides.push_back({ peerId, MakeTrackClear(trackId, "downlink_v3_zero_demand_pause") });
+			overrides.push_back({ peerId, MakeTrackResume(trackId, 5000u) });
+			break;
+		case ProducerSupplyState::kZeroDemandHold:
 			overrides.push_back({ peerId, MakeTrackClamp(
 				trackId, 0, 5000u, "downlink_v2_zero_demand_hold") });
-		} else if (state.visibleSubscriberCount > 0 && state.maxSpatialLayer >= 2) {
+			break;
+		case ProducerSupplyState::kLowClamped:
+			if (shouldClamp(state)) {
+				overrides.push_back({ peerId, MakeTrackClamp(
+					trackId, state.maxSpatialLayer, 5000u, "downlink_v2_room_demand") });
+			}
+			break;
+		case ProducerSupplyState::kActive:
 			overrides.push_back({ peerId, MakeTrackClear(trackId, "downlink_v2_demand_restored") });
+			break;
 		}
 	}
 	return overrides;

@@ -8,6 +8,14 @@
 
 namespace mediasoup::qos {
 
+enum class ProducerSupplyState {
+	kActive,
+	kLowClamped,
+	kZeroDemandHold,
+	kPaused,
+	kResumeWarmup,
+};
+
 struct ProducerDemandState {
 	std::string producerId;
 	std::string publisherPeerId;
@@ -17,11 +25,20 @@ struct ProducerDemandState {
 	size_t highPrioritySubscriberCount{ 0 };
 	int64_t zeroDemandSinceMs{ 0 };
 	int64_t holdUntilMs{ 0 };
+	// v3 state machine fields
+	ProducerSupplyState supplyState{ ProducerSupplyState::kActive };
+	int64_t lastNonZeroDemandAtMs{ 0 };
+	int64_t pauseEligibleAtMs{ 0 };
+	int64_t resumeEligibleAtMs{ 0 };
+	int64_t lastPauseSentAtMs{ 0 };
+	int64_t lastResumeSentAtMs{ 0 };
 };
 
 class ProducerDemandAggregator {
 public:
 	static constexpr int64_t kHoldMs = 2000;
+	static constexpr int64_t kPauseConfirmMs = 4000;
+	static constexpr int64_t kResumeWarmupMs = 1000;
 
 	void reset();
 	void addSubscriberPlan(
@@ -41,6 +58,9 @@ private:
 		size_t highPrioritySubscriberCount{ 0 };
 	};
 	std::unordered_map<std::string, Accumulator> accumulators_;
+
+	static ProducerSupplyState advanceSupplyState(
+		const ProducerDemandState& state, bool zeroDemand, int64_t nowMs);
 };
 
 } // namespace mediasoup::qos
