@@ -649,6 +649,7 @@ void RoomService::cleanupRoomResources(const std::string& roomId) {
 	pendingDownlinkRooms_.erase(
 		std::remove(pendingDownlinkRooms_.begin(), pendingDownlinkRooms_.end(), roomId),
 		pendingDownlinkRooms_.end());
+	downlinkRoomPlanStates_.erase(roomId);
 	for (auto it = trackQosOverrideRecords_.begin(); it != trackQosOverrideRecords_.end(); ) {
 		if (it->second.roomId == roomId) it = trackQosOverrideRecords_.erase(it);
 		else ++it;
@@ -1339,46 +1340,93 @@ RoomService::Result RoomService::requestConsumerKeyFrame(const std::string& room
 	return {true, it->second->toJson()};
 }
 
-// ── downlink v2 planner ──
+// ── downlink v3 coalesced planner ──
 
 void RoomService::markDownlinkRoomDirty(const std::string& roomId) {
 	if (dirtyDownlinkRooms_.insert(roomId).second)
 		pendingDownlinkRooms_.push_back(roomId);
 	if (!downlinkPlanningActive_) {
 		downlinkPlanningActive_ = true;
-		if (taskPoster_)
-			taskPoster_([this] { continueDownlinkPlanning(); });
-		else
-			continueDownlinkPlanning();
+		scheduleDownlinkPlanning(/*delayMs=*/0);
+		return;
+	}
+
+	// If the planner is currently sleeping for a deferred room, wake it up so
+	// one-shot events (leave/reconnect) are not stranded until the next stats push.
+	if (downlinkPlanningNextWakeAtMs_ > 0)
+		scheduleDownlinkPlanning(/*delayMs=*/0);
+}
+
+void RoomService::scheduleDownlinkPlanning(uint32_t delayMs) {
+	const uint64_t token = ++downlinkPlanningScheduleToken_;
+	downlinkPlanningNextWakeAtMs_ =
+		delayMs > 0 ? qos::NowMs() + static_cast<int64_t>(delayMs) : 0;
+
+	auto task = [this, token] {
+		if (!downlinkPlanningActive_ || token != downlinkPlanningScheduleToken_)
+			return;
+		downlinkPlanningNextWakeAtMs_ = 0;
+		continueDownlinkPlanning();
+	};
+
+	if (delayMs > 0 && delayedTaskPoster_) {
+		delayedTaskPoster_(std::move(task), delayMs);
+	} else if (taskPoster_) {
+		taskPoster_(std::move(task));
+	} else {
+		task();
 	}
 }
 
 void RoomService::continueDownlinkPlanning() {
 	if (pendingDownlinkRooms_.empty()) {
 		downlinkPlanningActive_ = false;
+		downlinkPlanningNextWakeAtMs_ = 0;
 		return;
 	}
 
-	std::string roomId = std::move(pendingDownlinkRooms_.front());
-	pendingDownlinkRooms_.pop_front();
-	dirtyDownlinkRooms_.erase(roomId);
+	const int64_t nowMs = qos::NowMs();
+	int64_t minDeferredDelayMs = 0;
+	std::deque<std::string> deferredRooms;
 
-	try {
-		runDownlinkPlanningForRoom(roomId);
-	} catch (const std::exception& e) {
-		MS_WARN(logger_, "[{}] downlink planning failed: {}", roomId, e.what());
-	} catch (...) {
-		MS_WARN(logger_, "[{}] downlink planning failed: unknown error", roomId);
+	while (!pendingDownlinkRooms_.empty()) {
+		std::string roomId = std::move(pendingDownlinkRooms_.front());
+		pendingDownlinkRooms_.pop_front();
+		dirtyDownlinkRooms_.erase(roomId);
+
+		auto& planState = downlinkRoomPlanStates_[roomId];
+		if (nowMs < planState.nextEligiblePlanAtMs) {
+			const int64_t delayMs = std::max<int64_t>(1, planState.nextEligiblePlanAtMs - nowMs);
+			if (minDeferredDelayMs == 0 || delayMs < minDeferredDelayMs)
+				minDeferredDelayMs = delayMs;
+			deferredRooms.push_back(std::move(roomId));
+			continue;
+		}
+
+		try {
+			runDownlinkPlanningForRoom(roomId);
+		} catch (const std::exception& e) {
+			MS_WARN(logger_, "[{}] downlink planning failed: {}", roomId, e.what());
+		} catch (...) {
+			MS_WARN(logger_, "[{}] downlink planning failed: unknown error", roomId);
+		}
+
+		planState.lastPlannedAtMs = nowMs;
+		planState.nextEligiblePlanAtMs = nowMs + downlinkPlanningIntervalMs_;
+	}
+
+	for (auto& roomId : deferredRooms) {
+		dirtyDownlinkRooms_.insert(roomId);
+		pendingDownlinkRooms_.push_back(std::move(roomId));
 	}
 
 	if (pendingDownlinkRooms_.empty()) {
 		downlinkPlanningActive_ = false;
+		downlinkPlanningNextWakeAtMs_ = 0;
 		return;
 	}
-	if (taskPoster_)
-		taskPoster_([this] { continueDownlinkPlanning(); });
-	else
-		continueDownlinkPlanning();
+
+	scheduleDownlinkPlanning(static_cast<uint32_t>(minDeferredDelayMs));
 }
 
 void RoomService::runDownlinkPlanningForRoom(const std::string& roomId) {

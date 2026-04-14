@@ -117,6 +117,8 @@ export type QosOverride = {
     maxLevelClamp?: number;
     forceAudioOnly?: boolean;
     disableRecovery?: boolean;
+    pauseUpstream?: boolean;
+    resumeUpstream?: boolean;
     ttlMs: number;
     reason: string;
 };

@@ -54,3 +54,25 @@ TEST(QosProtocolTest, ParsesValidOverrideFixture) {
 	EXPECT_FALSE(parsed.value.forceAudioOnly);
 	EXPECT_EQ(parsed.value.ttlMs, 10000u);
 }
+
+TEST(QosProtocolTest, ParsesV3PauseResumeOverrideFields) {
+	json payload = {
+		{"schema", "mediasoup.qos.override.v1"},
+		{"scope", "track"},
+		{"trackId", "track-1"},
+		{"pauseUpstream", true},
+		{"resumeUpstream", false},
+		{"ttlMs", 5000},
+		{"reason", "downlink_v3_zero_demand_pause"}
+	};
+
+	auto parsed = qos::QosValidator::ParseOverride(payload);
+
+	ASSERT_TRUE(parsed.ok) << parsed.error;
+	EXPECT_TRUE(parsed.value.hasTrackId);
+	EXPECT_EQ(parsed.value.trackId, "track-1");
+	EXPECT_TRUE(parsed.value.hasPauseUpstream);
+	EXPECT_TRUE(parsed.value.pauseUpstream);
+	EXPECT_TRUE(parsed.value.hasResumeUpstream);
+	EXPECT_FALSE(parsed.value.resumeUpstream);
+}

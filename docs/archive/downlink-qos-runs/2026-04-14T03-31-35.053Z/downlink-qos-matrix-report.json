@@ -1,0 +1,250 @@
+{
+  "generatedAt": "2026-04-14T03:31:35.053Z",
+  "selectedCaseIds": "all",
+  "includedCaseIds": [
+    "D1",
+    "D2",
+    "D3",
+    "D4",
+    "D5",
+    "D6",
+    "D7",
+    "D8"
+  ],
+  "summary": {
+    "total": 8,
+    "executed": 6,
+    "passed": 6,
+    "failed": 0,
+    "errors": 2
+  },
+  "cases": [
+    {
+      "caseId": "D1",
+      "group": "baseline",
+      "priority": "P0",
+      "startTime": "2026-04-14T03:23:46.286Z",
+      "producerId": "7540fc1d-fb88-4d7a-8f45-cb2a6f34efe9",
+      "consumerId": "53d0c60e-4e5c-4312-ae63-2131b82694a0",
+      "baseline": {
+        "network": {
+          "bandwidth": 5000,
+          "rtt": 30,
+          "loss": 0,
+          "jitter": 2
+        },
+        "durationMs": 10000
+      },
+      "impaired": {
+        "network": {
+          "bandwidth": 5000,
+          "rtt": 30,
+          "loss": 0,
+          "jitter": 2
+        },
+        "durationMs": 10000
+      },
+      "recovery": {
+        "network": {
+          "bandwidth": 5000,
+          "rtt": 30,
+          "loss": 0,
+          "jitter": 2
+        },
+        "durationMs": 10000
+      },
+      "endTime": "2026-04-14T03:24:50.424Z",
+      "verdict": {
+        "passed": true,
+        "reason": "ok"
+      }
+    },
+    {
+      "caseId": "D2",
+      "group": "bw_sweep",
+      "priority": "P0",
+      "startTime": "2026-04-14T03:24:52.027Z",
+      "producerId": "5da97340-20e6-4c8f-aa8b-bd6619ec63f9",
+      "consumerId": "45b06e6b-58fd-442a-b2d0-75c3ee37fbd3",
+      "baseline": {
+        "network": {
+          "bandwidth": 5000,
+          "rtt": 30,
+          "loss": 0,
+          "jitter": 2
+        },
+        "durationMs": 10000
+      },
+      "impaired": {
+        "network": {
+          "bandwidth": 300,
+          "rtt": 30,
+          "loss": 0,
+          "jitter": 2
+        },
+        "durationMs": 15000
+      },
+      "recovery": {
+        "network": {
+          "bandwidth": 5000,
+          "rtt": 30,
+          "loss": 0,
+          "jitter": 2
+        },
+        "durationMs": 15000
+      },
+      "endTime": "2026-04-14T03:26:33.808Z",
+      "verdict": {
+        "passed": true,
+        "reason": "ok"
+      }
+    },
+    {
+      "caseId": "D3",
+      "group": "loss_sweep",
+      "priority": "P0",
+      "error": "ws connect timeout"
+    },
+    {
+      "caseId": "D4",
+      "group": "rtt_sweep",
+      "priority": "P0",
+      "startTime": "2026-04-14T03:26:45.123Z",
+      "producerId": "7e954ea9-c765-412e-8b8f-b9a6a862cb86",
+      "consumerId": "dbe1223e-ce18-4266-b240-1f1e612c7853",
+      "baseline": {
+        "network": {
+          "bandwidth": 5000,
+          "rtt": 30,
+          "loss": 0,
+          "jitter": 2
+        },
+        "durationMs": 10000
+      },
+      "impaired": {
+        "network": {
+          "bandwidth": 5000,
+          "rtt": 500,
+          "loss": 0,
+          "jitter": 2
+        },
+        "durationMs": 15000
+      },
+      "recovery": {
+        "network": {
+          "bandwidth": 5000,
+          "rtt": 30,
+          "loss": 0,
+          "jitter": 2
+        },
+        "durationMs": 15000
+      },
+      "endTime": "2026-04-14T03:28:02.608Z",
+      "verdict": {
+        "passed": true,
+        "reason": "ok"
+      }
+    },
+    {
+      "caseId": "D5",
+      "group": "jitter_sweep",
+      "priority": "P0",
+      "startTime": "2026-04-14T03:28:04.400Z",
+      "producerId": "e7fb5b75-3d39-461c-959e-82baa80517c5",
+      "consumerId": "696cfeb4-9e13-471c-9b03-e6a654d66af6",
+      "baseline": {
+        "network": {
+          "bandwidth": 5000,
+          "rtt": 30,
+          "loss": 0,
+          "jitter": 2
+        },
+        "durationMs": 10000
+      },
+      "impaired": {
+        "network": {
+          "bandwidth": 5000,
+          "rtt": 30,
+          "loss": 0,
+          "jitter": 80
+        },
+        "durationMs": 15000
+      },
+      "recovery": {
+        "network": {
+          "bandwidth": 5000,
+          "rtt": 30,
+          "loss": 0,
+          "jitter": 2
+        },
+        "durationMs": 15000
+      },
+      "endTime": "2026-04-14T03:29:30.407Z",
+      "verdict": {
+        "passed": true,
+        "reason": "ok"
+      }
+    },
+    {
+      "caseId": "D6",
+      "group": "transition",
+      "priority": "P0",
+      "error": "ws connect timeout"
+    },
+    {
+      "caseId": "D7",
+      "group": "competition",
+      "priority": "P1",
+      "startTime": "2026-04-14T03:29:38.402Z",
+      "producerId": "cb84f8e1-7f4f-42eb-9314-4b6fce0e4043",
+      "consumerId": "c63b8385-10ca-49b6-ade2-d0f2e756f063",
+      "baseline": {
+        "network": {
+          "bandwidth": 5000,
+          "rtt": 30,
+          "loss": 0,
+          "jitter": 2
+        },
+        "durationMs": 10000
+      },
+      "impaired": {
+        "network": {
+          "bandwidth": 500,
+          "rtt": 30,
+          "loss": 0,
+          "jitter": 2
+        },
+        "durationMs": 15000
+      },
+      "recovery": {
+        "network": {
+          "bandwidth": 5000,
+          "rtt": 30,
+          "loss": 0,
+          "jitter": 2
+        },
+        "durationMs": 15000
+      },
+      "endTime": "2026-04-14T03:30:58.956Z",
+      "verdict": {
+        "passed": true,
+        "reason": "ok"
+      }
+    },
+    {
+      "caseId": "D8",
+      "group": "zero_demand",
+      "priority": "P0",
+      "startTime": "2026-04-14T03:31:03.177Z",
+      "producerId": "34a099d2-34c0-42b1-80ba-4fe5be38cde6",
+      "consumerId": "5cad9742-0aa2-453a-83e0-5e73bd1f8d49",
+      "pauseReceived": true,
+      "resumeReceived": true,
+      "endTime": "2026-04-14T03:31:31.939Z",
+      "verdict": {
+        "passed": true,
+        "reason": "ok"
+      }
+    }
+  ]
+}

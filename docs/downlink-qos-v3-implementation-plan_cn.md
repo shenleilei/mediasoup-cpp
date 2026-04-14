@@ -50,6 +50,16 @@
 4. `downlink` 的 matrix 要和 `uplink` 对齐，但断言对象必须不同
 5. 只有明确发现 client / SFU control plane 不够，才进入 worker 深改
 
+这里需要明确：
+
+- `v3` 并不是排斥改 worker 源代码
+- `mediasoup-cpp` 目录下本身就有 worker 相关代码入口，例如：
+  - [src/Worker.cpp](../src/Worker.cpp)
+  - [src/Worker.h](../src/Worker.h)
+  - 仓库根目录下的 `mediasoup-worker`
+
+所以“worker 改造”是 `v3` 的正式实现选项，只是不应该在没有黑盒证据时提前展开。
+
 ## 4. v3 目标调用链
 
 `v3` 最终要形成这条链：
@@ -326,6 +336,17 @@ bool shouldResume(const ProducerDemandState& state) const;
 3. resume 后是否必须显式请求 keyframe
 4. 当前 producer / transport API 是否足以实现目标
 
+这里的“worker”不是抽象概念，而是包括：
+
+- `mediasoup-cpp` 仓库中的 worker 相关 C++ 代码
+- 仓库实际运行使用的 `mediasoup-worker`
+
+阶段 4 的目标不是继续重复“先不改 worker”，而是形成明确结论：
+
+- 当前 control plane 已足够
+  或
+- 必须进入 worker 源代码修改
+
 ### 8.2 输出形式
 
 建议单独补一份验证文档，例如：
@@ -346,6 +367,10 @@ bool shouldResume(const ProducerDemandState& state) const;
 ### 8.4 验收标准
 
 - 能明确写出“需要 worker 改造”还是“当前 control plane 已足够”
+- 如果需要 worker 改造，能明确写出：
+  - 改哪一层
+  - 为什么 client / adapter 层无法单独解决
+  - 预期修改的是 `mediasoup-cpp` 内哪类 worker 代码 / 运行时行为
 
 ## 9. 阶段 5：补齐 downlink matrix 与报告体系
 

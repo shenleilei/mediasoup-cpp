@@ -241,6 +241,7 @@ TEST(PublisherSupplyControllerTest, ClampsWhenDemandBelowMax) {
 	s.producerId = "p1";
 	s.maxSpatialLayer = 1;
 	s.visibleSubscriberCount = 2;
+	s.supplyState = ProducerSupplyState::kLowClamped;
 	states.push_back(s);
 
 	auto overrides = ctrl.BuildOverrides(states,
@@ -319,6 +320,7 @@ TEST(PublisherSupplyControllerTest, ClampResendAfterTTLExpiry) {
 	s.producerId = "p1";
 	s.maxSpatialLayer = 1;
 	s.visibleSubscriberCount = 1;
+	s.supplyState = ProducerSupplyState::kLowClamped;
 
 	auto r1 = ctrl.BuildOverrides({s},
 		[](const std::string&) -> ResolvePair { return std::make_pair("alice", "t1"); }, 1000);
@@ -328,4 +330,186 @@ TEST(PublisherSupplyControllerTest, ClampResendAfterTTLExpiry) {
 	ASSERT_EQ(r2.size(), 1u);
 	// Both should produce identical overrides — the dedup is RoomService's job
 	EXPECT_EQ(r1[0].overrideData.raw.dump(), r2[0].overrideData.raw.dump());
+}
+
+// ── v3 ProducerSupplyState tests ──
+
+TEST(ProducerDemandAggregatorTest, ZeroDemandTransitionsToPausedAfterConfirm) {
+	ProducerDemandAggregator agg;
+	auto snap = MakeSnapshot("sub1", 1'000'000.0, {
+		MakeSub("c1", "p1", false), // hidden
+	});
+	SubscriberBudgetAllocator alloc;
+	auto plan = alloc.Allocate(snap, 0);
+	agg.addSubscriberPlan("sub1", snap, plan);
+
+	// First finalize: enters zero-demand hold
+	int64_t t0 = 1000;
+	auto d1 = agg.finalize(t0, {});
+	ASSERT_EQ(d1.size(), 1u);
+	EXPECT_EQ(d1[0].supplyState, ProducerSupplyState::kZeroDemandHold);
+
+	// Build prev map
+	std::unordered_map<std::string, ProducerDemandState> prev;
+	prev[d1[0].producerId] = d1[0];
+
+	// Second finalize at t0 + kPauseConfirmMs: should transition to paused
+	ProducerDemandAggregator agg2;
+	agg2.addSubscriberPlan("sub1", snap, plan);
+	auto d2 = agg2.finalize(t0 + ProducerDemandAggregator::kPauseConfirmMs, prev);
+	ASSERT_EQ(d2.size(), 1u);
+	EXPECT_EQ(d2[0].supplyState, ProducerSupplyState::kPaused);
+}
+
+TEST(ProducerDemandAggregatorTest, PausedTransitionsToResumeWarmupOnDemand) {
+	std::unordered_map<std::string, ProducerDemandState> prev;
+	ProducerDemandState paused;
+	paused.producerId = "p1";
+	paused.supplyState = ProducerSupplyState::kPaused;
+	paused.zeroDemandSinceMs = 1000;
+	paused.pauseEligibleAtMs = 5000;
+	prev["p1"] = paused;
+
+	ProducerDemandAggregator agg;
+	auto snap = MakeSnapshot("sub1", 1'000'000.0, {
+		MakeSub("c1", "p1", true), // now visible
+	});
+	SubscriberBudgetAllocator alloc;
+	auto plan = alloc.Allocate(snap, 0);
+	agg.addSubscriberPlan("sub1", snap, plan);
+
+	auto d = agg.finalize(10000, prev);
+	ASSERT_EQ(d.size(), 1u);
+	EXPECT_EQ(d[0].supplyState, ProducerSupplyState::kResumeWarmup);
+	EXPECT_GT(d[0].resumeEligibleAtMs, 10000);
+}
+
+TEST(ProducerDemandAggregatorTest, ResumeWarmupCompletesToActive) {
+	std::unordered_map<std::string, ProducerDemandState> prev;
+	ProducerDemandState warmup;
+	warmup.producerId = "p1";
+	warmup.supplyState = ProducerSupplyState::kResumeWarmup;
+	warmup.resumeEligibleAtMs = 11000;
+	warmup.lastNonZeroDemandAtMs = 10000;
+	prev["p1"] = warmup;
+
+	ProducerDemandAggregator agg;
+	auto snap = MakeSnapshot("sub1", 5'000'000.0, {
+		MakeSub("c1", "p1", true, true),
+	});
+	SubscriberBudgetAllocator alloc;
+	auto plan = alloc.Allocate(snap, 0);
+	agg.addSubscriberPlan("sub1", snap, plan);
+
+	// Before warmup completes
+	auto d1 = agg.finalize(10500, prev);
+	ASSERT_EQ(d1.size(), 1u);
+	EXPECT_EQ(d1[0].supplyState, ProducerSupplyState::kResumeWarmup);
+
+	// After warmup completes
+	prev["p1"] = d1[0];
+	ProducerDemandAggregator agg2;
+	agg2.addSubscriberPlan("sub1", snap, plan);
+	auto d2 = agg2.finalize(12000, prev);
+	ASSERT_EQ(d2.size(), 1u);
+	EXPECT_NE(d2[0].supplyState, ProducerSupplyState::kResumeWarmup);
+}
+
+TEST(ProducerDemandAggregatorTest, SingleVisibleFlickerDoesNotCausePause) {
+	// Rapid hide/show should not reach paused state
+	ProducerDemandAggregator agg;
+	SubscriberBudgetAllocator alloc;
+
+	// Start visible
+	auto snapVisible = MakeSnapshot("sub1", 1'000'000.0, {
+		MakeSub("c1", "p1", true),
+	});
+	auto planV = alloc.Allocate(snapVisible, 0);
+	agg.addSubscriberPlan("sub1", snapVisible, planV);
+	auto d1 = agg.finalize(1000, {});
+	ASSERT_EQ(d1.size(), 1u);
+	EXPECT_TRUE(d1[0].supplyState == ProducerSupplyState::kActive ||
+		d1[0].supplyState == ProducerSupplyState::kLowClamped);
+
+	// Hide briefly
+	std::unordered_map<std::string, ProducerDemandState> prev;
+	prev[d1[0].producerId] = d1[0];
+	ProducerDemandAggregator agg2;
+	auto snapHidden = MakeSnapshot("sub1", 1'000'000.0, {
+		MakeSub("c1", "p1", false),
+	});
+	auto planH = alloc.Allocate(snapHidden, 0);
+	agg2.addSubscriberPlan("sub1", snapHidden, planH);
+	auto d2 = agg2.finalize(1100, prev); // 100ms later
+	EXPECT_EQ(d2[0].supplyState, ProducerSupplyState::kZeroDemandHold);
+
+	// Show again quickly — should go back to active, not paused
+	prev[d2[0].producerId] = d2[0];
+	ProducerDemandAggregator agg3;
+	agg3.addSubscriberPlan("sub1", snapVisible, planV);
+	auto d3 = agg3.finalize(1200, prev);
+	ASSERT_EQ(d3.size(), 1u);
+	EXPECT_NE(d3[0].supplyState, ProducerSupplyState::kPaused);
+}
+
+// ── v3 PublisherSupplyController pause/resume tests ──
+
+TEST(PublisherSupplyControllerTest, PausedStateEmitsPauseUpstream) {
+	PublisherSupplyController ctrl;
+	ProducerDemandState s;
+	s.producerId = "p1";
+	s.supplyState = ProducerSupplyState::kPaused;
+	s.zeroDemandSinceMs = 1000;
+
+	auto overrides = ctrl.BuildOverrides({s},
+		[](const std::string&) -> ResolvePair { return std::make_pair("alice", "track-1"); },
+		6000);
+	// Should emit clear (to remove old resume) + pause
+	ASSERT_GE(overrides.size(), 2u);
+	// First: clear old resume
+	EXPECT_EQ(overrides[0].overrideData.reason, "downlink_v3_demand_resumed");
+	EXPECT_EQ(overrides[0].overrideData.ttlMs, 0u);
+	// Second: pause
+	EXPECT_TRUE(overrides[1].overrideData.hasPauseUpstream);
+	EXPECT_TRUE(overrides[1].overrideData.pauseUpstream);
+	EXPECT_EQ(overrides[1].overrideData.reason, "downlink_v3_zero_demand_pause");
+}
+
+TEST(PublisherSupplyControllerTest, ResumeWarmupEmitsResumeUpstream) {
+	PublisherSupplyController ctrl;
+	ProducerDemandState s;
+	s.producerId = "p1";
+	s.supplyState = ProducerSupplyState::kResumeWarmup;
+	s.visibleSubscriberCount = 1;
+	s.maxSpatialLayer = 1;
+
+	auto overrides = ctrl.BuildOverrides({s},
+		[](const std::string&) -> ResolvePair { return std::make_pair("alice", "track-1"); },
+		10000);
+	// Should emit clear (to remove old pause) + resume
+	ASSERT_GE(overrides.size(), 2u);
+	// First: clear the old pause
+	EXPECT_EQ(overrides[0].overrideData.reason, "downlink_v3_zero_demand_pause");
+	EXPECT_EQ(overrides[0].overrideData.ttlMs, 0u);
+	// Second: resume
+	EXPECT_TRUE(overrides[1].overrideData.hasResumeUpstream);
+	EXPECT_TRUE(overrides[1].overrideData.resumeUpstream);
+	EXPECT_EQ(overrides[1].overrideData.reason, "downlink_v3_demand_resumed");
+}
+
+TEST(PublisherSupplyControllerTest, ZeroDemandHoldEmitsLowClamp) {
+	PublisherSupplyController ctrl;
+	ProducerDemandState s;
+	s.producerId = "p1";
+	s.supplyState = ProducerSupplyState::kZeroDemandHold;
+	s.zeroDemandSinceMs = 1000;
+	s.holdUntilMs = 3000;
+
+	auto overrides = ctrl.BuildOverrides({s},
+		[](const std::string&) -> ResolvePair { return std::make_pair("alice", "track-1"); },
+		2000);
+	ASSERT_EQ(overrides.size(), 1u);
+	EXPECT_TRUE(overrides[0].overrideData.hasMaxLevelClamp);
+	EXPECT_EQ(overrides[0].overrideData.maxLevelClamp, 0u);
+	EXPECT_EQ(overrides[0].overrideData.reason, "downlink_v2_zero_demand_hold");
 }

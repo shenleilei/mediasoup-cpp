@@ -29,6 +29,20 @@ namespace mediasoup {
 ///   All Room/Router/Transport operations happen within the WorkerThread (single-threaded, no locks needed).
 ///
 class WorkerThread {
+private:
+	struct DelayedTask {
+		std::chrono::steady_clock::time_point dueAt;
+		uint64_t id{ 0 };
+		std::function<void()> fn;
+	};
+
+	struct DelayedTaskCompare {
+		bool operator()(const DelayedTask& lhs, const DelayedTask& rhs) const {
+			if (lhs.dueAt != rhs.dueAt) return lhs.dueAt > rhs.dueAt;
+			return lhs.id > rhs.id;
+		}
+	};
+
 public:
 	/// Construct a WorkerThread.
 	/// @param id                Thread index (0, 1, 2, ...)
@@ -72,6 +86,15 @@ public:
 			ev.data.fd = eventFd_;
 			::epoll_ctl(epollFd_, EPOLL_CTL_ADD, eventFd_, &ev);
 
+			// Create delayed task timer (timerfd)
+			delayedTimerFd_ = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+			if (delayedTimerFd_ >= 0) {
+				struct epoll_event dev{};
+				dev.events = EPOLLIN;
+				dev.data.fd = delayedTimerFd_;
+				::epoll_ctl(epollFd_, EPOLL_CTL_ADD, delayedTimerFd_, &dev);
+			}
+
 			// Create health check timer (timerfd)
 			healthTimerFd_ = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
 			if (healthTimerFd_ >= 0) {
@@ -102,6 +125,7 @@ public:
 				::epoll_ctl(epollFd_, EPOLL_CTL_ADD, gcTimerFd_, &tev);
 			}
 		} catch (...) {
+			if (delayedTimerFd_ >= 0) { ::close(delayedTimerFd_); delayedTimerFd_ = -1; }
 			if (healthTimerFd_ >= 0) { ::close(healthTimerFd_); healthTimerFd_ = -1; }
 			if (gcTimerFd_ >= 0) { ::close(gcTimerFd_); gcTimerFd_ = -1; }
 			if (eventFd_ >= 0) { ::close(eventFd_); eventFd_ = -1; }
@@ -112,6 +136,7 @@ public:
 
 	~WorkerThread() {
 		stop();
+		if (delayedTimerFd_ >= 0) ::close(delayedTimerFd_);
 		if (healthTimerFd_ >= 0) ::close(healthTimerFd_);
 		if (gcTimerFd_ >= 0) ::close(gcTimerFd_);
 		if (eventFd_ >= 0) ::close(eventFd_);
@@ -182,6 +207,24 @@ public:
 		}
 		uint64_t val = 1;
 		::write(eventFd_, &val, sizeof(val));
+	}
+
+	/// Thread-safe: post a task to this WorkerThread after a delay.
+	void postDelayed(std::function<void()> task, uint64_t delayMs) {
+		if (delayMs == 0 || delayedTimerFd_ < 0) {
+			post(std::move(task));
+			return;
+		}
+
+		{
+			std::lock_guard<std::mutex> lock(delayedQueueMutex_);
+			delayedTasks_.push(DelayedTask{
+				std::chrono::steady_clock::now() + std::chrono::milliseconds(delayMs),
+				nextDelayedTaskId_++,
+				std::move(task)
+			});
+			armDelayedTimerLocked();
+		}
 	}
 
 	/// Thread-safe: get the number of rooms managed by this thread.
@@ -285,6 +328,9 @@ private:
 		if (roomLifecycleFn_) roomService_->setRoomLifecycle(roomLifecycleFn_);
 		if (registryTaskFn_) roomService_->setRegistryTask(registryTaskFn_);
 		if (taskPosterFn_) roomService_->setTaskPoster(taskPosterFn_);
+		roomService_->setDelayedTaskPoster([this](std::function<void()> task, uint32_t delayMs) {
+			postDelayed(std::move(task), delayMs);
+		});
 	}
 
 	void loop() {
@@ -315,6 +361,11 @@ private:
 					uint64_t expirations;
 					(void)::read(gcTimerFd_, &expirations, sizeof(expirations));
 					onGcTimer();
+				} else if (fd == delayedTimerFd_) {
+					// Delayed task timer fired
+					uint64_t expirations;
+					(void)::read(delayedTimerFd_, &expirations, sizeof(expirations));
+					processDelayedTasks();
 				} else {
 					// Channel data from a Worker process
 					auto it = fdToWorker_.find(fd);
@@ -360,6 +411,46 @@ private:
 			queueDepth_.fetch_sub(1, std::memory_order_relaxed);
 		}
 		updateRoomCount();
+	}
+
+	void processDelayedTasks() {
+		std::vector<std::function<void()>> readyTasks;
+		{
+			std::lock_guard<std::mutex> lock(delayedQueueMutex_);
+			const auto now = std::chrono::steady_clock::now();
+			while (!delayedTasks_.empty() && delayedTasks_.top().dueAt <= now) {
+				readyTasks.push_back(std::move(delayedTasks_.top().fn));
+				delayedTasks_.pop();
+			}
+			armDelayedTimerLocked();
+		}
+
+		for (auto& task : readyTasks) {
+			try {
+				task();
+			} catch (const std::exception& e) {
+				MS_ERROR(logger_, "WorkerThread {} delayed task exception: {}", id_, e.what());
+			} catch (...) {
+				MS_ERROR(logger_, "WorkerThread {} delayed task unknown exception", id_);
+			}
+		}
+		updateRoomCount();
+	}
+
+	void armDelayedTimerLocked() {
+		if (delayedTimerFd_ < 0) return;
+
+		struct itimerspec its{};
+		if (!delayedTasks_.empty()) {
+			const auto now = std::chrono::steady_clock::now();
+			auto delay = delayedTasks_.top().dueAt - now;
+			if (delay <= std::chrono::steady_clock::duration::zero())
+				delay = std::chrono::nanoseconds(1);
+			const auto delayNs = std::chrono::duration_cast<std::chrono::nanoseconds>(delay);
+			its.it_value.tv_sec = static_cast<time_t>(delayNs.count() / 1000000000LL);
+			its.it_value.tv_nsec = static_cast<long>(delayNs.count() % 1000000000LL);
+		}
+		::timerfd_settime(delayedTimerFd_, 0, &its, nullptr);
 	}
 
 	void onHealthCheck() {
@@ -442,6 +533,7 @@ private:
 	// Event loop resources
 	int epollFd_ = -1;
 	int eventFd_ = -1;
+	int delayedTimerFd_ = -1;
 	int healthTimerFd_ = -1;
 	int gcTimerFd_ = -1;
 	std::thread thread_;
@@ -457,6 +549,9 @@ private:
 	};
 	std::mutex queueMutex_;
 	std::queue<QueuedTask> taskQueue_;
+	std::mutex delayedQueueMutex_;
+	std::priority_queue<DelayedTask, std::vector<DelayedTask>, DelayedTaskCompare> delayedTasks_;
+	uint64_t nextDelayedTaskId_{ 1 };
 
 	// Owned resources (only accessed from WorkerThread)
 	std::vector<std::shared_ptr<Worker>> workers_;

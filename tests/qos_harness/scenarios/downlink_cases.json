@@ -1,0 +1,158 @@
+[
+  {
+    "caseId": "D1",
+    "group": "baseline",
+    "priority": "P0",
+    "description": "good network, all consumers visible",
+    "baselineMs": 10000,
+    "impairmentMs": 10000,
+    "recoveryMs": 10000,
+    "phases": {
+      "baseline": { "bandwidth": 5000, "rtt": 30, "loss": 0, "jitter": 2 },
+      "impaired": { "bandwidth": 5000, "rtt": 30, "loss": 0, "jitter": 2 },
+      "recovery": { "bandwidth": 5000, "rtt": 30, "loss": 0, "jitter": 2 }
+    },
+    "expect": {
+      "consumerPaused": false,
+      "preferredSpatialLayer": 2,
+      "pauseUpstream": false
+    }
+  },
+  {
+    "caseId": "D2",
+    "group": "bw_sweep",
+    "priority": "P0",
+    "description": "bandwidth drops to 300kbps, expect layer downgrade",
+    "baselineMs": 10000,
+    "impairmentMs": 15000,
+    "recoveryMs": 15000,
+    "phases": {
+      "baseline": { "bandwidth": 5000, "rtt": 30, "loss": 0, "jitter": 2 },
+      "impaired": { "bandwidth": 300, "rtt": 30, "loss": 0, "jitter": 2 },
+      "recovery": { "bandwidth": 5000, "rtt": 30, "loss": 0, "jitter": 2 }
+    },
+    "expect": {
+      "consumerPaused": false,
+      "maxSpatialLayer": 0,
+      "pauseUpstream": false,
+      "recovers": true
+    }
+  },
+  {
+    "caseId": "D3",
+    "group": "loss_sweep",
+    "priority": "P0",
+    "description": "15% packet loss, expect health degrade",
+    "baselineMs": 10000,
+    "impairmentMs": 15000,
+    "recoveryMs": 15000,
+    "phases": {
+      "baseline": { "bandwidth": 5000, "rtt": 30, "loss": 0, "jitter": 2 },
+      "impaired": { "bandwidth": 5000, "rtt": 30, "loss": 15, "jitter": 2 },
+      "recovery": { "bandwidth": 5000, "rtt": 30, "loss": 0, "jitter": 2 }
+    },
+    "expect": {
+      "consumerPaused": false,
+      "maxSpatialLayer": 1,
+      "pauseUpstream": false,
+      "recovers": true
+    }
+  },
+  {
+    "caseId": "D4",
+    "group": "rtt_sweep",
+    "priority": "P0",
+    "description": "RTT 500ms, expect layer reduction",
+    "baselineMs": 10000,
+    "impairmentMs": 15000,
+    "recoveryMs": 15000,
+    "phases": {
+      "baseline": { "bandwidth": 5000, "rtt": 30, "loss": 0, "jitter": 2 },
+      "impaired": { "bandwidth": 5000, "rtt": 500, "loss": 0, "jitter": 2 },
+      "recovery": { "bandwidth": 5000, "rtt": 30, "loss": 0, "jitter": 2 }
+    },
+    "expect": {
+      "consumerPaused": false,
+      "maxSpatialLayer": 1,
+      "pauseUpstream": false,
+      "recovers": true
+    }
+  },
+  {
+    "caseId": "D5",
+    "group": "jitter_sweep",
+    "priority": "P0",
+    "description": "jitter 80ms, expect layer reduction",
+    "baselineMs": 10000,
+    "impairmentMs": 15000,
+    "recoveryMs": 15000,
+    "phases": {
+      "baseline": { "bandwidth": 5000, "rtt": 30, "loss": 0, "jitter": 2 },
+      "impaired": { "bandwidth": 5000, "rtt": 30, "loss": 0, "jitter": 80 },
+      "recovery": { "bandwidth": 5000, "rtt": 30, "loss": 0, "jitter": 2 }
+    },
+    "expect": {
+      "consumerPaused": false,
+      "maxSpatialLayer": 1,
+      "pauseUpstream": false,
+      "recovers": true
+    }
+  },
+  {
+    "caseId": "D6",
+    "group": "transition",
+    "priority": "P0",
+    "description": "good -> bad -> good, verify recovery without oscillation",
+    "baselineMs": 10000,
+    "impairmentMs": 15000,
+    "recoveryMs": 20000,
+    "phases": {
+      "baseline": { "bandwidth": 5000, "rtt": 30, "loss": 0, "jitter": 2 },
+      "impaired": { "bandwidth": 200, "rtt": 200, "loss": 10, "jitter": 40 },
+      "recovery": { "bandwidth": 5000, "rtt": 30, "loss": 0, "jitter": 2 }
+    },
+    "expect": {
+      "consumerPaused": false,
+      "pauseUpstream": false,
+      "recovers": true
+    }
+  },
+  {
+    "caseId": "D7",
+    "group": "competition",
+    "priority": "P1",
+    "description": "two subscribers, high-priority gets better layer under constrained bw",
+    "baselineMs": 10000,
+    "impairmentMs": 15000,
+    "recoveryMs": 15000,
+    "phases": {
+      "baseline": { "bandwidth": 5000, "rtt": 30, "loss": 0, "jitter": 2 },
+      "impaired": { "bandwidth": 500, "rtt": 30, "loss": 0, "jitter": 2 },
+      "recovery": { "bandwidth": 5000, "rtt": 30, "loss": 0, "jitter": 2 }
+    },
+    "expect": {
+      "highPriorityBetterLayer": true,
+      "pauseUpstream": false,
+      "recovers": true
+    }
+  },
+  {
+    "caseId": "D8",
+    "group": "zero_demand",
+    "priority": "P0",
+    "description": "all consumers hidden, expect pauseUpstream after kPauseConfirmMs",
+    "baselineMs": 10000,
+    "impairmentMs": 10000,
+    "recoveryMs": 15000,
+    "phases": {
+      "baseline": { "bandwidth": 5000, "rtt": 30, "loss": 0, "jitter": 2 },
+      "impaired": { "bandwidth": 5000, "rtt": 30, "loss": 0, "jitter": 2 },
+      "recovery": { "bandwidth": 5000, "rtt": 30, "loss": 0, "jitter": 2 }
+    },
+    "expect": {
+      "pauseUpstream": true,
+      "resumeUpstream": true,
+      "recovers": true
+    }
+  }
+]

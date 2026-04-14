@@ -1,8 +1,8 @@
-# Downlink QoS Design
+# Downlink QoS v1 Design
 
 ## 1. Goal
 
-This document describes a `subscriber/downlink QoS` design for this project.
+This document describes `subscriber/downlink QoS v1` for this project.
 
 Current QoS implementation is primarily publisher/uplink oriented:
 
@@ -12,14 +12,11 @@ Current QoS implementation is primarily publisher/uplink oriented:
 
 The next largest capability gap is subscriber/downlink QoS.
 
-The design below follows the same broad direction as LiveKit:
-
-- adaptive stream:
-  let subscriber-side view size / visibility drive desired receive quality
-- dynacast later:
-  once subscriber demand is stable, feed aggregate demand back into publisher layer supply
-
 This document only covers `v1`, which focuses on per-subscriber downlink control.
+
+For the dedicated `v2` design, see:
+
+- [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md)
 
 ## 2. Why This Matters
 
@@ -91,12 +88,11 @@ Current action model contains only uplink/publisher actions such as:
 - size-aware preferred layer selection
 - downlink health-based degradation and recovery
 
-`v1` should not implement yet:
+`v1` should not implement higher-level room-wide demand/supply closure yet.
 
-- dynacast
-- publisher layer suppression
-- whole-room global optimal allocation
-- full LiveKit-equivalent stream allocator
+That work is documented separately in:
+
+- [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md)
 
 ## 5. High-Level Model
 
@@ -265,39 +261,15 @@ Suggested default consumer priorities:
 
 This is simple enough for `v1` and already aligns with perceived user value.
 
-## 11. LiveKit-Aligned Interpretation
+## 11. V2 Reference
 
-This design intentionally mirrors the useful parts of LiveKit:
+This document does not define `v2`.
 
-- view-size-aware subscription quality selection
-- hidden-track pausing
-- subscriber-side prioritization first
-- dynacast later as a second-stage optimization
+The dedicated `v2` design lives in:
 
-Equivalent concepts:
+- [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md)
 
-- LiveKit adaptive stream
-  -> `visible + targetWidth/Height -> setPreferredLayers / pause`
-- LiveKit dynacast
-  -> future room-level aggregate demand feeding back into publisher layer supply
-
-## 12. V2: Dynacast
-
-Once `v1` is stable, add a room-level aggregate controller:
-
-1. aggregate highest demanded layer per producer across all subscribers
-2. detect unused higher simulcast layers
-3. notify publisher-side controller or encoder policy to stop sending unused layers
-
-This creates a full loop:
-
-- subscriber demand
-- room aggregation
-- publisher layer supply adjustment
-
-This should be explicitly delayed until `v1` is stable.
-
-## 13. Suggested File Changes
+## 12. Suggested File Changes
 
 ### New files
 
@@ -322,9 +294,9 @@ This should be explicitly delayed until `v1` is stable.
 - [qos-demo.js](../public/qos-demo.js)
   first demo entry point for end-to-end verification
 
-## 14. Testing Plan
+## 13. Testing Plan
 
-### 14.1 Unit tests
+### 13.1 Unit tests
 
 - hidden consumer -> `pauseConsumer`
 - pinned consumer keeps higher target than grid consumer
@@ -332,21 +304,21 @@ This should be explicitly delayed until `v1` is stable.
 - recovery upgrades one layer at a time
 - screenshare remains highest priority
 
-### 14.2 Integration tests
+### 13.2 Integration tests
 
 - two subscribers request different target sizes and receive different preferred layers
 - hidden subscriber pauses remote video consumer
 - recovery triggers keyframe on upgrade
 - lower-priority consumers degrade before pinned consumer
 
-### 14.3 Browser harness
+### 13.3 Browser harness
 
 - one large tile + one small tile
 - one pinned speaker + one normal tile
 - hidden video transitions
 - downlink weak-network + freeze scenarios
 
-## 15. Recommended Implementation Order
+## 14. Recommended Implementation Order
 
 1. define downlink snapshot schema
 2. add browser-side reporting in demo / harness
@@ -357,9 +329,9 @@ This should be explicitly delayed until `v1` is stable.
    - `setPreferredLayers`
 6. add recovery + keyframe
 7. add priority
-8. only then begin dynacast design
+8. only then move to [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md)
 
-## 16. Acceptance Criteria For V1
+## 15. Acceptance Criteria For V1
 
 `v1` should be considered successful only if all of the following are true:
 
@@ -369,14 +341,10 @@ This should be explicitly delayed until `v1` is stable.
 - freeze/loss/jitter degradation is visible and stable
 - recovery is stepwise and does not oscillate aggressively
 
-## 17. Summary
+## 16. Summary
 
 The highest-value next step is not more uplink-only tuning.
 
-The right next step is:
+The right next step is `subscriber/downlink QoS v1`.
 
-- `subscriber/downlink QoS v1`
-- then `adaptive stream` style UI hinting
-- then `dynacast`
-
-This gives the project the best path from “uplink-focused QoS prototype” toward a more complete RTC QoS system.
+Once `v1` is stable, move to the dedicated `v2` design in [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md).

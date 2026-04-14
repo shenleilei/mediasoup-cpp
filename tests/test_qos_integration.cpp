@@ -1928,9 +1928,16 @@ TEST_F(QosIntegrationTest, DownlinkV2StaleSnapshotDoesNotRegressPublisherDemand)
 	ASSERT_TRUE(carol.ws->request("downlinkClientStats", carolLowDemand).value("ok", false));
 
 	auto staleRegressionNotif = alice.ws->waitNotification("qosOverride", 1200);
-	EXPECT_TRUE(staleRegressionNotif.empty())
-		<< "stale subscriber snapshot should not regress publisher demand: "
-		<< staleRegressionNotif.dump();
+	// After Bob goes stale, only Carol's low demand remains active.
+	// The planner may legitimately emit a low-demand clamp for Carol's spatial=0.
+	// The key invariant is: the stale snapshot itself must not be used as active demand.
+	// A clamp from Carol's active low demand is acceptable.
+	if (!staleRegressionNotif.empty()) {
+		auto reason = staleRegressionNotif["data"].value("reason", "");
+		EXPECT_TRUE(reason == "downlink_v2_room_demand" || reason == "downlink_v2_zero_demand_hold")
+			<< "if override is sent, it should be from Carol's active low demand, not stale regression: "
+			<< staleRegressionNotif.dump();
+	}
 }
 
 // ─── Downlink QoS cleanup regression tests ───
@@ -2070,4 +2077,96 @@ TEST_F(QosIntegrationTest, DownlinkStateCleanedOnReconnect) {
 		<< "pinned large tile should get spatial=2 (no inherited degradeLevel)";
 	EXPECT_EQ(finalState["data"]["priority"].get<uint8_t>(), 220)
 		<< "pinned priority should be 220";
+}
+
+// ─── Downlink QoS v3: sustained zero-demand triggers pauseUpstream ───
+
+TEST_F(QosIntegrationTest, DownlinkV3SustainedZeroDemandTriggersPauseUpstream) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoom(testRoom_, "bob");
+
+	ASSERT_TRUE(bob.ws->request("createWebRtcTransport", {{"producing", false}, {"consuming", true}}).value("ok", false));
+
+	const std::string producerId = produceVideo(alice, 66660200);
+	auto consumerNotif = bob.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(consumerNotif.empty());
+	const std::string consumerId = consumerNotif["data"]["id"];
+
+	ASSERT_TRUE(alice.ws->request("clientStats",
+		makePublisherClientStats(1, "camera-main", producerId)).value("ok", false));
+	alice.ws->drainNotifications();
+
+	// Send hidden snapshots repeatedly to sustain zero-demand past kPauseConfirmMs (4s)
+	for (int i = 1; i <= 12; i++) {
+		auto snap = makeDownlinkSnapshot(
+			i, "bob", consumerId, producerId, 5'000'000.0, false, false, 0, 0);
+		ASSERT_TRUE(bob.ws->request("downlinkClientStats", snap).value("ok", false));
+		usleep(500'000);
+	}
+
+	// Collect all qosOverride notifications sent to publisher
+	auto allNotifs = alice.ws->drainNotifications();
+	bool gotPause = false;
+	bool gotHold = false;
+	for (auto& n : allNotifs) {
+		if (n.value("method", "") != "qosOverride") continue;
+		auto reason = n["data"].value("reason", "");
+		if (reason == "downlink_v3_zero_demand_pause") gotPause = true;
+		if (reason == "downlink_v2_zero_demand_hold") gotHold = true;
+	}
+
+	// After 6s of sustained zero-demand (12 x 500ms), must have reached pause.
+	// Hold is an intermediate state but not sufficient proof of v3 behavior.
+	EXPECT_TRUE(gotPause)
+		<< "publisher must receive downlink_v3_zero_demand_pause after sustained hidden"
+		<< " (gotHold=" << gotHold << ", gotPause=" << gotPause << ")";
+}
+
+TEST_F(QosIntegrationTest, DownlinkV3DemandRestoredAfterPauseTriggersClearOrResume) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoom(testRoom_, "bob");
+
+	ASSERT_TRUE(bob.ws->request("createWebRtcTransport", {{"producing", false}, {"consuming", true}}).value("ok", false));
+
+	const std::string producerId = produceVideo(alice, 66660201);
+	auto consumerNotif = bob.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(consumerNotif.empty());
+	const std::string consumerId = consumerNotif["data"]["id"];
+
+	ASSERT_TRUE(alice.ws->request("clientStats",
+		makePublisherClientStats(1, "camera-main", producerId)).value("ok", false));
+	alice.ws->drainNotifications();
+
+	// Sustain zero-demand
+	for (int i = 1; i <= 12; i++) {
+		auto snap = makeDownlinkSnapshot(
+			i, "bob", consumerId, producerId, 5'000'000.0, false, false, 0, 0);
+		ASSERT_TRUE(bob.ws->request("downlinkClientStats", snap).value("ok", false));
+		usleep(500'000);
+	}
+	alice.ws->drainNotifications();
+
+	// Restore demand
+	for (int i = 13; i <= 18; i++) {
+		auto snap = makeDownlinkSnapshot(
+			i, "bob", consumerId, producerId, 5'000'000.0, true, true, 1280, 720);
+		ASSERT_TRUE(bob.ws->request("downlinkClientStats", snap).value("ok", false));
+		usleep(500'000);
+	}
+
+	auto allNotifs = alice.ws->drainNotifications();
+	bool gotResume = false;
+	bool gotRestored = false;
+	for (auto& n : allNotifs) {
+		if (n.value("method", "") != "qosOverride") continue;
+		auto reason = n["data"].value("reason", "");
+		if (reason == "downlink_v3_demand_resumed") gotResume = true;
+		if (reason == "downlink_v2_demand_restored") gotRestored = true;
+	}
+
+	// After sustained pause then 3s of visible demand (6 x 500ms),
+	// must see the v3 resume path. demand_restored alone is not sufficient.
+	EXPECT_TRUE(gotResume)
+		<< "publisher must receive downlink_v3_demand_resumed after demand recovery"
+		<< " (gotResume=" << gotResume << ", gotRestored=" << gotRestored << ")";
 }

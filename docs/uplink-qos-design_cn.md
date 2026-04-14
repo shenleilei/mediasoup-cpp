@@ -228,8 +228,7 @@ executor / adapter 层负责把这些抽象动作真正落到 producer / transpo
 它当前没有完整覆盖的是：
 
 - subscriber/downlink QoS
-- 完整 dynacast
-- 更强的 room-wide bandwidth allocator
+- 更完整的下行闭环能力
 - 更大规模生产数据下的长期校准
 
 这也是为什么下一阶段的重点应该放在 downlink。
@@ -250,7 +249,7 @@ executor / adapter 层负责把这些抽象动作真正落到 producer / transpo
 - 主要覆盖 publisher 侧
 - 对下行体验提升有限
 - profile / policy 还偏代码内嵌
-- 与更完整的 subscriber allocator / dynacast 仍未形成闭环
+- 与更完整的下行 QoS 闭环仍未形成闭环
 - 生产环境下长期校准和观测能力仍需加强
 
 ## 12. 建议的理解方式
@@ -267,14 +266,11 @@ executor / adapter 层负责把这些抽象动作真正落到 producer / transpo
 
 1. 保持当前 uplink QoS 主线稳定
 2. 新增 subscriber/downlink QoS
-3. 再进一步做 adaptive stream / dynacast
+3. 需要时再进入单独的下行 `v2` 方案
 
-这样路径才会更像完整产品能力：
+如果要看这一步的单独设计，统一见：
 
-- uplink QoS
-- downlink QoS
-- room-level allocator
-- dynacast
+- [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md)
 
 ## 14. 总结
 

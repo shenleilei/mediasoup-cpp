@@ -10,6 +10,7 @@ ARTIFACTS_DIR="$ROOT_DIR/tests/qos_harness/artifacts"
 FAILURES_FILE="$ARTIFACTS_DIR/last-failures.txt"
 DOWNLINK_REPORT_FILE="$ROOT_DIR/docs/downlink-qos-case-results.md"
 GENERATE_CASE_REPORT=0
+GENERATE_DOWNLINK_CASE_REPORT=0
 MATRIX_INCLUDE_EXTENDED=0
 MATRIX_CASES=""
 
@@ -22,6 +23,7 @@ ALL_GROUPS=(
   node-harness
   browser-harness
   matrix
+  downlink-matrix
 )
 
 SELECTED_GROUPS=()
@@ -138,6 +140,7 @@ cleanup_test_processes_fallback() {
     "tests/qos_harness/browser_downlink_e2e.mjs"
     "tests/qos_harness/browser_downlink_priority.mjs"
     "tests/qos_harness/browser_downlink_v2.mjs"
+    "tests/qos_harness/browser_downlink_v3.mjs"
     "tests/qos_harness/run_matrix.mjs"
   )
 
@@ -275,7 +278,9 @@ downlink_report_labels() {
     "browser-harness:downlink-controls" \
     "browser-harness:downlink-e2e" \
     "browser-harness:downlink-priority" \
-    "browser-harness:downlink-v2"
+    "browser-harness:downlink-v2" \
+    "browser-harness:downlink-v3" \
+    "downlink-matrix"
 }
 
 downlink_task_category() {
@@ -283,6 +288,7 @@ downlink_task_category() {
   case "$label" in
     cpp-*) printf 'server\n' ;;
     browser-harness:*) printf 'browser\n' ;;
+    downlink-matrix) printf 'browser\n' ;;
     *) printf 'other\n' ;;
   esac
 }
@@ -307,6 +313,12 @@ downlink_task_description() {
       ;;
     browser-harness:downlink-v2)
       printf '浏览器 v2 验证：subscriber demand -> track-scoped publisher clamp / clear / zero-demand hold\n'
+      ;;
+    browser-harness:downlink-v3)
+      printf '浏览器 v3 验证：sustained zero-demand -> pauseUpstream / resumeUpstream / flicker 防抖\n'
+      ;;
+    downlink-matrix)
+      printf 'downlink 弱网矩阵：baseline / bw / loss / rtt / jitter / transition / competition / zero-demand\n'
       ;;
     *)
       printf '%s\n' "$label"
@@ -334,6 +346,12 @@ downlink_task_command() {
       ;;
     browser-harness:downlink-v2)
       printf 'node tests/qos_harness/browser_downlink_v2.mjs\n'
+      ;;
+    browser-harness:downlink-v3)
+      printf 'node tests/qos_harness/browser_downlink_v3.mjs\n'
+      ;;
+    downlink-matrix)
+      printf 'node tests/qos_harness/run_downlink_matrix.mjs\n'
       ;;
     *)
       printf '-\n'
@@ -484,14 +502,14 @@ normalize_groups() {
   if ((SKIP_BROWSER)); then
     local filtered=()
     for group in "${requested[@]}"; do
-      [[ "$group" == "browser-harness" || "$group" == browser-harness:* || "$group" == "matrix" ]] && continue
+      [[ "$group" == "browser-harness" || "$group" == browser-harness:* || "$group" == "matrix" || "$group" == "downlink-matrix" ]] && continue
       filtered+=("$group")
     done
     requested=("${filtered[@]}")
   elif ((SKIP_MATRIX)); then
     local filtered=()
     for group in "${requested[@]}"; do
-      [[ "$group" == "matrix" ]] && continue
+      [[ "$group" == "matrix" || "$group" == "downlink-matrix" ]] && continue
       filtered+=("$group")
     done
     requested=("${filtered[@]}")
@@ -567,7 +585,7 @@ run_cpp_integration() {
     "cpp-integration" \
     --cwd "$ROOT_DIR" \
     "$BUILD_DIR/mediasoup_qos_integration_tests" \
-    "--gtest_filter=QosIntegrationTest.ClientStatsQosStoredAndAggregated:QosIntegrationTest.ClientStatsQosInBroadcast:QosIntegrationTest.InvalidClientStatsRejected:QosIntegrationTest.OlderClientStatsSeqIsIgnored:QosIntegrationTest.JoinReceivesQosPolicyNotification:QosIntegrationTest.SetQosOverrideNotifiesTargetPeer:QosIntegrationTest.ManualQosOverrideClear:QosIntegrationTest.SetQosPolicyNotifiesTargetPeer:QosIntegrationTest.AutomaticQosOverrideOnPoorQuality:QosIntegrationTest.AutomaticQosOverrideOnLostQuality:QosIntegrationTest.AutomaticQosOverrideClearsWhenQualityRecovers:QosIntegrationTest.ConnectionQualityNotificationDelivered:QosIntegrationTest.RoomQosStateAndRoomPressureOverride:QosIntegrationTest.RoomLostPeerPressureOverride:QosIntegrationTest.DownlinkClientStatsStored:QosIntegrationTest.DownlinkClientStatsRejectsMalformedPayload:QosIntegrationTest.DownlinkClientStatsAcceptsLegacySchema:QosIntegrationTest.DownlinkClientStatsRejectsStaleSeq:QosIntegrationTest.DownlinkHiddenAutoPauses:QosIntegrationTest.DownlinkVisibleAutoResumes:QosIntegrationTest.DownlinkLargeSmallGetDifferentLayers:QosIntegrationTest.DownlinkStateCleanedOnLeave:QosIntegrationTest.DownlinkStateCleanedOnReconnect"
+    "--gtest_filter=QosIntegrationTest.ClientStatsQosStoredAndAggregated:QosIntegrationTest.ClientStatsQosInBroadcast:QosIntegrationTest.InvalidClientStatsRejected:QosIntegrationTest.OlderClientStatsSeqIsIgnored:QosIntegrationTest.JoinReceivesQosPolicyNotification:QosIntegrationTest.SetQosOverrideNotifiesTargetPeer:QosIntegrationTest.ManualQosOverrideClear:QosIntegrationTest.SetQosPolicyNotifiesTargetPeer:QosIntegrationTest.AutomaticQosOverrideOnPoorQuality:QosIntegrationTest.AutomaticQosOverrideOnLostQuality:QosIntegrationTest.AutomaticQosOverrideClearsWhenQualityRecovers:QosIntegrationTest.ConnectionQualityNotificationDelivered:QosIntegrationTest.RoomQosStateAndRoomPressureOverride:QosIntegrationTest.RoomLostPeerPressureOverride:QosIntegrationTest.DownlinkClientStatsStored:QosIntegrationTest.DownlinkClientStatsRejectsMalformedPayload:QosIntegrationTest.DownlinkClientStatsAcceptsLegacySchema:QosIntegrationTest.DownlinkClientStatsRejectsStaleSeq:QosIntegrationTest.DownlinkHiddenAutoPauses:QosIntegrationTest.DownlinkVisibleAutoResumes:QosIntegrationTest.DownlinkLargeSmallGetDifferentLayers:QosIntegrationTest.DownlinkStateCleanedOnLeave:QosIntegrationTest.DownlinkStateCleanedOnReconnect:QosIntegrationTest.DownlinkV3SustainedZeroDemandTriggersPauseUpstream:QosIntegrationTest.DownlinkV3DemandRestoredAfterPauseTriggersClearOrResume"
 }
 
 run_cpp_accuracy() {
@@ -623,6 +641,7 @@ run_browser_harness() {
   prepare_test_port 14014 "Downlink E2E harness SFU port 14014"
   prepare_test_port 14015 "Downlink priority harness SFU port 14015"
   prepare_test_port 14016 "Downlink v2 harness SFU port 14016"
+  prepare_test_port 14017 "Downlink v3 harness SFU port 14017"
   local failed=0
   if ! run_cmd \
     "browser-harness:server-signal" \
@@ -665,6 +684,13 @@ run_browser_harness() {
     node "$ROOT_DIR/tests/qos_harness/browser_downlink_v2.mjs"; then
     failed=1
   fi
+
+  if ! run_cmd \
+    "browser-harness:downlink-v3" \
+    --cwd "$ROOT_DIR" \
+    node "$ROOT_DIR/tests/qos_harness/browser_downlink_v3.mjs"; then
+    failed=1
+  fi
   return "$failed"
 }
 
@@ -683,6 +709,18 @@ run_matrix() {
     node "$ROOT_DIR/tests/qos_harness/run_matrix.mjs" "${matrix_args[@]}"
 }
 
+run_downlink_matrix() {
+  prepare_test_port 14018 "Downlink matrix SFU port 14018"
+  local dl_args=()
+  if [[ -n "$MATRIX_CASES" ]]; then
+    dl_args+=("--cases=$MATRIX_CASES")
+  fi
+  run_cmd \
+    "downlink-matrix" \
+    --cwd "$ROOT_DIR" \
+    node "$ROOT_DIR/tests/qos_harness/run_downlink_matrix.mjs" "${dl_args[@]}"
+}
+
 run_group() {
   local group="$1"
   case "$group" in
@@ -694,6 +732,7 @@ run_group() {
     node-harness) run_node_harness ;;
     browser-harness) run_browser_harness ;;
     matrix) run_matrix ;;
+    downlink-matrix) run_downlink_matrix ;;
     *) fail "internal error: unsupported group '$group'" ;;
   esac
 }
@@ -701,7 +740,7 @@ run_group() {
 run_target() {
   local target="$1"
   case "$target" in
-    client-js|cpp-unit|cpp-integration|cpp-accuracy|cpp-recording|node-harness|browser-harness|matrix)
+    client-js|cpp-unit|cpp-integration|cpp-accuracy|cpp-recording|node-harness|browser-harness|matrix|downlink-matrix)
       run_group "$target"
       ;;
     node-harness:*)
@@ -754,6 +793,13 @@ run_target() {
         --cwd "$ROOT_DIR" \
         node "$ROOT_DIR/tests/qos_harness/browser_downlink_v2.mjs"
       ;;
+    browser-harness:downlink-v3)
+      prepare_test_port 14017 "Downlink v3 harness SFU port 14017"
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        node "$ROOT_DIR/tests/qos_harness/browser_downlink_v3.mjs"
+      ;;
     *)
       fail "unknown target: $target"
       ;;
@@ -799,7 +845,9 @@ mapfile -t GROUPS_TO_RUN < <(normalize_groups)
 for group in "${GROUPS_TO_RUN[@]}"; do
   if [[ "$group" == "matrix" ]]; then
     GENERATE_CASE_REPORT=1
-    break
+  fi
+  if [[ "$group" == "downlink-matrix" ]]; then
+    GENERATE_DOWNLINK_CASE_REPORT=1
   fi
 done
 
@@ -857,6 +905,33 @@ if ((GENERATE_CASE_REPORT)) && [[ -f "$CASE_REPORT_SCRIPT" ]]; then
   else
     echo "<== [case-report] WARN (generation failed)" >&2
   fi
+  fi
+fi
+
+DOWNLINK_CASE_REPORT_SCRIPT="$ROOT_DIR/tests/qos_harness/render_downlink_case_report.mjs"
+if ((GENERATE_DOWNLINK_CASE_REPORT)) && [[ -f "$DOWNLINK_CASE_REPORT_SCRIPT" ]]; then
+  if [[ -n "$MATRIX_CASES" ]]; then
+    DL_CASE_REPORT_JSON="$ROOT_DIR/docs/generated/downlink-qos-matrix-report.targeted.json"
+    DL_CASE_REPORT_OUTPUT="$ROOT_DIR/docs/generated/downlink-qos-case-results.targeted.md"
+  else
+    DL_CASE_REPORT_JSON="$ROOT_DIR/docs/generated/downlink-qos-matrix-report.json"
+    DL_CASE_REPORT_OUTPUT="$ROOT_DIR/docs/downlink-qos-case-results.md"
+  fi
+
+  if [[ ! -f "$DL_CASE_REPORT_JSON" ]]; then
+    echo
+    echo "<== [downlink-case-report] WARN (matrix json not found: $DL_CASE_REPORT_JSON)" >&2
+  else
+    echo
+    echo "==> [downlink-case-report]"
+    if node \
+      "$DOWNLINK_CASE_REPORT_SCRIPT" \
+      "--input=$DL_CASE_REPORT_JSON" \
+      "--output=$DL_CASE_REPORT_OUTPUT"; then
+      echo "<== [downlink-case-report] PASS"
+    else
+      echo "<== [downlink-case-report] WARN (generation failed)" >&2
+    fi
   fi
 fi
 

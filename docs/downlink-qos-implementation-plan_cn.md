@@ -4,6 +4,12 @@
 
 这份文档不是“设计说明”，而是“落地实施计划”。
 
+本文只覆盖 `downlink QoS v1`。
+
+`v2` 的房间级 demand 聚合、publisher 供给回收和显式 bitrate allocator，统一见：
+
+- [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md)
+
 目标是把当前仓库从：
 
 - 已有 uplink QoS
@@ -29,7 +35,7 @@
 1. 先验证现有 `Consumer` API 的黑盒行为，再做自动控制器
 2. 先做手动控制链路，再做自动决策
 3. 先做 `pause/resume + preferredLayers`，最后再做 `priority`
-4. `dynacast` 不进入 `v1`
+4. `v2` 内容不在本文展开
 5. 先不改 `mediasoup-worker`
 
 ## 3. 阶段总览
@@ -41,9 +47,7 @@
 3. downlink snapshot schema 与服务端存储
 4. 最小 downlink QoS v1：可见性与尺寸驱动
 5. 健康度驱动的降档与恢复
-6. 优先级与房间级分配
-
-`dynacast` 作为后续阶段，不进入当前 `v1` 范围。
+6. 优先级效果验证与收口
 
 ---
 
@@ -344,8 +348,7 @@ node tests/qos_harness/browser_downlink_controls.mjs
 
 - `setPriority` 自动化
 - freeze/loss/jitter 复杂状态机
-- dynacast
-- publisher 联动
+- publisher 供给回收
 
 ### 7.7 测试建议
 
@@ -416,7 +419,7 @@ node tests/qos_harness/browser_downlink_controls.mjs
 
 ---
 
-## 9. 阶段 6：优先级与房间级分配
+## 9. 阶段 6：优先级效果验证与收口
 
 ### 9.1 当前状态判断
 
@@ -459,9 +462,8 @@ node tests/qos_harness/browser_downlink_controls.mjs
 
 这一阶段先不要扩展到以下内容：
 
-- 真正的房间级 bitrate budget allocator
-- `availableIncomingBitrate` 驱动的全局预算分配
-- dynacast
+- `v2` 的显式 bitrate allocator
+- `v2` 的 publisher 供给回收
 - “低优先级 consumer 必然暂停”的强假设
 
 换句话说，这一阶段是：
@@ -510,7 +512,7 @@ Claude 在这一阶段应优先复用：
 
 - allocator 新设计
 - worker 改造
-- dynacast
+- `v2` 设计里的新供给控制链路
 
 ### 9.6 推荐测试列表
 
@@ -600,7 +602,7 @@ Claude 在这一阶段应优先复用：
 那么结论不应是“e2e 不稳定”就算了，而应明确写成：
 
 - 当前实现还不足以证明阶段 6 完成
-- 需要进入真正的房间级预算分配设计
+- 需要转入 [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md) 中定义的显式 allocator 方案
 
 ### 9.10 Claude 交付物要求
 
@@ -615,28 +617,11 @@ Claude 在这一阶段的输出应至少包括：
 
 - 现有 `priority` 逻辑已存在
 - 但尚不能在真实竞争场景中稳定证明其效果
-- 下一步应转入“房间级预算分配”设计，而不是继续补表层 case
+- 下一步应转入 [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md) 中定义的 allocator，而不是继续补表层 case
 
 ---
 
-## 10. 阶段 7：Dynacast（后续）
-
-`dynacast` 不进入当前 `v1`。
-
-前提条件：
-
-- 前 6 个阶段已经稳定
-- 现有 `Consumer` API 行为已验证清楚
-- 需要进一步阅读 / 验证 `mediasoup-worker` 内部实现边界
-
-这一阶段再做：
-
-- 聚合所有 subscriber 对某个 producer 的最高需求层
-- 反向裁剪 publisher 发送层
-
----
-
-## 11. 推荐提交节奏
+## 10. 推荐提交节奏
 
 不要攒一个大 patch，建议每阶段一个 commit：
 
@@ -647,7 +632,7 @@ Claude 在这一阶段的输出应至少包括：
 5. `feat: add downlink degradation and recovery logic`
 6. `feat: add consumer priority based allocation`
 
-## 12. 当前最推荐先做的两步
+## 11. 当前最推荐先做的两步
 
 ### 优先级 1
 
@@ -666,7 +651,7 @@ Claude 在这一阶段的输出应至少包括：
 - 只有这两步完成后，才能确定现有 worker API 是否足够支撑 downlink QoS v1
 - 如果这两步没跑通，后续自动 controller 都会建立在不稳的基础上
 
-## 13. 总结
+## 12. 总结
 
 当前最合理的推进方式不是“一口气做完整 downlink QoS”，而是：
 

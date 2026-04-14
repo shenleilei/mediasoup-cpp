@@ -77,7 +77,12 @@ export function applyNetemConfig(config = {}) {
   const { bandwidth, rtt, loss, jitter } = config;
   clearNetem();
 
-  const netemArgs = ['qdisc', 'replace', 'dev', 'lo', 'root', 'handle', '1:', 'netem'];
+  // Use a prio qdisc as root, then attach netem only to UDP traffic.
+  // Band 1 = default (TCP, unmatched) → no impairment.
+  // Band 2 = UDP → netem impairment.
+  runTc(['qdisc', 'add', 'dev', 'lo', 'root', 'handle', '1:', 'prio', 'bands', '3', 'priomap', '1', '1', '1', '1', '1', '1', '1', '1', '1', '1', '1', '1', '1', '1', '1', '1']);
+
+  const netemArgs = ['qdisc', 'add', 'dev', 'lo', 'parent', '1:3', 'handle', '30:', 'netem'];
   // The matrix uses round-trip RTT targets, while netem delay is one-way.
   const delayBase = typeof rtt === 'number' ? Math.max(1, Math.round(rtt / 2)) : 1;
   netemArgs.push('delay', `${delayBase}ms`);
@@ -99,6 +104,9 @@ export function applyNetemConfig(config = {}) {
     netemArgs.push('rate', `${effectiveBandwidthKbps}kbit`);
   }
   runTc(netemArgs);
+
+  // Filter: send UDP packets to band 3 (netem), everything else stays on band 1 (no impairment).
+  runTc(['filter', 'add', 'dev', 'lo', 'parent', '1:0', 'protocol', 'ip', 'u32', 'match', 'ip', 'protocol', '17', '0xff', 'flowid', '1:3']);
 }
 
 export async function createLoopbackHarness() {
