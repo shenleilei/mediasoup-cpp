@@ -191,13 +191,13 @@
   }
 
   function clearRemoteConsumersByPeer(peerId) {
-    for (const [consumerId, entry] of Array.from(state.remoteConsumers.entries())) {
+    for (const [consumerId, entry] of state.remoteConsumers.entries()) {
       if (entry.peerId === peerId) {
         clearRemoteConsumerEntry(consumerId);
       }
     }
 
-    for (const [producerId, ownerPeerId] of Array.from(state.remoteProducerPeerMap.entries())) {
+    for (const [producerId, ownerPeerId] of state.remoteProducerPeerMap.entries()) {
       if (ownerPeerId === peerId) {
         clearRemoteConsumersByProducer(producerId);
         state.remoteProducerPeerMap.delete(producerId);
@@ -208,7 +208,7 @@
   }
 
   function clearAllRemoteConsumers() {
-    for (const consumerId of Array.from(state.remoteConsumers.keys())) {
+    for (const consumerId of [...state.remoteConsumers.keys()]) {
       clearRemoteConsumerEntry(consumerId);
     }
     state.remoteProducerConsumers.clear();
@@ -482,8 +482,11 @@
     if (data.producerId && data.peerId) {
       state.remoteProducerPeerMap.set(data.producerId, data.peerId);
     }
-    if (!data.peerId && data.producerId && state.remoteProducerPeerMap.has(data.producerId)) {
-      data.peerId = state.remoteProducerPeerMap.get(data.producerId);
+    if (!data.peerId && data.producerId) {
+      const mappedPeerId = state.remoteProducerPeerMap.get(data.producerId);
+      if (mappedPeerId) {
+        data.peerId = mappedPeerId;
+      }
     }
 
     if (!state.recvTransport) {
