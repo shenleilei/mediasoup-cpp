@@ -381,6 +381,57 @@ TEST_F(QosIntegrationTest, StatsReportWithConsumers) {
 	EXPECT_TRUE(foundBob);
 }
 
+TEST_F(QosIntegrationTest, StatsReportIncludesDownlinkConsumerState) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoom(testRoom_, "bob");
+
+	auto bobRecv = bob.ws->request("createWebRtcTransport", {
+		{"producing", false}, {"consuming", true}
+	});
+	ASSERT_TRUE(bobRecv.value("ok", false));
+
+	produceVideo(alice, 70000061);
+
+	auto consumerNotif = bob.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(consumerNotif.empty()) << "Bob did not get newConsumer";
+	const std::string consumerId = consumerNotif["data"]["id"];
+	const std::string producerId = consumerNotif["data"]["producerId"];
+
+	auto snapshot = makeDownlinkSnapshot(
+		1, "bob", consumerId, producerId, 2'000'000.0, true, true, 1280, 720);
+	auto downlinkResp = bob.ws->request("downlinkClientStats", snapshot);
+	ASSERT_TRUE(downlinkResp.value("ok", false)) << downlinkResp.dump();
+	usleep(500000);
+
+	auto stats = bob.ws->waitNotification("statsReport", 15000);
+	ASSERT_FALSE(stats.empty()) << "No statsReport received";
+
+	bool foundBob = false;
+	for (auto& peer : stats["data"]["peers"]) {
+		if (peer["peerId"] != "bob") continue;
+		foundBob = true;
+		ASSERT_TRUE(peer.contains("consumers"));
+		ASSERT_TRUE(peer["consumers"].contains(consumerId)) << peer.dump();
+		const auto& consumer = peer["consumers"][consumerId];
+		EXPECT_EQ(consumer["kind"], "video");
+		EXPECT_EQ(consumer["type"], "simple");
+		EXPECT_FALSE(consumer["paused"].get<bool>());
+		EXPECT_FALSE(consumer["producerPaused"].get<bool>());
+		EXPECT_EQ(consumer["preferredSpatialLayer"].get<uint8_t>(), 2);
+		EXPECT_EQ(consumer["preferredTemporalLayer"].get<uint8_t>(), 2);
+		EXPECT_EQ(consumer["priority"].get<uint8_t>(), 220);
+		EXPECT_TRUE(peer.contains("downlinkClientStats"));
+		ASSERT_TRUE(peer["downlinkClientStats"].contains("subscriptions"));
+		ASSERT_FALSE(peer["downlinkClientStats"]["subscriptions"].empty());
+		EXPECT_EQ(
+			peer["downlinkClientStats"]["subscriptions"][0]["consumerId"].get<std::string>(),
+			consumerId);
+		break;
+	}
+
+	EXPECT_TRUE(foundBob) << "Bob not found in statsReport";
+}
+
 // ─── Test 7: getStats after peer leaves returns empty ───
 TEST_F(QosIntegrationTest, GetStatsAfterPeerLeaves) {
 	auto alice = joinRoom(testRoom_, "alice");
@@ -2108,11 +2159,15 @@ TEST_F(QosIntegrationTest, DownlinkV3SustainedZeroDemandTriggersPauseUpstream) {
 	auto allNotifs = alice.ws->drainNotifications();
 	bool gotPause = false;
 	bool gotHold = false;
+	size_t pauseCount = 0;
+	size_t resumeCount = 0;
 	for (auto& n : allNotifs) {
 		if (n.value("method", "") != "qosOverride") continue;
 		auto reason = n["data"].value("reason", "");
 		if (reason == "downlink_v3_zero_demand_pause") gotPause = true;
 		if (reason == "downlink_v2_zero_demand_hold") gotHold = true;
+		if (n["data"].value("pauseUpstream", false)) pauseCount++;
+		if (n["data"].value("resumeUpstream", false)) resumeCount++;
 	}
 
 	// After 6s of sustained zero-demand (12 x 500ms), must have reached pause.
@@ -2120,6 +2175,8 @@ TEST_F(QosIntegrationTest, DownlinkV3SustainedZeroDemandTriggersPauseUpstream) {
 	EXPECT_TRUE(gotPause)
 		<< "publisher must receive downlink_v3_zero_demand_pause after sustained hidden"
 		<< " (gotHold=" << gotHold << ", gotPause=" << gotPause << ")";
+	EXPECT_EQ(pauseCount, 1u) << "pauseUpstream should be emitted exactly once during sustained hidden";
+	EXPECT_EQ(resumeCount, 0u) << "resumeUpstream must not be emitted while demand remains hidden";
 }
 
 TEST_F(QosIntegrationTest, DownlinkV3DemandRestoredAfterPauseTriggersClearOrResume) {
@@ -2157,11 +2214,15 @@ TEST_F(QosIntegrationTest, DownlinkV3DemandRestoredAfterPauseTriggersClearOrResu
 	auto allNotifs = alice.ws->drainNotifications();
 	bool gotResume = false;
 	bool gotRestored = false;
+	size_t pauseCount = 0;
+	size_t resumeCount = 0;
 	for (auto& n : allNotifs) {
 		if (n.value("method", "") != "qosOverride") continue;
 		auto reason = n["data"].value("reason", "");
 		if (reason == "downlink_v3_demand_resumed") gotResume = true;
 		if (reason == "downlink_v2_demand_restored") gotRestored = true;
+		if (n["data"].value("pauseUpstream", false)) pauseCount++;
+		if (n["data"].value("resumeUpstream", false)) resumeCount++;
 	}
 
 	// After sustained pause then 3s of visible demand (6 x 500ms),
@@ -2169,4 +2230,6 @@ TEST_F(QosIntegrationTest, DownlinkV3DemandRestoredAfterPauseTriggersClearOrResu
 	EXPECT_TRUE(gotResume)
 		<< "publisher must receive downlink_v3_demand_resumed after demand recovery"
 		<< " (gotResume=" << gotResume << ", gotRestored=" << gotRestored << ")";
+	EXPECT_EQ(resumeCount, 1u) << "resumeUpstream should be emitted exactly once after demand recovery";
+	EXPECT_EQ(pauseCount, 0u) << "pauseUpstream must not be re-emitted after demand recovery";
 }

@@ -840,7 +840,13 @@ json RoomService::collectPeerStats(const std::string& roomId, const std::string&
 	for (auto& [cid, cons] : peer->consumers) {
 		json cstat;
 		cstat["kind"] = cons->kind();
+		cstat["type"] = cons->type();
 		cstat["producerId"] = cons->producerId();
+		cstat["paused"] = cons->paused();
+		cstat["producerPaused"] = cons->producerPaused();
+		cstat["preferredSpatialLayer"] = cons->preferredSpatialLayer();
+		cstat["preferredTemporalLayer"] = cons->preferredTemporalLayer();
+		cstat["priority"] = cons->priority();
 		if (budgetLeft() > 0) {
 			try {
 				auto stats = cons->getStats(statsTimeout());
@@ -1544,7 +1550,18 @@ void RoomService::applyPublisherSupplyPlan(const std::string& roomId,
 void RoomService::maybeSendTrackQosOverride(const std::string& roomId,
 	const std::string& targetPeerId, const qos::QosOverride& overrideData)
 {
-	std::string key = roomId + "/" + targetPeerId + "/" + overrideData.trackId;
+	auto overrideSlot = [&overrideData]() -> const char* {
+		if (overrideData.hasPauseUpstream ||
+			overrideData.reason == "downlink_v3_zero_demand_pause")
+			return "pauseUpstream";
+		if (overrideData.hasResumeUpstream ||
+			overrideData.reason == "downlink_v3_demand_resumed")
+			return "resumeUpstream";
+		return "maxLevelClamp";
+	};
+
+	std::string key = roomId + "/" + targetPeerId + "/" + overrideData.trackId +
+		"/" + overrideSlot();
 	std::string sig = overrideData.raw.dump();
 	int64_t now = qos::NowMs();
 
