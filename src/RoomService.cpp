@@ -361,6 +361,234 @@ RoomService::Result RoomService::connectTransport(const std::string& roomId,
 	return {true, wt->connect(dtlsParams)};
 }
 
+// ── plain transport ──
+
+RoomService::Result RoomService::createPlainTransport(const std::string& roomId,
+	const std::string& peerId, bool producing, bool consuming)
+{
+	auto room = roomManager_.getRoom(roomId);
+	if (!room) return {false, {}, "", "room not found"};
+	auto peer = room->getPeer(peerId);
+	if (!peer) return {false, {}, "", "peer not found"};
+
+	PlainTransportOptions opts;
+	opts.listenInfos = roomManager_.listenInfos();
+	opts.rtcpMux = true;
+	opts.comedia = false;
+
+	auto transport = room->router()->createPlainTransport(opts);
+	if (producing) peer->plainSendTransport = transport;
+	else           peer->plainRecvTransport = transport;
+
+	json result = transport->toJson();
+
+	if (!producing && peer->plainRecvTransport) {
+		json consumers = json::array();
+		for (auto& other : room->getOtherPeers(peerId)) {
+			for (auto& [pid, prod] : other->producers) {
+				try {
+					json consumeOpts = {
+						{"producerId", prod->id()},
+						{"rtpCapabilities", peer->rtpCapabilities},
+						{"consumableRtpParameters", prod->consumableRtpParameters()}
+					};
+					auto consumer = peer->plainRecvTransport->consume(consumeOpts);
+					peer->consumers[consumer->id()] = consumer;
+					consumers.push_back({
+						{"peerId", other->id}, {"producerId", prod->id()},
+						{"id", consumer->id()}, {"kind", consumer->kind()},
+						{"rtpParameters", consumer->rtpParameters()},
+						{"producerPaused", prod->paused()}
+					});
+				} catch (const std::exception& e) {
+					MS_ERROR(logger_, "[{} {}] auto-subscribe on createPlainTransport FAILED for producer {}: {}",
+						roomId, peerId, pid, e.what());
+				}
+			}
+		}
+		result["consumers"] = consumers;
+	}
+
+	return {true, result};
+}
+
+RoomService::Result RoomService::connectPlainTransport(const std::string& roomId,
+	const std::string& peerId, const std::string& transportId,
+	const std::string& ip, uint16_t port)
+{
+	auto room = roomManager_.getRoom(roomId);
+	if (!room) return {false, {}, "", "room not found"};
+	auto peer = room->getPeer(peerId);
+	if (!peer) return {false, {}, "", "peer not found"};
+	auto transport = peer->getTransport(transportId);
+	if (!transport) return {false, {}, "", "transport not found"};
+	auto pt = std::dynamic_pointer_cast<PlainTransport>(transport);
+	if (!pt) return {false, {}, "", "not a PlainTransport"};
+	return {true, pt->connect(ip, port)};
+}
+
+// ── plain one-shot publish / subscribe ──
+
+RoomService::Result RoomService::plainPublish(const std::string& roomId,
+	const std::string& peerId, uint32_t videoSsrc, uint32_t audioSsrc)
+{
+	auto room = roomManager_.getRoom(roomId);
+	if (!room) return {false, {}, "", "room not found"};
+	auto peer = room->getPeer(peerId);
+	if (!peer) return {false, {}, "", "peer not found"};
+
+	// Create PlainTransport for sending
+	PlainTransportOptions opts;
+	opts.listenInfos = roomManager_.listenInfos();
+	opts.rtcpMux = true;
+	opts.comedia = true; // auto-detect sender address from first RTP packet
+
+	auto transport = room->router()->createPlainTransport(opts);
+	peer->plainSendTransport = transport;
+
+	auto caps = room->router()->rtpCapabilities();
+
+	// Find H264 and Opus payload types from router capabilities
+	uint8_t videoPt = 0, audioPt = 0;
+	for (auto& c : caps.codecs) {
+		if (c.mimeType == "video/H264" && videoPt == 0) videoPt = c.preferredPayloadType;
+		if (c.mimeType == "audio/opus" && audioPt == 0) audioPt = c.preferredPayloadType;
+	}
+	if (videoPt == 0) return {false, {}, "", "router has no H264 codec"};
+	if (audioPt == 0) return {false, {}, "", "router has no opus codec"};
+
+	// Produce video
+	json videoRtpParams = {
+		{"codecs", {{
+			{"mimeType", "video/H264"}, {"payloadType", videoPt},
+			{"clockRate", 90000},
+			{"parameters", {{"packetization-mode", 1}, {"level-asymmetry-allowed", 1}}}
+		}}},
+		{"encodings", {{{"ssrc", videoSsrc}}}},
+		{"rtcp", {{"cname", peerId + "-video"}}}
+	};
+	json videoProdOpts = {
+		{"kind", "video"}, {"rtpParameters", videoRtpParams},
+		{"routerRtpCapabilities", caps}
+	};
+	auto videoProd = transport->produce(videoProdOpts);
+	room->router()->addProducer(videoProd);
+	peer->producers[videoProd->id()] = videoProd;
+
+	// Produce audio
+	json audioRtpParams = {
+		{"codecs", {{
+			{"mimeType", "audio/opus"}, {"payloadType", audioPt},
+			{"clockRate", 48000}, {"channels", 2},
+			{"parameters", {{"useinbandfec", 1}}}
+		}}},
+		{"encodings", {{{"ssrc", audioSsrc}}}},
+		{"rtcp", {{"cname", peerId + "-audio"}}}
+	};
+	json audioProdOpts = {
+		{"kind", "audio"}, {"rtpParameters", audioRtpParams},
+		{"routerRtpCapabilities", caps}
+	};
+	auto audioProd = transport->produce(audioProdOpts);
+	room->router()->addProducer(audioProd);
+	peer->producers[audioProd->id()] = audioProd;
+
+	indexPeerProducers(roomId, peerId, peer->producers);
+
+	// Auto-subscribe other peers
+	for (auto& prod : {videoProd, audioProd}) {
+		for (auto& other : room->getOtherPeers(peerId)) {
+			auto recvT = other->recvTransport
+				? std::static_pointer_cast<Transport>(other->recvTransport)
+				: std::static_pointer_cast<Transport>(other->plainRecvTransport);
+			if (!recvT) continue;
+			try {
+				json consumeOpts = {
+					{"producerId", prod->id()},
+					{"rtpCapabilities", other->rtpCapabilities},
+					{"consumableRtpParameters", prod->consumableRtpParameters()}
+				};
+				auto consumer = recvT->consume(consumeOpts);
+				other->consumers[consumer->id()] = consumer;
+				if (notify_) {
+					notify_(roomId, other->id, {
+						{"notification", true}, {"method", "newConsumer"},
+						{"data", {
+							{"peerId", peerId}, {"producerId", prod->id()},
+							{"id", consumer->id()}, {"kind", consumer->kind()},
+							{"rtpParameters", consumer->rtpParameters()},
+							{"producerPaused", prod->paused()}
+						}}
+					});
+				}
+			} catch (const std::exception& e) {
+				MS_ERROR(logger_, "[{} {}] plainPublish auto-subscribe FAILED for {}: {}",
+					roomId, peerId, other->id, e.what());
+			}
+		}
+	}
+
+	auto tuple = transport->tuple();
+	return {true, {
+		{"transportId", transport->id()},
+		{"ip", tuple.localAddress}, {"port", tuple.localPort},
+		{"videoPt", videoPt}, {"videoSsrc", videoSsrc},
+		{"videoProdId", videoProd->id()},
+		{"audioPt", audioPt}, {"audioSsrc", audioSsrc},
+		{"audioProdId", audioProd->id()}
+	}};
+}
+
+RoomService::Result RoomService::plainSubscribe(const std::string& roomId,
+	const std::string& peerId, const std::string& recvIp, uint16_t recvPort)
+{
+	auto room = roomManager_.getRoom(roomId);
+	if (!room) return {false, {}, "", "room not found"};
+	auto peer = room->getPeer(peerId);
+	if (!peer) return {false, {}, "", "peer not found"};
+
+	PlainTransportOptions opts;
+	opts.listenInfos = roomManager_.listenInfos();
+	opts.rtcpMux = true;
+	opts.comedia = false;
+
+	auto transport = room->router()->createPlainTransport(opts);
+	peer->plainRecvTransport = transport;
+
+	// Connect to client's recv address
+	transport->connect(recvIp, recvPort);
+
+	json consumers = json::array();
+	for (auto& other : room->getOtherPeers(peerId)) {
+		for (auto& [pid, prod] : other->producers) {
+			try {
+				json consumeOpts = {
+					{"producerId", prod->id()},
+					{"rtpCapabilities", peer->rtpCapabilities},
+					{"consumableRtpParameters", prod->consumableRtpParameters()}
+				};
+				auto consumer = transport->consume(consumeOpts);
+				peer->consumers[consumer->id()] = consumer;
+				consumers.push_back({
+					{"peerId", other->id}, {"producerId", prod->id()},
+					{"id", consumer->id()}, {"kind", consumer->kind()},
+					{"rtpParameters", consumer->rtpParameters()}
+				});
+			} catch (const std::exception& e) {
+				MS_ERROR(logger_, "[{} {}] plainSubscribe FAILED for producer {}: {}",
+					roomId, peerId, pid, e.what());
+			}
+		}
+	}
+
+	auto tuple = transport->tuple();
+	return {true, {
+		{"transportId", transport->id()},
+		{"ip", tuple.localAddress}, {"port", tuple.localPort},
+		{"consumers", consumers}
+	}};
+}
+
 // ── produce / consume ──
 
 RoomService::Result RoomService::produce(const std::string& roomId,
