@@ -45,6 +45,8 @@ public:
 	using RegistryTaskFn = std::function<void(std::function<void()>)>;
 	using TaskPosterFn = std::function<void(std::function<void()>)>;
 	using DelayedTaskPosterFn = std::function<void(std::function<void()>, uint32_t)>;
+	using DownlinkSnapshotAppliedFn = std::function<void(
+		const std::string&, const std::string&, uint64_t)>;
 
 	RoomService(RoomManager& roomManager, RoomRegistry* registry,
 		const std::string& recordDir = "");
@@ -55,6 +57,9 @@ public:
 	void setRegistryTask(RegistryTaskFn fn) { registryTask_ = std::move(fn); }
 	void setTaskPoster(TaskPosterFn fn) { taskPoster_ = std::move(fn); }
 	void setDelayedTaskPoster(DelayedTaskPosterFn fn) { delayedTaskPoster_ = std::move(fn); }
+	void setDownlinkSnapshotApplied(DownlinkSnapshotAppliedFn fn) {
+		downlinkSnapshotApplied_ = std::move(fn);
+	}
 
 	void postRegistryTask(std::function<void()> task) {
 		if (registryTask_) registryTask_(std::move(task));
@@ -155,6 +160,10 @@ private:
 		const std::string& peerId);
 	void cleanupPeerProducerDemandCache(const std::string& roomId,
 		const std::unordered_map<std::string, std::shared_ptr<Producer>>& producers);
+	void indexPeerProducers(const std::string& roomId, const std::string& peerId,
+		const std::unordered_map<std::string, std::shared_ptr<Producer>>& producers);
+	void cleanupPeerProducerOwnerCache(const std::string& roomId,
+		const std::unordered_map<std::string, std::shared_ptr<Producer>>& producers);
 
 	RoomManager& roomManager_;
 	RoomRegistry* registry_;
@@ -165,6 +174,7 @@ private:
 	RegistryTaskFn registryTask_;
 	TaskPosterFn taskPoster_;
 	DelayedTaskPosterFn delayedTaskPoster_;
+	DownlinkSnapshotAppliedFn downlinkSnapshotApplied_;
 	std::shared_ptr<spdlog::logger> logger_;
 
 	std::unordered_map<std::string, std::shared_ptr<PeerRecorder>> recorders_;
@@ -201,6 +211,7 @@ private:
 	std::unordered_map<std::string, DownlinkRoomPlanState> downlinkRoomPlanStates_;
 	std::unordered_map<std::string, TrackQosOverrideRecord> trackQosOverrideRecords_;
 	std::unordered_map<std::string, std::unordered_map<std::string, qos::ProducerDemandState>> producerDemandCache_; // key: roomId -> producerId -> state
+	std::unordered_map<std::string, std::unordered_map<std::string, std::string>> producerOwnerPeerIds_; // key: roomId -> producerId -> peerId
 };
 
 } // namespace mediasoup

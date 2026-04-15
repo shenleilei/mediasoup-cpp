@@ -65,6 +65,58 @@ private:
 	bool stop_ = false;
 };
 
+class RegistryQueue {
+public:
+	void start() {
+		thread_ = std::thread(&RegistryQueue::loop, this);
+	}
+
+	void stop() {
+		{
+			std::lock_guard<std::mutex> lock(mu_);
+			stop_ = true;
+		}
+		cv_.notify_all();
+		if (thread_.joinable()) thread_.join();
+	}
+
+	void post(std::function<void()> fn) {
+		if (stop_.load(std::memory_order_relaxed)) {
+			fn();
+			return;
+		}
+		{
+			std::lock_guard<std::mutex> lock(mu_);
+			queue_.push(std::move(fn));
+		}
+		cv_.notify_one();
+	}
+
+private:
+	void loop() {
+		for (;;) {
+			std::function<void()> task;
+			{
+				std::unique_lock<std::mutex> lock(mu_);
+				cv_.wait(lock, [this] {
+					return stop_.load(std::memory_order_relaxed) || !queue_.empty();
+				});
+				if (stop_.load(std::memory_order_relaxed) && queue_.empty())
+					return;
+				task = std::move(queue_.front());
+				queue_.pop();
+			}
+			task();
+		}
+	}
+
+	std::thread thread_;
+	std::mutex mu_;
+	std::condition_variable cv_;
+	std::queue<std::function<void()>> queue_;
+	std::atomic<bool> stop_{ false };
+};
+
 // ─── Test 1: Basic post and execute ───
 TEST(WorkerQueueTest, PostAndExecute) {
 	WorkerQueue wq;
@@ -195,4 +247,30 @@ TEST(WorkerQueueTest, AliveTokenPattern) {
 
 	wq.stop();
 	EXPECT_EQ(sent.load(), 0) << "Should not send after alive=false";
+}
+
+TEST(RegistryQueueTest, StopDrainsQueuedTasksBeforeExit) {
+	RegistryQueue queue;
+	queue.start();
+
+	std::atomic<int> count{ 0 };
+	queue.post([&] {
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+		++count;
+	});
+	queue.post([&] { ++count; });
+	queue.post([&] { ++count; });
+
+	queue.stop();
+	EXPECT_EQ(count.load(), 3);
+}
+
+TEST(RegistryQueueTest, PostAfterStopRunsInline) {
+	RegistryQueue queue;
+	queue.start();
+	queue.stop();
+
+	std::atomic<int> count{ 0 };
+	queue.post([&] { ++count; });
+	EXPECT_EQ(count.load(), 1);
 }

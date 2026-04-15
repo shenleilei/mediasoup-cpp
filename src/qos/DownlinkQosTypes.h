@@ -11,6 +11,7 @@ using json = nlohmann::json;
 struct DownlinkSubscription {
 	std::string consumerId;
 	std::string producerId;
+	std::string kind{ "video" };
 	bool visible{ true };
 	bool pinned{ false };
 	bool activeSpeaker{ false };

@@ -11,6 +11,29 @@ void SubscriberQosController::pruneStaleConsumers(
 		else
 			++it;
 	}
+	for (auto it = lastState_.begin(); it != lastState_.end(); ) {
+		if (consumers.find(it->first) == consumers.end())
+			it = lastState_.erase(it);
+		else
+			++it;
+	}
+}
+
+void SubscriberQosController::syncConsumerState(
+	const std::unordered_map<std::string, std::shared_ptr<mediasoup::Consumer>>& consumers)
+{
+	for (const auto& [consumerId, consumer] : consumers) {
+		if (!consumer) continue;
+		auto& state = lastState_[consumerId];
+		state.paused = consumer->paused();
+		state.spatialLayer = consumer->preferredSpatialLayer();
+		state.temporalLayer = consumer->preferredTemporalLayer();
+		state.priority = consumer->priority();
+		if (consumer->paused())
+			pausedConsumers_.insert(consumerId);
+		else
+			pausedConsumers_.erase(consumerId);
+	}
 }
 
 void SubscriberQosController::applyActions(const std::vector<DownlinkAction>& actions,
@@ -36,9 +59,11 @@ void SubscriberQosController::applyActions(const std::vector<DownlinkAction>& ac
 				pausedConsumers_.erase(action.consumerId);
 				break;
 			case DownlinkAction::Type::kSetLayers:
-				consumer->setPreferredLayers(action.spatialLayer, action.temporalLayer);
-				if (action.requestKeyFrame)
-					consumer->requestKeyFrame();
+				if (consumer->kind() == "video") {
+					consumer->setPreferredLayers(action.spatialLayer, action.temporalLayer);
+					if (action.requestKeyFrame)
+						consumer->requestKeyFrame();
+				}
 				break;
 			case DownlinkAction::Type::kSetPriority:
 				consumer->setPriority(action.priority);

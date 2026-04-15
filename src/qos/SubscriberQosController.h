@@ -27,6 +27,8 @@ public:
 	/// of the set during long-lived sessions with frequent stream churn.
 	void pruneStaleConsumers(
 		const std::unordered_map<std::string, std::shared_ptr<mediasoup::Consumer>>& consumers);
+	void syncConsumerState(
+		const std::unordered_map<std::string, std::shared_ptr<mediasoup::Consumer>>& consumers);
 
 	size_t pausedCount() const { return pausedConsumers_.size(); }
 

@@ -52,7 +52,8 @@ ProducerSupplyState ProducerDemandAggregator::advanceSupplyState(
 		if (prev == ProducerSupplyState::kPaused)
 			return ProducerSupplyState::kResumeWarmup;
 		if (prev == ProducerSupplyState::kResumeWarmup) {
-			if (state.resumeEligibleAtMs > 0 && nowMs >= state.resumeEligibleAtMs)
+			if (state.resumeEligibleAtMs != kUnsetDemandTimeMs &&
+				nowMs >= state.resumeEligibleAtMs)
 				return state.maxSpatialLayer < 2
 					? ProducerSupplyState::kLowClamped
 					: ProducerSupplyState::kActive;
@@ -69,7 +70,8 @@ ProducerSupplyState ProducerDemandAggregator::advanceSupplyState(
 	case ProducerSupplyState::kLowClamped:
 		return ProducerSupplyState::kZeroDemandHold;
 	case ProducerSupplyState::kZeroDemandHold:
-		if (state.pauseEligibleAtMs > 0 && nowMs >= state.pauseEligibleAtMs)
+		if (state.pauseEligibleAtMs != kUnsetDemandTimeMs &&
+			nowMs >= state.pauseEligibleAtMs)
 			return ProducerSupplyState::kPaused;
 		return ProducerSupplyState::kZeroDemandHold;
 	case ProducerSupplyState::kPaused:
@@ -120,18 +122,18 @@ std::vector<ProducerDemandState> ProducerDemandAggregator::finalize(
 			state.holdUntilMs = state.zeroDemandSinceMs + kHoldMs;
 
 			// Set pause eligibility on first zero-demand entry
-			if (state.pauseEligibleAtMs == 0)
+			if (state.pauseEligibleAtMs == kUnsetDemandTimeMs)
 				state.pauseEligibleAtMs = state.zeroDemandSinceMs + kPauseConfirmMs;
 		} else {
 			state.lastNonZeroDemandAtMs = nowMs;
 			state.zeroDemandSinceMs = 0;
 			state.holdUntilMs = 0;
-			state.pauseEligibleAtMs = 0;
+			state.pauseEligibleAtMs = kUnsetDemandTimeMs;
 
 			// Set resume eligibility when transitioning from paused
 			if (prevIt != prev.end() &&
 				prevIt->second.supplyState == ProducerSupplyState::kPaused &&
-				state.resumeEligibleAtMs == 0)
+				state.resumeEligibleAtMs == kUnsetDemandTimeMs)
 			{
 				state.resumeEligibleAtMs = nowMs + kResumeWarmupMs;
 			}
@@ -141,7 +143,7 @@ std::vector<ProducerDemandState> ProducerDemandAggregator::finalize(
 
 		// Clear resume timer once warmup completes
 		if (state.supplyState != ProducerSupplyState::kResumeWarmup)
-			state.resumeEligibleAtMs = 0;
+			state.resumeEligibleAtMs = kUnsetDemandTimeMs;
 
 		result.push_back(std::move(state));
 	}
@@ -161,9 +163,11 @@ std::vector<ProducerDemandState> ProducerDemandAggregator::finalize(
 		// Carry forward v3 state
 		state.supplyState = prevState.supplyState;
 		state.lastNonZeroDemandAtMs = prevState.lastNonZeroDemandAtMs;
+		state.pauseEligibleAtMs = prevState.pauseEligibleAtMs;
+		state.resumeEligibleAtMs = prevState.resumeEligibleAtMs;
 		state.lastPauseSentAtMs = prevState.lastPauseSentAtMs;
 		state.lastResumeSentAtMs = prevState.lastResumeSentAtMs;
-		if (state.pauseEligibleAtMs == 0)
+		if (state.pauseEligibleAtMs == kUnsetDemandTimeMs)
 			state.pauseEligibleAtMs = state.zeroDemandSinceMs + kPauseConfirmMs;
 		state.supplyState = advanceSupplyState(state, /*zeroDemand=*/true, nowMs);
 

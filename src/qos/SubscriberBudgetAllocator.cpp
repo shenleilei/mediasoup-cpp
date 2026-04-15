@@ -1,6 +1,7 @@
 #include "qos/SubscriberBudgetAllocator.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <numeric>
 
 namespace mediasoup::qos {
@@ -22,6 +23,26 @@ struct UpgradeStep {
 	double deltaUtility;
 	double density; // deltaUtility / deltaCost
 };
+
+double LoadBitrateOverride(const char* name, double fallback)
+{
+	const char* raw = std::getenv(name);
+	if (!raw || !*raw) return fallback;
+	char* end = nullptr;
+	double value = std::strtod(raw, &end);
+	if (end == raw || !std::isfinite(value) || value <= 0.0) return fallback;
+	return value;
+}
+
+double GetCameraBaseBitrateBps()
+{
+	return LoadBitrateOverride("MEDIASOUP_QOS_BASE_BITRATE_BPS", kBaseBitrateBps);
+}
+
+double GetScreenShareBaseBitrateBps()
+{
+	return LoadBitrateOverride("MEDIASOUP_QOS_SCREENSHARE_BASE_BITRATE_BPS", kScreenShareBaseBps);
+}
 
 } // namespace
 
@@ -53,7 +74,7 @@ double SubscriberBudgetAllocator::computeUtility(const DownlinkSubscription& sub
 double SubscriberBudgetAllocator::estimateLayerBitrateBps(
 	const DownlinkSubscription& sub, uint8_t spatialLayer, uint8_t temporalLayer) const
 {
-	double baseBps = sub.isScreenShare ? kScreenShareBaseBps : kBaseBitrateBps;
+	double baseBps = sub.isScreenShare ? GetScreenShareBaseBitrateBps() : GetCameraBaseBitrateBps();
 	int s = std::min(static_cast<int>(spatialLayer), kMaxSpatial);
 	int t = std::min(static_cast<int>(temporalLayer), kMaxTemporal);
 	double spatialScale = kSpatialMultiplier[s];
@@ -93,6 +114,10 @@ SubscriberBudgetPlan SubscriberBudgetAllocator::Allocate(
 
 	for (size_t idx : order) {
 		if (allocs[idx].utility <= 0.0) continue;
+		if (subs[idx].kind != "video") {
+			allocs[idx].active = true;
+			continue;
+		}
 		double cost = estimateLayerBitrateBps(subs[idx], 0, 0);
 		if (usedBps + cost <= plan.budgetBps) {
 			allocs[idx].active = true;
@@ -178,7 +203,7 @@ SubscriberBudgetPlan SubscriberBudgetAllocator::Allocate(
 			a.consumerId = sub.consumerId;
 			plan.actions.push_back(a);
 		}
-		{
+		if (sub.kind == "video") {
 			DownlinkAction a;
 			a.type = DownlinkAction::Type::kSetLayers;
 			a.consumerId = sub.consumerId;

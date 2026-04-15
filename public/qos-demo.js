@@ -57,7 +57,9 @@
 
   function setStatus(text, level = 'warn') {
     els.status.className = `status ${level}`;
-    els.status.innerHTML = `<strong>状态：</strong> ${text}`;
+    const label = document.createElement('strong');
+    label.textContent = '状态：';
+    els.status.replaceChildren(label, document.createTextNode(` ${String(text ?? '')}`));
   }
 
   function escapeHtml(value) {

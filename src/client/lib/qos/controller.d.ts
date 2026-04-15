@@ -59,6 +59,7 @@ export declare class PublisherQosController {
     private snapshotIntervalMs;
     private allowAudioOnly;
     private allowVideoPause;
+    private activeOverrides?;
     private activeOverride?;
     private coordinationOverride?;
     private probeContext?;

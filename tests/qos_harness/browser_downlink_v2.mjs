@@ -18,9 +18,21 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..', '..');
 const chromiumPath = '/usr/lib64/chromium-browser/headless_shell';
-const signalingPort = 14016;
+let signalingPort = 0;
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function allocatePort() {
+  const net = await import('node:net');
+  return await new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address();
+      server.close(error => error ? reject(error) : resolve(port));
+    });
+  });
+}
 
 function buildBundle(tmpDir) {
   const outfile = path.join(tmpDir, 'bundle.js');
@@ -96,6 +108,7 @@ async function waitForPort(port, timeoutMs = 7000) {
 async function runScenario() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qos-downlink-v2-'));
   const bundlePath = buildBundle(tmpDir);
+  signalingPort = await allocatePort();
   const staticServer = await startStaticServer(bundlePath);
   const sfu = startSfu();
   const browser = await puppeteer.launch({
@@ -174,6 +187,7 @@ async function runScenario() {
     await browser.close();
     await new Promise(resolve => staticServer.close(resolve));
     await stopSfu(sfu);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 }
 

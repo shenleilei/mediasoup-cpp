@@ -12,12 +12,16 @@ exports.DownlinkSampler = void 0;
  *   const snapshot = await sampler.sample(subscriberPeerId);
  */
 class DownlinkSampler {
-    constructor(recvTransport) {
+    constructor(recvTransport, options = {}) {
         this._transport = recvTransport;
         /** @type {Map<string, object>} consumerId -> hint */
         this._hints = new Map();
-        this._prevBytesReceived = new Map();
-        this._prevTimestamp = new Map();
+        this._prevPacketsLost = new Map();
+        this._prevPacketsReceived = new Map();
+        this._statsProvider =
+            typeof options.statsProvider === 'function'
+                ? options.statsProvider
+                : async () => this._transport?.getStats?.();
     }
 
     /**
@@ -31,8 +35,8 @@ class DownlinkSampler {
 
     removeHints(consumerId) {
         this._hints.delete(consumerId);
-        this._prevBytesReceived.delete(consumerId);
-        this._prevTimestamp.delete(consumerId);
+        this._prevPacketsLost.delete(consumerId);
+        this._prevPacketsReceived.delete(consumerId);
     }
 
     /**
@@ -42,19 +46,17 @@ class DownlinkSampler {
      * @returns {Promise<{transport: object, subscriptions: Array}>}
      */
     async sample(subscriberPeerId) {
-        const pc = this._transport?._handler?._pc;
-        if (!pc) {
+        const rawStats = await this._statsProvider();
+        if (!rawStats || typeof rawStats.values !== 'function') {
             return { transport: { availableIncomingBitrate: 0, currentRoundTripTime: 0 }, subscriptions: [] };
         }
-
-        const rawStats = await pc.getStats();
-        const inboundBySSRC = new Map();
+        const inboundReports = [];
         let availableIncomingBitrate = 0;
         let currentRoundTripTime = 0;
 
         for (const report of rawStats.values()) {
             if (report.type === 'inbound-rtp' && report.kind === 'video') {
-                inboundBySSRC.set(report.ssrc, report);
+                inboundReports.push(report);
             }
             if (report.type === 'candidate-pair' && report.nominated) {
                 availableIncomingBitrate = report.availableIncomingBitrate || 0;
@@ -63,43 +65,36 @@ class DownlinkSampler {
         }
 
         const subscriptions = [];
+        const matchedReports = new Set();
         for (const [consumerId, hint] of this._hints) {
-            // Try to find matching inbound-rtp by iterating (consumer mid matching
-            // is complex; fall back to order-based or first available).
-            // For simplicity, collect all video inbound stats and match by index
-            // or let caller provide ssrc mapping. Here we use a best-effort approach.
-            let stats = null;
-            for (const report of inboundBySSRC.values()) {
-                // mediasoup consumer mid is set on the transceiver; match via trackIdentifier
-                // if available, otherwise take first unmatched.
-                if (!report._matched) {
-                    stats = report;
-                    report._matched = true;
-                    break;
-                }
+            const stats = selectInboundReport(inboundReports, hint, matchedReports);
+            const lossPercent = computeLossPercent(
+                stats,
+                this._prevPacketsLost.get(consumerId),
+                this._prevPacketsReceived.get(consumerId),
+            );
+            if (stats) {
+                this._prevPacketsLost.set(consumerId, Number(stats.packetsLost) || 0);
+                this._prevPacketsReceived.set(consumerId, Number(stats.packetsReceived) || 0);
             }
 
             subscriptions.push({
                 consumerId,
                 producerId: hint.producerId || '',
+                kind: hint.kind === 'audio' ? 'audio' : 'video',
                 visible: !!hint.visible,
                 pinned: !!hint.pinned,
                 activeSpeaker: !!hint.activeSpeaker,
                 isScreenShare: !!hint.isScreenShare,
                 targetWidth: hint.targetWidth || 0,
                 targetHeight: hint.targetHeight || 0,
-                packetsLost: stats?.packetsLost || 0,
+                packetsLost: lossPercent,
                 jitter: stats?.jitter || 0,
                 framesPerSecond: stats?.framesPerSecond || 0,
                 frameWidth: stats?.frameWidth || 0,
                 frameHeight: stats?.frameHeight || 0,
                 freezeRate: computeFreezeRate(stats),
             });
-        }
-
-        // Clear _matched flags
-        for (const report of inboundBySSRC.values()) {
-            delete report._matched;
         }
 
         return {
@@ -120,6 +115,61 @@ function computeFreezeRate(stats) {
         return stats.totalFreezesDuration / stats.totalPlaybackDuration;
     }
     return freezeCount > 0 ? freezeCount / totalFrames : 0;
+}
+
+function selectInboundReport(reports, hint, matchedReports) {
+    const explicitMatches = reports.filter(report => matchesHint(report, hint));
+    for (const report of explicitMatches) {
+        if (!matchedReports.has(report)) {
+            matchedReports.add(report);
+            return report;
+        }
+    }
+    for (const report of reports) {
+        if (!matchedReports.has(report)) {
+            matchedReports.add(report);
+            return report;
+        }
+    }
+    return null;
+}
+
+function matchesHint(report, hint = {}) {
+    if (!report || !hint) return false;
+    if (Number.isFinite(hint.ssrc) && Number(report.ssrc) === Number(hint.ssrc)) {
+        return true;
+    }
+    if (typeof hint.mid === 'string' && hint.mid && report.mid === hint.mid) {
+        return true;
+    }
+    if (typeof hint.trackIdentifier === 'string' &&
+        hint.trackIdentifier &&
+        report.trackIdentifier === hint.trackIdentifier) {
+        return true;
+    }
+    return false;
+}
+
+function computeLossPercent(stats, previousLost, previousReceived) {
+    if (!stats) return 0;
+    const currentLost = Number(stats.packetsLost);
+    const currentReceived = Number(stats.packetsReceived);
+    if (!Number.isFinite(currentLost) || !Number.isFinite(currentReceived)) {
+        return 0;
+    }
+    if (!Number.isFinite(previousLost) || !Number.isFinite(previousReceived)) {
+        return 0;
+    }
+    const deltaLost = currentLost - previousLost;
+    const deltaReceived = currentReceived - previousReceived;
+    if (deltaLost < 0 || deltaReceived < 0) {
+        return 0;
+    }
+    const total = deltaLost + deltaReceived;
+    if (total <= 0) {
+        return 0;
+    }
+    return Math.max(0, Math.min(100, Math.round((deltaLost / total) * 100)));
 }
 
 exports.DownlinkSampler = DownlinkSampler;

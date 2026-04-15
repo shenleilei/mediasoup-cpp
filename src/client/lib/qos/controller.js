@@ -36,7 +36,7 @@ function wasActionApplied(result) {
             return result.applied !== false;
         }
     }
-    return true;
+    return false;
 }
 function isStrongRecoverySignal(signals, profile) {
     const { thresholds } = profile;
@@ -658,9 +658,11 @@ class PublisherQosController {
         if (!this.signalChannel) {
             return;
         }
+        const nextSeq = this.seq >= constants_1.QOS_MAX_SEQ ? 0 : this.seq + 1;
+        this.seq = nextSeq;
         const payload = {
             schema: constants_1.QOS_CLIENT_SCHEMA_V1,
-            seq: ++this.seq,
+            seq: nextSeq,
             tsMs: nowMs,
             peerState: {
                 mode: resolvePeerMode(this.inAudioOnlyMode, this.kind),

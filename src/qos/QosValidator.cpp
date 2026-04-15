@@ -1,5 +1,7 @@
 #include "qos/QosValidator.h"
 #include <algorithm>
+#include <cmath>
+#include <unordered_set>
 
 namespace mediasoup::qos {
 
@@ -32,7 +34,11 @@ bool IsNonEmptyString(const json& value) {
 }
 
 bool IsFiniteNumber(const json& value) {
-	return value.is_number_float() || value.is_number_integer() || value.is_number_unsigned();
+	if (value.is_number_float()) {
+		return std::isfinite(value.get<double>());
+	}
+
+	return value.is_number_integer() || value.is_number_unsigned();
 }
 
 bool IsNonNegativeNumber(const json& value) {
@@ -392,6 +398,10 @@ ParseResult<QosOverride> QosValidator::ParseOverride(const json& payload) {
 		overrideData.hasResumeUpstream = true;
 		overrideData.resumeUpstream = payload["resumeUpstream"].get<bool>();
 	}
+	if (overrideData.hasPauseUpstream && overrideData.pauseUpstream &&
+		overrideData.hasResumeUpstream && overrideData.resumeUpstream) {
+		return MakeError<QosOverride>("pauseUpstream and resumeUpstream are mutually exclusive");
+	}
 
 	return MakeSuccess(std::move(overrideData));
 }
@@ -441,10 +451,15 @@ ParseResult<DownlinkSnapshot> QosValidator::ParseDownlinkSnapshot(const json& pa
 			result.error = "subscriptions array is required";
 			return result;
 		}
+		auto sanitizeFinite = [](double value, double fallback = 0.0) {
+			return std::isfinite(value) ? value : fallback;
+		};
 		if (payload.contains("transport") && payload["transport"].is_object()) {
 			auto& t = payload["transport"];
-			v.availableIncomingBitrate = t.value("availableIncomingBitrate", 0.0);
-			v.currentRoundTripTime = t.value("currentRoundTripTime", 0.0);
+			v.availableIncomingBitrate = sanitizeFinite(
+				t.value("availableIncomingBitrate", 0.0));
+			v.currentRoundTripTime = sanitizeFinite(
+				t.value("currentRoundTripTime", 0.0));
 			// Clamp to sane ranges
 			if (v.availableIncomingBitrate < 0.0) v.availableIncomingBitrate = 0.0;
 			if (v.currentRoundTripTime < 0.0) v.currentRoundTripTime = 0.0;
@@ -454,6 +469,8 @@ ParseResult<DownlinkSnapshot> QosValidator::ParseDownlinkSnapshot(const json& pa
 			result.error = "too many subscriptions";
 			return result;
 		}
+		std::unordered_set<std::string> seenConsumerIds;
+		seenConsumerIds.reserve(payload["subscriptions"].size());
 		for (auto& s : payload["subscriptions"]) {
 			if (!s.is_object()) {
 				result.error = "subscription entry must be object";
@@ -462,13 +479,22 @@ ParseResult<DownlinkSnapshot> QosValidator::ParseDownlinkSnapshot(const json& pa
 			DownlinkSubscription sub;
 			sub.consumerId = s.value("consumerId", "");
 			sub.producerId = s.value("producerId", "");
+			sub.kind = s.value("kind", "video");
 			if (sub.consumerId.empty() || sub.producerId.empty()) {
 				result.error = "subscription consumerId and producerId are required";
+				return result;
+			}
+			if (sub.kind != "audio" && sub.kind != "video") {
+				result.error = "subscription kind must be audio or video";
 				return result;
 			}
 			if (sub.consumerId.size() > kDownlinkMaxIdLength ||
 				sub.producerId.size() > kDownlinkMaxIdLength) {
 				result.error = "subscription id too long";
+				return result;
+			}
+			if (!seenConsumerIds.insert(sub.consumerId).second) {
+				result.error = "duplicate subscription consumerId";
 				return result;
 			}
 			sub.visible = s.value("visible", true);
@@ -478,11 +504,13 @@ ParseResult<DownlinkSnapshot> QosValidator::ParseDownlinkSnapshot(const json& pa
 			sub.targetWidth = s.value("targetWidth", 0u);
 			sub.targetHeight = s.value("targetHeight", 0u);
 			sub.packetsLost = s.value("packetsLost", 0u);
-			sub.jitter = std::max(0.0, s.value("jitter", 0.0));
-			sub.framesPerSecond = std::max(0.0, s.value("framesPerSecond", 0.0));
+			sub.jitter = std::max(0.0, sanitizeFinite(s.value("jitter", 0.0)));
+			sub.framesPerSecond = std::max(0.0,
+				sanitizeFinite(s.value("framesPerSecond", 0.0)));
 			sub.frameWidth = s.value("frameWidth", 0u);
 			sub.frameHeight = s.value("frameHeight", 0u);
-			sub.freezeRate = std::clamp(s.value("freezeRate", 0.0), 0.0, 1.0);
+			sub.freezeRate = std::clamp(
+				sanitizeFinite(s.value("freezeRate", 0.0)), 0.0, 1.0);
 			v.subscriptions.push_back(std::move(sub));
 		}
 		v.raw = payload;

@@ -26,6 +26,10 @@ class DownlinkHints {
     set(consumerId, hint) {
         this._hints.set(consumerId, {
             producerId: hint.producerId || '',
+            kind: hint.kind === 'audio' ? 'audio' : 'video',
+            ssrc: Number.isFinite(hint.ssrc) ? hint.ssrc : undefined,
+            mid: typeof hint.mid === 'string' ? hint.mid : undefined,
+            trackIdentifier: typeof hint.trackIdentifier === 'string' ? hint.trackIdentifier : undefined,
             visible: hint.visible !== false,
             pinned: !!hint.pinned,
             activeSpeaker: !!hint.activeSpeaker,
@@ -42,16 +46,19 @@ class DownlinkHints {
     setVisible(consumerId, visible) {
         const h = this._hints.get(consumerId);
         if (h) h.visible = !!visible;
+        else console.warn(`[DownlinkHints] setVisible ignored for unknown consumerId=${consumerId}`);
     }
 
     setPinned(consumerId, pinned) {
         const h = this._hints.get(consumerId);
         if (h) h.pinned = !!pinned;
+        else console.warn(`[DownlinkHints] setPinned ignored for unknown consumerId=${consumerId}`);
     }
 
     setActiveSpeaker(consumerId, active) {
         const h = this._hints.get(consumerId);
         if (h) h.activeSpeaker = !!active;
+        else console.warn(`[DownlinkHints] setActiveSpeaker ignored for unknown consumerId=${consumerId}`);
     }
 
     setTargetSize(consumerId, width, height) {
@@ -60,6 +67,7 @@ class DownlinkHints {
             h.targetWidth = width || 0;
             h.targetHeight = height || 0;
         }
+        else console.warn(`[DownlinkHints] setTargetSize ignored for unknown consumerId=${consumerId}`);
     }
 
     get(consumerId) {

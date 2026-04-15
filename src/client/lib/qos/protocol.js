@@ -300,6 +300,9 @@ function parseQosOverride(payload) {
     const disableRecovery = optionalBoolean(obj, 'disableRecovery', 'qosOverride');
     const pauseUpstream = optionalBoolean(obj, 'pauseUpstream', 'qosOverride');
     const resumeUpstream = optionalBoolean(obj, 'resumeUpstream', 'qosOverride');
+    if (pauseUpstream === true && resumeUpstream === true) {
+        throw new TypeError('qosOverride.pauseUpstream and qosOverride.resumeUpstream are mutually exclusive');
+    }
     const ttlMs = asNonNegativeInt(obj.ttlMs, 'qosOverride.ttlMs');
     const reason = asNonEmptyString(obj.reason, 'qosOverride.reason');
     return {

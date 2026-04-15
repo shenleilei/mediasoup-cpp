@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include "qos/DownlinkQosRegistry.h"
 #include "qos/QosRegistry.h"
 #include "qos/QosValidator.h"
 #include <fstream>
@@ -20,6 +21,15 @@ qos::ClientQosSnapshot ValidSnapshot() {
 	auto parsed = qos::QosValidator::ParseClientSnapshot(LoadFixture("valid_client_v1"));
 	EXPECT_TRUE(parsed.ok) << parsed.error;
 	return parsed.value;
+}
+
+qos::DownlinkSnapshot ValidDownlinkSnapshot(uint64_t seq = 1, int64_t tsMs = 1000) {
+	qos::DownlinkSnapshot snapshot;
+	snapshot.schema = "mediasoup.qos.downlink.client.v1";
+	snapshot.seq = seq;
+	snapshot.tsMs = tsMs;
+	snapshot.subscriberPeerId = "alice";
+	return snapshot;
 }
 
 } // namespace
@@ -140,4 +150,41 @@ TEST(QosRegistryTest, ErasePeerAndRoomWork) {
 	registry.EraseRoom("room1");
 	EXPECT_EQ(registry.Get("room1", "bob"), nullptr);
 	EXPECT_NE(registry.Get("room2", "carol"), nullptr);
+}
+
+TEST(DownlinkQosRegistryTest, SeqResetFromHighValueAccepted) {
+	qos::DownlinkQosRegistry registry;
+	auto high = ValidDownlinkSnapshot(5000);
+	auto reset = ValidDownlinkSnapshot(1);
+
+	EXPECT_TRUE(registry.Upsert("room1", "alice", high, 1000));
+	EXPECT_TRUE(registry.Upsert("room1", "alice", reset, 2000));
+
+	auto* entry = registry.Get("room1", "alice");
+	ASSERT_NE(entry, nullptr);
+	EXPECT_EQ(entry->snapshot.seq, 1u);
+}
+
+TEST(DownlinkQosRegistryTest, SeqWrapNearMaxAccepted) {
+	qos::DownlinkQosRegistry registry;
+	auto high = ValidDownlinkSnapshot(qos::kDownlinkMaxSeq - 1);
+	auto wrapped = ValidDownlinkSnapshot(0);
+
+	EXPECT_TRUE(registry.Upsert("room1", "alice", high, 1000));
+	EXPECT_TRUE(registry.Upsert("room1", "alice", wrapped, 2000));
+
+	auto* entry = registry.Get("room1", "alice");
+	ASSERT_NE(entry, nullptr);
+	EXPECT_EQ(entry->snapshot.seq, 0u);
+}
+
+TEST(DownlinkQosRegistryTest, RejectsRegressedTsOnAdvancingSeq) {
+	qos::DownlinkQosRegistry registry;
+	auto first = ValidDownlinkSnapshot(1, 2000);
+	auto regressedTs = ValidDownlinkSnapshot(2, 500);
+	std::string reason;
+
+	EXPECT_TRUE(registry.Upsert("room1", "alice", first, 1000));
+	EXPECT_FALSE(registry.Upsert("room1", "alice", regressedTs, 2000, &reason));
+	EXPECT_EQ(reason, "stale-ts");
 }
