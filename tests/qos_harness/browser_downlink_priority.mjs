@@ -25,9 +25,21 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..', '..');
 const chromiumPath = '/usr/lib64/chromium-browser/headless_shell';
-const signalingPort = 14015;
+let signalingPort = 0;
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function allocatePort() {
+  const net = await import('node:net');
+  return await new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address();
+      server.close(error => error ? reject(error) : resolve(port));
+    });
+  });
+}
 
 async function withTimeout(label, promise, timeoutMs = 30000) {
   let timer = null;
@@ -225,6 +237,7 @@ async function run() {
   let sfu, browser;
 
   try {
+    signalingPort = await allocatePort();
     sfu = startSfu();
     await waitForPort(signalingPort);
     console.log(`[info] SFU listening on ${signalingPort}`);

@@ -1,6 +1,32 @@
 #include "qos/DownlinkAllocator.h"
 
 namespace mediasoup::qos {
+namespace {
+
+void ApplyActionToLastState(const DownlinkAction& action,
+	std::unordered_map<std::string, ConsumerLastState>& lastState)
+{
+	auto& state = lastState[action.consumerId];
+	switch (action.type) {
+	case DownlinkAction::Type::kPause:
+		state.paused = true;
+		break;
+	case DownlinkAction::Type::kResume:
+		state.paused = false;
+		break;
+	case DownlinkAction::Type::kSetLayers:
+		state.spatialLayer = action.spatialLayer;
+		state.temporalLayer = action.temporalLayer;
+		break;
+	case DownlinkAction::Type::kSetPriority:
+		state.priority = action.priority;
+		break;
+	case DownlinkAction::Type::kNone:
+		break;
+	}
+}
+
+} // namespace
 
 uint8_t DownlinkAllocator::ComputePriority(const DownlinkSubscription& sub) {
 	if (!sub.visible) return kPriorityHidden;
@@ -24,6 +50,14 @@ std::vector<DownlinkAction> DownlinkAllocator::Compute(
 		if (!sub.visible) {
 			if (!wasPaused) {
 				actions.push_back({DownlinkAction::Type::kPause, sub.consumerId, 0, 0, false, priority});
+			}
+			actions.push_back({DownlinkAction::Type::kSetPriority, sub.consumerId, 0, 0, false, priority});
+			continue;
+		}
+
+		if (sub.kind != "video") {
+			if (wasPaused) {
+				actions.push_back({DownlinkAction::Type::kResume, sub.consumerId, 0, 0, false, priority});
 			}
 			actions.push_back({DownlinkAction::Type::kSetPriority, sub.consumerId, 0, 0, false, priority});
 			continue;
@@ -63,6 +97,14 @@ std::vector<DownlinkAction> DownlinkAllocator::ComputeDiff(
 	auto fullActions = Compute(subscriptions, currentlyPaused, degradeLevel);
 	std::vector<DownlinkAction> filtered;
 	filtered.reserve(fullActions.size());
+	std::unordered_map<std::string, bool> actualPaused;
+	actualPaused.reserve(subscriptions.size());
+	for (size_t i = 0; i < subscriptions.size(); ++i) {
+		actualPaused[subscriptions[i].consumerId] =
+			(i < currentlyPaused.size()) ? currentlyPaused[i] : false;
+		auto& state = lastState[subscriptions[i].consumerId];
+		state.paused = actualPaused[subscriptions[i].consumerId];
+	}
 
 	for (auto& action : fullActions) {
 		auto it = lastState.find(action.consumerId);
@@ -70,10 +112,10 @@ std::vector<DownlinkAction> DownlinkAllocator::ComputeDiff(
 			auto& prev = it->second;
 			switch (action.type) {
 			case DownlinkAction::Type::kPause:
-				if (prev.paused) continue; // already paused
+				if (actualPaused[action.consumerId]) continue; // already paused
 				break;
 			case DownlinkAction::Type::kResume:
-				if (!prev.paused) continue; // already resumed
+				if (!actualPaused[action.consumerId]) continue; // already resumed
 				break;
 			case DownlinkAction::Type::kSetLayers:
 				if (!action.requestKeyFrame &&
@@ -89,38 +131,7 @@ std::vector<DownlinkAction> DownlinkAllocator::ComputeDiff(
 			}
 		}
 		filtered.push_back(action);
-	}
-
-	// Update lastState to reflect the full desired state (not just what was emitted).
-	for (size_t i = 0; i < subscriptions.size(); ++i) {
-		const auto& sub = subscriptions[i];
-		uint8_t priority = ComputePriority(sub);
-		auto& st = lastState[sub.consumerId];
-		st.priority = priority;
-		if (!sub.visible) {
-			st.paused = true;
-			st.spatialLayer = 0;
-			st.temporalLayer = 0;
-		} else {
-			bool wasPaused = (i < currentlyPaused.size()) ? currentlyPaused[i] : false;
-			st.paused = false;
-
-			bool isLarge = sub.pinned || sub.isScreenShare || sub.targetWidth > kSmallTileMaxWidth;
-			uint8_t spatial = isLarge ? 2 : 0;
-			uint8_t temporal = isLarge ? 2 : 0;
-			if (degradeLevel >= 3) {
-				spatial = 0; temporal = 0;
-			} else if (degradeLevel == 2) {
-				spatial = std::min(spatial, uint8_t(1));
-				temporal = std::min(temporal, uint8_t(1));
-			} else if (degradeLevel == 1) {
-				spatial = std::min(spatial, uint8_t(1));
-				temporal = std::min(temporal, uint8_t(2));
-			}
-			st.spatialLayer = spatial;
-			st.temporalLayer = temporal;
-			(void)wasPaused; // used only by Compute for resume logic
-		}
+		ApplyActionToLastState(action, lastState);
 	}
 
 	return filtered;
@@ -135,6 +146,10 @@ std::vector<DownlinkAction> DownlinkAllocator::ComputeBudgetDiff(
 
 	// Build desired end-state per consumer from the plan
 	std::unordered_map<std::string, ConsumerLastState> desired;
+	std::unordered_map<std::string, bool> initiallyPaused;
+	initiallyPaused.reserve(lastState.size());
+	for (const auto& [consumerId, state] : lastState)
+		initiallyPaused[consumerId] = state.paused;
 	for (auto& a : planActions) {
 		auto& d = desired[a.consumerId];
 		switch (a.type) {
@@ -160,7 +175,7 @@ std::vector<DownlinkAction> DownlinkAllocator::ComputeBudgetDiff(
 			auto desiredIt = desired.find(a.consumerId);
 			bool resumingFromPause =
 				desiredIt != desired.end() &&
-				prev.paused &&
+				initiallyPaused[a.consumerId] &&
 				!desiredIt->second.paused;
 
 			if (action.type == DownlinkAction::Type::kSetLayers && resumingFromPause)
@@ -181,11 +196,8 @@ std::vector<DownlinkAction> DownlinkAllocator::ComputeBudgetDiff(
 			}
 		}
 		filtered.push_back(std::move(action));
+		ApplyActionToLastState(filtered.back(), lastState);
 	}
-
-	// Update lastState to desired
-	for (auto& [cid, d] : desired)
-		lastState[cid] = d;
 
 	return filtered;
 }

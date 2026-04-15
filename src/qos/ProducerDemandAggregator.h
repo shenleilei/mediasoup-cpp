@@ -8,6 +8,8 @@
 
 namespace mediasoup::qos {
 
+constexpr int64_t kUnsetDemandTimeMs = -1;
+
 enum class ProducerSupplyState {
 	kActive,
 	kLowClamped,
@@ -27,11 +29,11 @@ struct ProducerDemandState {
 	int64_t holdUntilMs{ 0 };
 	// v3 state machine fields
 	ProducerSupplyState supplyState{ ProducerSupplyState::kActive };
-	int64_t lastNonZeroDemandAtMs{ 0 };
-	int64_t pauseEligibleAtMs{ 0 };
-	int64_t resumeEligibleAtMs{ 0 };
-	int64_t lastPauseSentAtMs{ 0 };
-	int64_t lastResumeSentAtMs{ 0 };
+	int64_t lastNonZeroDemandAtMs{ kUnsetDemandTimeMs };
+	int64_t pauseEligibleAtMs{ kUnsetDemandTimeMs };
+	int64_t resumeEligibleAtMs{ kUnsetDemandTimeMs };
+	int64_t lastPauseSentAtMs{ kUnsetDemandTimeMs };
+	int64_t lastResumeSentAtMs{ kUnsetDemandTimeMs };
 };
 
 class ProducerDemandAggregator {

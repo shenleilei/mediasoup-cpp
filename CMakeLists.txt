@@ -102,14 +102,31 @@ if(BUILD_TESTS)
     add_subdirectory(third_party/googletest EXCLUDE_FROM_ALL)
     enable_testing()
 
-    file(GLOB TEST_SOURCES tests/test_*.cpp)
-    list(FILTER TEST_SOURCES EXCLUDE REGEX "test_integration\\.cpp$")
-    list(FILTER TEST_SOURCES EXCLUDE REGEX "test_multi_sfu_topology\\.cpp$")
-    list(FILTER TEST_SOURCES EXCLUDE REGEX "test_e2e_pubsub\\.cpp$")
-    list(FILTER TEST_SOURCES EXCLUDE REGEX "test_qos_integration\\.cpp$")
-    list(FILTER TEST_SOURCES EXCLUDE REGEX "test_stability_integration\\.cpp$")
-    list(FILTER TEST_SOURCES EXCLUDE REGEX "test_multinode_integration\\.cpp$")
-    list(FILTER TEST_SOURCES EXCLUDE REGEX "test_review_fixes_integration\\.cpp$")
+    set(TEST_SOURCES
+        tests/test_downlink_allocator.cpp
+        tests/test_downlink_health.cpp
+        tests/test_downlink_v2.cpp
+        tests/test_geo_db_resolver.cpp
+        tests/test_geo_router.cpp
+        tests/test_multinode.cpp
+        tests/test_ortc.cpp
+        tests/test_qos_accuracy.cpp
+        tests/test_qos_aggregator.cpp
+        tests/test_qos_override.cpp
+        tests/test_qos_protocol.cpp
+        tests/test_qos_registry.cpp
+        tests/test_qos_room_aggregator.cpp
+        tests/test_qos_unit.cpp
+        tests/test_qos_validator.cpp
+        tests/test_request_timeout.cpp
+        tests/test_review_fixes.cpp
+        tests/test_room.cpp
+        tests/test_rtp_types.cpp
+        tests/test_stability.cpp
+        tests/test_supported_capabilities.cpp
+        tests/test_utils.cpp
+        tests/test_worker_queue.cpp
+    )
     add_executable(mediasoup_tests ${TEST_SOURCES})
     target_include_directories(mediasoup_tests PRIVATE
         ${CMAKE_SOURCE_DIR}/src

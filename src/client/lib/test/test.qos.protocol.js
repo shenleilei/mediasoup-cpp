@@ -25,12 +25,13 @@ var __importStar = (this && this.__importStar) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const fs = __importStar(require("node:fs"));
 const path = __importStar(require("node:path"));
+const downlinkProtocol = __importStar(require("../qos/downlinkProtocol"));
 const protocol = __importStar(require("../qos/protocol"));
 const profiles = __importStar(require("../qos/profiles"));
 const clock = __importStar(require("../qos/clock"));
 const trace = __importStar(require("../qos/trace"));
 function loadFixture(name) {
-    const fixturePath = path.join(__dirname, 'fixtures', 'qos_protocol', `${name}.json`);
+    const fixturePath = path.resolve(__dirname, '../../../../tests/fixtures/qos_protocol', `${name}.json`);
     return JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
 }
 function createTraceBuffer(capacity) {
@@ -80,6 +81,33 @@ test('qos protocol parses and validates valid policy and override fixtures', () 
     expect(parsedPolicy.sampleIntervalMs).toBe(1000);
     expect(parsedOverride.schema).toBe('mediasoup.qos.override.v1');
     expect(parsedOverride.maxLevelClamp).toBe(2);
+});
+test('qos protocol rejects mutually exclusive pause and resume override flags', () => {
+    const override = loadFixture('valid_override_v1');
+    override.pauseUpstream = true;
+    override.resumeUpstream = true;
+    expect(() => protocol.parseQosOverride(override)).toThrow(/mutually exclusive/);
+});
+test('downlink protocol normalizes legacy schema without mutating payload', () => {
+    const payload = {
+        schema: downlinkProtocol.DOWNLINK_SCHEMA_V1_LEGACY,
+        seq: 42,
+        subscriberPeerId: 'alice',
+        tsMs: 123,
+        subscriptions: [],
+    };
+    const parsed = downlinkProtocol.parseDownlinkSnapshot(payload);
+    expect(parsed.schema).toBe(downlinkProtocol.DOWNLINK_SCHEMA_V1);
+    expect(payload.schema).toBe(downlinkProtocol.DOWNLINK_SCHEMA_V1_LEGACY);
+});
+test('downlink protocol rejects unsafe seq values', () => {
+    expect(() => downlinkProtocol.parseDownlinkSnapshot({
+        schema: downlinkProtocol.DOWNLINK_SCHEMA_V1,
+        seq: Number.MAX_SAFE_INTEGER + 1,
+        subscriberPeerId: 'alice',
+        tsMs: 123,
+        subscriptions: [],
+    })).toThrow(/safe integer/);
 });
 test('qos profiles expose source-specific defaults and resolve helper', () => {
     expect(typeof profiles.getDefaultCameraProfile).toBe('function');

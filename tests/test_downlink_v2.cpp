@@ -3,6 +3,7 @@
 #include "qos/ProducerDemandAggregator.h"
 #include "qos/PublisherSupplyController.h"
 #include "qos/RoomDownlinkPlanner.h"
+#include <cstdlib>
 
 using namespace mediasoup::qos;
 
@@ -32,6 +33,36 @@ static DownlinkSnapshot MakeSnapshot(const std::string& peerId,
 	snap.subscriptions = std::move(subs);
 	return snap;
 }
+
+class ScopedEnvVar {
+public:
+	ScopedEnvVar(const char* name, const char* value) : name_(name ? name : "")
+	{
+		const char* current = std::getenv(name_.c_str());
+		if (current) {
+			hadValue_ = true;
+			oldValue_ = current;
+		}
+
+		if (value)
+			::setenv(name_.c_str(), value, 1);
+		else
+			::unsetenv(name_.c_str());
+	}
+
+	~ScopedEnvVar()
+	{
+		if (hadValue_)
+			::setenv(name_.c_str(), oldValue_.c_str(), 1);
+		else
+			::unsetenv(name_.c_str());
+	}
+
+private:
+	std::string name_;
+	std::string oldValue_;
+	bool hadValue_{ false };
+};
 
 // ── SubscriberBudgetAllocator tests ──
 
@@ -117,6 +148,50 @@ TEST(SubscriberBudgetAllocatorTest, DegradeLevelStillCapsBudgetAllocator) {
 			EXPECT_EQ(a.temporalLayer, 0);
 		}
 	}
+}
+
+TEST(SubscriberBudgetAllocatorTest, CameraBaseBitrateOverrideAffectsAdmission) {
+	ScopedEnvVar bitrateOverride("MEDIASOUP_QOS_BASE_BITRATE_BPS", "500000");
+	SubscriberBudgetAllocator alloc;
+	auto snap = MakeSnapshot("sub1", 200'000.0, {
+		MakeSub("c1", "p1", true),
+		MakeSub("c2", "p2", true),
+	});
+
+	auto plan = alloc.Allocate(snap, 0);
+	int resumed = 0;
+	int paused = 0;
+	for (const auto& action : plan.actions) {
+		if (action.type == DownlinkAction::Type::kResume)
+			++resumed;
+		else if (action.type == DownlinkAction::Type::kPause)
+			++paused;
+	}
+
+	EXPECT_EQ(resumed, 1);
+	EXPECT_EQ(paused, 1);
+}
+
+TEST(SubscriberBudgetAllocatorTest, ScreenShareBaseBitrateOverrideCanForceClampToBase) {
+	ScopedEnvVar bitrateOverride("MEDIASOUP_QOS_SCREENSHARE_BASE_BITRATE_BPS", "1000000");
+	SubscriberBudgetAllocator alloc;
+	auto snap = MakeSnapshot("sub1", 500'000.0, {
+		MakeSub("screen", "p1", true, false, true),
+	});
+
+	auto plan = alloc.Allocate(snap, 0);
+	uint8_t spatial = 255;
+	uint8_t temporal = 255;
+	for (const auto& action : plan.actions) {
+		if (action.type == DownlinkAction::Type::kSetLayers) {
+			spatial = action.spatialLayer;
+			temporal = action.temporalLayer;
+		}
+	}
+
+	ASSERT_NE(spatial, 255);
+	EXPECT_EQ(spatial, 0);
+	EXPECT_EQ(temporal, 0);
 }
 
 // ── ProducerDemandAggregator tests ──

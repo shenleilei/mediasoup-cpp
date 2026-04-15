@@ -61,9 +61,13 @@ class DownlinkReporter {
             for (const [cid, hint] of this._hints.getAll()) {
                 this._sampler.setHints(cid, hint);
             }
+            const nextSeq = this._seq >= downlinkProtocol_1.DOWNLINK_MAX_SEQ
+                ? 0
+                : this._seq + 1;
+            this._seq = nextSeq;
             const { transport, subscriptions } = await this._sampler.sample(this._peerId);
             const snapshot = (0, downlinkProtocol_1.serializeDownlinkSnapshot)({
-                seq: this._seq++,
+                seq: nextSeq,
                 subscriberPeerId: this._peerId,
                 transport,
                 subscriptions,

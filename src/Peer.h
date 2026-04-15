@@ -21,8 +21,12 @@ struct Peer {
 	std::shared_ptr<WebRtcTransport> recvTransport;
 	std::unordered_map<std::string, std::shared_ptr<Producer>> producers;
 	std::unordered_map<std::string, std::shared_ptr<Consumer>> consumers;
+	bool closed = false;
 
 	void close() {
+		if (closed) return;
+		closed = true;
+
 		// Close transports first so mediasoup-worker tears down attached producers/consumers
 		// in one path, which avoids double-close noise during disconnect cleanup.
 		if (sendTransport) { sendTransport->close(); sendTransport.reset(); }

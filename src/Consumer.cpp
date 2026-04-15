@@ -56,16 +56,22 @@ void Consumer::close() {
 	if (closed_) return;
 	closed_ = true;
 
-	channel_->emitter().off(id_);
+	if (channel_) {
+		channel_->emitter().off(id_);
+	}
 
 	try {
-		channel_->requestBuild(FBS::Request::Method::TRANSPORT_CLOSE_CONSUMER,
-			FBS::Request::Body::Transport_CloseConsumerRequest,
-			[this](flatbuffers::FlatBufferBuilder& builder) {
-				auto idOff = builder.CreateString(id_);
-				auto reqOff = FBS::Transport::CreateCloseConsumerRequest(builder, idOff);
-				return reqOff.Union();
-			}, transportId_);
+		if (channel_) {
+			channel_->requestBuild(FBS::Request::Method::TRANSPORT_CLOSE_CONSUMER,
+				FBS::Request::Body::Transport_CloseConsumerRequest,
+				[this](flatbuffers::FlatBufferBuilder& builder) {
+					auto idOff = builder.CreateString(id_);
+					auto reqOff = FBS::Transport::CreateCloseConsumerRequest(builder, idOff);
+					return reqOff.Union();
+				}, transportId_);
+		} else {
+			spdlog::warn("Consumer::close() skipped close request due to null channel [id:{}]", id_);
+		}
 	} catch (const std::exception& e) {
 		spdlog::warn("Consumer::close() request failed [id:{}]: {}", id_, e.what());
 	} catch (...) {
@@ -78,7 +84,9 @@ void Consumer::close() {
 void Consumer::transportClosed() {
 	if (closed_) return;
 	closed_ = true;
-	channel_->emitter().off(id_);
+	if (channel_) {
+		channel_->emitter().off(id_);
+	}
 	emitter_.emit("transportclose");
 }
 

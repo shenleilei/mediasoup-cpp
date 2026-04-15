@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include "qos/QosValidator.h"
 #include <fstream>
+#include <limits>
 
 using namespace mediasoup;
 using json = nlohmann::json;
@@ -58,6 +59,16 @@ TEST(QosValidatorTest, RejectsInvalidPauseUpstreamType) {
 	auto parsed = qos::QosValidator::ParseOverride(fixture);
 	EXPECT_FALSE(parsed.ok);
 	EXPECT_NE(parsed.error.find("pauseUpstream"), std::string::npos);
+}
+
+TEST(QosValidatorTest, RejectsMutuallyExclusivePauseAndResumeUpstream) {
+	auto fixture = LoadFixture("valid_override_v1");
+	fixture["pauseUpstream"] = true;
+	fixture["resumeUpstream"] = true;
+
+	auto parsed = qos::QosValidator::ParseOverride(fixture);
+	EXPECT_FALSE(parsed.ok);
+	EXPECT_NE(parsed.error.find("mutually exclusive"), std::string::npos);
 }
 
 // ── Downlink snapshot validation tests ──
@@ -138,12 +149,49 @@ TEST(QosValidatorTest, DownlinkRejectsTooManySubscriptions) {
 	EXPECT_NE(parsed.error.find("too many"), std::string::npos);
 }
 
+TEST(QosValidatorTest, DownlinkRejectsDuplicateConsumerIds) {
+	auto snap = MakeValidDownlinkSnapshot();
+	snap["subscriptions"].push_back({
+		{"consumerId", "c1"},
+		{"producerId", "p2"},
+		{"visible", true}
+	});
+	auto parsed = qos::QosValidator::ParseDownlinkSnapshot(snap);
+	EXPECT_FALSE(parsed.ok);
+	EXPECT_NE(parsed.error.find("duplicate"), std::string::npos);
+}
+
+TEST(QosValidatorTest, DownlinkRejectsInvalidSubscriptionKind) {
+	auto snap = MakeValidDownlinkSnapshot();
+	snap["subscriptions"][0]["kind"] = "data";
+	auto parsed = qos::QosValidator::ParseDownlinkSnapshot(snap);
+	EXPECT_FALSE(parsed.ok);
+	EXPECT_NE(parsed.error.find("kind"), std::string::npos);
+}
+
 TEST(QosValidatorTest, DownlinkClampsNegativeRtt) {
 	auto snap = MakeValidDownlinkSnapshot();
 	snap["transport"]["currentRoundTripTime"] = -1.0;
 	auto parsed = qos::QosValidator::ParseDownlinkSnapshot(snap);
 	EXPECT_TRUE(parsed.ok) << parsed.error;
 	EXPECT_GE(parsed.value.currentRoundTripTime, 0.0);
+}
+
+TEST(QosValidatorTest, DownlinkSanitizesNonFiniteMetrics) {
+	auto snap = MakeValidDownlinkSnapshot();
+	snap["transport"]["availableIncomingBitrate"] = std::numeric_limits<double>::infinity();
+	snap["transport"]["currentRoundTripTime"] = -std::numeric_limits<double>::infinity();
+	snap["subscriptions"][0]["jitter"] = std::numeric_limits<double>::quiet_NaN();
+	snap["subscriptions"][0]["framesPerSecond"] = std::numeric_limits<double>::infinity();
+	snap["subscriptions"][0]["freezeRate"] = std::numeric_limits<double>::quiet_NaN();
+
+	auto parsed = qos::QosValidator::ParseDownlinkSnapshot(snap);
+	EXPECT_TRUE(parsed.ok) << parsed.error;
+	EXPECT_EQ(parsed.value.availableIncomingBitrate, 0.0);
+	EXPECT_EQ(parsed.value.currentRoundTripTime, 0.0);
+	EXPECT_EQ(parsed.value.subscriptions[0].jitter, 0.0);
+	EXPECT_EQ(parsed.value.subscriptions[0].framesPerSecond, 0.0);
+	EXPECT_EQ(parsed.value.subscriptions[0].freezeRate, 0.0);
 }
 
 TEST(QosValidatorTest, DownlinkAcceptsLegacySchema) {

@@ -11,7 +11,7 @@ DownlinkHealth DownlinkHealthMonitor::classify(const DownlinkSnapshot& snapshot)
 		worstFreeze = std::max(worstFreeze, sub.freezeRate);
 		worstJitter = std::max(worstJitter, sub.jitter);
 		if (sub.framesPerSecond > 0) lowestFps = std::min(lowestFps, sub.framesPerSecond);
-		// Normalize packetsLost as a rate approximation (per snapshot interval)
+		// packetsLost is reported as an interval loss percentage in [0, 100].
 		double lossRate = sub.packetsLost > 0 ? std::min(1.0, sub.packetsLost / 100.0) : 0;
 		worstLoss = std::max(worstLoss, lossRate);
 	}
@@ -62,7 +62,7 @@ bool DownlinkHealthMonitor::update(const DownlinkSnapshot& snapshot) {
 	case DownlinkHealth::kCongested:
 		if (observed == DownlinkHealth::kCongested) {
 			degradeLevel_ = std::min(degradeLevel_ + 1, kMaxDegradeLevel);
-		} else if (observed != DownlinkHealth::kCongested) {
+		} else {
 			state_ = DownlinkHealth::kRecovering;
 			stableCount_ = 1;
 		}

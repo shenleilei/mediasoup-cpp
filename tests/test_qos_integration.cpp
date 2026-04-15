@@ -1698,6 +1698,52 @@ TEST_F(QosIntegrationTest, DownlinkClientStatsRejectsMalformedPayload) {
 	EXPECT_FALSE(resp.value("ok", true));
 }
 
+TEST_F(QosIntegrationTest, DownlinkClientStatsDropsInconsistentSubscriptions) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoom(testRoom_, "bob");
+
+	ASSERT_TRUE(bob.ws->request("createWebRtcTransport", {{"producing", false}, {"consuming", true}}).value("ok", false));
+	const std::string producerId = produceVideo(alice, 66660170);
+	auto notif = bob.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(notif.empty());
+	const std::string consumerId = notif["data"]["id"];
+
+	auto payload = makeDownlinkSnapshot(
+		1, "bob", consumerId, "wrong-producer-id", 1'000'000.0, false, false, 640, 360);
+	auto resp = bob.ws->request("downlinkClientStats", payload);
+	ASSERT_TRUE(resp.value("ok", false)) << resp.dump();
+	usleep(500000);
+
+	auto state = bob.ws->request("getConsumerState", {{"consumerId", consumerId}});
+	ASSERT_TRUE(state.value("ok", false));
+	EXPECT_FALSE(state["data"]["paused"].get<bool>())
+		<< "invalid consumer/producer mapping should be ignored";
+
+	auto statsResp = bob.ws->request("getStats", {{"peerId", "bob"}});
+	ASSERT_TRUE(statsResp.value("ok", false)) << statsResp.dump();
+	ASSERT_TRUE(statsResp["data"].contains("downlinkClientStats")) << statsResp.dump();
+	EXPECT_TRUE(statsResp["data"]["downlinkClientStats"]["subscriptions"].empty())
+		<< "inconsistent subscriptions should be filtered before storage";
+}
+
+TEST_F(QosIntegrationTest, DownlinkClientStatsRateLimited) {
+	auto alice = joinRoom(testRoom_, "alice");
+
+	auto payload = makeDownlinkSnapshot(
+		1, "alice", "c1", "p1", 1'000'000.0, true, false, 640, 360);
+	auto req1 = alice.ws->sendRequest("downlinkClientStats", payload);
+
+	payload["seq"] = 2;
+	auto req2 = alice.ws->sendRequest("downlinkClientStats", payload);
+
+	auto resp1 = alice.ws->waitResponse(req1);
+	ASSERT_TRUE(resp1.value("ok", false)) << resp1.dump();
+
+	auto resp2 = alice.ws->waitResponse(req2);
+	EXPECT_FALSE(resp2.value("ok", true));
+	EXPECT_NE(resp2.value("error", "").find("rate limited"), std::string::npos);
+}
+
 TEST_F(QosIntegrationTest, DownlinkClientStatsAcceptsLegacySchema) {
 	auto alice = joinRoom(testRoom_, "alice");
 
@@ -1739,6 +1785,43 @@ TEST_F(QosIntegrationTest, DownlinkClientStatsRejectsStaleSeq) {
 	auto resp2 = alice.ws->request("downlinkClientStats", payload);
 	// Structurally valid so parse passes; stale seq is silently dropped inside the registry
 	EXPECT_TRUE(resp2.value("ok", false));
+}
+
+TEST_F(QosIntegrationTest, DownlinkClientStatsAcceptsSeqResetFromHighValue) {
+	auto alice = joinRoom(testRoom_, "alice");
+
+	auto payload = makeDownlinkSnapshot(
+		5000, "alice", "c1", "p1", 1'000'000.0, true, false, 640, 360);
+	auto resp1 = alice.ws->request("downlinkClientStats", payload);
+	ASSERT_TRUE(resp1.value("ok", false)) << resp1.dump();
+
+	usleep(150000);
+	payload["seq"] = 1;
+	auto resp2 = alice.ws->request("downlinkClientStats", payload);
+	ASSERT_TRUE(resp2.value("ok", false)) << resp2.dump();
+
+	auto statsResp = alice.ws->request("getStats", {{"peerId", "alice"}});
+	ASSERT_TRUE(statsResp.value("ok", false)) << statsResp.dump();
+	EXPECT_EQ(statsResp["data"]["downlinkClientStats"]["seq"], 1);
+}
+
+TEST_F(QosIntegrationTest, DownlinkClientStatsRejectsRegressedTs) {
+	auto alice = joinRoom(testRoom_, "alice");
+
+	auto payload = makeDownlinkSnapshot(
+		1, "alice", "c1", "p1", 1'000'000.0, true, false, 640, 360);
+	auto resp1 = alice.ws->request("downlinkClientStats", payload);
+	ASSERT_TRUE(resp1.value("ok", false)) << resp1.dump();
+
+	usleep(150000);
+	payload["seq"] = 2;
+	payload["tsMs"] = 1;
+	auto resp2 = alice.ws->request("downlinkClientStats", payload);
+	ASSERT_TRUE(resp2.value("ok", false)) << resp2.dump();
+
+	auto statsResp = alice.ws->request("getStats", {{"peerId", "alice"}});
+	ASSERT_TRUE(statsResp.value("ok", false)) << statsResp.dump();
+	EXPECT_EQ(statsResp["data"]["downlinkClientStats"]["seq"], 1);
 }
 
 // ─── Downlink QoS Phase 4: allocator integration tests ───
@@ -1904,6 +1987,47 @@ TEST_F(QosIntegrationTest, DownlinkLargeSmallGetDifferentLayers) {
 	EXPECT_EQ(state2["data"]["priority"].get<uint8_t>(), 120) << "visible grid priority should be 120";
 }
 
+TEST_F(QosIntegrationTest, DownlinkReconcilesManualConsumerPauseOnNextPlan) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoom(testRoom_, "bob");
+
+	ASSERT_TRUE(bob.ws->request("createWebRtcTransport", {{"producing", false}, {"consuming", true}}).value("ok", false));
+
+	const std::string producerId = produceVideo(alice, 66660150);
+	auto notif = bob.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(notif.empty());
+	const std::string consumerId = notif["data"]["id"];
+
+	auto baseline = makeDownlinkSnapshot(
+		1, "bob", consumerId, producerId, 5'000'000.0, true, true, 1280, 720);
+	ASSERT_TRUE(bob.ws->request("downlinkClientStats", baseline).value("ok", false));
+	usleep(500000);
+
+	auto state0 = bob.ws->request("getConsumerState", {{"consumerId", consumerId}});
+	ASSERT_TRUE(state0.value("ok", false));
+	ASSERT_FALSE(state0["data"]["paused"].get<bool>());
+
+	auto manualPause = bob.ws->request("pauseConsumer", {{"consumerId", consumerId}});
+	ASSERT_TRUE(manualPause.value("ok", false)) << manualPause.dump();
+
+	auto pausedState = bob.ws->request("getConsumerState", {{"consumerId", consumerId}});
+	ASSERT_TRUE(pausedState.value("ok", false));
+	ASSERT_TRUE(pausedState["data"]["paused"].get<bool>());
+
+	usleep(150000);
+	baseline["seq"] = 2;
+	auto resp = bob.ws->request("downlinkClientStats", baseline);
+	ASSERT_TRUE(resp.value("ok", false)) << resp.dump();
+	usleep(500000);
+
+	auto finalState = bob.ws->request("getConsumerState", {{"consumerId", consumerId}});
+	ASSERT_TRUE(finalState.value("ok", false));
+	EXPECT_FALSE(finalState["data"]["paused"].get<bool>())
+		<< "next downlink plan should reconcile manual pause and resume the consumer";
+	EXPECT_EQ(finalState["data"]["preferredSpatialLayer"].get<uint8_t>(), 2);
+	EXPECT_EQ(finalState["data"]["priority"].get<uint8_t>(), 220);
+}
+
 TEST_F(QosIntegrationTest, DownlinkV2LowDemandClampsPublisherAndRecoveryClearsIt) {
 	auto alice = joinRoom(testRoom_, "alice");
 	auto bob = joinRoom(testRoom_, "bob");
@@ -2002,15 +2126,12 @@ TEST_F(QosIntegrationTest, DownlinkStateCleanedOnLeave) {
 	auto aliceSend = alice.ws->request("createWebRtcTransport", {{"producing", true}, {"consuming", false}});
 	ASSERT_TRUE(aliceSend.value("ok", false));
 
-	json rtpParams = {{"codecs", {{{"mimeType", "audio/opus"}, {"clockRate", 48000}, {"channels", 2}, {"payloadType", 100}}}},
-		{"encodings", {{{"ssrc", 77770001}}}}, {"mid", "0"}};
-	auto prod = alice.ws->request("produce", {{"transportId", aliceSend["data"]["id"]}, {"kind", "audio"}, {"rtpParameters", rtpParams}});
-	ASSERT_TRUE(prod.value("ok", false));
+	const std::string producerId = produceVideo(alice, 77770001);
 
 	auto notif = bob.ws->waitNotification("newConsumer", 3000);
 	ASSERT_FALSE(notif.empty());
 	std::string consumerId = notif["data"]["id"];
-	std::string producerId = notif["data"]["producerId"];
+	EXPECT_EQ(notif["data"]["producerId"].get<std::string>(), producerId);
 
 	// Pause via downlink snapshot (hidden)
 	json snap = {{"schema", "mediasoup.qos.downlink.client.v1"}, {"seq", 1}, {"tsMs", 1700000000000},
@@ -2071,15 +2192,12 @@ TEST_F(QosIntegrationTest, DownlinkStateCleanedOnReconnect) {
 	auto aliceSend = alice.ws->request("createWebRtcTransport", {{"producing", true}, {"consuming", false}});
 	ASSERT_TRUE(aliceSend.value("ok", false));
 
-	json rtpParams = {{"codecs", {{{"mimeType", "audio/opus"}, {"clockRate", 48000}, {"channels", 2}, {"payloadType", 100}}}},
-		{"encodings", {{{"ssrc", 77770002}}}}, {"mid", "0"}};
-	auto prod = alice.ws->request("produce", {{"transportId", aliceSend["data"]["id"]}, {"kind", "audio"}, {"rtpParameters", rtpParams}});
-	ASSERT_TRUE(prod.value("ok", false));
+	const std::string producerId = produceVideo(alice, 77770002);
 
 	auto notif = bob.ws->waitNotification("newConsumer", 3000);
 	ASSERT_FALSE(notif.empty());
 	std::string consumerId = notif["data"]["id"];
-	std::string producerId = notif["data"]["producerId"];
+	EXPECT_EQ(notif["data"]["producerId"].get<std::string>(), producerId);
 
 	// Build up downlink state: hidden + seq=10
 	json snap = {{"schema", "mediasoup.qos.downlink.client.v1"}, {"seq", 10}, {"tsMs", 1700000000000},

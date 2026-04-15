@@ -72,6 +72,16 @@ public:
 		, logger_(Logger::Get("WorkerThread"))
 	{
 		try {
+			auto addEpollFd = [this](int fd, uint32_t events) {
+				struct epoll_event ev{};
+				ev.events = events;
+				ev.data.fd = fd;
+				if (::epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd, &ev) != 0) {
+					throw std::runtime_error("epoll_ctl ADD failed for fd " +
+						std::to_string(fd) + ": " + std::string(strerror(errno)));
+				}
+			};
+
 			epollFd_ = ::epoll_create1(0);
 			if (epollFd_ < 0)
 				throw std::runtime_error("epoll_create1 failed: " + std::string(strerror(errno)));
@@ -81,18 +91,12 @@ public:
 				throw std::runtime_error("eventfd failed: " + std::string(strerror(errno)));
 
 			// Register eventfd in epoll (for task queue wakeup)
-			struct epoll_event ev{};
-			ev.events = EPOLLIN;
-			ev.data.fd = eventFd_;
-			::epoll_ctl(epollFd_, EPOLL_CTL_ADD, eventFd_, &ev);
+			addEpollFd(eventFd_, EPOLLIN);
 
 			// Create delayed task timer (timerfd)
 			delayedTimerFd_ = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
 			if (delayedTimerFd_ >= 0) {
-				struct epoll_event dev{};
-				dev.events = EPOLLIN;
-				dev.data.fd = delayedTimerFd_;
-				::epoll_ctl(epollFd_, EPOLL_CTL_ADD, delayedTimerFd_, &dev);
+				addEpollFd(delayedTimerFd_, EPOLLIN);
 			}
 
 			// Create health check timer (timerfd)
@@ -102,12 +106,11 @@ public:
 				its.it_interval.tv_sec = kHealthCheckIntervalMs / 1000;
 				its.it_interval.tv_nsec = (kHealthCheckIntervalMs % 1000) * 1000000L;
 				its.it_value = its.it_interval;
-				::timerfd_settime(healthTimerFd_, 0, &its, nullptr);
+				if (::timerfd_settime(healthTimerFd_, 0, &its, nullptr) != 0)
+					throw std::runtime_error("timerfd_settime failed for health timer: " +
+						std::string(strerror(errno)));
 
-				struct epoll_event tev{};
-				tev.events = EPOLLIN;
-				tev.data.fd = healthTimerFd_;
-				::epoll_ctl(epollFd_, EPOLL_CTL_ADD, healthTimerFd_, &tev);
+				addEpollFd(healthTimerFd_, EPOLLIN);
 			}
 
 			// Create GC timer (idle room cleanup)
@@ -117,12 +120,11 @@ public:
 				its.it_interval.tv_sec = kGcIntervalMs / 1000;
 				its.it_interval.tv_nsec = (kGcIntervalMs % 1000) * 1000000L;
 				its.it_value = its.it_interval;
-				::timerfd_settime(gcTimerFd_, 0, &its, nullptr);
+				if (::timerfd_settime(gcTimerFd_, 0, &its, nullptr) != 0)
+					throw std::runtime_error("timerfd_settime failed for gc timer: " +
+						std::string(strerror(errno)));
 
-				struct epoll_event tev{};
-				tev.events = EPOLLIN;
-				tev.data.fd = gcTimerFd_;
-				::epoll_ctl(epollFd_, EPOLL_CTL_ADD, gcTimerFd_, &tev);
+				addEpollFd(gcTimerFd_, EPOLLIN);
 			}
 		} catch (...) {
 			if (delayedTimerFd_ >= 0) { ::close(delayedTimerFd_); delayedTimerFd_ = -1; }
@@ -254,6 +256,9 @@ public:
 	void setRoomLifecycle(RoomService::RoomLifecycleFn fn) { roomLifecycleFn_ = std::move(fn); }
 	void setRegistryTask(RoomService::RegistryTaskFn fn) { registryTaskFn_ = std::move(fn); }
 	void setTaskPoster(RoomService::TaskPosterFn fn) { taskPosterFn_ = std::move(fn); }
+	void setDownlinkSnapshotApplied(RoomService::DownlinkSnapshotAppliedFn fn) {
+		downlinkSnapshotAppliedFn_ = std::move(fn);
+	}
 
 	/// Called by RoomService to update room count (from within WorkerThread).
 	void updateRoomCount() {
@@ -328,6 +333,8 @@ private:
 		if (roomLifecycleFn_) roomService_->setRoomLifecycle(roomLifecycleFn_);
 		if (registryTaskFn_) roomService_->setRegistryTask(registryTaskFn_);
 		if (taskPosterFn_) roomService_->setTaskPoster(taskPosterFn_);
+		if (downlinkSnapshotAppliedFn_)
+			roomService_->setDownlinkSnapshotApplied(downlinkSnapshotAppliedFn_);
 		roomService_->setDelayedTaskPoster([this](std::function<void()> task, uint32_t delayMs) {
 			postDelayed(std::move(task), delayMs);
 		});
@@ -575,6 +582,7 @@ private:
 	RoomService::RoomLifecycleFn roomLifecycleFn_;
 	RoomService::RegistryTaskFn registryTaskFn_;
 	RoomService::TaskPosterFn taskPosterFn_;
+	RoomService::DownlinkSnapshotAppliedFn downlinkSnapshotAppliedFn_;
 
 	std::shared_ptr<spdlog::logger> logger_;
 };

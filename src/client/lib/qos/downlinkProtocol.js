@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DOWNLINK_SCHEMA_V1 = 'mediasoup.qos.downlink.client.v1';
 exports.DOWNLINK_SCHEMA_V1_LEGACY = 'mediasoup.downlink.v1';
+exports.DOWNLINK_MAX_SEQ = Number.MAX_SAFE_INTEGER;
 exports.DOWNLINK_MAX_SUBSCRIPTIONS = 64;
 exports.serializeDownlinkSnapshot = serializeDownlinkSnapshot;
 exports.parseDownlinkSnapshot = parseDownlinkSnapshot;
@@ -38,6 +39,7 @@ function serializeDownlinkSnapshot({ seq, subscriberPeerId, transport, subscript
         subscriptions: capped.map(s => ({
             consumerId: s.consumerId,
             producerId: s.producerId,
+            kind: s.kind === 'audio' ? 'audio' : 'video',
             visible: !!s.visible,
             pinned: !!s.pinned,
             activeSpeaker: !!s.activeSpeaker,
@@ -67,11 +69,19 @@ function parseDownlinkSnapshot(payload) {
         payload.schema !== exports.DOWNLINK_SCHEMA_V1_LEGACY) {
         throw new TypeError(`unsupported schema: ${payload.schema}`);
     }
-    if (typeof payload.seq !== 'number' || payload.seq < 0) {
-        throw new TypeError('seq must be a non-negative number');
+    if (!Number.isSafeInteger(payload.seq) || payload.seq < 0) {
+        throw new TypeError(`seq must be a non-negative safe integer <= ${exports.DOWNLINK_MAX_SEQ}`);
     }
-    if (payload.schema === exports.DOWNLINK_SCHEMA_V1_LEGACY) {
-        payload.schema = exports.DOWNLINK_SCHEMA_V1;
-    }
-    return payload;
+    return {
+        ...payload,
+        schema: payload.schema === exports.DOWNLINK_SCHEMA_V1_LEGACY
+            ? exports.DOWNLINK_SCHEMA_V1
+            : payload.schema,
+        subscriptions: Array.isArray(payload.subscriptions)
+            ? payload.subscriptions.map(s => ({
+                ...s,
+                kind: s?.kind === 'audio' ? 'audio' : 'video',
+            }))
+            : payload.subscriptions,
+    };
 }

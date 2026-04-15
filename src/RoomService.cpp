@@ -1,6 +1,7 @@
 #include "RoomService.h"
 #include <algorithm>
 #include <dirent.h>
+#include <memory>
 #include <sstream>
 #include <sys/stat.h>
 
@@ -68,6 +69,54 @@ const char* DownlinkHealthToString(qos::DownlinkHealth health)
 	}
 }
 
+using UniqueDir = std::unique_ptr<DIR, decltype(&closedir)>;
+
+UniqueDir OpenDir(const std::string& path)
+{
+	return UniqueDir(opendir(path.c_str()), &closedir);
+}
+
+size_t FilterConsistentDownlinkSubscriptions(
+	const std::shared_ptr<Peer>& peer,
+	qos::DownlinkSnapshot* snapshot)
+{
+	if (!peer || !snapshot) return 0;
+
+	std::vector<qos::DownlinkSubscription> filtered;
+	filtered.reserve(snapshot->subscriptions.size());
+	json filteredRaw = json::array();
+	const bool hasRawSubscriptions =
+		snapshot->raw.is_object() &&
+		snapshot->raw.contains("subscriptions") &&
+		snapshot->raw["subscriptions"].is_array();
+
+	size_t dropped = 0;
+	for (size_t i = 0; i < snapshot->subscriptions.size(); ++i) {
+		const auto& sub = snapshot->subscriptions[i];
+		auto consumerIt = peer->consumers.find(sub.consumerId);
+		if (consumerIt == peer->consumers.end() ||
+			!consumerIt->second ||
+			consumerIt->second->producerId() != sub.producerId) {
+			++dropped;
+			continue;
+		}
+		auto normalizedSub = sub;
+		normalizedSub.kind = consumerIt->second->kind();
+		filtered.push_back(std::move(normalizedSub));
+		if (hasRawSubscriptions && i < snapshot->raw["subscriptions"].size()) {
+			auto raw = snapshot->raw["subscriptions"][i];
+			raw["kind"] = consumerIt->second->kind();
+			filteredRaw.push_back(std::move(raw));
+		}
+	}
+
+	snapshot->subscriptions = std::move(filtered);
+	if (hasRawSubscriptions)
+		snapshot->raw["subscriptions"] = std::move(filteredRaw);
+
+	return dropped;
+}
+
 } // namespace
 
 RoomService::RoomService(RoomManager& roomManager, RoomRegistry* registry,
@@ -132,9 +181,12 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 	bool isReconnect = false;
 	if (oldPeer) {
 		isReconnect = true;
+		const auto oldPeerProducers = oldPeer->producers;
 		// Clean up old peer's producers from router
-		for (auto& [pid, _] : oldPeer->producers)
+		for (auto& [pid, _] : oldPeerProducers)
 			room->router()->removeProducer(pid);
+		cleanupPeerProducerOwnerCache(roomId, oldPeerProducers);
+		cleanupPeerProducerDemandCache(roomId, oldPeerProducers);
 		oldPeer->close();
 
 		// Clean up recorder and client stats for old session
@@ -153,7 +205,6 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 		downlinkQosRegistry_.ErasePeer(roomId, peerId);
 		subscriberControllers_.erase(key);
 		cleanupPeerTrackQosOverrides(roomId, peerId);
-		cleanupPeerProducerDemandCache(roomId, oldPeer->producers);
 		markDownlinkRoomDirty(roomId);
 	}
 
@@ -214,6 +265,7 @@ RoomService::Result RoomService::leave(const std::string& roomId, const std::str
 	// Remove peer's producers from router before closing peer
 	auto peer = room->getPeer(peerId);
 	if (peer) {
+		cleanupPeerProducerOwnerCache(roomId, peer->producers);
 		cleanupPeerProducerDemandCache(roomId, peer->producers);
 		for (auto& [pid, _] : peer->producers)
 			room->router()->removeProducer(pid);
@@ -338,6 +390,7 @@ RoomService::Result RoomService::produce(const std::string& roomId,
 	auto producer = transport->produce(produceOpts);
 	room->router()->addProducer(producer);
 	peer->producers[producer->id()] = producer;
+	indexPeerProducers(roomId, peerId, peer->producers);
 
 	// Server-driven auto-subscribe
 	for (auto& other : room->getOtherPeers(peerId)) {
@@ -655,6 +708,7 @@ void RoomService::cleanupRoomResources(const std::string& roomId) {
 		else ++it;
 	}
 	producerDemandCache_.erase(roomId);
+	producerOwnerPeerIds_.erase(roomId);
 }
 
 // ── disk cleanup ──
@@ -666,10 +720,10 @@ void RoomService::cleanOldRecordings(uint64_t maxBytes) {
 	std::vector<DirEntry> dirs;
 	uint64_t totalSize = 0;
 
-	DIR* dir = opendir(recordDir_.c_str());
+	auto dir = OpenDir(recordDir_);
 	if (!dir) return;
 	struct dirent* ent;
-	while ((ent = readdir(dir))) {
+	while ((ent = readdir(dir.get()))) {
 		if (ent->d_name[0] == '.') continue;
 		std::string subdir = recordDir_ + "/" + ent->d_name;
 		struct stat st;
@@ -677,10 +731,10 @@ void RoomService::cleanOldRecordings(uint64_t maxBytes) {
 
 		uint64_t dirSize = 0;
 		time_t newest = 0;
-		DIR* rdir = opendir(subdir.c_str());
+		auto rdir = OpenDir(subdir);
 		if (!rdir) continue;
 		struct dirent* rent;
-		while ((rent = readdir(rdir))) {
+		while ((rent = readdir(rdir.get()))) {
 			std::string fpath = subdir + "/" + rent->d_name;
 			struct stat fst;
 			if (stat(fpath.c_str(), &fst) == 0 && S_ISREG(fst.st_mode)) {
@@ -688,11 +742,9 @@ void RoomService::cleanOldRecordings(uint64_t maxBytes) {
 				if (fst.st_mtime > newest) newest = fst.st_mtime;
 			}
 		}
-		closedir(rdir);
 		totalSize += dirSize;
 		dirs.push_back({subdir, newest, dirSize});
 	}
-	closedir(dir);
 
 	if (totalSize <= maxBytes) return;
 
@@ -707,12 +759,11 @@ void RoomService::cleanOldRecordings(uint64_t maxBytes) {
 			if (key.compare(0, prefix.size(), prefix) == 0) { active = true; break; }
 		}
 		if (active) continue;
-		DIR* rdir = opendir(d.path.c_str());
+		auto rdir = OpenDir(d.path);
 		if (rdir) {
 			struct dirent* rent;
-			while ((rent = readdir(rdir)))
+			while ((rent = readdir(rdir.get())))
 				if (rent->d_name[0] != '.') std::remove((d.path + "/" + rent->d_name).c_str());
-			closedir(rdir);
 		}
 		rmdir(d.path.c_str());
 		totalSize -= d.size;
@@ -749,6 +800,11 @@ void RoomService::setClientStats(const std::string& roomId, const std::string& p
 void RoomService::setDownlinkClientStats(const std::string& roomId, const std::string& peerId,
 	const json& stats)
 {
+	auto room = roomManager_.getRoom(roomId);
+	if (!room) return;
+	auto peer = room->getPeer(peerId);
+	if (!peer) return;
+
 	auto parsed = qos::QosValidator::ParseDownlinkSnapshot(stats);
 	if (!parsed.ok) {
 		MS_WARN(logger_, "[{} {}] invalid downlink stats ignored: {}", roomId, peerId, parsed.error);
@@ -757,6 +813,13 @@ void RoomService::setDownlinkClientStats(const std::string& roomId, const std::s
 	if (parsed.value.subscriberPeerId != peerId) {
 		MS_WARN(logger_, "[{} {}] downlink subscriberPeerId mismatch: {}", roomId, peerId, parsed.value.subscriberPeerId);
 		return;
+	}
+	const auto droppedSubscriptions =
+		FilterConsistentDownlinkSubscriptions(peer, &parsed.value);
+	if (droppedSubscriptions > 0) {
+		MS_WARN(logger_,
+			"[{} {}] dropped {} inconsistent downlink subscriptions",
+			roomId, peerId, droppedSubscriptions);
 	}
 	std::string rejectReason;
 	if (!downlinkQosRegistry_.Upsert(roomId, peerId, parsed.value, qos::NowMs(), &rejectReason)) {
@@ -1278,6 +1341,7 @@ RoomService::Result RoomService::pauseConsumer(const std::string& roomId,
 	auto it = peer->consumers.find(consumerId);
 	if (it == peer->consumers.end()) return {false, {}, "", "consumer not found"};
 	it->second->pause();
+	subscriberControllers_[roomId + "/" + peerId].syncConsumerState(peer->consumers);
 	return {true, it->second->toJson()};
 }
 
@@ -1291,6 +1355,7 @@ RoomService::Result RoomService::resumeConsumer(const std::string& roomId,
 	auto it = peer->consumers.find(consumerId);
 	if (it == peer->consumers.end()) return {false, {}, "", "consumer not found"};
 	it->second->resume();
+	subscriberControllers_[roomId + "/" + peerId].syncConsumerState(peer->consumers);
 	return {true, it->second->toJson()};
 }
 
@@ -1317,6 +1382,7 @@ RoomService::Result RoomService::setConsumerPreferredLayers(const std::string& r
 	auto it = peer->consumers.find(consumerId);
 	if (it == peer->consumers.end()) return {false, {}, "", "consumer not found"};
 	it->second->setPreferredLayers(spatialLayer, temporalLayer);
+	subscriberControllers_[roomId + "/" + peerId].syncConsumerState(peer->consumers);
 	return {true, it->second->toJson()};
 }
 
@@ -1330,6 +1396,7 @@ RoomService::Result RoomService::setConsumerPriority(const std::string& roomId,
 	auto it = peer->consumers.find(consumerId);
 	if (it == peer->consumers.end()) return {false, {}, "", "consumer not found"};
 	it->second->setPriority(priority);
+	subscriberControllers_[roomId + "/" + peerId].syncConsumerState(peer->consumers);
 	return {true, it->second->toJson()};
 }
 
@@ -1455,7 +1522,10 @@ void RoomService::runDownlinkPlanningForRoom(const std::string& roomId) {
 		std::string ctrlKey = roomId + "/" + peerId;
 		auto& ctrl = subscriberControllers_[ctrlKey];
 		auto peer = room->getPeer(peerId);
-		if (peer) ctrl.pruneStaleConsumers(peer->consumers);
+		if (peer) {
+			ctrl.pruneStaleConsumers(peer->consumers);
+			ctrl.syncConsumerState(peer->consumers);
+		}
 		ctrl.healthMonitor().update(entry->snapshot);
 
 		qos::SubscriberInput input;
@@ -1464,10 +1534,19 @@ void RoomService::runDownlinkPlanningForRoom(const std::string& roomId) {
 		input.degradeLevel = ctrl.healthMonitor().degradeLevel();
 		subscriberInputs.push_back(std::move(input));
 	}
-	if (subscriberInputs.empty()) return;
+	auto& prevDemand = producerDemandCache_[roomId];
+	if (subscriberInputs.empty()) {
+		if (prevDemand.empty()) return;
+		qos::ProducerDemandAggregator aggregator;
+		auto decayedDemandStates = aggregator.finalize(nowMs, prevDemand);
+		prevDemand.clear();
+		for (auto& state : decayedDemandStates)
+			prevDemand[state.producerId] = state;
+		applyPublisherSupplyPlan(roomId, decayedDemandStates);
+		return;
+	}
 
 	// Run room planner
-	auto& prevDemand = producerDemandCache_[roomId];
 	qos::RoomDownlinkPlanner planner;
 	auto plan = planner.PlanRoom(subscriberInputs, nowMs, prevDemand);
 	std::vector<qos::ProducerDemandState> effectiveDemandStates = plan.producerDemands;
@@ -1500,11 +1579,22 @@ void RoomService::runDownlinkPlanningForRoom(const std::string& roomId) {
 		prevDemand[d.producerId] = d;
 
 	applyPublisherSupplyPlan(roomId, effectiveDemandStates);
+
+	if (downlinkSnapshotApplied_) {
+		for (const auto& input : subscriberInputs)
+			downlinkSnapshotApplied_(roomId, input.peerId, input.snapshot.seq);
+	}
 }
 
 std::optional<std::string> RoomService::resolveProducerOwnerPeerId(
 	const std::string& roomId, const std::string& producerId) const
 {
+	auto roomIt = producerOwnerPeerIds_.find(roomId);
+	if (roomIt != producerOwnerPeerIds_.end()) {
+		auto ownerIt = roomIt->second.find(producerId);
+		if (ownerIt != roomIt->second.end()) return ownerIt->second;
+	}
+
 	auto room = roomManager_.getRoom(roomId);
 	if (!room) return std::nullopt;
 	for (auto& pid : room->getPeerIds()) {
@@ -1617,6 +1707,27 @@ void RoomService::cleanupPeerProducerDemandCache(const std::string& roomId,
 
 	if (roomIt->second.empty())
 		producerDemandCache_.erase(roomIt);
+}
+
+void RoomService::indexPeerProducers(const std::string& roomId, const std::string& peerId,
+	const std::unordered_map<std::string, std::shared_ptr<Producer>>& producers)
+{
+	auto& owners = producerOwnerPeerIds_[roomId];
+	for (const auto& [producerId, _] : producers)
+		owners[producerId] = peerId;
+}
+
+void RoomService::cleanupPeerProducerOwnerCache(const std::string& roomId,
+	const std::unordered_map<std::string, std::shared_ptr<Producer>>& producers)
+{
+	auto roomIt = producerOwnerPeerIds_.find(roomId);
+	if (roomIt == producerOwnerPeerIds_.end()) return;
+
+	for (const auto& [producerId, _] : producers)
+		roomIt->second.erase(producerId);
+
+	if (roomIt->second.empty())
+		producerOwnerPeerIds_.erase(roomIt);
 }
 
 } // namespace mediasoup
