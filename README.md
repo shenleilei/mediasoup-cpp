@@ -633,6 +633,10 @@ node tests/qos_harness/run_matrix.mjs --include-extended
 
 # targeted blind-spot rerun
 node tests/qos_harness/run_matrix.mjs --cases=T9,T10,T11
+
+# multi-room capacity ramp:
+# each room has exactly 2 peers: 1 publisher sending 1080p, 1 subscriber receiving it
+node tests/qos_harness/browser_capacity_rooms.mjs --workers=1 --step=5 --max-rooms=50
 ```
 
 Behavior:

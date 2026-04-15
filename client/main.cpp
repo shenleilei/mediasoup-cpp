@@ -1,449 +1,428 @@
-// plain-client: PlainTransport MP4 推流客户端
-// 用法: ./plain-client ws://SERVER:PORT/ws ROOM PEER file.mp4
-//
-// 依赖: libwebsockets, ffmpeg (libavformat/libavcodec/libavutil), nlohmann_json
-// 编译: cd client && mkdir build && cd build && cmake .. && make
+// plain-client: PlainTransport MP4 推流客户端 (zero external WS dependency)
+// Usage: ./plain-client SERVER_IP SERVER_PORT ROOM PEER file.mp4
 
 #include <nlohmann/json.hpp>
-#include <libwebsockets.h>
 
 extern "C" {
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
-#include <libavutil/opt.h>
 }
 
+#include <openssl/sha.h>
+#include <openssl/bio.h>
+#include <openssl/evp.h>
+#include <openssl/buffer.h>
+
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <signal.h>
+#include <poll.h>
 
 #include <atomic>
 #include <chrono>
-#include <condition_variable>
 #include <cstring>
 #include <iostream>
-#include <mutex>
-#include <queue>
+#include <map>
 #include <string>
 #include <thread>
 #include <vector>
+#include <random>
 
 using json = nlohmann::json;
 static std::atomic<bool> g_running{true};
 static void onSignal(int) { g_running = false; }
 
 // ═══════════════════════════════════════════════════════════
-// 1. WebSocket signaling client (libwebsockets)
+// Minimal WebSocket client (RFC 6455, text frames only)
 // ═══════════════════════════════════════════════════════════
 
-struct WsClient {
-	struct lws_context* ctx = nullptr;
-	struct lws* wsi = nullptr;
-	std::mutex mu;
-	std::condition_variable cv;
-	bool connected = false;
-	uint32_t nextId = 1;
-
-	// pending responses: id → json
-	std::map<uint32_t, json> responses;
-	std::queue<std::string> sendQueue;
-	std::string recvBuf;
-
-	// notification callback
-	std::function<void(const json&)> onNotification;
-
-	json request(const std::string& method, const json& data, int timeoutSec = 5) {
-		uint32_t id;
-		{
-			std::lock_guard<std::mutex> lk(mu);
-			id = nextId++;
-			json msg = {{"request", true}, {"id", id}, {"method", method}, {"data", data}};
-			sendQueue.push(msg.dump());
-		}
-		lws_callback_on_writable(wsi);
-
-		// Wait for response
-		std::unique_lock<std::mutex> lk(mu);
-		auto ok = cv.wait_for(lk, std::chrono::seconds(timeoutSec), [&] {
-			return responses.count(id) > 0;
-		});
-		if (!ok) throw std::runtime_error("timeout waiting for " + method);
-		json resp = std::move(responses[id]);
-		responses.erase(id);
-		if (!resp.value("ok", false))
-			throw std::runtime_error(method + " failed: " + resp.value("error", "unknown"));
-		return resp["data"];
-	}
-
-	void handleMessage(const std::string& text) {
-		auto msg = json::parse(text, nullptr, false);
-		if (msg.is_discarded()) return;
-
-		if (msg.value("response", false)) {
-			std::lock_guard<std::mutex> lk(mu);
-			responses[msg["id"].get<uint32_t>()] = msg;
-			cv.notify_all();
-		} else if (msg.value("notification", false) && onNotification) {
-			onNotification(msg);
-		}
-	}
-};
-
-static WsClient* g_ws = nullptr;
-
-static int wsCallback(struct lws* wsi, enum lws_callback_reasons reason,
-	void* /*user*/, void* in, size_t len)
-{
-	if (!g_ws) return 0;
-	switch (reason) {
-	case LWS_CALLBACK_CLIENT_ESTABLISHED:
-		g_ws->connected = true;
-		g_ws->cv.notify_all();
-		break;
-	case LWS_CALLBACK_CLIENT_RECEIVE:
-		g_ws->recvBuf.append((char*)in, len);
-		if (lws_is_final_fragment(wsi)) {
-			g_ws->handleMessage(g_ws->recvBuf);
-			g_ws->recvBuf.clear();
-		}
-		break;
-	case LWS_CALLBACK_CLIENT_WRITEABLE: {
-		std::lock_guard<std::mutex> lk(g_ws->mu);
-		while (!g_ws->sendQueue.empty()) {
-			auto& msg = g_ws->sendQueue.front();
-			std::vector<uint8_t> buf(LWS_PRE + msg.size());
-			memcpy(buf.data() + LWS_PRE, msg.data(), msg.size());
-			lws_write(wsi, buf.data() + LWS_PRE, msg.size(), LWS_WRITE_TEXT);
-			g_ws->sendQueue.pop();
-		}
-		break;
-	}
-	case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
-	case LWS_CALLBACK_CLIENT_CLOSED:
-		g_ws->connected = false;
-		g_running = false;
-		g_ws->cv.notify_all();
-		break;
-	default:
-		break;
-	}
-	return 0;
+static std::string base64Encode(const unsigned char* data, int len) {
+	BIO* b64 = BIO_new(BIO_f_base64());
+	BIO* mem = BIO_new(BIO_s_mem());
+	b64 = BIO_push(b64, mem);
+	BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
+	BIO_write(b64, data, len);
+	BIO_flush(b64);
+	BUF_MEM* bptr;
+	BIO_get_mem_ptr(b64, &bptr);
+	std::string result(bptr->data, bptr->length);
+	BIO_free_all(b64);
+	return result;
 }
 
-static const struct lws_protocols protocols[] = {
-	{"ws", wsCallback, 0, 65536}, {nullptr, nullptr, 0, 0}
-};
+struct WsClient {
+	int fd = -1;
 
-// ═══════════════════════════════════════════════════════════
-// 2. RTP packetizer
-// ═══════════════════════════════════════════════════════════
+	bool connect(const std::string& host, int port, const std::string& path) {
+		struct addrinfo hints{}, *res;
+		hints.ai_family = AF_INET;
+		hints.ai_socktype = SOCK_STREAM;
+		if (getaddrinfo(host.c_str(), std::to_string(port).c_str(), &hints, &res) != 0) return false;
+		fd = socket(res->ai_family, SOCK_STREAM, 0);
+		if (::connect(fd, res->ai_addr, res->ai_addrlen) < 0) { freeaddrinfo(res); return false; }
+		freeaddrinfo(res);
+		int flag = 1;
+		setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
 
-struct RtpHeader {
-	uint8_t buf[12];
-	void init(uint8_t pt, uint16_t seq, uint32_t ts, uint32_t ssrc, bool marker = false) {
-		buf[0] = 0x80; // V=2
-		buf[1] = (marker ? 0x80 : 0) | (pt & 0x7F);
-		buf[2] = (seq >> 8) & 0xFF;
-		buf[3] = seq & 0xFF;
-		buf[4] = (ts >> 24) & 0xFF; buf[5] = (ts >> 16) & 0xFF;
-		buf[6] = (ts >> 8) & 0xFF;  buf[7] = ts & 0xFF;
-		buf[8] = (ssrc >> 24) & 0xFF; buf[9] = (ssrc >> 16) & 0xFF;
-		buf[10] = (ssrc >> 8) & 0xFF; buf[11] = ssrc & 0xFF;
+		// Generate random key
+		unsigned char keyBytes[16];
+		std::random_device rd;
+		for (auto& b : keyBytes) b = rd() & 0xFF;
+		std::string key = base64Encode(keyBytes, 16);
+
+		// HTTP upgrade
+		std::string req = "GET " + path + " HTTP/1.1\r\n"
+			"Host: " + host + ":" + std::to_string(port) + "\r\n"
+			"Upgrade: websocket\r\nConnection: Upgrade\r\n"
+			"Sec-WebSocket-Key: " + key + "\r\n"
+			"Sec-WebSocket-Version: 13\r\n\r\n";
+		::send(fd, req.data(), req.size(), 0);
+
+		// Read response
+		char buf[4096];
+		int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+		if (n <= 0) return false;
+		buf[n] = 0;
+		return strstr(buf, "101") != nullptr;
 	}
+
+	void sendText(const std::string& msg) {
+		std::vector<uint8_t> frame;
+		frame.push_back(0x81); // FIN + text
+		// Mask bit set (client must mask)
+		uint8_t maskKey[4];
+		std::random_device rd;
+		for (auto& b : maskKey) b = rd() & 0xFF;
+
+		if (msg.size() < 126) {
+			frame.push_back(0x80 | (uint8_t)msg.size());
+		} else if (msg.size() < 65536) {
+			frame.push_back(0x80 | 126);
+			frame.push_back((msg.size() >> 8) & 0xFF);
+			frame.push_back(msg.size() & 0xFF);
+		} else {
+			frame.push_back(0x80 | 127);
+			for (int i = 7; i >= 0; i--)
+				frame.push_back((msg.size() >> (i * 8)) & 0xFF);
+		}
+		frame.insert(frame.end(), maskKey, maskKey + 4);
+		for (size_t i = 0; i < msg.size(); i++)
+			frame.push_back(msg[i] ^ maskKey[i % 4]);
+		::send(fd, frame.data(), frame.size(), 0);
+	}
+
+	std::string recvText(int timeoutMs = 10000) {
+		struct pollfd pfd{fd, POLLIN, 0};
+		if (poll(&pfd, 1, timeoutMs) <= 0) return "";
+
+		uint8_t hdr[2];
+		if (::recv(fd, hdr, 2, MSG_WAITALL) != 2) return "";
+		bool masked = hdr[1] & 0x80;
+		uint64_t len = hdr[1] & 0x7F;
+		if (len == 126) {
+			uint8_t ext[2];
+			::recv(fd, ext, 2, MSG_WAITALL);
+			len = (ext[0] << 8) | ext[1];
+		} else if (len == 127) {
+			uint8_t ext[8];
+			::recv(fd, ext, 8, MSG_WAITALL);
+			len = 0;
+			for (int i = 0; i < 8; i++) len = (len << 8) | ext[i];
+		}
+		uint8_t mask[4] = {};
+		if (masked) ::recv(fd, mask, 4, MSG_WAITALL);
+
+		std::string data(len, 0);
+		size_t got = 0;
+		while (got < len) {
+			int n = ::recv(fd, &data[got], len - got, 0);
+			if (n <= 0) return "";
+			got += n;
+		}
+		if (masked) for (size_t i = 0; i < len; i++) data[i] ^= mask[i % 4];
+		return data;
+	}
+
+	json request(const std::string& method, const json& reqData, int timeoutMs = 5000) {
+		static uint32_t nextId = 1;
+		uint32_t id = nextId++;
+		json msg = {{"request", true}, {"id", id}, {"method", method}, {"data", reqData}};
+		sendText(msg.dump());
+
+		// Read until we get our response
+		auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+		while (std::chrono::steady_clock::now() < deadline) {
+			int remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+				deadline - std::chrono::steady_clock::now()).count();
+			auto text = recvText(std::max(remaining, 1));
+			if (text.empty()) continue;
+			auto resp = json::parse(text, nullptr, false);
+			if (resp.is_discarded()) continue;
+			if (resp.value("response", false) && resp.value("id", 0u) == id) {
+				if (!resp.value("ok", false))
+					throw std::runtime_error(method + ": " + resp.value("error", "unknown"));
+				return resp["data"];
+			}
+			// else notification, ignore for now
+		}
+		throw std::runtime_error("timeout: " + method);
+	}
+
+	void close() { if (fd >= 0) { ::close(fd); fd = -1; } }
 };
+
+// ═══════════════════════════════════════════════════════════
+// RTP packetizer
+// ═══════════════════════════════════════════════════════════
 
 static constexpr int kMaxRtpPayload = 1200;
 
-// Send H264 NALUs over RTP with FU-A fragmentation
-static void sendH264Frame(int fd, const uint8_t* data, int size,
+static void rtpHeader(uint8_t* buf, uint8_t pt, uint16_t seq, uint32_t ts, uint32_t ssrc, bool marker) {
+	buf[0] = 0x80;
+	buf[1] = (marker ? 0x80 : 0) | (pt & 0x7F);
+	buf[2] = seq >> 8; buf[3] = seq & 0xFF;
+	buf[4] = ts >> 24; buf[5] = ts >> 16; buf[6] = ts >> 8; buf[7] = ts;
+	buf[8] = ssrc >> 24; buf[9] = ssrc >> 16; buf[10] = ssrc >> 8; buf[11] = ssrc;
+}
+
+static void sendH264(int fd, const uint8_t* data, int size,
 	uint8_t pt, uint32_t ts, uint32_t ssrc, uint16_t& seq)
 {
-	// Skip Annex-B start codes, split into NALUs
+	// Parse Annex-B NALUs
 	std::vector<std::pair<const uint8_t*, int>> nalus;
 	int i = 0;
 	while (i < size) {
-		// Find start code
 		int scLen = 0;
-		if (i + 3 < size && data[i] == 0 && data[i+1] == 0 && data[i+2] == 1) scLen = 3;
-		else if (i + 4 < size && data[i] == 0 && data[i+1] == 0 && data[i+2] == 0 && data[i+3] == 1) scLen = 4;
-		if (scLen > 0) { i += scLen; continue; }
-		// Find end of NALU
+		if (i + 3 <= size && data[i]==0 && data[i+1]==0 && data[i+2]==1) scLen = 3;
+		else if (i + 4 <= size && data[i]==0 && data[i+1]==0 && data[i+2]==0 && data[i+3]==1) scLen = 4;
+		if (scLen) { i += scLen; continue; }
 		int start = i;
+		i++;
 		while (i < size) {
-			if (i + 3 < size && data[i] == 0 && data[i+1] == 0 && (data[i+2] == 1 || (data[i+2] == 0 && i+3 < size && data[i+3] == 1)))
+			if (i + 3 <= size && data[i]==0 && data[i+1]==0 && (data[i+2]==1 || (data[i+2]==0 && i+3<size && data[i+3]==1)))
 				break;
 			i++;
 		}
-		if (i > start) nalus.push_back({data + start, i - start});
+		nalus.push_back({data + start, i - start});
 	}
 
 	for (size_t n = 0; n < nalus.size(); n++) {
-		auto [nalu, naluLen] = nalus[n];
-		bool lastNalu = (n == nalus.size() - 1);
-
-		if (naluLen <= kMaxRtpPayload) {
-			// Single NALU packet
-			uint8_t pkt[12 + kMaxRtpPayload];
-			RtpHeader hdr;
-			hdr.init(pt, seq++, ts, ssrc, lastNalu);
-			memcpy(pkt, hdr.buf, 12);
-			memcpy(pkt + 12, nalu, naluLen);
-			send(fd, pkt, 12 + naluLen, 0);
+		auto [nalu, nLen] = nalus[n];
+		bool last = (n == nalus.size() - 1);
+		if (nLen <= kMaxRtpPayload) {
+			uint8_t pkt[12 + 1400];
+			rtpHeader(pkt, pt, seq++, ts, ssrc, last);
+			memcpy(pkt + 12, nalu, nLen);
+			send(fd, pkt, 12 + nLen, 0);
 		} else {
-			// FU-A fragmentation
-			uint8_t naluType = nalu[0] & 0x1F;
-			uint8_t nri = nalu[0] & 0x60;
-			int offset = 1; // skip NALU header byte
+			uint8_t naluHdr = nalu[0];
+			int off = 1;
 			bool first = true;
-			while (offset < naluLen) {
-				int chunkLen = std::min(kMaxRtpPayload - 2, naluLen - offset);
-				bool last = (offset + chunkLen >= naluLen);
-
-				uint8_t pkt[12 + 2 + kMaxRtpPayload];
-				RtpHeader hdr;
-				hdr.init(pt, seq++, ts, ssrc, last && lastNalu);
-				memcpy(pkt, hdr.buf, 12);
-				pkt[12] = nri | 28; // FU indicator: type=28 (FU-A)
-				pkt[13] = naluType | (first ? 0x80 : 0) | (last ? 0x40 : 0); // FU header
-				memcpy(pkt + 14, nalu + offset, chunkLen);
-				send(fd, pkt, 14 + chunkLen, 0);
-
-				offset += chunkLen;
+			while (off < nLen) {
+				int chunk = std::min(kMaxRtpPayload - 2, nLen - off);
+				bool end = (off + chunk >= nLen);
+				uint8_t pkt[12 + 2 + 1400];
+				rtpHeader(pkt, pt, seq++, ts, ssrc, end && last);
+				pkt[12] = (naluHdr & 0x60) | 28;
+				pkt[13] = (naluHdr & 0x1F) | (first ? 0x80 : 0) | (end ? 0x40 : 0);
+				memcpy(pkt + 14, nalu + off, chunk);
+				send(fd, pkt, 14 + chunk, 0);
+				off += chunk;
 				first = false;
 			}
 		}
 	}
 }
 
-// Send Opus frame over RTP (single packet, no fragmentation needed)
-static void sendOpusFrame(int fd, const uint8_t* data, int size,
+static void sendOpus(int fd, const uint8_t* data, int size,
 	uint8_t pt, uint32_t ts, uint32_t ssrc, uint16_t& seq)
 {
 	uint8_t pkt[12 + 4096];
-	RtpHeader hdr;
-	hdr.init(pt, seq++, ts, ssrc, true);
-	memcpy(pkt, hdr.buf, 12);
+	rtpHeader(pkt, pt, seq++, ts, ssrc, true);
 	memcpy(pkt + 12, data, size);
 	send(fd, pkt, 12 + size, 0);
 }
 
 // ═══════════════════════════════════════════════════════════
-// 3. MP4 reader + AAC→Opus transcoder
-// ═══════════════════════════════════════════════════════════
-
-struct Mp4Reader {
-	AVFormatContext* fmtCtx = nullptr;
-	int videoIdx = -1, audioIdx = -1;
-	// Audio transcode: AAC decoder + Opus encoder
-	AVCodecContext* audioDecCtx = nullptr;
-	AVCodecContext* audioEncCtx = nullptr;
-	AVFrame* audioFrame = nullptr;
-
-	bool open(const char* path) {
-		if (avformat_open_input(&fmtCtx, path, nullptr, nullptr) < 0) return false;
-		if (avformat_find_stream_info(fmtCtx, nullptr) < 0) return false;
-
-		for (unsigned i = 0; i < fmtCtx->nb_streams; i++) {
-			auto* par = fmtCtx->streams[i]->codecpar;
-			if (par->codec_type == AVMEDIA_TYPE_VIDEO && videoIdx < 0) videoIdx = i;
-			if (par->codec_type == AVMEDIA_TYPE_AUDIO && audioIdx < 0) audioIdx = i;
-		}
-
-		// Setup audio transcoder if audio track exists
-		if (audioIdx >= 0) {
-			auto* par = fmtCtx->streams[audioIdx]->codecpar;
-			auto* dec = avcodec_find_decoder(par->codec_id);
-			if (dec) {
-				audioDecCtx = avcodec_alloc_context3(dec);
-				avcodec_parameters_to_context(audioDecCtx, par);
-				avcodec_open2(audioDecCtx, dec, nullptr);
-
-				auto* enc = avcodec_find_encoder(AV_CODEC_ID_OPUS);
-				if (enc) {
-					audioEncCtx = avcodec_alloc_context3(enc);
-					audioEncCtx->sample_rate = 48000;
-					audioEncCtx->ch_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO;
-					audioEncCtx->bit_rate = 64000;
-					audioEncCtx->sample_fmt = AV_SAMPLE_FMT_FLT;
-					avcodec_open2(audioEncCtx, enc, nullptr);
-				}
-				audioFrame = av_frame_alloc();
-			}
-		}
-		return videoIdx >= 0;
-	}
-
-	void close() {
-		if (audioFrame) av_frame_free(&audioFrame);
-		if (audioEncCtx) avcodec_free_context(&audioEncCtx);
-		if (audioDecCtx) avcodec_free_context(&audioDecCtx);
-		if (fmtCtx) avformat_close_input(&fmtCtx);
-	}
-};
-
-// ═══════════════════════════════════════════════════════════
-// 4. Main
+// Main
 // ═══════════════════════════════════════════════════════════
 
 int main(int argc, char* argv[]) {
-	if (argc < 5) {
-		fprintf(stderr, "Usage: %s ws://host:port/ws ROOM PEER file.mp4\n", argv[0]);
+	if (argc < 6) {
+		fprintf(stderr, "Usage: %s SERVER_IP SERVER_PORT ROOM PEER file.mp4\n", argv[0]);
 		return 1;
 	}
-	const char* wsUrl = argv[1];
-	const char* roomId = argv[2];
-	const char* peerId = argv[3];
-	const char* mp4Path = argv[4];
+	const char* serverIp = argv[1];
+	int serverPort = atoi(argv[2]);
+	const char* roomId = argv[3];
+	const char* peerId = argv[4];
+	const char* mp4Path = argv[5];
 
 	signal(SIGINT, onSignal);
 	signal(SIGPIPE, SIG_IGN);
 
-	// ── Open MP4 ──
-	Mp4Reader mp4;
-	if (!mp4.open(mp4Path)) {
-		fprintf(stderr, "Failed to open %s\n", mp4Path);
-		return 1;
+	// Open MP4
+	AVFormatContext* fmtCtx = nullptr;
+	if (avformat_open_input(&fmtCtx, mp4Path, nullptr, nullptr) < 0) {
+		fprintf(stderr, "Cannot open %s\n", mp4Path); return 1;
 	}
-	printf("Opened %s (video=%d audio=%d)\n", mp4Path, mp4.videoIdx, mp4.audioIdx);
+	avformat_find_stream_info(fmtCtx, nullptr);
+	int vidIdx = -1, audIdx = -1;
+	for (unsigned i = 0; i < fmtCtx->nb_streams; i++) {
+		if (fmtCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO && vidIdx < 0) vidIdx = i;
+		if (fmtCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO && audIdx < 0) audIdx = i;
+	}
+	printf("MP4: video=%d audio=%d\n", vidIdx, audIdx);
 
-	// ── Connect WebSocket ──
+	// Setup H264 bitstream filter (MP4 AVCC → Annex-B for RTP)
+	const AVBitStreamFilter* bsf = av_bsf_get_by_name("h264_mp4toannexb");
+	AVBSFContext* bsfCtx = nullptr;
+	if (vidIdx >= 0 && bsf) {
+		av_bsf_alloc(bsf, &bsfCtx);
+		avcodec_parameters_copy(bsfCtx->par_in, fmtCtx->streams[vidIdx]->codecpar);
+		bsfCtx->time_base_in = fmtCtx->streams[vidIdx]->time_base;
+		av_bsf_init(bsfCtx);
+	}
+
+	// Audio transcode setup (AAC→Opus)
+	AVCodecContext* adec = nullptr, *aenc = nullptr;
+	AVFrame* aframe = nullptr;
+	if (audIdx >= 0) {
+		auto* par = fmtCtx->streams[audIdx]->codecpar;
+		auto* dec = avcodec_find_decoder(par->codec_id);
+		if (dec) {
+			adec = avcodec_alloc_context3(dec);
+			avcodec_parameters_to_context(adec, par);
+			avcodec_open2(adec, dec, nullptr);
+			auto* enc = avcodec_find_encoder(AV_CODEC_ID_OPUS);
+			if (enc) {
+				aenc = avcodec_alloc_context3(enc);
+				aenc->sample_rate = 48000;
+				aenc->channels = 2;
+				aenc->channel_layout = AV_CH_LAYOUT_STEREO;
+				aenc->bit_rate = 64000;
+				aenc->sample_fmt = AV_SAMPLE_FMT_FLT;
+				if (avcodec_open2(aenc, enc, nullptr) < 0) {
+					avcodec_free_context(&aenc); aenc = nullptr;
+					printf("WARN: Opus encoder init failed, audio disabled\n");
+				}
+			}
+			aframe = av_frame_alloc();
+		}
+	}
+
+	// WebSocket connect
 	WsClient ws;
-	g_ws = &ws;
-
-	struct lws_context_creation_info ctxInfo{};
-	ctxInfo.port = CONTEXT_PORT_NO_LISTEN;
-	ctxInfo.protocols = protocols;
-	ctxInfo.options = LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
-	ws.ctx = lws_create_context(&ctxInfo);
-
-	// Parse URL
-	char host[256], path[256];
-	int port = 0, ssl = 0;
-	lws_parse_uri(const_cast<char*>(wsUrl), (const char**)&(const char*){nullptr},
-		(const char**)&host, &port, (const char**)&path);
-	// Simple parse
-	std::string url(wsUrl);
-	ssl = url.find("wss://") == 0 ? 1 : 0;
-	auto hostStart = url.find("://") + 3;
-	auto portStart = url.find(':', hostStart);
-	auto pathStart = url.find('/', hostStart);
-	std::string hostStr = url.substr(hostStart, (portStart != std::string::npos ? portStart : pathStart) - hostStart);
-	port = portStart != std::string::npos ? std::stoi(url.substr(portStart + 1, pathStart - portStart - 1)) : (ssl ? 443 : 80);
-	std::string pathStr = pathStart != std::string::npos ? url.substr(pathStart) : "/ws";
-
-	struct lws_client_connect_info ccInfo{};
-	ccInfo.context = ws.ctx;
-	ccInfo.address = hostStr.c_str();
-	ccInfo.port = port;
-	ccInfo.path = pathStr.c_str();
-	ccInfo.host = hostStr.c_str();
-	ccInfo.origin = hostStr.c_str();
-	ccInfo.protocol = "ws";
-	ccInfo.ssl_connection = ssl;
-	ws.wsi = lws_client_connect_via_info(&ccInfo);
-
-	// Service thread
-	std::thread wsThread([&] {
-		while (g_running) lws_service(ws.ctx, 50);
-	});
-
-	// Wait for connection
-	{
-		std::unique_lock<std::mutex> lk(ws.mu);
-		ws.cv.wait_for(lk, std::chrono::seconds(5), [&] { return ws.connected; });
+	if (!ws.connect(serverIp, serverPort, "/ws")) {
+		fprintf(stderr, "WS connect failed\n"); return 1;
 	}
-	if (!ws.connected) {
-		fprintf(stderr, "WebSocket connect failed\n");
-		g_running = false;
-		wsThread.join();
-		return 1;
-	}
-	printf("WebSocket connected\n");
+	printf("WS connected to %s:%d\n", serverIp, serverPort);
 
 	try {
-		// ── Join ──
-		auto joinResp = ws.request("join", {
+		// Join
+		ws.request("join", {
 			{"roomId", roomId}, {"peerId", peerId},
 			{"displayName", peerId}, {"rtpCapabilities", json::object()}
 		});
-		printf("Joined room %s\n", roomId);
+		printf("Joined room=%s peer=%s\n", roomId, peerId);
 
-		// ── PlainPublish ──
-		uint32_t videoSsrc = 11111111, audioSsrc = 22222222;
-		auto pubResp = ws.request("plainPublish", {
-			{"videoSsrc", videoSsrc}, {"audioSsrc", audioSsrc}
-		});
-		std::string srvIp = pubResp["ip"];
-		uint16_t srvPort = pubResp["port"];
-		uint8_t videoPt = pubResp["videoPt"];
-		uint8_t audioPt = pubResp["audioPt"];
-		printf("PlainPublish OK → %s:%d (videoPt=%d audioPt=%d)\n",
-			srvIp.c_str(), srvPort, videoPt, audioPt);
+		// PlainPublish
+		uint32_t vSsrc = 11111111, aSsrc = 22222222;
+		auto pub = ws.request("plainPublish", {{"videoSsrc", vSsrc}, {"audioSsrc", aSsrc}});
+		std::string srvIp = pub["ip"];
+		uint16_t srvPort = pub["port"];
+		uint8_t vPt = pub["videoPt"], aPt = pub["audioPt"];
+		// Use the signaling server IP for UDP too (announced IP may be public,
+		// but we're connecting from the same network as the signaling endpoint)
+		std::string udpIp = serverIp;
+		printf("Publish → %s:%d (announced=%s) vPt=%d aPt=%d\n",
+			udpIp.c_str(), srvPort, srvIp.c_str(), vPt, aPt);
 
-		// ── Create UDP socket ──
-		int udpFd = socket(AF_INET, SOCK_DGRAM, 0);
-		struct sockaddr_in addr{};
-		addr.sin_family = AF_INET;
-		addr.sin_port = htons(srvPort);
-		inet_pton(AF_INET, srvIp.c_str(), &addr.sin_addr);
-		connect(udpFd, (struct sockaddr*)&addr, sizeof(addr));
-		printf("UDP connected to %s:%d\n", srvIp.c_str(), srvPort);
+		// UDP socket
+		int udp = socket(AF_INET, SOCK_DGRAM, 0);
+		sockaddr_in dst{};
+		dst.sin_family = AF_INET;
+		dst.sin_port = htons(srvPort);
+		inet_pton(AF_INET, udpIp.c_str(), &dst.sin_addr);
+		::connect(udp, (sockaddr*)&dst, sizeof(dst));
 
-		// ── Stream MP4 ──
-		uint16_t videoSeq = 0, audioSeq = 0;
+		// Send a few dummy RTP packets to let comedia lock the source address
+		uint16_t vSeq = 0, aSeq = 0;
+		for (int i = 0; i < 5; i++) {
+			uint8_t dummy[12 + 1];
+			rtpHeader(dummy, vPt, vSeq++, 0, vSsrc, false);
+			dummy[12] = 0; // empty payload
+			send(udp, dummy, 13, 0);
+			std::this_thread::sleep_for(std::chrono::milliseconds(20));
+		}
+		printf("Sent probe packets for comedia\n");
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+		// Stream
 		AVPacket* pkt = av_packet_alloc();
-		auto startTime = std::chrono::steady_clock::now();
-		int64_t firstPts = -1;
+		auto t0 = std::chrono::steady_clock::now();
+		double firstPts = -1;
+		int frameCnt = 0;
 
-		while (g_running && av_read_frame(mp4.fmtCtx, pkt) >= 0) {
-			auto* st = mp4.fmtCtx->streams[pkt->stream_index];
-			double ptsSec = pkt->pts * av_q2d(st->time_base);
-			if (firstPts < 0) firstPts = pkt->pts;
+		while (g_running && av_read_frame(fmtCtx, pkt) >= 0) {
+			auto* st = fmtCtx->streams[pkt->stream_index];
+			double pts = pkt->pts * av_q2d(st->time_base);
+			if (firstPts < 0) firstPts = pts;
+			double elapsed = pts - firstPts;
 
-			// Pace: sleep until it's time to send this frame
-			double elapsed = ptsSec - (firstPts * av_q2d(st->time_base));
-			auto target = startTime + std::chrono::microseconds((int64_t)(elapsed * 1e6));
+			// Pace
+			auto target = t0 + std::chrono::microseconds((int64_t)(elapsed * 1e6));
 			std::this_thread::sleep_until(target);
 
-			if (pkt->stream_index == mp4.videoIdx) {
-				uint32_t rtpTs = (uint32_t)(ptsSec * 90000);
-				sendH264Frame(udpFd, pkt->data, pkt->size,
-					videoPt, rtpTs, videoSsrc, videoSeq);
-			} else if (pkt->stream_index == mp4.audioIdx && mp4.audioDecCtx && mp4.audioEncCtx) {
-				// Transcode AAC → Opus
-				if (avcodec_send_packet(mp4.audioDecCtx, pkt) == 0) {
-					while (avcodec_receive_frame(mp4.audioDecCtx, mp4.audioFrame) == 0) {
-						if (avcodec_send_frame(mp4.audioEncCtx, mp4.audioFrame) == 0) {
-							AVPacket* encPkt = av_packet_alloc();
-							while (avcodec_receive_packet(mp4.audioEncCtx, encPkt) == 0) {
-								uint32_t rtpTs = (uint32_t)(ptsSec * 48000);
-								sendOpusFrame(udpFd, encPkt->data, encPkt->size,
-									audioPt, rtpTs, audioSsrc, audioSeq);
-								av_packet_unref(encPkt);
+			if (pkt->stream_index == vidIdx) {
+				uint32_t rtpTs = (uint32_t)(pts * 90000);
+				if (bsfCtx) {
+					AVPacket* bsfPkt = av_packet_alloc();
+					av_packet_ref(bsfPkt, pkt);
+					av_bsf_send_packet(bsfCtx, bsfPkt);
+					while (av_bsf_receive_packet(bsfCtx, bsfPkt) == 0) {
+						sendH264(udp, bsfPkt->data, bsfPkt->size, vPt, rtpTs, vSsrc, vSeq);
+						av_packet_unref(bsfPkt);
+					}
+					av_packet_free(&bsfPkt);
+				} else {
+					sendH264(udp, pkt->data, pkt->size, vPt, rtpTs, vSsrc, vSeq);
+				}
+				if (++frameCnt % 100 == 0) printf("sent %d video frames\n", frameCnt);
+			} else if (pkt->stream_index == audIdx && adec && aenc) {
+				if (avcodec_send_packet(adec, pkt) == 0) {
+					while (avcodec_receive_frame(adec, aframe) == 0) {
+						if (avcodec_send_frame(aenc, aframe) == 0) {
+							AVPacket* ep = av_packet_alloc();
+							while (avcodec_receive_packet(aenc, ep) == 0) {
+								sendOpus(udp, ep->data, ep->size, aPt, (uint32_t)(pts * 48000), aSsrc, aSeq);
+								av_packet_unref(ep);
 							}
-							av_packet_free(&encPkt);
+							av_packet_free(&ep);
 						}
 					}
 				}
 			}
 			av_packet_unref(pkt);
 		}
-		av_packet_free(&pkt);
-		::close(udpFd);
-		printf("Streaming finished\n");
 
-		// ── Leave ──
-		try { ws.request("leave", {}, 2); } catch (...) {}
+		av_packet_free(&pkt);
+		::close(udp);
+		printf("Done: %d video frames sent\n", frameCnt);
 
 	} catch (const std::exception& e) {
 		fprintf(stderr, "Error: %s\n", e.what());
 	}
 
-	g_running = false;
-	wsThread.join();
-	lws_context_destroy(ws.ctx);
-	mp4.close();
+	ws.close();
+	if (bsfCtx) av_bsf_free(&bsfCtx);
+	if (aframe) av_frame_free(&aframe);
+	if (aenc) avcodec_free_context(&aenc);
+	if (adec) avcodec_free_context(&adec);
+	avformat_close_input(&fmtCtx);
 	return 0;
 }
