@@ -2,6 +2,7 @@
 // Usage: ./plain-client SERVER_IP SERVER_PORT ROOM PEER file.mp4
 
 #include <nlohmann/json.hpp>
+#include "RtcpHandler.h"
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -190,10 +191,22 @@ static void rtpHeader(uint8_t* buf, uint8_t pt, uint16_t seq, uint32_t ts, uint3
 	buf[8] = ssrc >> 24; buf[9] = ssrc >> 16; buf[10] = ssrc >> 8; buf[11] = ssrc;
 }
 
+// Global RTCP context for RTP packet store (NACK retransmission)
+static RtcpContext* g_rtcp = nullptr;
+
+static inline void rtpSendAndStore(int fd, const uint8_t* pkt, size_t len) {
+	send(fd, pkt, len, 0);
+	if (g_rtcp && len >= 12) {
+		uint16_t seq = (pkt[2] << 8) | pkt[3];
+		g_rtcp->videoStore.store(seq, pkt, len);
+		g_rtcp->videoPacketCount++;
+		g_rtcp->videoOctetCount += (len > 12) ? (len - 12) : 0;
+	}
+}
+
 static void sendH264(int fd, const uint8_t* data, int size,
 	uint8_t pt, uint32_t ts, uint32_t ssrc, uint16_t& seq)
 {
-	// Parse Annex-B NALUs
 	std::vector<std::pair<const uint8_t*, int>> nalus;
 	int i = 0;
 	while (i < size) {
@@ -218,7 +231,7 @@ static void sendH264(int fd, const uint8_t* data, int size,
 			uint8_t pkt[12 + 1400];
 			rtpHeader(pkt, pt, seq++, ts, ssrc, last);
 			memcpy(pkt + 12, nalu, nLen);
-			send(fd, pkt, 12 + nLen, 0);
+			rtpSendAndStore(fd, pkt, 12 + nLen);
 		} else {
 			uint8_t naluHdr = nalu[0];
 			int off = 1;
@@ -231,7 +244,7 @@ static void sendH264(int fd, const uint8_t* data, int size,
 				pkt[12] = (naluHdr & 0x60) | 28;
 				pkt[13] = (naluHdr & 0x1F) | (first ? 0x80 : 0) | (end ? 0x40 : 0);
 				memcpy(pkt + 14, nalu + off, chunk);
-				send(fd, pkt, 14 + chunk, 0);
+				rtpSendAndStore(fd, pkt, 14 + chunk);
 				off += chunk;
 				first = false;
 			}
@@ -357,43 +370,22 @@ int main(int argc, char* argv[]) {
 			fcntl(udp, F_SETFL, flags | O_NONBLOCK);
 		}
 
-		// Send a few dummy RTP packets to let comedia lock the source address
 		uint16_t vSeq = 0, aSeq = 0;
 
-		// Keyframe cache for PLI response
-		std::vector<uint8_t> lastKeyframe; // Annex-B data of last IDR + SPS/PPS
-		uint32_t lastKeyframeTs = 0;
-
-		// RTCP PLI/FIR detector: check incoming UDP for RTCP feedback
-		auto checkAndRespondPli = [&]() {
-			uint8_t buf[1500];
-			while (true) {
-				int n = recv(udp, buf, sizeof(buf), MSG_DONTWAIT);
-				if (n <= 0) break;
-				// RTCP packet: version=2, PT in [200..207] for SR/RR/SDES/BYE/APP
-				// or PT=206 for PSFB (PLI/FIR)
-				if (n < 12) continue;
-				uint8_t pt = buf[1];
-				// PSFB = 206, PLI fmt=1, FIR fmt=4
-				if (pt == 206) {
-					uint8_t fmt = buf[0] & 0x1F;
-					if (fmt == 1 || fmt == 4) {
-						// PLI or FIR received — resend cached keyframe
-						if (!lastKeyframe.empty()) {
-							sendH264(udp, lastKeyframe.data(), lastKeyframe.size(),
-								vPt, lastKeyframeTs, vSsrc, vSeq);
-							printf("PLI: resent keyframe (%zu bytes)\n", lastKeyframe.size());
-						}
-					}
-				}
-			}
-		};
+		// Setup RTCP context (SR + NACK + PLI)
+		RtcpContext rtcp;
+		rtcp.videoSsrc = vSsrc;
+		rtcp.audioSsrc = aSsrc;
+		rtcp.videoPt = vPt;
+		rtcp.videoSeqPtr = &vSeq;
+		rtcp.sendH264Fn = sendH264;
+		g_rtcp = &rtcp;
 
 		// Send probe packets for comedia
 		for (int i = 0; i < 5; i++) {
 			uint8_t dummy[12 + 1];
 			rtpHeader(dummy, vPt, vSeq++, 0, vSsrc, false);
-			dummy[12] = 0; // empty payload
+			dummy[12] = 0;
 			send(udp, dummy, 13, 0);
 			std::this_thread::sleep_for(std::chrono::milliseconds(20));
 		}
@@ -418,30 +410,30 @@ int main(int argc, char* argv[]) {
 
 			if (pkt->stream_index == vidIdx) {
 				uint32_t rtpTs = (uint32_t)(pts * 90000);
+				rtcp.lastVideoRtpTs = rtpTs;
 				if (bsfCtx) {
 					AVPacket* bsfPkt = av_packet_alloc();
 					av_packet_ref(bsfPkt, pkt);
 					av_bsf_send_packet(bsfCtx, bsfPkt);
 					while (av_bsf_receive_packet(bsfCtx, bsfPkt) == 0) {
-						// Cache keyframes for PLI response
-						if (bsfPkt->flags & AV_PKT_FLAG_KEY) {
-							lastKeyframe.assign(bsfPkt->data, bsfPkt->data + bsfPkt->size);
-							lastKeyframeTs = rtpTs;
-						}
+						if (bsfPkt->flags & AV_PKT_FLAG_KEY)
+							rtcp.cacheKeyframe(bsfPkt->data, bsfPkt->size, rtpTs);
 						sendH264(udp, bsfPkt->data, bsfPkt->size, vPt, rtpTs, vSsrc, vSeq);
 						av_packet_unref(bsfPkt);
 					}
 					av_packet_free(&bsfPkt);
 				} else {
-					if (pkt->flags & AV_PKT_FLAG_KEY) {
-						lastKeyframe.assign(pkt->data, pkt->data + pkt->size);
-						lastKeyframeTs = rtpTs;
-					}
+					if (pkt->flags & AV_PKT_FLAG_KEY)
+						rtcp.cacheKeyframe(pkt->data, pkt->size, rtpTs);
 					sendH264(udp, pkt->data, pkt->size, vPt, rtpTs, vSsrc, vSeq);
 				}
-				// Check for incoming PLI/FIR requests
-				checkAndRespondPli();
-				if (++frameCnt % 100 == 0) printf("sent %d video frames\n", frameCnt);
+				// Process incoming RTCP (PLI + NACK) and send periodic SR
+				rtcp.processIncomingRtcp(udp);
+				rtcp.maybeSendSR(udp);
+				if (++frameCnt % 100 == 0)
+					printf("sent %d frames [nack_retx=%d pli=%d sr=%d]\n",
+						frameCnt, rtcp.nackRetransmitted, rtcp.pliResponded,
+						(int)(rtcp.videoPacketCount > 0));
 			} else if (pkt->stream_index == audIdx && adec && aenc) {
 				if (avcodec_send_packet(adec, pkt) == 0) {
 					while (avcodec_receive_frame(adec, aframe) == 0) {
@@ -449,6 +441,7 @@ int main(int argc, char* argv[]) {
 							AVPacket* ep = av_packet_alloc();
 							while (avcodec_receive_packet(aenc, ep) == 0) {
 								sendOpus(udp, ep->data, ep->size, aPt, (uint32_t)(pts * 48000), aSsrc, aSeq);
+								rtcp.onAudioRtpSent(ep->size, (uint32_t)(pts * 48000));
 								av_packet_unref(ep);
 							}
 							av_packet_free(&ep);
@@ -459,6 +452,7 @@ int main(int argc, char* argv[]) {
 			av_packet_unref(pkt);
 		}
 
+		g_rtcp = nullptr;
 		av_packet_free(&pkt);
 		::close(udp);
 		printf("Done: %d video frames sent\n", frameCnt);
