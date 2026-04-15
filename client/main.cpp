@@ -19,6 +19,7 @@ extern "C" {
 #include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <poll.h>
 
@@ -350,8 +351,45 @@ int main(int argc, char* argv[]) {
 		inet_pton(AF_INET, udpIp.c_str(), &dst.sin_addr);
 		::connect(udp, (sockaddr*)&dst, sizeof(dst));
 
+		// Set non-blocking for RTCP recv
+		{
+			int flags = fcntl(udp, F_GETFL, 0);
+			fcntl(udp, F_SETFL, flags | O_NONBLOCK);
+		}
+
 		// Send a few dummy RTP packets to let comedia lock the source address
 		uint16_t vSeq = 0, aSeq = 0;
+
+		// Keyframe cache for PLI response
+		std::vector<uint8_t> lastKeyframe; // Annex-B data of last IDR + SPS/PPS
+		uint32_t lastKeyframeTs = 0;
+
+		// RTCP PLI/FIR detector: check incoming UDP for RTCP feedback
+		auto checkAndRespondPli = [&]() {
+			uint8_t buf[1500];
+			while (true) {
+				int n = recv(udp, buf, sizeof(buf), MSG_DONTWAIT);
+				if (n <= 0) break;
+				// RTCP packet: version=2, PT in [200..207] for SR/RR/SDES/BYE/APP
+				// or PT=206 for PSFB (PLI/FIR)
+				if (n < 12) continue;
+				uint8_t pt = buf[1];
+				// PSFB = 206, PLI fmt=1, FIR fmt=4
+				if (pt == 206) {
+					uint8_t fmt = buf[0] & 0x1F;
+					if (fmt == 1 || fmt == 4) {
+						// PLI or FIR received — resend cached keyframe
+						if (!lastKeyframe.empty()) {
+							sendH264(udp, lastKeyframe.data(), lastKeyframe.size(),
+								vPt, lastKeyframeTs, vSsrc, vSeq);
+							printf("PLI: resent keyframe (%zu bytes)\n", lastKeyframe.size());
+						}
+					}
+				}
+			}
+		};
+
+		// Send probe packets for comedia
 		for (int i = 0; i < 5; i++) {
 			uint8_t dummy[12 + 1];
 			rtpHeader(dummy, vPt, vSeq++, 0, vSsrc, false);
@@ -385,13 +423,24 @@ int main(int argc, char* argv[]) {
 					av_packet_ref(bsfPkt, pkt);
 					av_bsf_send_packet(bsfCtx, bsfPkt);
 					while (av_bsf_receive_packet(bsfCtx, bsfPkt) == 0) {
+						// Cache keyframes for PLI response
+						if (bsfPkt->flags & AV_PKT_FLAG_KEY) {
+							lastKeyframe.assign(bsfPkt->data, bsfPkt->data + bsfPkt->size);
+							lastKeyframeTs = rtpTs;
+						}
 						sendH264(udp, bsfPkt->data, bsfPkt->size, vPt, rtpTs, vSsrc, vSeq);
 						av_packet_unref(bsfPkt);
 					}
 					av_packet_free(&bsfPkt);
 				} else {
+					if (pkt->flags & AV_PKT_FLAG_KEY) {
+						lastKeyframe.assign(pkt->data, pkt->data + pkt->size);
+						lastKeyframeTs = rtpTs;
+					}
 					sendH264(udp, pkt->data, pkt->size, vPt, rtpTs, vSsrc, vSeq);
 				}
+				// Check for incoming PLI/FIR requests
+				checkAndRespondPli();
 				if (++frameCnt % 100 == 0) printf("sent %d video frames\n", frameCnt);
 			} else if (pkt->stream_index == audIdx && adec && aenc) {
 				if (avcodec_send_packet(adec, pkt) == 0) {
