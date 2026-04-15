@@ -169,6 +169,17 @@ struct RtcpContext {
 	int nackRetransmitted = 0;
 	int pliResponded = 0;
 
+	// RR-derived stats (updated from incoming RTCP RR)
+	double rrLossFraction = 0;      // 0..1, from last RR
+	uint32_t rrCumulativeLost = 0;  // total packets lost
+	double rrJitterMs = 0;          // interarrival jitter in ms
+	double rrRttMs = -1;            // round-trip time from SR/RR exchange, -1 = unknown
+	int64_t lastRrReceivedMs = 0;
+
+	// SR NTP timestamp tracking (for RTT calculation)
+	uint32_t lastSrNtpMid = 0;     // middle 32 bits of NTP timestamp from our last SR
+	int64_t lastSrSentAtMs = 0;    // when we sent the last SR (local clock)
+
 	// Send function
 	using SendH264Fn = std::function<void(int fd, const uint8_t* data, int size,
 		uint8_t pt, uint32_t ts, uint32_t ssrc, uint16_t& seq)>;
@@ -207,13 +218,15 @@ struct RtcpContext {
 		lastSrSentMs = now;
 
 		uint8_t buf[64];
-		// Video SR
 		if (videoPacketCount > 0) {
 			size_t len = buildSenderReport(buf, videoSsrc, lastVideoRtpTs,
 				videoPacketCount, videoOctetCount);
 			send(udpFd, buf, len, 0);
+			// Record NTP mid (bytes 10-13 of SR: ntpSec[15:0] + ntpFrac[31:16])
+			lastSrNtpMid = ((uint32_t)buf[10] << 24) | ((uint32_t)buf[11] << 16)
+				| ((uint32_t)buf[12] << 8) | buf[13];
+			lastSrSentAtMs = now;
 		}
-		// Audio SR
 		if (audioPacketCount > 0) {
 			size_t len = buildSenderReport(buf, audioSsrc, lastAudioRtpTs,
 				audioPacketCount, audioOctetCount);
@@ -251,9 +264,39 @@ struct RtcpContext {
 					// NACK
 					int ret = handleNack(buf + offset, pktLen, videoStore, udpFd);
 					nackRetransmitted += ret;
+				} else if (pt == RTCP_PT_RR && pktLen >= 32) {
+					// RR report block starts at offset+8 (after header+sender SSRC)
+					// Each report block is 24 bytes
+					size_t rbOff = offset + 8;
+					while (rbOff + 24 <= offset + pktLen) {
+						// uint32_t reportSsrc = read32(buf+rbOff);
+						uint8_t lossFrac = buf[rbOff + 4];
+						uint32_t cumLost = ((uint32_t)buf[rbOff+5] << 16) | ((uint32_t)buf[rbOff+6] << 8) | buf[rbOff+7];
+						uint32_t jitter = ((uint32_t)buf[rbOff+16] << 24) | ((uint32_t)buf[rbOff+17] << 16)
+							| ((uint32_t)buf[rbOff+18] << 8) | buf[rbOff+19];
+						uint32_t lsr = ((uint32_t)buf[rbOff+20] << 24) | ((uint32_t)buf[rbOff+21] << 16)
+							| ((uint32_t)buf[rbOff+22] << 8) | buf[rbOff+23];
+						uint32_t dlsr = ((uint32_t)buf[rbOff+24] << 24) | ((uint32_t)buf[rbOff+25] << 16)
+							| ((uint32_t)buf[rbOff+26] << 8) | buf[rbOff+27];
+
+						rrLossFraction = lossFrac / 256.0;
+						rrCumulativeLost = cumLost;
+						rrJitterMs = (double)jitter / 90.0; // video clock 90kHz → ms
+
+						// RTT = now - LSR - DLSR (all in 1/65536 sec units)
+						if (lsr != 0 && lastSrNtpMid != 0 && lsr == lastSrNtpMid) {
+							auto nowRtcp = std::chrono::duration_cast<std::chrono::milliseconds>(
+								std::chrono::steady_clock::now().time_since_epoch()).count();
+							double dlsrMs = (double)dlsr / 65536.0 * 1000.0;
+							double elapsed = (double)(nowRtcp - lastSrSentAtMs);
+							rrRttMs = std::max(0.0, elapsed - dlsrMs);
+						}
+
+						lastRrReceivedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+							std::chrono::steady_clock::now().time_since_epoch()).count();
+						rbOff += 24;
+					}
 				}
-				// RR (PT=201) — we receive but don't need to act on it
-				// TWCC (PT=205, fmt=15) — for future BWE implementation
 
 				offset += pktLen;
 			}
