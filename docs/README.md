@@ -32,7 +32,8 @@
 |---|---|
 | 新接手开发 | [DEVELOPMENT.md](./DEVELOPMENT.md) |
 | 做线上排障 | [troubleshooting_cn.md](./troubleshooting_cn.md) → [architecture_cn.md](./architecture_cn.md) → [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) |
-| 做 QoS 改动 | [uplink-qos-design_cn.md](./uplink-qos-design_cn.md) → [downlink-qos-design_cn.md](./downlink-qos-design_cn.md) → [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md) → [downlink-qos-v2-implementation-plan_cn.md](./downlink-qos-v2-implementation-plan_cn.md) → [downlink-qos-implementation-plan_cn.md](./downlink-qos-implementation-plan_cn.md) → [uplink-qos-final-report.md](./uplink-qos-final-report.md) → [uplink-qos-boundaries.md](./uplink-qos-boundaries.md) → [review_qos.md](./review_qos.md) → [run_qos_tests.sh](../scripts/run_qos_tests.sh) |
+| 做 QoS 改动 | [uplink-qos-design_cn.md](./uplink-qos-design_cn.md) → [downlink-qos-design_cn.md](./downlink-qos-design_cn.md) → [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md) → [downlink-qos-v2-implementation-plan_cn.md](./downlink-qos-v2-implementation-plan_cn.md) → [downlink-qos-implementation-plan_cn.md](./downlink-qos-implementation-plan_cn.md) → [downlink-qos-v3-design_cn.md](./downlink-qos-v3-design_cn.md) → [downlink-qos-v3-implementation-plan_cn.md](./downlink-qos-v3-implementation-plan_cn.md) → [uplink-qos-final-report.md](./uplink-qos-final-report.md) → [uplink-qos-boundaries.md](./uplink-qos-boundaries.md) → [review_qos.md](./review_qos.md) → [run_qos_tests.sh](../scripts/run_qos_tests.sh) |
+| 查 worker 架构 | [mediasoup-worker-architecture-analysis_cn.md](./mediasoup-worker-architecture-analysis_cn.md) |
 | 查 QoS 详细 case 结果 | [uplink-qos-case-analysis.md](./uplink-qos-case-analysis.md) |
 | 查 QoS 测试覆盖地图 | [qos-test-coverage_cn.md](./qos-test-coverage_cn.md) |
 | 做上线 / 运维准备 | [PRODUCTION_CHECKLIST.md](./PRODUCTION_CHECKLIST.md) → [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) |
@@ -50,6 +51,7 @@
 | [PRODUCTION_CHECKLIST.md](./PRODUCTION_CHECKLIST.md) | 上线前检查项。 |
 | [commercialization-plan_cn.md](./commercialization-plan_cn.md) | 商业化路线图，回答三个月可商用与十二个月领先要补什么。 |
 | [q1.md](./q1.md) | 截止 `2026-07-14` 的执行版计划，按 `2026-07-01` 上线和 `2026-07-14` QoS 强化拆分。 |
+| [mediasoup-worker-architecture-analysis_cn.md](./mediasoup-worker-architecture-analysis_cn.md) | 基于 `mediasoup-worker 3.14.6` 源码的架构与模块分析，从进程入口到 `Router/Transport/Producer/Consumer/BWE`。 |
 | [REDIS_KEY_GUIDELINES.md](./REDIS_KEY_GUIDELINES.md) | Redis key 设计和约束。 |
 
 ## 3. QoS 专项文档
@@ -73,7 +75,9 @@
 15. [uplink-qos-test-execution-checklist.md](./uplink-qos-test-execution-checklist.md)
 16. [qos-test-coverage_cn.md](./qos-test-coverage_cn.md)
 17. [review_qos.md](./review_qos.md)
-18. [uplink-qos-loopback-boundary-investigation.md](./uplink-qos-loopback-boundary-investigation.md)
+18. [downlink-qos-v3-design_cn.md](./downlink-qos-v3-design_cn.md)
+19. [downlink-qos-v3-implementation-plan_cn.md](./downlink-qos-v3-implementation-plan_cn.md)
+20. [uplink-qos-loopback-boundary-investigation.md](./uplink-qos-loopback-boundary-investigation.md)
 
 说明：
 
@@ -83,6 +87,8 @@
 - [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md) 用中文定义 `downlink QoS v2` 的房间级 demand 聚合、显式预算分配和 publisher 供给回收方案。
 - [downlink-qos-v2-implementation-plan_cn.md](./downlink-qos-v2-implementation-plan_cn.md) 用中文给出 `downlink QoS v2` 的分阶段实施方案，细化到类和函数级别。
 - [downlink-qos-worker-validation_cn.md](./downlink-qos-worker-validation_cn.md) 用中文整理正式做 downlink QoS 之前需要先补齐的 worker / API 黑盒验证项。
+- [downlink-qos-v3-design_cn.md](./downlink-qos-v3-design_cn.md) 用中文定义 `downlink QoS v3` 的目标、worker 边界和 control plane 的职责修正。
+- [downlink-qos-v3-implementation-plan_cn.md](./downlink-qos-v3-implementation-plan_cn.md) 用中文给出 `downlink QoS v3` 的实施路径，并明确当前“不继续做强控制面最终 allocator”的决策。
 - [downlink-qos-implementation-plan_cn.md](./downlink-qos-implementation-plan_cn.md) 用中文给出 `downlink QoS v1` 的分阶段实施计划。
 - 当前签收口径，以 [uplink-qos-final-report.md](./uplink-qos-final-report.md) 和 [uplink-qos-test-results-summary.md](./uplink-qos-test-results-summary.md) 为准。
 - [uplink-qos-boundaries.md](./uplink-qos-boundaries.md) 用来说明“底层 WebRTC 自动能力”和“本仓库 uplink QoS 策略能力”的职责边界。
