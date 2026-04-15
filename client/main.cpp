@@ -536,10 +536,11 @@ int main(int argc, char* argv[]) {
 						snap.timestampMs = now;
 						snap.bytesSent = rtcp.videoOctetCount;
 						snap.packetsSent = rtcp.videoPacketCount;
-						snap.packetsLost = 0; // TODO: extract from RTCP RR
+						snap.packetsLost = rtcp.rrCumulativeLost;
 						snap.targetBitrateBps = encBitrate;
 						snap.configuredBitrateBps = encBitrate;
-						snap.roundTripTimeMs = -1; // TODO: extract from RTCP RR
+						snap.roundTripTimeMs = rtcp.rrRttMs;
+						snap.jitterMs = rtcp.rrJitterMs;
 						qosCtrl->onSample(snap);
 					}
 				}
