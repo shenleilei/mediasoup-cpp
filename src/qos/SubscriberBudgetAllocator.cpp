@@ -36,6 +36,25 @@ struct PrevLayerState {
 	int64_t lastUpgradeAtMs{ 0 };
 };
 
+bool hasUpgradeHeadroom(double budgetBps, double usedBps, double deltaBps)
+{
+	double remainingHeadroom = budgetBps - (usedBps + deltaBps);
+	return remainingHeadroom >= budgetBps * kUpgradeHeadroomRatio;
+}
+
+bool isInUpgradeCooldown(const PrevLayerState& prev, int64_t nowMs)
+{
+	return prev.exists && nowMs > 0 && prev.lastUpgradeAtMs > 0 &&
+		(nowMs - prev.lastUpgradeAtMs) < kUpgradeCooldownMs;
+}
+
+double applySwitchPenalty(double utility, const PrevLayerState& prev, uint8_t s, uint8_t t)
+{
+	if (!prev.exists || (s == prev.spatial && t == prev.temporal))
+		return utility;
+	return utility * (1.0 - kSwitchPenalty);
+}
+
 } // namespace
 
 double SubscriberBudgetAllocator::computeBudgetBps(const DownlinkSnapshot& snapshot) const {
@@ -170,12 +189,9 @@ SubscriberBudgetPlan SubscriberBudgetAllocator::Allocate(
 				double oldCost = estimateLayerBitrateBps(subs[i], allocs[i].spatial, allocs[i].temporal);
 				double delta = newCost - oldCost;
 				if (delta > 0.0 && usedBps + delta <= plan.budgetBps) {
-					double remainingHeadroom = plan.budgetBps - (usedBps + delta);
-					if (remainingHeadroom < plan.budgetBps * kUpgradeHeadroomRatio)
+					if (!hasUpgradeHeadroom(plan.budgetBps, usedBps, delta))
 						continue;
-					bool inCooldown = prev[i].exists && nowMs > 0 &&
-						prev[i].lastUpgradeAtMs > 0 &&
-						(nowMs - prev[i].lastUpgradeAtMs) < kUpgradeCooldownMs;
+					bool inCooldown = isInUpgradeCooldown(prev[i], nowMs);
 					if (inCooldown) {
 						if (!cooldownCounted[i] && lastState) {
 							auto it = lastState->find(subs[i].consumerId);
@@ -185,9 +201,7 @@ SubscriberBudgetPlan SubscriberBudgetAllocator::Allocate(
 						}
 						continue;
 					}
-					double deltaUtility = allocs[i].utility;
-					if (prev[i].exists && (ns != prev[i].spatial || nt != prev[i].temporal))
-						deltaUtility *= (1.0 - kSwitchPenalty);
+					double deltaUtility = applySwitchPenalty(allocs[i].utility, prev[i], ns, nt);
 					double density = deltaUtility / delta;
 					if (density > bestDensity) {
 						bestDensity = density; bestIdx = i;
@@ -203,12 +217,9 @@ SubscriberBudgetPlan SubscriberBudgetAllocator::Allocate(
 				double oldCost = estimateLayerBitrateBps(subs[i], allocs[i].spatial, allocs[i].temporal);
 				double delta = newCost - oldCost;
 				if (delta > 0.0 && usedBps + delta <= plan.budgetBps) {
-					double remainingHeadroom = plan.budgetBps - (usedBps + delta);
-					if (remainingHeadroom < plan.budgetBps * kUpgradeHeadroomRatio)
+					if (!hasUpgradeHeadroom(plan.budgetBps, usedBps, delta))
 						continue;
-					bool inCooldown = prev[i].exists && nowMs > 0 &&
-						prev[i].lastUpgradeAtMs > 0 &&
-						(nowMs - prev[i].lastUpgradeAtMs) < kUpgradeCooldownMs;
+					bool inCooldown = isInUpgradeCooldown(prev[i], nowMs);
 					if (inCooldown) {
 						if (!cooldownCounted[i] && lastState) {
 							auto it = lastState->find(subs[i].consumerId);
@@ -218,9 +229,7 @@ SubscriberBudgetPlan SubscriberBudgetAllocator::Allocate(
 						}
 						continue;
 					}
-					double deltaUtility = allocs[i].utility;
-					if (prev[i].exists && (ns != prev[i].spatial || nt != prev[i].temporal))
-						deltaUtility *= (1.0 - kSwitchPenalty);
+					double deltaUtility = applySwitchPenalty(allocs[i].utility, prev[i], ns, nt);
 					double density = deltaUtility / delta;
 					if (density > bestDensity) {
 						bestDensity = density; bestIdx = i;
