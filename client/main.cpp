@@ -1,12 +1,15 @@
 // plain-client: PlainTransport MP4 推流客户端 (zero external WS dependency)
-// Usage: ./plain-client SERVER_IP SERVER_PORT ROOM PEER file.mp4
+// Usage: ./plain-client SERVER_IP SERVER_PORT ROOM PEER file.mp4 [--copy]
+// --copy: skip re-encoding, use original H264 (no QoS bitrate control)
 
 #include <nlohmann/json.hpp>
 #include "RtcpHandler.h"
+#include "qos/QosController.h"
 
 extern "C" {
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
+#include <libavutil/opt.h>
 }
 
 #include <openssl/sha.h>
@@ -275,6 +278,7 @@ int main(int argc, char* argv[]) {
 	const char* roomId = argv[3];
 	const char* peerId = argv[4];
 	const char* mp4Path = argv[5];
+	bool copyMode = (argc > 6 && std::string(argv[6]) == "--copy");
 
 	signal(SIGINT, onSignal);
 	signal(SIGPIPE, SIG_IGN);
@@ -328,6 +332,45 @@ int main(int argc, char* argv[]) {
 			aframe = av_frame_alloc();
 		}
 	}
+
+	// Video decode → re-encode setup (for QoS bitrate control)
+	AVCodecContext* vdec = nullptr, *venc = nullptr;
+	AVFrame* vframe = nullptr;
+	int encBitrate = 900000; // initial bitrate, QoS will adjust
+	if (!copyMode && vidIdx >= 0) {
+		auto* par = fmtCtx->streams[vidIdx]->codecpar;
+		auto* dec = avcodec_find_decoder(par->codec_id);
+		if (dec) {
+			vdec = avcodec_alloc_context3(dec);
+			avcodec_parameters_to_context(vdec, par);
+			avcodec_open2(vdec, dec, nullptr);
+
+			auto* enc = avcodec_find_encoder(AV_CODEC_ID_H264);
+			if (enc) {
+				venc = avcodec_alloc_context3(enc);
+				venc->width = par->width;
+				venc->height = par->height;
+				venc->pix_fmt = AV_PIX_FMT_YUV420P;
+				venc->time_base = {1, 25};
+				venc->framerate = {25, 1};
+				venc->bit_rate = encBitrate;
+				venc->rc_max_rate = encBitrate;
+				venc->rc_buffer_size = encBitrate;
+				venc->gop_size = 25;
+				venc->max_b_frames = 0;
+				av_opt_set(venc->priv_data, "preset", "ultrafast", 0);
+				av_opt_set(venc->priv_data, "tune", "zerolatency", 0);
+				av_opt_set(venc->priv_data, "profile", "baseline", 0);
+				if (avcodec_open2(venc, enc, nullptr) < 0) {
+					avcodec_free_context(&venc); venc = nullptr;
+					printf("WARN: x264 encoder init failed, falling back to copy mode\n");
+					copyMode = true;
+				}
+			}
+			vframe = av_frame_alloc();
+		}
+	}
+	printf("Mode: %s\n", copyMode ? "copy (no QoS bitrate control)" : "re-encode (QoS enabled)");
 
 	// WebSocket connect
 	WsClient ws;
@@ -392,6 +435,35 @@ int main(int argc, char* argv[]) {
 		printf("Sent probe packets for comedia\n");
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
+		// Setup QoS controller (only in re-encode mode)
+		std::unique_ptr<qos::PublisherQosController> qosCtrl;
+		if (!copyMode && venc) {
+			qosCtrl = std::make_unique<qos::PublisherQosController>(qos::PublisherQosController::Options{
+				qos::Source::Camera, "video", pub.value("videoProdId", ""), 0,
+				[&](const qos::PlannedAction& action) -> bool {
+					if (action.type == qos::ActionType::SetEncodingParameters && action.encodingParameters.has_value()) {
+						auto& ep = *action.encodingParameters;
+						if (ep.maxBitrateBps.has_value() && venc) {
+							encBitrate = *ep.maxBitrateBps;
+							venc->bit_rate = encBitrate;
+							venc->rc_max_rate = encBitrate;
+							printf("[QoS] encoder bitrate → %d bps\n", encBitrate);
+						}
+					} else if (action.type == qos::ActionType::EnterAudioOnly) {
+						printf("[QoS] → audio only mode\n");
+					} else if (action.type == qos::ActionType::ExitAudioOnly) {
+						printf("[QoS] → exit audio only\n");
+					}
+					return true;
+				},
+				[&](const nlohmann::json& snap) {
+					try { ws.request("clientStats", snap, 2); } catch (...) {}
+				}
+			});
+		}
+
+		int64_t lastQosSampleMs = 0;
+
 		// Stream
 		AVPacket* pkt = av_packet_alloc();
 		auto t0 = std::chrono::steady_clock::now();
@@ -411,29 +483,72 @@ int main(int argc, char* argv[]) {
 			if (pkt->stream_index == vidIdx) {
 				uint32_t rtpTs = (uint32_t)(pts * 90000);
 				rtcp.lastVideoRtpTs = rtpTs;
-				if (bsfCtx) {
-					AVPacket* bsfPkt = av_packet_alloc();
-					av_packet_ref(bsfPkt, pkt);
-					av_bsf_send_packet(bsfCtx, bsfPkt);
-					while (av_bsf_receive_packet(bsfCtx, bsfPkt) == 0) {
-						if (bsfPkt->flags & AV_PKT_FLAG_KEY)
-							rtcp.cacheKeyframe(bsfPkt->data, bsfPkt->size, rtpTs);
-						sendH264(udp, bsfPkt->data, bsfPkt->size, vPt, rtpTs, vSsrc, vSeq);
-						av_packet_unref(bsfPkt);
+
+				if (!copyMode && vdec && venc) {
+					// Re-encode path: decode → encode with QoS-controlled bitrate
+					if (avcodec_send_packet(vdec, pkt) == 0) {
+						while (avcodec_receive_frame(vdec, vframe) == 0) {
+							vframe->pict_type = AV_PICTURE_TYPE_NONE;
+							if (avcodec_send_frame(venc, vframe) == 0) {
+								AVPacket* encPkt = av_packet_alloc();
+								while (avcodec_receive_packet(venc, encPkt) == 0) {
+									// encPkt is already Annex-B from x264
+									if (encPkt->flags & AV_PKT_FLAG_KEY)
+										rtcp.cacheKeyframe(encPkt->data, encPkt->size, rtpTs);
+									sendH264(udp, encPkt->data, encPkt->size, vPt, rtpTs, vSsrc, vSeq);
+									av_packet_unref(encPkt);
+								}
+								av_packet_free(&encPkt);
+							}
+						}
 					}
-					av_packet_free(&bsfPkt);
 				} else {
-					if (pkt->flags & AV_PKT_FLAG_KEY)
-						rtcp.cacheKeyframe(pkt->data, pkt->size, rtpTs);
-					sendH264(udp, pkt->data, pkt->size, vPt, rtpTs, vSsrc, vSeq);
+					// Copy path: BSF convert AVCC→Annex-B
+					if (bsfCtx) {
+						AVPacket* bsfPkt = av_packet_alloc();
+						av_packet_ref(bsfPkt, pkt);
+						av_bsf_send_packet(bsfCtx, bsfPkt);
+						while (av_bsf_receive_packet(bsfCtx, bsfPkt) == 0) {
+							if (bsfPkt->flags & AV_PKT_FLAG_KEY)
+								rtcp.cacheKeyframe(bsfPkt->data, bsfPkt->size, rtpTs);
+							sendH264(udp, bsfPkt->data, bsfPkt->size, vPt, rtpTs, vSsrc, vSeq);
+							av_packet_unref(bsfPkt);
+						}
+						av_packet_free(&bsfPkt);
+					} else {
+						if (pkt->flags & AV_PKT_FLAG_KEY)
+							rtcp.cacheKeyframe(pkt->data, pkt->size, rtpTs);
+						sendH264(udp, pkt->data, pkt->size, vPt, rtpTs, vSsrc, vSeq);
+					}
 				}
+
 				// Process incoming RTCP (PLI + NACK) and send periodic SR
 				rtcp.processIncomingRtcp(udp);
 				rtcp.maybeSendSR(udp);
+
+				// QoS sampling (every 1s)
+				if (qosCtrl) {
+					auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+						std::chrono::steady_clock::now().time_since_epoch()).count();
+					if (now - lastQosSampleMs >= 1000) {
+						lastQosSampleMs = now;
+						qos::RawSenderSnapshot snap;
+						snap.timestampMs = now;
+						snap.bytesSent = rtcp.videoOctetCount;
+						snap.packetsSent = rtcp.videoPacketCount;
+						snap.packetsLost = 0; // TODO: extract from RTCP RR
+						snap.targetBitrateBps = encBitrate;
+						snap.configuredBitrateBps = encBitrate;
+						snap.roundTripTimeMs = -1; // TODO: extract from RTCP RR
+						qosCtrl->onSample(snap);
+					}
+				}
+
 				if (++frameCnt % 100 == 0)
-					printf("sent %d frames [nack_retx=%d pli=%d sr=%d]\n",
+					printf("sent %d frames [nack=%d pli=%d br=%dk level=%d]\n",
 						frameCnt, rtcp.nackRetransmitted, rtcp.pliResponded,
-						(int)(rtcp.videoPacketCount > 0));
+						encBitrate / 1000,
+						qosCtrl ? qosCtrl->currentLevel() : -1);
 			} else if (pkt->stream_index == audIdx && adec && aenc) {
 				if (avcodec_send_packet(adec, pkt) == 0) {
 					while (avcodec_receive_frame(adec, aframe) == 0) {
@@ -463,6 +578,9 @@ int main(int argc, char* argv[]) {
 
 	ws.close();
 	if (bsfCtx) av_bsf_free(&bsfCtx);
+	if (vframe) av_frame_free(&vframe);
+	if (venc) avcodec_free_context(&venc);
+	if (vdec) avcodec_free_context(&vdec);
 	if (aframe) av_frame_free(&aframe);
 	if (aenc) avcodec_free_context(&aenc);
 	if (adec) avcodec_free_context(&adec);
