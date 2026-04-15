@@ -13,3 +13,6 @@
 [submodule "third_party/googletest"]
 	path = third_party/googletest
 	url = https://github.com/google/googletest.git
+[submodule "src/mediasoup-worker-src"]
+	path = src/mediasoup-worker-src
+	url = https://github.com/versatica/mediasoup.git
