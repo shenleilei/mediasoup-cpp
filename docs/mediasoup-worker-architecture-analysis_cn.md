@@ -4,7 +4,7 @@
 
 这份文档基于当前仓库本地下载的 `versatica/mediasoup` 源码：
 
-- 路径：[src/mediasoup-worker-src](../src/mediasoup-worker-src)
+- 路径：[src/mediasoup-worker-src](https://github.com/versatica/mediasoup/tree/3.14.6)
 - tag：`3.14.6`
 - commit：`c042ee7f08ca94ac903f8140f66febb720ef9f91`
 
@@ -21,34 +21,34 @@
 
 `mediasoup-worker` 在这份源码里的核心目录是：
 
-- [worker/src](../src/mediasoup-worker-src/worker/src)
-- [worker/include](../src/mediasoup-worker-src/worker/include)
-- [worker/fbs](../src/mediasoup-worker-src/worker/fbs)
-- [doc](../src/mediasoup-worker-src/doc)
+- [worker/src](https://github.com/versatica/mediasoup/blob/3.14.6/worker/src)
+- [worker/include](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include)
+- [worker/fbs](https://github.com/versatica/mediasoup/blob/3.14.6/worker/fbs)
+- [doc](https://github.com/versatica/mediasoup/tree/3.14.6/doc)
 
 按职责划分，可以粗分成 6 层：
 
 1. 进程入口与全局生命周期
-   - [lib.cpp](../src/mediasoup-worker-src/worker/src/lib.cpp)
-   - [Worker.cpp](../src/mediasoup-worker-src/worker/src/Worker.cpp)
+   - [lib.cpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/src/lib.cpp)
+   - [Worker.cpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/src/Worker.cpp)
 2. Channel/IPC
-   - [ChannelSocket.hpp](../src/mediasoup-worker-src/worker/include/Channel/ChannelSocket.hpp)
-   - [ChannelMessageRegistrator.hpp](../src/mediasoup-worker-src/worker/include/ChannelMessageRegistrator.hpp)
+   - [ChannelSocket.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/Channel/ChannelSocket.hpp)
+   - [ChannelMessageRegistrator.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/ChannelMessageRegistrator.hpp)
 3. 房间与对象图
-   - [Router.hpp](../src/mediasoup-worker-src/worker/include/RTC/Router.hpp)
-   - [Transport.hpp](../src/mediasoup-worker-src/worker/include/RTC/Transport.hpp)
+   - [Router.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/Router.hpp)
+   - [Transport.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/Transport.hpp)
 4. 媒体对象
-   - [Producer.hpp](../src/mediasoup-worker-src/worker/include/RTC/Producer.hpp)
-   - [Consumer.hpp](../src/mediasoup-worker-src/worker/include/RTC/Consumer.hpp)
-   - [SimulcastConsumer.hpp](../src/mediasoup-worker-src/worker/include/RTC/SimulcastConsumer.hpp)
-   - [SvcConsumer.hpp](../src/mediasoup-worker-src/worker/include/RTC/SvcConsumer.hpp)
+   - [Producer.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/Producer.hpp)
+   - [Consumer.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/Consumer.hpp)
+   - [SimulcastConsumer.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/SimulcastConsumer.hpp)
+   - [SvcConsumer.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/SvcConsumer.hpp)
 5. 网络与传输
-   - [WebRtcTransport.hpp](../src/mediasoup-worker-src/worker/include/RTC/WebRtcTransport.hpp)
-   - [WebRtcServer.hpp](../src/mediasoup-worker-src/worker/include/RTC/WebRtcServer.hpp)
-   - [RtpListener.hpp](../src/mediasoup-worker-src/worker/include/RTC/RtpListener.hpp)
+   - [WebRtcTransport.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/WebRtcTransport.hpp)
+   - [WebRtcServer.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/WebRtcServer.hpp)
+   - [RtpListener.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/RtpListener.hpp)
 6. 拥塞控制与带宽分配
-   - [TransportCongestionControlClient.hpp](../src/mediasoup-worker-src/worker/include/RTC/TransportCongestionControlClient.hpp)
-   - [TransportCongestionControlServer.hpp](../src/mediasoup-worker-src/worker/include/RTC/TransportCongestionControlServer.hpp)
+   - [TransportCongestionControlClient.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/TransportCongestionControlClient.hpp)
+   - [TransportCongestionControlServer.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/TransportCongestionControlServer.hpp)
 
 ## 3. 总体架构
 
@@ -102,7 +102,7 @@ mediasoup-worker process
 
 ### 4.1 入口：`mediasoup_worker_run`
 
-主入口在 [lib.cpp](../src/mediasoup-worker-src/worker/src/lib.cpp)：
+主入口在 [lib.cpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/src/lib.cpp)：
 
 1. 初始化 `libuv`
 2. 创建 `ChannelSocket`
@@ -120,7 +120,7 @@ mediasoup-worker process
 
 ### 4.2 `Worker` 是进程根对象
 
-[Worker.hpp](../src/mediasoup-worker-src/worker/include/Worker.hpp) 和 [Worker.cpp](../src/mediasoup-worker-src/worker/src/Worker.cpp) 说明：
+[Worker.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/Worker.hpp) 和 [Worker.cpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/src/Worker.cpp) 说明：
 
 - `Worker` 持有：
   - `ChannelSocket`
@@ -141,7 +141,7 @@ mediasoup-worker process
 
 ### 4.3 `RTC::Shared`
 
-[Shared.hpp](../src/mediasoup-worker-src/worker/include/RTC/Shared.hpp) 很小，但很重要。
+[Shared.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/Shared.hpp) 很小，但很重要。
 
 它把两类跨模块共享能力抽出来：
 
@@ -154,7 +154,7 @@ mediasoup-worker process
 
 ### 5.1 Channel 是 worker 的控制面入口
 
-[ChannelSocket.hpp](../src/mediasoup-worker-src/worker/include/Channel/ChannelSocket.hpp) 定义了 worker 内部最重要的控制抽象：
+[ChannelSocket.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/Channel/ChannelSocket.hpp) 定义了 worker 内部最重要的控制抽象：
 
 - `RequestHandler`
 - `NotificationHandler`
@@ -169,7 +169,7 @@ mediasoup-worker process
 
 ### 5.2 `Worker` 只处理顶层 request
 
-[Worker.cpp](../src/mediasoup-worker-src/worker/src/Worker.cpp) 的 `HandleRequest()` 只直接处理少数顶层方法：
+[Worker.cpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/src/Worker.cpp) 的 `HandleRequest()` 只直接处理少数顶层方法：
 
 - `WORKER_CLOSE`
 - `WORKER_DUMP`
@@ -193,7 +193,7 @@ mediasoup-worker process
 
 ### 5.3 `ChannelMessageRegistrator`
 
-[ChannelMessageRegistrator.hpp](../src/mediasoup-worker-src/worker/include/ChannelMessageRegistrator.hpp) 本质上是：
+[ChannelMessageRegistrator.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/ChannelMessageRegistrator.hpp) 本质上是：
 
 - `handlerId -> RequestHandler*`
 - `handlerId -> NotificationHandler*`
@@ -228,7 +228,7 @@ mediasoup-worker process
 
 ### 6.2 `WebRtcServer`
 
-[WebRtcServer.hpp](../src/mediasoup-worker-src/worker/include/RTC/WebRtcServer.hpp) 和 [WebRtcServer.cpp](../src/mediasoup-worker-src/worker/src/RTC/WebRtcServer.cpp) 说明：
+[WebRtcServer.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/WebRtcServer.hpp) 和 [WebRtcServer.cpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/src/RTC/WebRtcServer.cpp) 说明：
 
 `WebRtcServer` 的职责是：
 
@@ -242,7 +242,7 @@ mediasoup-worker process
 
 ### 6.3 `Router`
 
-[Router.hpp](../src/mediasoup-worker-src/worker/include/RTC/Router.hpp) 是 worker 内部真正的媒体拓扑中枢。
+[Router.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/Router.hpp) 是 worker 内部真正的媒体拓扑中枢。
 
 它维护：
 
@@ -274,7 +274,7 @@ mediasoup-worker process
 
 ### 7.2 维护 `Producer <-> Consumer` 拓扑
 
-在 [Router.cpp](../src/mediasoup-worker-src/worker/src/RTC/Router.cpp) 里：
+在 [Router.cpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/src/RTC/Router.cpp) 里：
 
 - `OnTransportNewProducer()` 把 Producer 加入路由图
 - `OnTransportNewConsumer()` 把 Consumer 绑定到 Producer
@@ -316,7 +316,7 @@ mediasoup-worker process
 
 ### 8.1 `Transport` 的职责
 
-从 [Transport.hpp](../src/mediasoup-worker-src/worker/include/RTC/Transport.hpp) 可以看出，`Transport` 是一个超核心聚合类：
+从 [Transport.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/Transport.hpp) 可以看出，`Transport` 是一个超核心聚合类：
 
 - 拥有 Producer / Consumer / DataProducer / DataConsumer
 - 拥有 `RtpListener`
@@ -358,7 +358,7 @@ mediasoup-worker process
 
 ## 9. `RtpListener`：incoming RTP demux 核心
 
-[RtpListener.hpp](../src/mediasoup-worker-src/worker/include/RTC/RtpListener.hpp) 和 [RtpListener.cpp](../src/mediasoup-worker-src/worker/src/RTC/RtpListener.cpp) 负责把 incoming RTP 归到某个 Producer。
+[RtpListener.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/RtpListener.hpp) 和 [RtpListener.cpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/src/RTC/RtpListener.cpp) 负责把 incoming RTP 归到某个 Producer。
 
 它维护 3 张表：
 
@@ -383,7 +383,7 @@ mediasoup-worker process
 
 ### 10.1 `Producer` 的角色
 
-[Producer.hpp](../src/mediasoup-worker-src/worker/include/RTC/Producer.hpp) 对应的是：
+[Producer.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/Producer.hpp) 对应的是：
 
 - 接收进来的媒体流
 - 维护 `RtpStreamRecv`
@@ -414,7 +414,7 @@ mediasoup-worker process
 
 ### 11.1 `Consumer` 是一个抽象基类
 
-[Consumer.hpp](../src/mediasoup-worker-src/worker/include/RTC/Consumer.hpp) 定义了非常关键的抽象接口：
+[Consumer.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/Consumer.hpp) 定义了非常关键的抽象接口：
 
 - `GetBitratePriority()`
 - `IncreaseLayer()`
@@ -452,7 +452,7 @@ worker 内部会真实使用这个 priority 来参与可用带宽分配，不是
 
 ### 12.1 `TRANSPORT_CONSUME`
 
-[Transport.cpp](../src/mediasoup-worker-src/worker/src/RTC/Transport.cpp) 的 `TRANSPORT_CONSUME` 分支会按 `RtpParameters::Type` 创建：
+[Transport.cpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/src/RTC/Transport.cpp) 的 `TRANSPORT_CONSUME` 分支会按 `RtpParameters::Type` 创建：
 
 - `SimpleConsumer`
 - `SimulcastConsumer`
@@ -489,7 +489,7 @@ worker 会创建 `TransportCongestionControlClient`。
 
 ### 13.1 它不是手写 BWE，而是 libwebrtc 封装
 
-[TransportCongestionControlClient.cpp](../src/mediasoup-worker-src/worker/src/RTC/TransportCongestionControlClient.cpp) 里明确用了：
+[TransportCongestionControlClient.cpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/src/RTC/TransportCongestionControlClient.cpp) 里明确用了：
 
 - `webrtc::GoogCcNetworkControllerFactory`
 - `webrtc::RtpTransportControllerSend`
@@ -521,7 +521,7 @@ worker 会创建 `TransportCongestionControlClient`。
 
 ### 14.1 角色
 
-[TransportCongestionControlServer.hpp](../src/mediasoup-worker-src/worker/include/RTC/TransportCongestionControlServer.hpp) 和 [TransportCongestionControlServer.cpp](../src/mediasoup-worker-src/worker/src/RTC/TransportCongestionControlServer.cpp) 负责：
+[TransportCongestionControlServer.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/TransportCongestionControlServer.hpp) 和 [TransportCongestionControlServer.cpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/src/RTC/TransportCongestionControlServer.cpp) 负责：
 
 - 收集 incoming RTP 的时间信息
 - 生成 `transport-cc` feedback
@@ -552,7 +552,7 @@ worker 会创建 `TransportCongestionControlClient`。
 
 ### 15.1 `DistributeAvailableOutgoingBitrate()`
 
-[Transport.cpp](../src/mediasoup-worker-src/worker/src/RTC/Transport.cpp) 有一个非常直接的内部算法：
+[Transport.cpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/src/RTC/Transport.cpp) 有一个非常直接的内部算法：
 
 - 收集所有 `priority > 0` 的 Consumer
 - 从 `tccClient->GetAvailableBitrate()` 取当前可用带宽
@@ -581,7 +581,7 @@ worker 会创建 `TransportCongestionControlClient`。
 
 ### 16.1 它不只是执行 `preferredLayers`
 
-[SimulcastConsumer.cpp](../src/mediasoup-worker-src/worker/src/RTC/SimulcastConsumer.cpp) 里，`preferredSpatialLayer` / `preferredTemporalLayer` 只是“上界偏好”，不是最终直接下发层。
+[SimulcastConsumer.cpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/src/RTC/SimulcastConsumer.cpp) 里，`preferredSpatialLayer` / `preferredTemporalLayer` 只是“上界偏好”，不是最终直接下发层。
 
 真正运行时还有：
 
@@ -748,17 +748,17 @@ worker 仍然**不知道**这些业务语义：
 
 如果后面还要继续读 worker 源码，建议按下面顺序：
 
-1. [worker/src/lib.cpp](../src/mediasoup-worker-src/worker/src/lib.cpp)
-2. [worker/src/Worker.cpp](../src/mediasoup-worker-src/worker/src/Worker.cpp)
-3. [worker/include/Channel/ChannelSocket.hpp](../src/mediasoup-worker-src/worker/include/Channel/ChannelSocket.hpp)
-4. [worker/include/RTC/Router.hpp](../src/mediasoup-worker-src/worker/include/RTC/Router.hpp)
-5. [worker/include/RTC/Transport.hpp](../src/mediasoup-worker-src/worker/include/RTC/Transport.hpp)
-6. [worker/include/RTC/RtpListener.hpp](../src/mediasoup-worker-src/worker/include/RTC/RtpListener.hpp)
-7. [worker/include/RTC/Producer.hpp](../src/mediasoup-worker-src/worker/include/RTC/Producer.hpp)
-8. [worker/include/RTC/Consumer.hpp](../src/mediasoup-worker-src/worker/include/RTC/Consumer.hpp)
-9. [worker/src/RTC/TransportCongestionControlClient.cpp](../src/mediasoup-worker-src/worker/src/RTC/TransportCongestionControlClient.cpp)
-10. [worker/src/RTC/SimulcastConsumer.cpp](../src/mediasoup-worker-src/worker/src/RTC/SimulcastConsumer.cpp)
-11. [worker/src/RTC/SvcConsumer.cpp](../src/mediasoup-worker-src/worker/src/RTC/SvcConsumer.cpp)
+1. [worker/src/lib.cpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/src/lib.cpp)
+2. [worker/src/Worker.cpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/src/Worker.cpp)
+3. [worker/include/Channel/ChannelSocket.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/Channel/ChannelSocket.hpp)
+4. [worker/include/RTC/Router.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/Router.hpp)
+5. [worker/include/RTC/Transport.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/Transport.hpp)
+6. [worker/include/RTC/RtpListener.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/RtpListener.hpp)
+7. [worker/include/RTC/Producer.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/Producer.hpp)
+8. [worker/include/RTC/Consumer.hpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/include/RTC/Consumer.hpp)
+9. [worker/src/RTC/TransportCongestionControlClient.cpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/src/RTC/TransportCongestionControlClient.cpp)
+10. [worker/src/RTC/SimulcastConsumer.cpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/src/RTC/SimulcastConsumer.cpp)
+11. [worker/src/RTC/SvcConsumer.cpp](https://github.com/versatica/mediasoup/blob/3.14.6/worker/src/RTC/SvcConsumer.cpp)
 
 ## 22. 结论
 
