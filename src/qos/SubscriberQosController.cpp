@@ -11,6 +11,12 @@ void SubscriberQosController::pruneStaleConsumers(
 		else
 			++it;
 	}
+	for (auto it = lastState_.begin(); it != lastState_.end(); ) {
+		if (consumers.find(it->first) == consumers.end())
+			it = lastState_.erase(it);
+		else
+			++it;
+	}
 }
 
 void SubscriberQosController::applyActions(const std::vector<DownlinkAction>& actions,

@@ -23,6 +23,7 @@ struct SubscriberInput {
 	std::string peerId;
 	DownlinkSnapshot snapshot;
 	int degradeLevel{ 0 };
+	std::unordered_map<std::string, ConsumerLastState>* lastState{ nullptr };
 };
 
 class RoomDownlinkPlanner {

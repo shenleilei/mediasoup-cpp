@@ -24,6 +24,12 @@ struct ConsumerLastState {
 	uint8_t spatialLayer{ 0 };
 	uint8_t temporalLayer{ 0 };
 	uint8_t priority{ 0 };
+	bool hasLayerState{ false };
+	int64_t lastLayerChangeAtMs{ 0 };
+	int64_t lastUpgradeAtMs{ 0 };
+	uint64_t layerSwitchCount{ 0 };
+	uint64_t upgradeBlockedByCooldownCount{ 0 };
+	uint64_t flappingEvents{ 0 };
 };
 
 class DownlinkAllocator {
@@ -56,7 +62,8 @@ public:
 	/// redundant actions.  lastState is updated to reflect the plan.
 	static std::vector<DownlinkAction> ComputeBudgetDiff(
 		const std::vector<DownlinkAction>& planActions,
-		std::unordered_map<std::string, ConsumerLastState>& lastState);
+		std::unordered_map<std::string, ConsumerLastState>& lastState,
+		int64_t nowMs = 0);
 };
 
 } // namespace mediasoup::qos

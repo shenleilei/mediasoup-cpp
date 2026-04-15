@@ -206,3 +206,27 @@ TEST(DownlinkAllocatorTest, ComputeBudgetDiffEmitsKeyFrameOnResume) {
 	EXPECT_TRUE(hasResume);
 	EXPECT_TRUE(hasKeyFrameLayers);
 }
+
+TEST(DownlinkAllocatorTest, ComputeBudgetDiffTracksLayerSwitchMetrics) {
+	std::vector<DownlinkAction> planActions = {
+		{DownlinkAction::Type::kSetLayers, "c1", 1, 0, false, 0},
+		{DownlinkAction::Type::kSetPriority, "c1", 0, 0, false, DownlinkAllocator::kPriorityPinned},
+	};
+	std::unordered_map<std::string, ConsumerLastState> lastState;
+	lastState["c1"] = {
+		.paused = false,
+		.spatialLayer = 0,
+		.temporalLayer = 0,
+		.priority = DownlinkAllocator::kPriorityPinned,
+		.hasLayerState = true,
+		.lastLayerChangeAtMs = 1000,
+	};
+
+	DownlinkAllocator::ComputeBudgetDiff(planActions, lastState, 2000);
+
+	ASSERT_TRUE(lastState.count("c1") > 0);
+	EXPECT_EQ(lastState["c1"].layerSwitchCount, 1u);
+	EXPECT_EQ(lastState["c1"].flappingEvents, 1u);
+	EXPECT_EQ(lastState["c1"].lastLayerChangeAtMs, 2000);
+	EXPECT_EQ(lastState["c1"].lastUpgradeAtMs, 2000);
+}

@@ -119,6 +119,7 @@ std::vector<DownlinkAction> DownlinkAllocator::ComputeDiff(
 			}
 			st.spatialLayer = spatial;
 			st.temporalLayer = temporal;
+			st.hasLayerState = true;
 			(void)wasPaused; // used only by Compute for resume logic
 		}
 	}
@@ -128,8 +129,10 @@ std::vector<DownlinkAction> DownlinkAllocator::ComputeDiff(
 
 std::vector<DownlinkAction> DownlinkAllocator::ComputeBudgetDiff(
 	const std::vector<DownlinkAction>& planActions,
-	std::unordered_map<std::string, ConsumerLastState>& lastState)
+	std::unordered_map<std::string, ConsumerLastState>& lastState,
+	int64_t nowMs)
 {
+	constexpr int64_t kFlappingWindowMs = 4'000;
 	std::vector<DownlinkAction> filtered;
 	filtered.reserve(planActions.size());
 
@@ -143,6 +146,7 @@ std::vector<DownlinkAction> DownlinkAllocator::ComputeBudgetDiff(
 		case DownlinkAction::Type::kResume:
 			d.paused = false; break;
 		case DownlinkAction::Type::kSetLayers:
+			d.hasLayerState = true;
 			d.spatialLayer = a.spatialLayer;
 			d.temporalLayer = a.temporalLayer; break;
 		case DownlinkAction::Type::kSetPriority:
@@ -184,8 +188,44 @@ std::vector<DownlinkAction> DownlinkAllocator::ComputeBudgetDiff(
 	}
 
 	// Update lastState to desired
-	for (auto& [cid, d] : desired)
-		lastState[cid] = d;
+	for (auto& [cid, d] : desired) {
+		auto& st = lastState[cid];
+		bool hadLayer = st.hasLayerState;
+		bool changedLayer = hadLayer &&
+			(st.spatialLayer != d.spatialLayer || st.temporalLayer != d.temporalLayer);
+		bool upgradedLayer = changedLayer &&
+			(static_cast<int>(d.spatialLayer) > static_cast<int>(st.spatialLayer) ||
+				(d.spatialLayer == st.spatialLayer &&
+					static_cast<int>(d.temporalLayer) > static_cast<int>(st.temporalLayer)));
+		if (changedLayer) {
+			st.layerSwitchCount++;
+			if (nowMs > 0 && st.lastLayerChangeAtMs > 0 &&
+				(nowMs - st.lastLayerChangeAtMs) < kFlappingWindowMs)
+				st.flappingEvents++;
+			if (nowMs > 0)
+				st.lastLayerChangeAtMs = nowMs;
+			if (upgradedLayer && nowMs > 0)
+				st.lastUpgradeAtMs = nowMs;
+		} else if (!hadLayer && d.hasLayerState && nowMs > 0) {
+			st.lastLayerChangeAtMs = nowMs;
+			st.lastUpgradeAtMs = nowMs;
+		}
+
+		bool preservedHasLayer = st.hasLayerState;
+		uint64_t preservedSwitch = st.layerSwitchCount;
+		uint64_t preservedCooldownBlocked = st.upgradeBlockedByCooldownCount;
+		uint64_t preservedFlapping = st.flappingEvents;
+		int64_t preservedLayerChangeAtMs = st.lastLayerChangeAtMs;
+		int64_t preservedUpgradeAtMs = st.lastUpgradeAtMs;
+
+		st = d;
+		st.hasLayerState = preservedHasLayer || d.hasLayerState;
+		st.layerSwitchCount = preservedSwitch;
+		st.upgradeBlockedByCooldownCount = preservedCooldownBlocked;
+		st.flappingEvents = preservedFlapping;
+		st.lastLayerChangeAtMs = preservedLayerChangeAtMs;
+		st.lastUpgradeAtMs = preservedUpgradeAtMs;
+	}
 
 	return filtered;
 }

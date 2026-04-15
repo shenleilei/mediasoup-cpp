@@ -1462,6 +1462,7 @@ void RoomService::runDownlinkPlanningForRoom(const std::string& roomId) {
 		input.peerId = peerId;
 		input.snapshot = entry->snapshot;
 		input.degradeLevel = ctrl.healthMonitor().degradeLevel();
+		input.lastState = &ctrl.lastState();
 		subscriberInputs.push_back(std::move(input));
 	}
 	if (subscriberInputs.empty()) return;
@@ -1490,7 +1491,7 @@ void RoomService::runDownlinkPlanningForRoom(const std::string& roomId) {
 		if (!peer) continue;
 
 		auto diffActions = qos::DownlinkAllocator::ComputeBudgetDiff(
-			sp.plan.actions, ctrl.lastState());
+			sp.plan.actions, ctrl.lastState(), nowMs);
 		ctrl.applyActions(diffActions, peer->consumers);
 	}
 

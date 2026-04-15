@@ -17,7 +17,9 @@ public:
 
 	SubscriberBudgetPlan Allocate(
 		const DownlinkSnapshot& snapshot,
-		int degradeLevel) const;
+		int degradeLevel,
+		std::unordered_map<std::string, ConsumerLastState>* lastState = nullptr,
+		int64_t nowMs = 0) const;
 
 private:
 	double computeBudgetBps(const DownlinkSnapshot& snapshot) const;

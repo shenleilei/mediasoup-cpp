@@ -119,6 +119,35 @@ TEST(SubscriberBudgetAllocatorTest, DegradeLevelStillCapsBudgetAllocator) {
 	}
 }
 
+TEST(SubscriberBudgetAllocatorTest, UpgradeCooldownBlocksImmediateUpgrade) {
+	SubscriberBudgetAllocator alloc;
+	auto snap = MakeSnapshot("sub1", 5'000'000.0, {
+		MakeSub("c1", "p1", true, true),
+	});
+	std::unordered_map<std::string, ConsumerLastState> lastState;
+	lastState["c1"] = {
+		.paused = false,
+		.spatialLayer = 0,
+		.temporalLayer = 0,
+		.priority = DownlinkAllocator::kPriorityPinned,
+		.hasLayerState = true,
+		.lastLayerChangeAtMs = 1000,
+		.lastUpgradeAtMs = 1000,
+	};
+
+	auto plan = alloc.Allocate(snap, 0, &lastState, 2000); // within cooldown window
+	uint8_t spatial = 255, temporal = 255;
+	for (auto& a : plan.actions) {
+		if (a.type == DownlinkAction::Type::kSetLayers && a.consumerId == "c1") {
+			spatial = a.spatialLayer;
+			temporal = a.temporalLayer;
+		}
+	}
+	EXPECT_EQ(spatial, 0);
+	EXPECT_EQ(temporal, 0);
+	EXPECT_GT(lastState["c1"].upgradeBlockedByCooldownCount, 0u);
+}
+
 // ── ProducerDemandAggregator tests ──
 
 TEST(ProducerDemandAggregatorTest, MaxLayerComesFromHighestSubscriberDemand) {

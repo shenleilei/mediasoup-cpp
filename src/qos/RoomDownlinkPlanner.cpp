@@ -11,7 +11,7 @@ RoomDownlinkPlan RoomDownlinkPlanner::PlanRoom(
 	ProducerDemandAggregator aggregator;
 
 	for (auto& sub : subscribers) {
-		auto plan = budgetAllocator_.Allocate(sub.snapshot, sub.degradeLevel);
+		auto plan = budgetAllocator_.Allocate(sub.snapshot, sub.degradeLevel, sub.lastState, nowMs);
 		aggregator.addSubscriberPlan(sub.peerId, sub.snapshot, plan);
 		result.subscriberPlans.push_back({ sub.peerId, std::move(plan) });
 	}
