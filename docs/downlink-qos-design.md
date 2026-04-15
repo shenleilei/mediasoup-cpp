@@ -44,7 +44,7 @@ The project already collects or exposes:
 
 Relevant files:
 
-- [RoomService.cpp](./RoomService.cpp)
+- [RoomService.cpp](../src/RoomService.cpp)
 - [qos-demo.js](../public/qos-demo.js)
 
 ### 3.2 Existing server-side control actions
