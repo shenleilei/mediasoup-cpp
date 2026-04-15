@@ -113,6 +113,36 @@
 也就是说，`v3` 完全可以把“修改 worker 源代码”纳入正式范围；
 只是这件事应该在证据驱动的前提下进入，而不是一开始就默认它是第一步。
 
+这里需要补一个基于 `mediasoup-worker 3.14.6` 源码的明确结论：
+
+- worker 已经内建了 transport 级别的：
+  - `available outgoing bitrate` 估计
+  - 多 consumer 间的 bitrate 分配
+  - 基于 `consumer.priority` 的分配顺序
+  - `SimulcastConsumer / SvcConsumer` 的层切换与 anti-flap
+- 这些能力主要落在：
+  - `Transport::DistributeAvailableOutgoingBitrate()`
+  - `Transport::ComputeOutgoingDesiredBitrate()`
+  - `SimulcastConsumer::IncreaseLayer()/ApplyLayers()`
+  - `SvcConsumer::IncreaseLayer()/ApplyLayers()`
+
+这意味着 `v3` 后续不能再把 worker 当成“只会被动执行 `setPreferredLayers()` 的媒体黑盒”。
+
+但同时也要明确，worker 仍然**不知道**这些业务语义：
+
+- 哪个 consumer 在页面里是 `visible`
+- 哪个 tile 是 `pinned`
+- `targetWidth / targetHeight` 的业务价值
+- room 级跨 subscriber 的 producer demand
+- publisher 侧 `pauseUpstream / resumeUpstream` 的供给策略
+
+所以当前更准确的边界应该是：
+
+- worker 负责 transport 内 consumer 分配、层切换和媒体执行
+- control plane 负责 room 级业务语义、producer demand 聚合和 publisher supply 控制
+
+这也是为什么后面的 `v3` 不应该继续沿着“在控制面实现更强的最终 subscriber allocator”这个方向扩展。
+
 ### 3.4 还没有和 uplink 对齐的 downlink matrix
 
 当前 `uplink QoS` 已经有：
@@ -182,6 +212,35 @@
 
 - 先用 control plane + browser / integration 验证把问题收敛
 - 再决定是否需要修改 worker 源代码来支撑真正的数据面 pause / resume
+
+### 5.2.1 不在控制面重复实现 transport 级 consumer allocator
+
+在 worker 源码边界明确以后，`v3` 这里还要再加一条原则：
+
+- 不要在 control plane 里继续做一个和 worker transport allocator 平行的“最终分配器”
+
+原因很直接：
+
+1. worker 已经会在 transport 内按可用带宽和 priority 分配 consumer 层级
+2. worker 已经在 `SimulcastConsumer / SvcConsumer` 内部做了 anti-flap
+3. control plane 如果再做一套“最终层分配”，就会形成双层分配和双层 hysteresis
+
+双层控制最容易带来的问题不是“更稳”，而是：
+
+- 行为难以解释
+- 恢复过慢
+- producer demand 与实际 committed consumer 层脱节
+
+因此，`v3` 的控制面更适合做：
+
+- 业务语义到 worker 控制意图的映射
+  - `priority`
+  - `preferredLayers`
+  - `pause / resume`
+- room 级 producer demand 聚合
+- publisher supply / `pauseUpstream` / `resumeUpstream`
+
+而不是继续把 `SubscriberBudgetAllocator` 演进成一个更复杂的最终层调度器。
 
 ### 5.3 planner 必须从“事件驱动”升级到“时钟驱动”
 

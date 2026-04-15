@@ -60,6 +60,36 @@
 
 所以“worker 改造”是 `v3` 的正式实现选项，只是不应该在没有黑盒证据时提前展开。
 
+### 3.1 当前实现决策修正
+
+在补完 `mediasoup-worker 3.14.6` 源码分析后，当前 `v3` 的实施方向需要做一个明确修正：
+
+- 不继续把控制面里的 `SubscriberBudgetAllocator` 往“最终 consumer 分配器”方向做大
+
+原因是 worker 已经在 transport 内提供了：
+
+- `available outgoing bitrate` 估计
+- 多 consumer 间的 bitrate 分配
+- 基于 `consumer.priority` 的分配顺序
+- `SimulcastConsumer / SvcConsumer` 的层切换与 anti-flap
+
+因此，当前控制面的下一步不应再是：
+
+- committed-state budget allocator
+- 更复杂的 switching penalty
+- 更复杂的控制面 layer dwell
+
+而应改成：
+
+- 业务语义到 worker 控制意图的映射
+  - `priority`
+  - `preferredLayers`
+  - `pause / resume`
+- producer demand 聚合
+- publisher supply / `pauseUpstream` / `resumeUpstream`
+
+也就是说，控制面要做的是 room-level 语义与供给控制，而不是继续重复 worker transport 内已有的 consumer allocation。
+
 ## 4. v3 目标调用链
 
 `v3` 最终要形成这条链：
@@ -97,6 +127,14 @@
 - fixed minimum planning interval
 
 这是 `v3` 的总入口，不先做这层，后面的 pause / resume 很容易振荡。
+
+但这里要强调：
+
+- 这个 planner 的主要输出，不再建议理解成“最终 consumer bitrate/layer 分配结果”
+- 更合理的定位是：
+  - room-level 语义整合
+  - worker 控制意图生成
+  - producer demand 聚合入口
 
 ### 5.2 需要修改的文件
 
@@ -347,6 +385,17 @@ bool shouldResume(const ProducerDemandState& state) const;
   或
 - 必须进入 worker 源代码修改
 
+同时，这个阶段还有一个现实目标：
+
+- 判断当前控制面里哪些 downlink allocator 逻辑属于重复实现，应该收缩掉
+
+这里的判断标准很简单：
+
+- 如果一项逻辑本质上是在 transport 内决定多个 consumer 的最终层分配
+  - 优先交给 worker
+- 如果一项逻辑本质上是在 room 级表达业务语义或控制 publisher supply
+  - 保留在 control plane
+
 ### 8.2 输出形式
 
 建议单独补一份验证文档，例如：
@@ -452,6 +501,24 @@ bool shouldResume(const ProducerDemandState& state) const;
 4. `feat: apply publisher pause and resume in client qos controller`
 5. `test: add downlink pause-resume integration coverage`
 6. `test: add downlink matrix and report pipeline`
+
+### 10.1 当前分支的取舍结论
+
+结合 worker 边界分析，当前分支后续不建议再新增类似下面这种 commit：
+
+- `feat: add committed-state subscriber budget allocator`
+- `feat: add control-plane layer dwell / switching penalty`
+
+更合理的下一步应该是：
+
+1. 收缩控制面 allocator，只保留 worker 控制意图：
+   - `priority`
+   - `preferredLayers`
+   - `pause / resume`
+2. 保留并继续增强：
+   - producer demand 聚合
+   - publisher supply / `pauseUpstream` / `resumeUpstream`
+3. 补“worker 实际 committed 状态”与 control-plane demand 对齐的观测与验证
 
 ## 11. 完成标准
 
