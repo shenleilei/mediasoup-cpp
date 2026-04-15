@@ -89,8 +89,19 @@ public:
 		const json& rtpCapabilities);
 	Result pauseProducer(const std::string& roomId, const std::string& producerId);
 	Result resumeProducer(const std::string& roomId, const std::string& producerId);
+	Result createPlainTransport(const std::string& roomId, const std::string& peerId,
+		bool producing, bool consuming);
+	Result connectPlainTransport(const std::string& roomId, const std::string& peerId,
+		const std::string& transportId, const std::string& ip, uint16_t port);
 	Result restartIce(const std::string& roomId, const std::string& peerId,
 		const std::string& transportId);
+
+	// PlainTransport: one-shot publish (create transport + produce video + audio)
+	Result plainPublish(const std::string& roomId, const std::string& peerId,
+		uint32_t videoSsrc, uint32_t audioSsrc);
+	// PlainTransport: one-shot subscribe (create transport + consume all)
+	Result plainSubscribe(const std::string& roomId, const std::string& peerId,
+		const std::string& recvIp, uint16_t recvPort);
 	Result setQosOverride(const std::string& roomId, const std::string& callerPeerId,
 		const std::string& targetPeerId, const json& overrideData);
 	Result setQosPolicy(const std::string& roomId, const std::string& callerPeerId,

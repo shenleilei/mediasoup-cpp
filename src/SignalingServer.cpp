@@ -851,6 +851,14 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 					} else if (method == "requestConsumerKeyFrame") {
 						result = rs->requestConsumerKeyFrame(roomId, peerId,
 							data.at("consumerId").get<std::string>());
+					} else if (method == "plainPublish") {
+						result = rs->plainPublish(roomId, peerId,
+							data.value("videoSsrc", 1111u),
+							data.value("audioSsrc", 2222u));
+					} else if (method == "plainSubscribe") {
+						result = rs->plainSubscribe(roomId, peerId,
+							data.at("recvIp").get<std::string>(),
+							data.at("recvPort").get<uint16_t>());
 					} else {
 						result = {false, {}, "", "unknown method: " + method};
 					}

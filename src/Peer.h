@@ -1,5 +1,6 @@
 #pragma once
 #include "WebRtcTransport.h"
+#include "PlainTransport.h"
 #include "Producer.h"
 #include "Consumer.h"
 #include "RtpTypes.h"
@@ -19,6 +20,8 @@ struct Peer {
 	RtpCapabilities rtpCapabilities;
 	std::shared_ptr<WebRtcTransport> sendTransport;
 	std::shared_ptr<WebRtcTransport> recvTransport;
+	std::shared_ptr<PlainTransport> plainSendTransport;
+	std::shared_ptr<PlainTransport> plainRecvTransport;
 	std::unordered_map<std::string, std::shared_ptr<Producer>> producers;
 	std::unordered_map<std::string, std::shared_ptr<Consumer>> consumers;
 	bool closed = false;
@@ -27,10 +30,10 @@ struct Peer {
 		if (closed) return;
 		closed = true;
 
-		// Close transports first so mediasoup-worker tears down attached producers/consumers
-		// in one path, which avoids double-close noise during disconnect cleanup.
 		if (sendTransport) { sendTransport->close(); sendTransport.reset(); }
 		if (recvTransport) { recvTransport->close(); recvTransport.reset(); }
+		if (plainSendTransport) { plainSendTransport->close(); plainSendTransport.reset(); }
+		if (plainRecvTransport) { plainRecvTransport->close(); plainRecvTransport.reset(); }
 		for (auto& [_, p] : producers)
 			if (p && !p->closed()) p->close();
 		producers.clear();
@@ -42,6 +45,8 @@ struct Peer {
 	std::shared_ptr<Transport> getTransport(const std::string& tid) {
 		if (sendTransport && sendTransport->id() == tid) return sendTransport;
 		if (recvTransport && recvTransport->id() == tid) return recvTransport;
+		if (plainSendTransport && plainSendTransport->id() == tid) return plainSendTransport;
+		if (plainRecvTransport && plainRecvTransport->id() == tid) return plainRecvTransport;
 		return nullptr;
 	}
 
