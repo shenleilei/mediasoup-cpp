@@ -231,6 +231,7 @@ async function main() {
   } finally {
     await browser.close();
     await new Promise(resolve => server.close(resolve));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 
   console.log(JSON.stringify(results, null, 2));
