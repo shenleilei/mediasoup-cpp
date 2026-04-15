@@ -44,6 +44,7 @@
 
 | 文档 | 用途 |
 |---|---|
+| [full-architecture-flow_cn.md](./full-architecture-flow_cn.md) | 全链路架构流程图：从信令加入到 Worker 媒体转发，覆盖进程模型、SDP/DTLS/ICE、IPC、BWE、Redis 多节点、QoS。 |
 | [architecture_cn.md](./architecture_cn.md) | 运行时架构详解，覆盖线程/进程模型、关键时序、IPC、多节点与故障恢复。 |
 | [troubleshooting_cn.md](./troubleshooting_cn.md) | 运行时排障手册，覆盖 join/IPC/Redis/QoS/录制/worker crash 的定位路径。 |
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | 项目开发主文档，包含架构、线程模型、构建与测试入口。 |
