@@ -44,6 +44,14 @@ public:
 	// Call this every ~1s with fresh stats
 	void onSample(const RawSenderSnapshot& snapshot) {
 		auto now = nowMs();
+
+		// Warmup: skip first few samples (encoder startup + comedia lock)
+		if (sampleCount_ < kWarmupSamples) {
+			prevSnapshot_ = snapshot;
+			hasPrev_ = true;
+			sampleCount_++;
+			return;
+		}
 		DerivedSignals signals = deriveSignals(snapshot, hasPrev_ ? &prevSnapshot_ : nullptr,
 			hasPrevSig_ ? &prevSignals_ : nullptr);
 
@@ -161,6 +169,7 @@ private:
 	bool hasPrevSig_ = false;
 
 	int sampleCount_ = 0;
+	static constexpr int kWarmupSamples = 5; // skip first 5 seconds
 	int snapshotSeq_ = 0;
 	int64_t lastSnapshotMs_ = 0;
 };
