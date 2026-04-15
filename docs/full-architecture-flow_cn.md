@@ -5,39 +5,46 @@
 ## 1. 进程 / 线程模型总览
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        main()                               │
-│  解析配置 → 创建 RoomRegistry(Redis) → 创建 N 个 WorkerThread │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-              ┌────────────┼────────────────┐
-              ▼            ▼                ▼
-     ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-     │WorkerThread 0│ │WorkerThread 1│ │WorkerThread N│
-     │  epoll loop  │ │  epoll loop  │ │  epoll loop  │
-     │  ┌────────┐  │ │              │ │              │
-     │  │Worker 0 │  │ │   ...        │ │   ...        │
-     │  │Worker 1 │  │ │              │ │              │
-     │  └────────┘  │ │              │ │              │
-     │  RoomManager │ │              │ │              │
-     │  RoomService │ │              │ │              │
-     └──────┬──────┘ └──────────────┘ └──────────────┘
-            │
-            │ fork+exec
-            ▼
-     ┌──────────────┐
-     │mediasoup-worker│  ← 单线程 libuv 事件循环
-     │  (C++ 进程)    │
-     │  Router        │
-     │  Transport     │
-     │  Producer      │
-     │  Consumer      │
-     │  BWE           │
-     └──────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                         main()                               │
+│  解析配置 → 可选创建 RoomRegistry(Redis) → 创建 N 个 WorkerThread │
+└───────────────┬───────────────────────────────┬──────────────┘
+                │                               │
+                │                               ├─ registry worker thread
+                │                               │    串行执行 Redis command / heartbeat / refreshRoom
+                │                               │
+                │                               └─ Redis subscriber thread
+                │                                    poll + redisGetReply → 更新 nodeCache_/roomCache_
+                │
+     ┌──────────┼────────────────┐
+     ▼          ▼                ▼
+┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+│WorkerThread 0│ │WorkerThread 1│ │WorkerThread N│
+│  epoll loop  │ │  epoll loop  │ │  epoll loop  │
+│  ┌────────┐  │ │              │ │              │
+│  │Worker 0 │  │ │   ...        │ │   ...        │
+│  │Worker 1 │  │ │              │ │              │
+│  └────────┘  │ │              │ │              │
+│  RoomManager │ │              │ │              │
+│  RoomService │ │              │ │              │
+└──────┬──────┘ └──────────────┘ └──────────────┘
+       │
+       │ fork+exec
+       ▼
+┌────────────────┐
+│mediasoup-worker│  ← 单线程 libuv 事件循环
+│  (C++ 进程)    │
+│  Router        │
+│  Transport     │
+│  Producer      │
+│  Consumer      │
+│  BWE           │
+└────────────────┘
 ```
 
 关键点：
 - **主线程 (uWS)**: 运行 SignalingServer，处理 WebSocket / HTTP，维护 room→WorkerThread 分派表
+- **Registry worker / Redis subscriber**: 只有启用 Redis 多节点时存在；前者串行执行 Redis 命令，后者订阅 `sfu:ch:nodes` / `sfu:ch:rooms`
 - **WorkerThread**: 每个是独立 std::thread + epoll 事件循环，拥有若干 Worker 子进程。内部有 4 个 epoll fd:
   - eventFd: 任务队列唤醒（主线程 post 过来的任务）
   - healthTimerFd: 定期检查房间健康（dead router 检测）
@@ -65,7 +72,7 @@ Client                SignalingServer(uWS)        WorkerThread           RoomSer
   │                        │                         │                      │                        │
   │                        │                         │          ┌───────────┴──────────────┐         │
   │                        │                         │          │ a. registry->claimRoom() │         │
-  │                        │                         │          │    (Redis SET NX)        │         │
+  │                        │                         │          │    (启用 Redis 时 Lua 抢占)│        │
   │                        │                         │          │ b. 如果 redirect → 返回   │         │
   │                        │                         │          │ c. roomManager->          │         │
   │                        │                         │          │    createRoom(roomId)     │         │
@@ -77,12 +84,14 @@ Client                SignalingServer(uWS)        WorkerThread           RoomSer
   │                        │                         │                      │   Channel: WORKER_CREATE_ROUTER
   │                        │                         │                      │◀── response ───────────│
   │                        │                         │                      │                        │
-  │                        │                         │                      │ room->addPeer(peer)    │
-  │                        │                         │                      │ return rtpCapabilities  │
+  │                        │                         │                      │ room->replacePeer(peer) │
+  │                        │                         │                      │ return bootstrap payload│
   │                        │                         │◀─────────────────────│                        │
   │                        │◀── loop->defer(resp) ───│                      │                        │
   │◀── join response ──────│                         │                      │                        │
-  │   {routerRtpCaps}      │ 绑定 sd->roomId/peerId  │                      │                        │
+  │   {routerRtpCapabilities,│ 绑定 sd->roomId/peerId │                      │                        │
+  │    existingProducers,  │ 可能追加 qosPolicy notify│                     │                        │
+  │    participants,qosPolicy}│                      │                        │
 ```
 
 ## 3. Transport 创建与 DTLS 握手
@@ -106,7 +115,8 @@ Client                SignalingServer        WorkerThread/RoomService          W
   │                        │                         │ transport->connect(dtlsParams)              │
   │                        │                         │   Channel: WEBRTCTRANSPORT_CONNECT ────────▶│
   │                        │                         │◀── response (accepted) ──────────────────── │
-  │◀── ok ─────────────────│◀────────────────────────│                          │
+  │◀── {dtlsLocalRole:     │◀────────────────────────│                          │
+  │    "server"} ─────────│                         │                          │
   │                        │                         │                          │
   │                        │                         │          (异步，后续到达)  │
   │                        │                         │◀── Notification:         │
@@ -120,8 +130,9 @@ Client                SignalingServer        WorkerThread/RoomService          W
 说明：
 - 客户端需要创建两个 Transport: **sendTransport** (producing=true) 和 **recvTransport** (consuming=true)
 - ICE candidate 由 Worker 在创建 Transport 时生成，通过 response 一次性返回（非 trickle ICE）
-- DTLS 角色: Worker 默认 `auto`，客户端提供 `client` 角色的 fingerprint
+- `dtlsParameters` 由客户端完整传入；控制面当前固定返回 `{"dtlsLocalRole":"server"}`
 - connect 是同步返回的，ICE/DTLS 状态变化通过异步 Notification 到达
+- 如果创建的是 recvTransport，`createWebRtcTransport` 的响应还会额外带上自动补建的 `consumers[]`
 
 ## 4. Produce 与 Auto-Subscribe
 
@@ -146,8 +157,9 @@ Client A               RoomService                    Worker              Client
   │                        │◀──── {consumerId, rtpParams}──────│            │
   │                        │                            │                    │
   │                        │── notify B: "newConsumer" ──────────────────────▶│
-  │                        │   {consumerId, producerId, │                    │
-  │                        │    kind, rtpParameters}    │                    │
+  │                        │   {peerId, producerId, id, │                    │
+  │                        │    kind, rtpParameters,    │                    │
+  │                        │    producerPaused}         │                    │
 ```
 
 关键设计：
@@ -256,6 +268,7 @@ Redis Key 设计:
 - `sfu:room:{roomId}` → `nodeId` (TTL, Lua EVAL 原子抢占: SET NX + 死节点接管)
 - Pub/Sub: `sfu:ch:nodes`, `sfu:ch:rooms` 实时同步本地缓存
 - 每个节点维护 nodeCache_ / roomCache_ 内存缓存，resolveRoom 优先查缓存，miss 才走 Redis
+- Redis 不可用时退化为单节点模式：`registry_ == nullptr`，房间仍可在本机运行，但没有跨节点 redirect / resolve
 
 ## 8. QoS 控制链路
 
@@ -263,8 +276,8 @@ Redis Key 设计:
 Client                RoomService                    QoS 子系统
   │                        │                            │
   │── clientStats ────────▶│                            │
-  │  {producerId,          │ setClientStats()           │
-  │   bitrate,rtt,loss}    │──▶ QosAggregator           │
+  │  {tracks,...}          │ setClientStats()           │
+  │                        │──▶ QosAggregator           │
   │                        │   .ingest(stats)           │
   │                        │                            │
   │                        │   QosRegistry              │
@@ -272,31 +285,29 @@ Client                RoomService                    QoS 子系统
   │                        │                            │
   │                        │   if 需要降级:              │
   │                        │     maybeSendAutomaticQosOverride()
-  │                        │     → notify 客户端 "qosOverride"  │
-  │                        │       {forceAudioOnly,     │
-  │                        │        maxLevelClamp,      │
-  │                        │        ttlMs, reason}      │
-  │                        │     (客户端侧执行降级策略)   │
+  │                        │     → notify "qosOverride" │
+  │                        │       (peer / track scope) │
+  │                        │     客户端侧执行编码/暂停策略 │
   │                        │                            │
-  │                        │   if 需要通知客户端:        │
-  │                        │     notify("connectionQuality", │
-  │                        │       {quality, score})    │
+  │                        │   if 聚合变化:              │
+  │                        │     notify("qosConnectionQuality",
+  │                        │       {quality,stale,lost,lastUpdatedMs})
+  │                        │     broadcast("qosRoomState", roomAggregate)
   │                        │                            │
-  │── downlinkStats ──────▶│                            │
-  │  {consumerId,          │ setDownlinkClientStats()   │
-  │   bitrate,loss}        │──▶ DownlinkQosRegistry     │
+  │── downlinkClientStats ▶│                            │
+  │  {subscriptions,...}   │ setDownlinkClientStats()   │
+  │                        │──▶ DownlinkQosRegistry     │
   │                        │                            │
   │                        │   RoomDownlinkPlanner      │
   │                        │   .plan(room)              │
-  │                        │   → SubscriberBudgetAllocator │
-  │                        │   → PublisherSupplyController  │
-  │                        │   → Consumer setPreferredLayers│
-  │                        │   → Producer QoS override      │
+  │                        │   → subscriber-side controls│
+  │                        │      setPreferredLayers / priority / pause │
+  │                        │   → publisher-side track qosOverride notify │
 ```
 
-上行 QoS 说明：
-- 上行 QoS override 是**通知客户端执行**的（notify "qosOverride"），不是直接操作 Worker
-- 客户端收到 override 后自行调整编码参数（如 forceAudioOnly、maxLevelClamp）
+上行 / 发布侧 QoS 说明：
+- QoS override 是**通知客户端执行**的（notify `qosOverride`），不是直接操作 Worker 内的 Producer
+- override 既可以是 peer 级，也可以是 track 级；客户端收到后自行调整编码参数或暂停/恢复上行
 - 有去重和 TTL 刷新机制：相同 signature 的 override 在 TTL/2 内不重复发送
 - 恢复时发送 ttlMs=0 的 clear 通知
 
@@ -304,20 +315,23 @@ Client                RoomService                    QoS 子系统
 
 ```
 启动:
-  main() → config → RoomRegistry.start() → N × WorkerThread.start()
+  main() → config → 可选 RoomRegistry.start() → 创建 N × WorkerThread
+    → startRegistryWorker()/Redis subscriber（启用 Redis 时）
     → 每个 WT: fork M 个 Worker → epoll 注册 Channel fd → 创建 RoomManager/RoomService
-    → SignalingServer.listen(port)
+    → waitReady() 且至少 1 个 worker 可用 → SignalingServer.listen(port)
 
 加入:
   WS connect → join → pickLeastLoadedWT → assignRoom → wt.post
-    → claimRoom(Redis Lua EVAL 原子抢占) → createRoom → createRouter(Worker IPC)
-    → addPeer (或 replacePeer 如果 reconnect) → return rtpCapabilities
+    → claimRoom(Redis Lua EVAL 原子抢占；无 Redis 时本地处理)
+    → createRoom → createRouter(Worker IPC)
+    → replacePeer/addPeer → return {routerRtpCapabilities, existingProducers, participants, qosPolicy}
+    → defer 回主线程后再补发 qosPolicy notify
 
 建连:
-  createWebRtcTransport(send) → Worker IPC → {ice, dtls}
-  connectWebRtcTransport(send) → Worker IPC → ok (ICE/DTLS 异步完成)
-  createWebRtcTransport(recv) → Worker IPC → {ice, dtls} + 自动订阅已有 Producer 的 Consumer 列表
-  connectWebRtcTransport(recv) → Worker IPC → ok
+  createWebRtcTransport(send) → Worker IPC → {id, iceParameters, iceCandidates, dtlsParameters}
+  connectWebRtcTransport(send) → Worker IPC → {dtlsLocalRole:"server"} (ICE/DTLS 异步完成)
+  createWebRtcTransport(recv) → Worker IPC → {id, iceParameters, iceCandidates, dtlsParameters, consumers[]}
+  connectWebRtcTransport(recv) → Worker IPC → {dtlsLocalRole:"server"}
 
 推流:
   produce → Worker IPC (TRANSPORT_PRODUCE) → 自动为房间内其他 Peer 创建 Consumer → notify newConsumer
@@ -328,8 +342,10 @@ Client                RoomService                    QoS 子系统
   Worker 内部: BWE 估算带宽 → SimulcastConsumer 选层 → RTCP 反馈
 
 QoS:
-  上行: clientStats → QosAggregator → maybeSendAutomaticQosOverride → notify 客户端执行降级
-  下行: downlinkStats → DownlinkQosRegistry → RoomDownlinkPlanner → 预算分配 → setPreferredLayers
+  上行: clientStats → QosAggregator → maybeSendAutomaticQosOverride
+    → notify qosOverride / qosConnectionQuality / qosRoomState
+  下行: downlinkClientStats → DownlinkQosRegistry → RoomDownlinkPlanner
+    → subscriber-side Consumer controls + publisher-side track qosOverride
 
 故障恢复:
   Worker 死亡 → epoll 检测 EOF → handleWorkerDeath → respawn 新 Worker (限速 10s/3次)
