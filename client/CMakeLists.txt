@@ -14,7 +14,7 @@ target_include_directories(plain-client PRIVATE
 )
 
 target_link_libraries(plain-client PRIVATE
-    avformat avcodec avutil
+    avformat avcodec avutil swscale
     ssl crypto
     pthread
 )

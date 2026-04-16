@@ -270,7 +270,58 @@ Redis Key 设计:
 - 每个节点维护 nodeCache_ / roomCache_ 内存缓存，resolveRoom 优先查缓存，miss 才走 Redis
 - Redis 不可用时退化为单节点模式：`registry_ == nullptr`，房间仍可在本机运行，但没有跨节点 redirect / resolve
 
-## 8. QoS 控制链路
+## 8. Linux PlainTransport C++ client 与 PlainTransport 发布路径
+
+```text
+plain-client(main.cpp)
+  -> WsClient.connect()
+  -> join(roomId, peerId)
+  -> plainPublish(videoSsrcs, audioSsrc)
+  -> 服务端返回 {ip, port, videoTracks[], audioPt}
+  -> 本地 UDP connect 到 PlainTransport
+  -> 发送 comedia probe RTP
+  -> registerVideoStream(ssrc, pt, seqPtr)
+  -> 进入主发送循环
+
+主发送循环:
+  MP4 demux
+    -> video:
+       copy path
+       或 decode -> x264 per-track encode
+       -> RTP packetize -> UDP send
+    -> audio:
+       AAC decode -> Opus encode -> RTP send
+    -> processIncomingRtcp()
+    -> maybeSendSR()
+    -> QoS sampling
+```
+
+QoS 侧链路：
+
+```text
+RTCP RR + local counters + async getStats
+  -> RawSenderSnapshot
+  -> PublisherQosController (per video track)
+  -> actionSink
+     - setEncodingParameters
+     - enter/exitAudioOnly
+     - pause/resumeUpstream
+  -> serializeSnapshot()
+  -> clientStats
+
+notification:
+  qosPolicy / qosOverride
+    -> plain-client main thread
+    -> handlePolicy / handleOverride
+```
+
+关键点：
+
+- Linux client 不走 WebRTC sender，但仍走同一套 QoS schema 和通知协议。
+- 多 video track 共享同一个 peer 级采样窗口，但每个 track 有独立的 encoder / RTCP / controller state。
+- `pauseUpstream` / `audio-only` 不只停止主发送路径，也会阻止 RTCP 触发的视频重传 / keyframe 补发。
+
+## 9. QoS 控制链路
 
 ```
 Client                RoomService                    QoS 子系统
@@ -311,7 +362,7 @@ Client                RoomService                    QoS 子系统
 - 有去重和 TTL 刷新机制：相同 signature 的 override 在 TTL/2 内不重复发送
 - 恢复时发送 ttlMs=0 的 clear 通知
 
-## 9. 完整生命周期一览
+## 10. 完整生命周期一览
 
 ```
 启动:

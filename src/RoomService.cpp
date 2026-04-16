@@ -430,12 +430,22 @@ RoomService::Result RoomService::connectPlainTransport(const std::string& roomId
 // ── plain one-shot publish / subscribe ──
 
 RoomService::Result RoomService::plainPublish(const std::string& roomId,
-	const std::string& peerId, uint32_t videoSsrc, uint32_t audioSsrc)
+	const std::string& peerId, const std::vector<uint32_t>& videoSsrcs, uint32_t audioSsrc)
 {
 	auto room = roomManager_.getRoom(roomId);
 	if (!room) return {false, {}, "", "room not found"};
 	auto peer = room->getPeer(peerId);
 	if (!peer) return {false, {}, "", "peer not found"};
+	if (videoSsrcs.empty()) return {false, {}, "", "videoSsrcs cannot be empty"};
+	if (audioSsrc == 0) return {false, {}, "", "audioSsrc must be non-zero"};
+
+	std::unordered_set<uint32_t> uniqueSsrcs;
+	uniqueSsrcs.insert(audioSsrc);
+	for (auto videoSsrc : videoSsrcs) {
+		if (videoSsrc == 0) return {false, {}, "", "videoSsrcs must be non-zero"};
+		if (!uniqueSsrcs.insert(videoSsrc).second)
+			return {false, {}, "", "duplicate SSRC in plainPublish request"};
+	}
 
 	// Create PlainTransport for sending
 	PlainTransportOptions opts;
@@ -457,23 +467,28 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 	if (videoPt == 0) return {false, {}, "", "router has no H264 codec"};
 	if (audioPt == 0) return {false, {}, "", "router has no opus codec"};
 
-	// Produce video
-	json videoRtpParams = {
-		{"codecs", {{
-			{"mimeType", "video/H264"}, {"payloadType", videoPt},
-			{"clockRate", 90000},
-			{"parameters", {{"packetization-mode", 1}, {"level-asymmetry-allowed", 1}}}
-		}}},
-		{"encodings", {{{"ssrc", videoSsrc}}}},
-		{"rtcp", {{"cname", peerId + "-video"}}}
-	};
-	json videoProdOpts = {
-		{"kind", "video"}, {"rtpParameters", videoRtpParams},
-		{"routerRtpCapabilities", caps}
-	};
-	auto videoProd = transport->produce(videoProdOpts);
-	room->router()->addProducer(videoProd);
-	peer->producers[videoProd->id()] = videoProd;
+	std::vector<std::shared_ptr<Producer>> videoProducers;
+	videoProducers.reserve(videoSsrcs.size());
+	for (size_t index = 0; index < videoSsrcs.size(); ++index) {
+		uint32_t videoSsrc = videoSsrcs[index];
+		json videoRtpParams = {
+			{"codecs", {{
+				{"mimeType", "video/H264"}, {"payloadType", videoPt},
+				{"clockRate", 90000},
+				{"parameters", {{"packetization-mode", 1}, {"level-asymmetry-allowed", 1}}}
+			}}},
+			{"encodings", {{{"ssrc", videoSsrc}}}},
+			{"rtcp", {{"cname", peerId + "-video-" + std::to_string(index)}}}
+		};
+		json videoProdOpts = {
+			{"kind", "video"}, {"rtpParameters", videoRtpParams},
+			{"routerRtpCapabilities", caps}
+		};
+		auto videoProd = transport->produce(videoProdOpts);
+		room->router()->addProducer(videoProd);
+		peer->producers[videoProd->id()] = videoProd;
+		videoProducers.push_back(videoProd);
+	}
 
 	// Produce audio
 	json audioRtpParams = {
@@ -496,7 +511,9 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 	indexPeerProducers(roomId, peerId, peer->producers);
 
 	// Auto-subscribe other peers
-	for (auto& prod : {videoProd, audioProd}) {
+	std::vector<std::shared_ptr<Producer>> allProducers = videoProducers;
+	allProducers.push_back(audioProd);
+	for (const auto& prod : allProducers) {
 		for (auto& other : room->getOtherPeers(peerId)) {
 			auto recvT = other->recvTransport
 				? std::static_pointer_cast<Transport>(other->recvTransport)
@@ -529,11 +546,21 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 	}
 
 	auto tuple = transport->tuple();
+	json videoTracks = json::array();
+	for (size_t index = 0; index < videoProducers.size(); ++index) {
+		videoTracks.push_back({
+			{"index", index},
+			{"pt", videoPt},
+			{"ssrc", videoSsrcs[index]},
+			{"producerId", videoProducers[index]->id()}
+		});
+	}
 	return {true, {
 		{"transportId", transport->id()},
 		{"ip", tuple.localAddress}, {"port", tuple.localPort},
-		{"videoPt", videoPt}, {"videoSsrc", videoSsrc},
-		{"videoProdId", videoProd->id()},
+		{"videoPt", videoPt}, {"videoSsrc", videoSsrcs.front()},
+		{"videoProdId", videoProducers.front()->id()},
+		{"videoTracks", videoTracks},
 		{"audioPt", audioPt}, {"audioSsrc", audioSsrc},
 		{"audioProdId", audioProd->id()}
 	}};

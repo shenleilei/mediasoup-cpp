@@ -11,14 +11,31 @@ inline ProbeContext beginProbe(int previousLevel, int targetLevel,
 		previousAudioOnly, targetAudioOnly, 0, 0, 3, 2};
 }
 
+inline bool isProbeHealthy(const DerivedSignals& signals, const Thresholds& thresholds) {
+	return signals.lossEwma < thresholds.stableLossRate
+		&& signals.rttEwma < thresholds.stableRttMs
+		&& !signals.bandwidthLimited
+		&& !signals.cpuLimited;
+}
+
+inline bool isProbeBad(const DerivedSignals& signals, const Thresholds& thresholds) {
+	return signals.bandwidthLimited
+		|| signals.lossEwma >= thresholds.congestedLossRate
+		|| signals.rttEwma >= thresholds.congestedRttMs
+		|| signals.cpuLimited;
+}
+
 inline ProbeResult evaluateProbe(ProbeContext& ctx, const DerivedSignals& signals,
 	const Profile& profile)
 {
-	auto& t = profile.thresholds;
-	if (isRecoveryHealthy(signals, t))
+	auto& thresholds = profile.thresholds;
+	if (isProbeHealthy(signals, thresholds)) {
 		ctx.healthySamples++;
-	else
+		ctx.badSamples = 0;
+	} else if (isProbeBad(signals, thresholds)) {
+		ctx.healthySamples = 0;
 		ctx.badSamples++;
+	}
 
 	if (ctx.healthySamples >= ctx.requiredHealthySamples)
 		return ProbeResult::Successful;

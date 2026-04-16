@@ -31,6 +31,24 @@ TEST(QosProtocolTest, ParsesValidClientSnapshotFixture) {
 	EXPECT_EQ(parsed.value.tracks[0].source, "camera");
 }
 
+TEST(QosProtocolTest, ParsesVideoOnlyClientSnapshotWithExtendedSignalFields) {
+	auto fixture = LoadFixture("valid_client_v1");
+	fixture["peerState"]["mode"] = "video-only";
+	fixture["tracks"][0]["signals"]["bitrateUtilization"] = 0.82;
+	fixture["tracks"][0]["signals"]["lossEwma"] = 0.05;
+	fixture["tracks"][0]["signals"]["rttEwma"] = 140.0;
+	fixture["tracks"][0]["signals"]["jitterEwma"] = 16.0;
+
+	auto parsed = qos::QosValidator::ParseClientSnapshot(fixture);
+
+	ASSERT_TRUE(parsed.ok) << parsed.error;
+	EXPECT_EQ(parsed.value.peerMode, "video-only");
+	EXPECT_DOUBLE_EQ(parsed.value.tracks[0].signals["bitrateUtilization"].get<double>(), 0.82);
+	EXPECT_DOUBLE_EQ(parsed.value.tracks[0].signals["lossEwma"].get<double>(), 0.05);
+	EXPECT_DOUBLE_EQ(parsed.value.tracks[0].signals["rttEwma"].get<double>(), 140.0);
+	EXPECT_DOUBLE_EQ(parsed.value.tracks[0].signals["jitterEwma"].get<double>(), 16.0);
+}
+
 TEST(QosProtocolTest, ParsesValidPolicyFixture) {
 	auto fixture = LoadFixture("valid_policy_v1");
 	auto parsed = qos::QosValidator::ParsePolicy(fixture);
@@ -75,4 +93,18 @@ TEST(QosProtocolTest, ParsesV3PauseResumeOverrideFields) {
 	EXPECT_TRUE(parsed.value.pauseUpstream);
 	EXPECT_TRUE(parsed.value.hasResumeUpstream);
 	EXPECT_FALSE(parsed.value.resumeUpstream);
+}
+
+TEST(QosProtocolTest, RejectsTrackScopedOverrideWithoutTrackId) {
+	json payload = {
+		{"schema", "mediasoup.qos.override.v1"},
+		{"scope", "track"},
+		{"ttlMs", 5000},
+		{"reason", "downlink_v3_zero_demand_pause"}
+	};
+
+	auto parsed = qos::QosValidator::ParseOverride(payload);
+
+	EXPECT_FALSE(parsed.ok);
+	EXPECT_NE(parsed.error.find("trackId"), std::string::npos);
 }

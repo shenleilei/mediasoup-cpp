@@ -47,10 +47,11 @@ struct RtpPacketStore {
 
 	void store(uint16_t seq, const uint8_t* data, size_t len) {
 		if (len > sizeof(Entry::data)) return;
+		const bool isNewEntry = buf_.find(seq) == buf_.end();
 		auto& e = buf_[seq];
 		memcpy(e.data, data, len);
 		e.len = len;
-		order_.push_back(seq);
+		if (isNewEntry) order_.push_back(seq);
 		while (order_.size() > kMaxPackets) {
 			buf_.erase(order_.front());
 			order_.pop_front();
@@ -142,60 +143,86 @@ inline int handleNack(const uint8_t* rtcpData, size_t rtcpLen,
 // ═══════════════════════════════════════════════════════════
 // Unified RTCP receiver: handles PLI, FIR, NACK from Worker
 // ═══════════════════════════════════════════════════════════
-struct RtcpContext {
-	// Sender stats (for SR)
-	uint32_t videoSsrc = 0;
-	uint32_t audioSsrc = 0;
-	uint32_t videoPacketCount = 0;
-	uint32_t videoOctetCount = 0;
-	uint32_t audioPacketCount = 0;
-	uint32_t audioOctetCount = 0;
-	uint32_t lastVideoRtpTs = 0;
-	uint32_t lastAudioRtpTs = 0;
-
-	// Retransmission buffer
-	RtpPacketStore videoStore;
-	RtpPacketStore audioStore;
-
-	// Keyframe cache (for PLI)
+struct VideoStreamRtcpState {
+	uint32_t ssrc = 0;
+	uint8_t payloadType = 0;
+	uint32_t packetCount = 0;
+	uint32_t octetCount = 0;
+	uint32_t lastRtpTs = 0;
+	RtpPacketStore store;
 	std::vector<uint8_t> lastKeyframe;
 	uint32_t lastKeyframeTs = 0;
+	double rrLossFraction = 0;      // 0..1, from last RR
+	uint32_t rrCumulativeLost = 0;  // total packets lost
+	double rrJitterMs = 0;          // video RR interarrival jitter in ms (current client consumes 90kHz video clock only)
+	double rrRttMs = -1;            // round-trip time from SR/RR exchange, -1 = unknown
+	int64_t lastRrReceivedMs = 0;
+	std::unordered_map<uint32_t, int64_t> srNtpToSendTime;
+	std::deque<uint32_t> srNtpOrder;
+	uint16_t* seqPtr = nullptr;
+	int nackRetransmitted = 0;
+	int pliResponded = 0;
+};
 
-	// SR interval
+struct RtcpContext {
+	uint32_t audioSsrc = 0;
+	uint32_t audioPacketCount = 0;
+	uint32_t audioOctetCount = 0;
+	uint32_t lastAudioRtpTs = 0;
+	RtpPacketStore audioStore;
+
+	std::unordered_map<uint32_t, VideoStreamRtcpState> videoStreams;
+
 	int64_t lastSrSentMs = 0;
 	static constexpr int64_t kSrIntervalMs = 1000;
 
-	// Stats
 	int nackRetransmitted = 0;
 	int pliResponded = 0;
 
-	// RR-derived stats (updated from incoming RTCP RR)
-	double rrLossFraction = 0;      // 0..1, from last RR
-	uint32_t rrCumulativeLost = 0;  // total packets lost
-	double rrJitterMs = 0;          // interarrival jitter in ms
-	double rrRttMs = -1;            // round-trip time from SR/RR exchange, -1 = unknown
-	int64_t lastRrReceivedMs = 0;
-
-	// SR NTP timestamp tracking (for RTT calculation)
-	uint32_t lastSrNtpMid = 0;     // middle 32 bits of NTP timestamp from our last SR
-	int64_t lastSrSentAtMs = 0;    // when we sent the last SR (local clock)
-
-	// Send function
 	using SendH264Fn = std::function<void(int fd, const uint8_t* data, int size,
 		uint8_t pt, uint32_t ts, uint32_t ssrc, uint16_t& seq)>;
 	SendH264Fn sendH264Fn;
-	uint8_t videoPt = 0;
-	uint16_t* videoSeqPtr = nullptr;
+	using CanSendVideoFn = std::function<bool(uint32_t ssrc)>;
+	CanSendVideoFn canSendVideoFn;
 
-	// Record a sent video RTP packet
-	void onVideoRtpSent(const uint8_t* pkt, size_t len, uint32_t rtpTs) {
-		videoStore.store(videoPacketCount & 0xFFFF, pkt, len);
-		// Note: we store by actual seq from the packet header
+	void registerVideoStream(uint32_t ssrc, uint8_t payloadType, uint16_t* seqPtr) {
+		auto& stream = videoStreams[ssrc];
+		stream.ssrc = ssrc;
+		stream.payloadType = payloadType;
+		stream.seqPtr = seqPtr;
+	}
+
+	VideoStreamRtcpState* getVideoStream(uint32_t ssrc) {
+		auto it = videoStreams.find(ssrc);
+		return it != videoStreams.end() ? &it->second : nullptr;
+	}
+
+	const VideoStreamRtcpState* getVideoStream(uint32_t ssrc) const {
+		auto it = videoStreams.find(ssrc);
+		return it != videoStreams.end() ? &it->second : nullptr;
+	}
+
+	VideoStreamRtcpState* getFirstVideoStream() {
+		return videoStreams.empty() ? nullptr : &videoStreams.begin()->second;
+	}
+
+	const VideoStreamRtcpState* getFirstVideoStream() const {
+		return videoStreams.empty() ? nullptr : &videoStreams.begin()->second;
+	}
+
+	void onVideoRtpSent(const uint8_t* pkt, size_t len) {
+		if (len < 12) return;
+		uint32_t ssrc = ((uint32_t)pkt[8] << 24) | ((uint32_t)pkt[9] << 16)
+			| ((uint32_t)pkt[10] << 8) | pkt[11];
+		auto* stream = getVideoStream(ssrc);
+		if (!stream) return;
 		uint16_t seq = (pkt[2] << 8) | pkt[3];
-		videoStore.store(seq, pkt, len);
-		videoPacketCount++;
-		videoOctetCount += (len > 12) ? (len - 12) : 0;
-		lastVideoRtpTs = rtpTs;
+		uint32_t rtpTs = ((uint32_t)pkt[4] << 24) | ((uint32_t)pkt[5] << 16)
+			| ((uint32_t)pkt[6] << 8) | pkt[7];
+		stream->store.store(seq, pkt, len);
+		stream->packetCount++;
+		stream->octetCount += (len > 12) ? (len - 12) : 0;
+		stream->lastRtpTs = rtpTs;
 	}
 
 	void onAudioRtpSent(size_t payloadLen, uint32_t rtpTs) {
@@ -204,13 +231,13 @@ struct RtcpContext {
 		lastAudioRtpTs = rtpTs;
 	}
 
-	// Cache keyframe for PLI response
-	void cacheKeyframe(const uint8_t* data, size_t len, uint32_t rtpTs) {
-		lastKeyframe.assign(data, data + len);
-		lastKeyframeTs = rtpTs;
+	void cacheKeyframe(uint32_t ssrc, const uint8_t* data, size_t len, uint32_t rtpTs) {
+		auto* stream = getVideoStream(ssrc);
+		if (!stream) return;
+		stream->lastKeyframe.assign(data, data + len);
+		stream->lastKeyframeTs = rtpTs;
 	}
 
-	// Maybe send periodic SR
 	void maybeSendSR(int udpFd) {
 		auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
 			std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -218,14 +245,22 @@ struct RtcpContext {
 		lastSrSentMs = now;
 
 		uint8_t buf[64];
-		if (videoPacketCount > 0) {
-			size_t len = buildSenderReport(buf, videoSsrc, lastVideoRtpTs,
-				videoPacketCount, videoOctetCount);
+		for (auto& entry : videoStreams) {
+			auto& stream = entry.second;
+			if (stream.packetCount == 0) continue;
+			size_t len = buildSenderReport(buf, stream.ssrc, stream.lastRtpTs,
+				stream.packetCount, stream.octetCount);
 			send(udpFd, buf, len, 0);
-			// Record NTP mid (bytes 10-13 of SR: ntpSec[15:0] + ntpFrac[31:16])
-			lastSrNtpMid = ((uint32_t)buf[10] << 24) | ((uint32_t)buf[11] << 16)
+			uint32_t ntpMid = ((uint32_t)buf[10] << 24) | ((uint32_t)buf[11] << 16)
 				| ((uint32_t)buf[12] << 8) | buf[13];
-			lastSrSentAtMs = now;
+			if (stream.srNtpToSendTime.find(ntpMid) == stream.srNtpToSendTime.end())
+				stream.srNtpOrder.push_back(ntpMid);
+			stream.srNtpToSendTime[ntpMid] = now;
+			while (stream.srNtpOrder.size() > 32) {
+				auto oldest = stream.srNtpOrder.front();
+				stream.srNtpOrder.pop_front();
+				stream.srNtpToSendTime.erase(oldest);
+			}
 		}
 		if (audioPacketCount > 0) {
 			size_t len = buildSenderReport(buf, audioSsrc, lastAudioRtpTs,
@@ -234,14 +269,12 @@ struct RtcpContext {
 		}
 	}
 
-	// Process incoming RTCP from Worker
 	void processIncomingRtcp(int udpFd) {
 		uint8_t buf[1500];
 		while (true) {
 			int n = recv(udpFd, buf, sizeof(buf), MSG_DONTWAIT);
 			if (n <= 0) break;
 
-			// Parse compound RTCP: may contain multiple packets
 			size_t offset = 0;
 			while (offset + 4 <= (size_t)n) {
 				uint8_t version = (buf[offset] >> 6) & 0x3;
@@ -253,46 +286,76 @@ struct RtcpContext {
 				size_t pktLen = (lengthWords + 1) * 4;
 				if (offset + pktLen > (size_t)n) break;
 
+				uint32_t mediaSsrc = 0;
+				if (pktLen >= 12) {
+					mediaSsrc = ((uint32_t)buf[offset + 8] << 24) | ((uint32_t)buf[offset + 9] << 16)
+						| ((uint32_t)buf[offset + 10] << 8) | buf[offset + 11];
+				}
+
 				if (pt == RTCP_PT_PSFB) {
-					// PLI (fmt=1) or FIR (fmt=4)
-					if ((fmt == 1 || fmt == 4) && !lastKeyframe.empty() && sendH264Fn && videoSeqPtr) {
-						sendH264Fn(udpFd, lastKeyframe.data(), lastKeyframe.size(),
-							videoPt, lastKeyframeTs, videoSsrc, *videoSeqPtr);
+					uint32_t targetSsrc = mediaSsrc;
+					if (fmt == 4 && targetSsrc == 0 && pktLen >= 20) {
+						targetSsrc = ((uint32_t)buf[offset + 12] << 24) | ((uint32_t)buf[offset + 13] << 16)
+							| ((uint32_t)buf[offset + 14] << 8) | buf[offset + 15];
+					}
+					auto* stream = targetSsrc != 0 ? getVideoStream(targetSsrc) : getFirstVideoStream();
+					if (stream && canSendVideoFn && !canSendVideoFn(stream->ssrc)) {
+						offset += pktLen;
+						continue;
+					}
+					if ((fmt == 1 || fmt == 4) && stream && !stream->lastKeyframe.empty() && sendH264Fn && stream->seqPtr) {
+						sendH264Fn(udpFd, stream->lastKeyframe.data(), stream->lastKeyframe.size(),
+							stream->payloadType, stream->lastKeyframeTs, stream->ssrc, *stream->seqPtr);
 						pliResponded++;
+						stream->pliResponded++;
 					}
 				} else if (pt == RTCP_PT_RTPFB && fmt == 1) {
-					// NACK
-					int ret = handleNack(buf + offset, pktLen, videoStore, udpFd);
-					nackRetransmitted += ret;
+					auto* stream = mediaSsrc != 0 ? getVideoStream(mediaSsrc) : getFirstVideoStream();
+					if (stream) {
+						if (canSendVideoFn && !canSendVideoFn(stream->ssrc)) {
+							offset += pktLen;
+							continue;
+						}
+						int ret = handleNack(buf + offset, pktLen, stream->store, udpFd);
+						nackRetransmitted += ret;
+						stream->nackRetransmitted += ret;
+					}
 				} else if (pt == RTCP_PT_RR && pktLen >= 32) {
-					// RR report block starts at offset+8 (after header+sender SSRC)
-					// Each report block is 24 bytes
 					size_t rbOff = offset + 8;
 					while (rbOff + 24 <= offset + pktLen) {
-						// uint32_t reportSsrc = read32(buf+rbOff);
-						uint8_t lossFrac = buf[rbOff + 4];
-						uint32_t cumLost = ((uint32_t)buf[rbOff+5] << 16) | ((uint32_t)buf[rbOff+6] << 8) | buf[rbOff+7];
-						uint32_t jitter = ((uint32_t)buf[rbOff+16] << 24) | ((uint32_t)buf[rbOff+17] << 16)
-							| ((uint32_t)buf[rbOff+18] << 8) | buf[rbOff+19];
-						uint32_t lsr = ((uint32_t)buf[rbOff+20] << 24) | ((uint32_t)buf[rbOff+21] << 16)
-							| ((uint32_t)buf[rbOff+22] << 8) | buf[rbOff+23];
-						uint32_t dlsr = ((uint32_t)buf[rbOff+24] << 24) | ((uint32_t)buf[rbOff+25] << 16)
-							| ((uint32_t)buf[rbOff+26] << 8) | buf[rbOff+27];
-
-						rrLossFraction = lossFrac / 256.0;
-						rrCumulativeLost = cumLost;
-						rrJitterMs = (double)jitter / 90.0; // video clock 90kHz → ms
-
-						// RTT = now - LSR - DLSR (all in 1/65536 sec units)
-						if (lsr != 0 && lastSrNtpMid != 0 && lsr == lastSrNtpMid) {
-							auto nowRtcp = std::chrono::duration_cast<std::chrono::milliseconds>(
-								std::chrono::steady_clock::now().time_since_epoch()).count();
-							double dlsrMs = (double)dlsr / 65536.0 * 1000.0;
-							double elapsed = (double)(nowRtcp - lastSrSentAtMs);
-							rrRttMs = std::max(0.0, elapsed - dlsrMs);
+						uint32_t reportSsrc = ((uint32_t)buf[rbOff] << 24) | ((uint32_t)buf[rbOff + 1] << 16)
+							| ((uint32_t)buf[rbOff + 2] << 8) | buf[rbOff + 3];
+						auto* stream = getVideoStream(reportSsrc);
+						if (!stream) {
+							rbOff += 24;
+							continue;
 						}
 
-						lastRrReceivedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+						uint8_t lossFrac = buf[rbOff + 4];
+						uint32_t cumLost = ((uint32_t)buf[rbOff + 5] << 16) | ((uint32_t)buf[rbOff + 6] << 8) | buf[rbOff + 7];
+						uint32_t jitter = ((uint32_t)buf[rbOff + 12] << 24) | ((uint32_t)buf[rbOff + 13] << 16)
+							| ((uint32_t)buf[rbOff + 14] << 8) | buf[rbOff + 15];
+						uint32_t lsr = ((uint32_t)buf[rbOff + 16] << 24) | ((uint32_t)buf[rbOff + 17] << 16)
+							| ((uint32_t)buf[rbOff + 18] << 8) | buf[rbOff + 19];
+						uint32_t dlsr = ((uint32_t)buf[rbOff + 20] << 24) | ((uint32_t)buf[rbOff + 21] << 16)
+							| ((uint32_t)buf[rbOff + 22] << 8) | buf[rbOff + 23];
+
+						stream->rrLossFraction = lossFrac / 256.0;
+						stream->rrCumulativeLost = cumLost;
+						stream->rrJitterMs = (double)jitter / 90.0; // video clock 90kHz → ms
+
+						if (lsr != 0) {
+							auto it = stream->srNtpToSendTime.find(lsr);
+							if (it != stream->srNtpToSendTime.end()) {
+								auto nowRtcp = std::chrono::duration_cast<std::chrono::milliseconds>(
+									std::chrono::steady_clock::now().time_since_epoch()).count();
+								double dlsrMs = (double)dlsr / 65536.0 * 1000.0;
+								double elapsed = (double)(nowRtcp - it->second);
+								stream->rrRttMs = std::max(0.0, elapsed - dlsrMs);
+							}
+						}
+
+						stream->lastRrReceivedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
 							std::chrono::steady_clock::now().time_since_epoch()).count();
 						rbOff += 24;
 					}

@@ -852,8 +852,17 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 						result = rs->requestConsumerKeyFrame(roomId, peerId,
 							data.at("consumerId").get<std::string>());
 					} else if (method == "plainPublish") {
+						std::vector<uint32_t> videoSsrcs;
+						if (data.contains("videoSsrcs") && data.at("videoSsrcs").is_array()) {
+							for (const auto& value : data.at("videoSsrcs")) {
+								videoSsrcs.push_back(value.get<uint32_t>());
+							}
+						}
+						if (videoSsrcs.empty()) {
+							videoSsrcs.push_back(data.value("videoSsrc", 1111u));
+						}
 						result = rs->plainPublish(roomId, peerId,
-							data.value("videoSsrc", 1111u),
+							videoSsrcs,
 							data.value("audioSsrc", 2222u));
 					} else if (method == "plainSubscribe") {
 						result = rs->plainSubscribe(roomId, peerId,

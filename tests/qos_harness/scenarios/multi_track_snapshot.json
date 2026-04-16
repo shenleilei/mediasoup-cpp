@@ -1,0 +1,8 @@
+{
+  "roomId": "room_cpp_multi_track_snapshot",
+  "peerId": "plain_cpp_multi_track_snapshot",
+  "trackCount": 2,
+  "expect": {
+    "trackIds": ["video", "video-1"]
+  }
+}

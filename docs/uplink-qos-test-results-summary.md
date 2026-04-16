@@ -5,6 +5,7 @@
 > **文档性质**
 >
 > 这是结果汇总版，适合快速看覆盖面和最终口径。
+> 如果只想先看总口径和各分支入口，先看 [qos-status.md](./qos-status.md)。
 > 若需要正式汇报结论，请看 [uplink-qos-final-report.md](./uplink-qos-final-report.md)；
 > 若需要逐 case 明细，请看 [uplink-qos-case-results.md](./uplink-qos-case-results.md)。
 

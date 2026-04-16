@@ -4,6 +4,13 @@
 
 基于 mediasoup C++ worker 的 SFU 服务端，Room-first 设计。控制面用 C++17 实现，媒体面复用 mediasoup-worker 预编译二进制（v3.14.6）。
 
+仓库内同时维护两条客户端相关路径：
+
+- 浏览器 / WebRTC 路径
+- Linux `PlainTransport C++ client` 路径
+
+如果要理解 Linux client 本身怎么工作，请继续看 [linux-client-architecture_cn.md](./linux-client-architecture_cn.md)。
+
 ## 线程模型
 
 ### 线程清单
@@ -116,6 +123,38 @@ WorkerThread 检测到 worker 死亡（channel fd EOF）→ `onWorkerDied()` →
 4. UDP connect trick（`connect(8.8.8.8:53)` + `getsockname`，零网络开销）
 5. 最后才回退到 127.0.0.1（带 warn 日志）
 
+## Linux PlainTransport C++ client
+
+Linux client 的核心入口在：
+
+- `client/main.cpp`
+- `client/RtcpHandler.h`
+- `client/qos/*`
+
+它的职责不是浏览器替代，而是：
+
+- `PlainTransport` 端到端验证
+- Linux 侧 QoS 闭环
+- `cpp-client-harness` / `cpp-client-matrix`
+
+运行模型：
+
+- 主线程负责 MP4 demux、视频编码、RTP 发送、RTCP 处理、QoS 采样
+- `WsClient` reader thread 负责异步接收 response / notification
+- 每个 video track 有独立 runtime：`ssrc / producerId / encoder / qosCtrl`
+
+主路径：
+
+```text
+join
+  -> plainPublish
+  -> UDP PlainTransport publish
+  -> RTCP SR / RR / NACK / PLI
+  -> getStats-assisted QoS sampling
+  -> clientStats
+  -> qosPolicy / qosOverride notifications
+```
+
 ## 数据流
 
 ### 信令流（produce 请求）
@@ -146,18 +185,18 @@ WorkerThread 检测到 worker 死亡（channel fd EOF）→ `onWorkerDied()` →
 
 ### 测试矩阵
 
-| 套件 | 数量 | 内容 |
-|------|------|------|
-| mediasoup_tests | 149 | ORTC、RTP 类型、Room/Peer、QoS 精度、Recorder、EventEmitter、WorkerQueue、respawn 限流、room dispatch |
-| mediasoup_integration_tests | 17 | 黑盒：真实 SFU + WebSocket 客户端 |
-| mediasoup_review_fix_tests | 19 | 重连、geo 路由、country isolation、缓存、session identity |
-| mediasoup_stability_integration_tests | 10 | close/disconnect 各种时序 |
-| mediasoup_qos_integration_tests | 17 | stats 采集、广播、录制 QoS |
-| mediasoup_e2e_tests | 3 | 多 peer 发布/订阅压力 |
-| mediasoup_topology_tests | 6 | 多节点 room affinity、crash takeover |
-| mediasoup_bench | - | Worker 并发压测 |
-
-**总计：221 个测试**
+| 套件 | 内容 |
+|------|------|
+| mediasoup_tests | ORTC、RTP 类型、Room/Peer、QoS 单测、Recorder、WorkerQueue、plain-client QoS 单测、review fixes |
+| mediasoup_integration_tests | 黑盒：真实 SFU + WebSocket 客户端 |
+| mediasoup_review_fix_tests | 重连、geo 路由、country isolation、缓存、session identity |
+| mediasoup_stability_integration_tests | close/disconnect 各种时序 |
+| mediasoup_qos_integration_tests | stats 采集、广播、policy / override、downlink / publisher supply、plainPublish 约束 |
+| mediasoup_e2e_tests | 多 peer 发布/订阅压力 |
+| mediasoup_topology_tests | 多节点 room affinity、crash takeover |
+| mediasoup_qos_accuracy_tests | QoS 精度（真实 UDP 收发） |
+| mediasoup_qos_recording_accuracy_tests | 录制 QoS 精度 |
+| mediasoup_bench | Worker 并发压测 |
 
 ### 运行
 
@@ -220,14 +259,15 @@ src/
 ├── EventEmitter.h        # 轻量事件系统
 └── Logger.h              # spdlog 封装
 tests/
-├── test_ortc.cpp                      # ORTC 协商（25 tests）
+├── test_ortc.cpp                      # ORTC 协商
 ├── test_room.cpp                      # Room/Peer 管理
 ├── test_rtp_types.cpp                 # RTP 类型序列化
 ├── test_stability.cpp                 # Recorder 稳定性、EventEmitter 清理
 ├── test_worker_queue.cpp              # WorkerThread 任务队列
 ├── test_multinode.cpp                 # WorkerManager、room dispatch、respawn 限流
 ├── test_request_timeout.cpp           # Channel IPC 超时
-├── test_review_fixes.cpp             # Channel 线程安全
+├── test_review_fixes.cpp              # 历史 review 修复回归
+├── test_client_qos.cpp                # PlainTransport C++ client QoS 单测
 ├── test_qos_unit.cpp                  # QoS 数据结构
 ├── test_qos_accuracy.cpp             # QoS 精度（真实 UDP 收发）
 ├── test_qos_recording_accuracy.cpp   # 录制 QoS 精度
@@ -239,7 +279,7 @@ tests/
 ├── test_e2e_pubsub.cpp              # 端到端发布订阅
 ├── test_multi_sfu_topology.cpp      # 多节点拓扑
 ├── test_multinode_integration.cpp   # 多节点集成
-└── bench_worker_load.cpp            # Worker 压测
+└── bench_worker_load.cpp              # Worker 压测
 ```
 
 ## 性能基准

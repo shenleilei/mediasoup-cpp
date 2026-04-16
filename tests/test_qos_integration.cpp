@@ -1135,6 +1135,18 @@ TEST_F(QosIntegrationTest, ManualQosOverrideClear) {
 		!clearNotif["data"]["forceAudioOnly"].get<bool>());
 }
 
+TEST_F(QosIntegrationTest, PlainPublishRejectsDuplicateVideoSsrcs) {
+	auto alice = joinRoom(testRoom_, "alice");
+
+	auto resp = alice.ws->request("plainPublish", {
+		{"videoSsrcs", json::array({11111111u, 11111111u})},
+		{"audioSsrc", 22222222u}
+	});
+
+	EXPECT_FALSE(resp.value("ok", false)) << resp.dump();
+	EXPECT_FALSE(resp.value("error", "").empty()) << resp.dump();
+}
+
 TEST_F(QosIntegrationTest, SetQosPolicyNotifiesTargetPeer) {
 	auto alice = joinRoom(testRoom_, "alice");
 	(void)alice.ws->waitNotification("qosPolicy", 3000);

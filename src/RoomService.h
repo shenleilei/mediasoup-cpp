@@ -96,9 +96,9 @@ public:
 	Result restartIce(const std::string& roomId, const std::string& peerId,
 		const std::string& transportId);
 
-	// PlainTransport: one-shot publish (create transport + produce video + audio)
+	// PlainTransport: one-shot publish (create transport + produce one or more video tracks + audio)
 	Result plainPublish(const std::string& roomId, const std::string& peerId,
-		uint32_t videoSsrc, uint32_t audioSsrc);
+		const std::vector<uint32_t>& videoSsrcs, uint32_t audioSsrc);
 	// PlainTransport: one-shot subscribe (create transport + consume all)
 	Result plainSubscribe(const std::string& roomId, const std::string& peerId,
 		const std::string& recvIp, uint16_t recvPort);

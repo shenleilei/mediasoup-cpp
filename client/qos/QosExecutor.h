@@ -1,6 +1,8 @@
 #pragma once
 #include "QosTypes.h"
 #include <functional>
+#include <iomanip>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 
@@ -32,8 +34,19 @@ private:
 	static std::string makeKey(const PlannedAction& a) {
 		std::string k = actionStr(a.type);
 		k += ":" + std::to_string(a.level);
-		if (a.encodingParameters.has_value() && a.encodingParameters->maxBitrateBps.has_value())
-			k += ":br" + std::to_string(*a.encodingParameters->maxBitrateBps);
+		if (a.encodingParameters.has_value()) {
+			if (a.encodingParameters->maxBitrateBps.has_value())
+				k += ":br" + std::to_string(*a.encodingParameters->maxBitrateBps);
+			if (a.encodingParameters->maxFramerate.has_value())
+				k += ":fps" + std::to_string(*a.encodingParameters->maxFramerate);
+			if (a.encodingParameters->scaleResolutionDownBy.has_value()) {
+				std::ostringstream oss;
+				oss << std::fixed << std::setprecision(3) << *a.encodingParameters->scaleResolutionDownBy;
+				k += ":scale" + oss.str();
+			}
+			if (a.encodingParameters->adaptivePtime.has_value())
+				k += std::string(":ptime") + (*a.encodingParameters->adaptivePtime ? "1" : "0");
+		}
 		if (a.spatialLayer.has_value())
 			k += ":sl" + std::to_string(*a.spatialLayer);
 		return k;

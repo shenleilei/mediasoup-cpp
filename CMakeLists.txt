@@ -103,6 +103,7 @@ if(BUILD_TESTS)
     enable_testing()
 
     set(TEST_SOURCES
+        tests/test_client_qos.cpp
         tests/test_downlink_allocator.cpp
         tests/test_downlink_health.cpp
         tests/test_downlink_v2.cpp

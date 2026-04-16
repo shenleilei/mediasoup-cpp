@@ -186,6 +186,36 @@
     return card;
   }
 
+  function prettyTrackSource(source, kind = 'video') {
+    if (source === 'screenShare') {
+      return '屏幕共享';
+    }
+    if (source === 'audio' || kind === 'audio') {
+      return '音频';
+    }
+    return '摄像头';
+  }
+
+  function remoteTrackTitle(entry) {
+    return entry.remoteTrack?.localTrackId
+      ? `Track ${entry.remoteTrack.localTrackId}`
+      : `Track #${entry.fallbackTrackOrdinal || 1}`;
+  }
+
+  function remoteTrackSubtitle(entry) {
+    const parts = [entry.peerId || 'remote-peer'];
+    parts.push(prettyTrackSource(entry.remoteTrack?.source, entry.consumer?.kind));
+    parts.push(shortId(entry.producerId));
+    return parts.filter(Boolean).join(' · ');
+  }
+
+  function remoteTrackBadge(entry) {
+    if (entry.remoteTrack?.quality || entry.remoteTrack?.state) {
+      return `${entry.remoteTrack.quality || '-'} / ${entry.remoteTrack.state || '-'}`;
+    }
+    return '已订阅';
+  }
+
   function formatRemoteServerSummary(serverState) {
     if (!serverState) {
       return '等待 statsReport';
@@ -386,6 +416,83 @@
   function clearRemoteVideoCards() {
     els.remoteVideos.innerHTML = '';
     state.remoteVideoConsumers.clear();
+    renderRemoteVideoGroups();
+  }
+
+  function createRemotePeerGroup(peerId, entries) {
+    const group = document.createElement('section');
+    group.className = 'remote-peer-group';
+    group.dataset.peerId = peerId;
+
+    const head = document.createElement('div');
+    head.className = 'remote-peer-head';
+
+    const copy = document.createElement('div');
+    const title = document.createElement('div');
+    title.className = 'remote-peer-title';
+    title.textContent = peerId || 'remote-peer';
+
+    const statsPeer = Array.isArray(state.latestStatsReport?.peers)
+      ? state.latestStatsReport.peers.find(peer => peer.peerId === peerId) || null
+      : null;
+    const producerCount = statsPeer?.producers ? Object.keys(statsPeer.producers).length : entries.length;
+    const subtitle = document.createElement('div');
+    subtitle.className = 'remote-peer-subtitle';
+    subtitle.textContent = `tracks ${entries.length} · producers ${producerCount}`;
+
+    copy.appendChild(title);
+    copy.appendChild(subtitle);
+
+    const badge = document.createElement('div');
+    badge.className = 'badge';
+    badge.textContent = statsPeer?.qos?.quality || 'remote';
+
+    head.appendChild(copy);
+    head.appendChild(badge);
+
+    const grid = document.createElement('div');
+    grid.className = 'remote-peer-grid';
+    for (const entry of entries) {
+      grid.appendChild(entry.card);
+    }
+
+    group.appendChild(head);
+    group.appendChild(grid);
+    return group;
+  }
+
+  function renderRemoteVideoGroups() {
+    els.remoteVideos.innerHTML = '';
+
+    if (state.remoteVideoConsumers.size === 0) {
+      els.remoteVideos.appendChild(createVideoCard({
+        title: '远端订阅',
+        subtitle: '加入房间并等待远端发布后，这里会按 peer 分组显示多路 video track。',
+        badgeText: '空闲',
+      }));
+      return;
+    }
+
+    const groups = new Map();
+    for (const entry of state.remoteVideoConsumers.values()) {
+      const key = entry.peerId || 'remote-peer';
+      const list = groups.get(key) || [];
+      list.push(entry);
+      groups.set(key, list);
+    }
+
+    const sortedGroups = Array.from(groups.entries()).sort((left, right) => left[0].localeCompare(right[0]));
+    for (const [peerId, entries] of sortedGroups) {
+      entries.sort((left, right) => {
+        const leftKey = left.remoteTrack?.localTrackId || left.producerId || left.consumer?.id || '';
+        const rightKey = right.remoteTrack?.localTrackId || right.producerId || right.consumer?.id || '';
+        return leftKey.localeCompare(rightKey);
+      });
+      entries.forEach((entry, index) => {
+        entry.fallbackTrackOrdinal = index + 1;
+      });
+      els.remoteVideos.appendChild(createRemotePeerGroup(peerId, entries));
+    }
   }
 
   function updateRemoteCardUI(entry) {
@@ -393,13 +500,33 @@
       return;
     }
 
+    const allPeerStats = Array.isArray(state.latestStatsReport?.peers) ? state.latestStatsReport.peers : [];
+    entry.remotePeerStats = allPeerStats.find(peer => peer.peerId === entry.peerId) || null;
+    const remoteTracks = Array.isArray(entry.remotePeerStats?.clientStats?.tracks)
+      ? entry.remotePeerStats.clientStats.tracks
+      : [];
+    entry.remoteTrack = remoteTracks.find(track => track.producerId === entry.producerId) || null;
+    entry.remoteProducer = entry.remotePeerStats?.producers?.[entry.producerId] || null;
+
     const serverState = entry.serverState || {};
     const serverSub = entry.serverSubscription || {};
     const recvRttMs = state.localDebugStats?.recv?.currentRoundTripTime;
+
+    if (entry.titleEl) {
+      entry.titleEl.textContent = remoteTrackTitle(entry);
+    }
+    if (entry.subtitleEl) {
+      entry.subtitleEl.textContent = remoteTrackSubtitle(entry);
+    }
+    if (entry.badgeEl) {
+      entry.badgeEl.textContent = remoteTrackBadge(entry);
+    }
     entry.serverSummaryEl.innerHTML = `<strong>远端 QoS</strong> ${escapeHtml(formatRemoteServerSummary(entry.serverState))}`;
     entry.metricsGridEl.innerHTML = [
       qosItem('Consumer', shortId(entry.consumer?.id)),
       qosItem('Producer', shortId(entry.producerId)),
+      qosItem('Track', fmtValue(entry.remoteTrack?.localTrackId, '-')),
+      qosItem('Source', prettyTrackSource(entry.remoteTrack?.source, entry.consumer?.kind)),
       qosItem('状态', serverState.paused ? '暂停' : '活动'),
       qosItem('Producer 暂停', fmtBool(serverState.producerPaused)),
       qosItem('空间层', fmtValue(serverState.preferredSpatialLayer, 0)),
@@ -407,6 +534,7 @@
       qosItem('优先级', fmtValue(serverState.priority, 0)),
       qosItem('Consumer 分数', fmtValue(serverState.score, 0)),
       qosItem('Producer 分数', fmtValue(serverState.producerScore, 0)),
+      qosItem('Publisher QoS', fmtValue(entry.remotePeerStats?.qos?.quality, '-')),
       qosItem('可见', fmtBool(serverSub.visible)),
       qosItem('置顶', fmtBool(serverSub.pinned)),
       qosItem('主讲', fmtBool(serverSub.activeSpeaker)),
@@ -464,6 +592,8 @@
       entry.serverSubscription = subscriptionByConsumerId.get(entry.consumer.id) || null;
       updateRemoteCardUI(entry);
     }
+
+    renderRemoteVideoGroups();
   }
 
   function stopMediaStream(stream) {
@@ -939,18 +1069,25 @@
           producerId: data.producerId,
           peerId: data.peerId || data.producerId,
           element: renderedElement,
+          hintTargetEl: card.querySelector('.video-frame'),
           card,
           serverState: null,
           serverSubscription: null,
+          remotePeerStats: null,
+          remoteTrack: null,
+          remoteProducer: null,
+          titleEl: card.querySelector('.video-title'),
+          subtitleEl: card.querySelector('.video-subtitle'),
+          badgeEl: card.querySelector('.badge'),
           serverSummaryEl: null,
           metricsGridEl: null,
         };
         const controls = createRemoteVideoControls(entry);
 
         card.appendChild(controls);
-        els.remoteVideos.appendChild(card);
 
         registerRemoteVideoConsumer(entry);
+        renderRemoteVideoGroups();
       }
 
       log(`Subscribed ${data.kind} from ${data.peerId || data.producerId}`);
@@ -1045,10 +1182,11 @@
         state.downlinkBundle.sampler.removeHints(consumerId);
       }
     }
+    renderRemoteVideoGroups();
   }
 
   function computeConsumerHint(entry) {
-    const target = entry.card || entry.element;
+    const target = entry.hintTargetEl || entry.card || entry.element;
     const rect = target && typeof target.getBoundingClientRect === 'function'
       ? target.getBoundingClientRect()
       : { width: 0, height: 0 };
