@@ -1,0 +1,35 @@
+{
+  "name": "multi_video_budget",
+  "roomId": "qos_harness_room_multi_video_budget",
+  "peerId": "alice",
+  "trackCount": 3,
+  "weights": [1, 2, 4],
+  "matrixProfile": {
+    "warmupMs": 6000,
+    "phases": [
+      {
+        "name": "baseline",
+        "durationMs": 4000,
+        "sendCeilingBps": 900000,
+        "lossRate": 0,
+        "rttMs": 80,
+        "jitterMs": 8,
+        "qualityLimitationReason": "none"
+      },
+      {
+        "name": "impairment",
+        "durationMs": 12000,
+        "sendCeilingBps": 300000,
+        "lossRate": 0.08,
+        "rttMs": 260,
+        "jitterMs": 24,
+        "qualityLimitationReason": "bandwidth"
+      }
+    ]
+  },
+  "expect": {
+    "trackIds": ["video", "video-1", "video-2"],
+    "highestBitrateTrack": "video-2",
+    "lowestBitrateTrack": "video"
+  }
+}

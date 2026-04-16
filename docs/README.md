@@ -32,7 +32,8 @@
 |---|---|
 | 新接手开发 | [DEVELOPMENT.md](./DEVELOPMENT.md) |
 | 做线上排障 | [troubleshooting_cn.md](./troubleshooting_cn.md) → [architecture_cn.md](./architecture_cn.md) → [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) |
-| 做 QoS 改动 | [uplink-qos-design_cn.md](./uplink-qos-design_cn.md) → [downlink-qos-design_cn.md](./downlink-qos-design_cn.md) → [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md) → [downlink-qos-v2-implementation-plan_cn.md](./downlink-qos-v2-implementation-plan_cn.md) → [downlink-qos-implementation-plan_cn.md](./downlink-qos-implementation-plan_cn.md) → [downlink-qos-v3-design_cn.md](./downlink-qos-v3-design_cn.md) → [downlink-qos-v3-implementation-plan_cn.md](./downlink-qos-v3-implementation-plan_cn.md) → [uplink-qos-final-report.md](./uplink-qos-final-report.md) → [uplink-qos-boundaries.md](./uplink-qos-boundaries.md) → [review_qos.md](./review_qos.md) → [run_qos_tests.sh](../scripts/run_qos_tests.sh) |
+| 做 QoS 改动 | [qos-status.md](./qos-status.md) → [uplink-qos-design_cn.md](./uplink-qos-design_cn.md) → [downlink-qos-design_cn.md](./downlink-qos-design_cn.md) → [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md) → [downlink-qos-v3-design_cn.md](./downlink-qos-v3-design_cn.md) → [downlink-qos-v3-implementation-plan_cn.md](./downlink-qos-v3-implementation-plan_cn.md) → [run_qos_tests.sh](../scripts/run_qos_tests.sh) |
+| 做 Linux client / PlainTransport C++ client | [plain-client-qos-status.md](./plain-client-qos-status.md) → [linux-client-architecture_cn.md](./linux-client-architecture_cn.md) → [plain-client-qos-parity-checklist.md](./plain-client-qos-parity-checklist.md) |
 | 查 worker 架构 | [mediasoup-worker-architecture-analysis_cn.md](./mediasoup-worker-architecture-analysis_cn.md) |
 | 查 QoS 详细 case 结果 | [uplink-qos-case-analysis.md](./uplink-qos-case-analysis.md) |
 | 查 QoS 测试覆盖地图 | [qos-test-coverage_cn.md](./qos-test-coverage_cn.md) |
@@ -46,6 +47,10 @@
 |---|---|
 | [full-architecture-flow_cn.md](./full-architecture-flow_cn.md) | 全链路架构流程图：从信令加入到 Worker 媒体转发，覆盖进程模型、SDP/DTLS/ICE、IPC、BWE、Redis 多节点、QoS。 |
 | [architecture_cn.md](./architecture_cn.md) | 运行时架构详解，覆盖线程/进程模型、关键时序、IPC、多节点与故障恢复。 |
+| [linux-client-architecture_cn.md](./linux-client-architecture_cn.md) | Linux `PlainTransport C++ client` 架构说明，覆盖 FFmpeg、RTP/RTCP、QoS 控制器、多 track 和服务端交互。 |
+| [qos-status.md](./qos-status.md) | QoS 总状态摘要，统一给出 browser uplink / plain-client / downlink 的当前口径与结果入口。 |
+| [plain-client-qos-status.md](./plain-client-qos-status.md) | Linux `PlainTransport C++ client` QoS 当前状态摘要，集中给出签收范围、结果入口与主文档。 |
+| [downlink-qos-status.md](./downlink-qos-status.md) | downlink QoS 当前状态摘要，说明当前范围、当前结果入口和后续边界。 |
 | [troubleshooting_cn.md](./troubleshooting_cn.md) | 运行时排障手册，覆盖 join/IPC/Redis/QoS/录制/worker crash 的定位路径。 |
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | 项目开发主文档，包含架构、线程模型、构建与测试入口。 |
 | [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) | 监控、告警与值班处理流程。 |
@@ -59,30 +64,34 @@
 
 推荐阅读顺序：
 
-1. [uplink-qos-briefing.md](./uplink-qos-briefing.md)
-2. [uplink-qos-design_cn.md](./uplink-qos-design_cn.md)
-3. [downlink-qos-design_cn.md](./downlink-qos-design_cn.md)
-4. [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md)
-5. [downlink-qos-v2-implementation-plan_cn.md](./downlink-qos-v2-implementation-plan_cn.md)
-6. [downlink-qos-worker-validation_cn.md](./downlink-qos-worker-validation_cn.md)
-7. [downlink-qos-implementation-plan_cn.md](./downlink-qos-implementation-plan_cn.md)
-8. [uplink-qos-final-report.md](./uplink-qos-final-report.md)
-9. [uplink-qos-boundaries.md](./uplink-qos-boundaries.md)
-10. [uplink-qos-blind-spot-scenario.md](./uplink-qos-blind-spot-scenario.md)
-11. [uplink-qos-test-results-summary.md](./uplink-qos-test-results-summary.md)
-12. [uplink-qos-case-results.md](./uplink-qos-case-results.md)
-13. [uplink-qos-priority-roadmap.md](./uplink-qos-priority-roadmap.md)
-14. [uplink-qos-case-analysis.md](./uplink-qos-case-analysis.md)
-15. [uplink-qos-test-execution-checklist.md](./uplink-qos-test-execution-checklist.md)
-16. [qos-test-coverage_cn.md](./qos-test-coverage_cn.md)
-17. [review_qos.md](./review_qos.md)
-18. [downlink-qos-v3-design_cn.md](./downlink-qos-v3-design_cn.md)
-19. [downlink-qos-v3-implementation-plan_cn.md](./downlink-qos-v3-implementation-plan_cn.md)
-20. [uplink-qos-loopback-boundary-investigation.md](./uplink-qos-loopback-boundary-investigation.md)
+1. [qos-status.md](./qos-status.md)
+2. [uplink-qos-final-report.md](./uplink-qos-final-report.md)
+3. [uplink-qos-test-results-summary.md](./uplink-qos-test-results-summary.md)
+4. [uplink-qos-case-results.md](./uplink-qos-case-results.md)
+5. [plain-client-qos-status.md](./plain-client-qos-status.md)
+6. [plain-client-qos-parity-checklist.md](./plain-client-qos-parity-checklist.md)
+7. [downlink-qos-status.md](./downlink-qos-status.md)
+8. [downlink-qos-case-results.md](./downlink-qos-case-results.md)
+9. [uplink-qos-design_cn.md](./uplink-qos-design_cn.md)
+10. [downlink-qos-design_cn.md](./downlink-qos-design_cn.md)
+11. [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md)
+12. [downlink-qos-v2-implementation-plan_cn.md](./downlink-qos-v2-implementation-plan_cn.md)
+13. [downlink-qos-worker-validation_cn.md](./downlink-qos-worker-validation_cn.md)
+14. [downlink-qos-implementation-plan_cn.md](./downlink-qos-implementation-plan_cn.md)
+15. [downlink-qos-v3-design_cn.md](./downlink-qos-v3-design_cn.md)
+16. [downlink-qos-v3-implementation-plan_cn.md](./downlink-qos-v3-implementation-plan_cn.md)
+17. [uplink-qos-boundaries.md](./uplink-qos-boundaries.md)
+18. [uplink-qos-briefing.md](./uplink-qos-briefing.md)
+19. [uplink-qos-case-analysis.md](./uplink-qos-case-analysis.md)
+20. [uplink-qos-blind-spot-scenario.md](./uplink-qos-blind-spot-scenario.md)
+21. [uplink-qos-loopback-boundary-investigation.md](./uplink-qos-loopback-boundary-investigation.md)
+22. [uplink-qos-priority-roadmap.md](./uplink-qos-priority-roadmap.md)
+23. [uplink-qos-test-execution-checklist.md](./uplink-qos-test-execution-checklist.md)
+24. [qos-test-coverage_cn.md](./qos-test-coverage_cn.md)
 
 说明：
 
-- [review_qos.md](./review_qos.md) 不是“当前结论总表”，而是“原始 review 发现 + 后续有效项判定”的混合文档。
+- [qos-status.md](./qos-status.md) 是当前 QoS 总口径主入口。
 - [uplink-qos-design_cn.md](./uplink-qos-design_cn.md) 用中文说明当前 uplink QoS 的设计、控制链路和边界。
 - [downlink-qos-design_cn.md](./downlink-qos-design_cn.md) 用中文说明当前 `downlink QoS v1` 的设计边界与基础模型。
 - [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md) 用中文定义 `downlink QoS v2` 的房间级 demand 聚合、显式预算分配和 publisher 供给回收方案。
@@ -91,14 +100,23 @@
 - [downlink-qos-v3-design_cn.md](./downlink-qos-v3-design_cn.md) 用中文定义 `downlink QoS v3` 的目标、worker 边界和 control plane 的职责修正。
 - [downlink-qos-v3-implementation-plan_cn.md](./downlink-qos-v3-implementation-plan_cn.md) 用中文给出 `downlink QoS v3` 的实施路径，并明确当前“不继续做强控制面最终 allocator”的决策。
 - [downlink-qos-implementation-plan_cn.md](./downlink-qos-implementation-plan_cn.md) 用中文给出 `downlink QoS v1` 的分阶段实施计划。
-- 当前签收口径，以 [uplink-qos-final-report.md](./uplink-qos-final-report.md) 和 [uplink-qos-test-results-summary.md](./uplink-qos-test-results-summary.md) 为准。
+- [plain-client-qos-parity-checklist.md](./plain-client-qos-parity-checklist.md) 用中文列出 JS uplink QoS 测试资产与 C++ client 对位覆盖的当前状态。
+- [linux-client-architecture_cn.md](./linux-client-architecture_cn.md) 是当前 Linux client 架构主入口。
+- [plain-client-qos-status.md](./plain-client-qos-status.md) 是当前 plain-client QoS 结果与签收范围的稳定摘要入口。
+- [downlink-qos-status.md](./downlink-qos-status.md) 是当前 downlink 范围和结果入口摘要。
+- 当前签收口径，以 [qos-status.md](./qos-status.md) 为总入口，并按各分支状态页下钻。
 - [uplink-qos-boundaries.md](./uplink-qos-boundaries.md) 用来说明“底层 WebRTC 自动能力”和“本仓库 uplink QoS 策略能力”的职责边界。
 - [qos-test-coverage_cn.md](./qos-test-coverage_cn.md) 用来回答“上下行 QoS 现在分别测了哪些场景、在哪一层验证”。
 - [uplink-qos-blind-spot-scenario.md](./uplink-qos-blind-spot-scenario.md) 用来汇总“高质量网络突入长时盲区再恢复”这一类极端转场场景的理论时序和实测结果。
 - [uplink-qos-loopback-boundary-investigation.md](./uplink-qos-loopback-boundary-investigation.md) 用来记录 `BW2` 一类 loopback 边界 case 的专项排查结论、runner 特性和后续治理方向。
 - full matrix 当前机器结果在 [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json)。
 - targeted rerun 当前机器结果在 [generated/uplink-qos-matrix-report.targeted.json](./generated/uplink-qos-matrix-report.targeted.json)。
+- Linux plain-client QoS 当前状态摘要在 [plain-client-qos-status.md](./plain-client-qos-status.md)。
+- PlainTransport C++ client full matrix 当前机器结果在 [plain-client-qos-case-results.md](./plain-client-qos-case-results.md) 和 [generated/uplink-qos-cpp-client-matrix-report.json](./generated/uplink-qos-cpp-client-matrix-report.json)。
+- PlainTransport C++ client targeted rerun 当前机器结果在 [generated/uplink-qos-cpp-client-case-results.targeted.md](./generated/uplink-qos-cpp-client-case-results.targeted.md) 和 [generated/uplink-qos-cpp-client-matrix-report.targeted.json](./generated/uplink-qos-cpp-client-matrix-report.targeted.json)。
+- downlink 当前状态摘要在 [downlink-qos-status.md](./downlink-qos-status.md)。
 - 每次报告生成的历史快照都归档在 [archive/uplink-qos-runs](./archive/uplink-qos-runs)。
+- 已删除的 plain-client 历史迁移 / review / blocker / matrix 方案过程稿不再保留在 `docs/` 中；如需追历史判断，请直接看 git 历史。
 
 ## 4. QoS 测试入口
 
@@ -123,6 +141,7 @@ cd /root/mediasoup-cpp
 - `cpp-integration`: 服务端 QoS 集成测试
 - `cpp-accuracy`: QoS 统计精度测试
 - `cpp-recording`: QoS 录制精度测试
+- `cpp-client-matrix`: PlainTransport C++ client 弱网矩阵
 - `node-harness`: Node QoS harness
 - `browser-harness`: browser signaling / loopback
 - `matrix`: browser loopback 弱网矩阵

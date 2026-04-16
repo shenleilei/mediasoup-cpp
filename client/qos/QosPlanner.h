@@ -62,4 +62,10 @@ inline std::vector<PlannedAction> planActions(const PlannerInput& input) {
 	return planActionsForLevel(input, target);
 }
 
+inline std::vector<PlannedAction> planRecovery(const PlannerInput& input) {
+	PlannerInput recoveryInput = input;
+	recoveryInput.state = State::Recovering;
+	return planActions(recoveryInput);
+}
+
 } // namespace qos

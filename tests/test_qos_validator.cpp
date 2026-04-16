@@ -71,6 +71,16 @@ TEST(QosValidatorTest, RejectsMutuallyExclusivePauseAndResumeUpstream) {
 	EXPECT_NE(parsed.error.find("mutually exclusive"), std::string::npos);
 }
 
+TEST(QosValidatorTest, RejectsTrackScopedOverrideWithoutTrackId) {
+	auto fixture = LoadFixture("valid_override_v1");
+	fixture["scope"] = "track";
+	fixture.erase("trackId");
+
+	auto parsed = qos::QosValidator::ParseOverride(fixture);
+	EXPECT_FALSE(parsed.ok);
+	EXPECT_NE(parsed.error.find("trackId"), std::string::npos);
+}
+
 // ── Downlink snapshot validation tests ──
 
 namespace {

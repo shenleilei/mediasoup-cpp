@@ -11,6 +11,7 @@ FAILURES_FILE="$ARTIFACTS_DIR/last-failures.txt"
 DOWNLINK_REPORT_FILE="$ROOT_DIR/docs/downlink-qos-case-results.md"
 GENERATE_CASE_REPORT=0
 GENERATE_DOWNLINK_CASE_REPORT=0
+GENERATE_CPP_CLIENT_CASE_REPORT=0
 MATRIX_INCLUDE_EXTENDED=0
 MATRIX_CASES=""
 
@@ -20,6 +21,8 @@ ALL_GROUPS=(
   cpp-integration
   cpp-accuracy
   cpp-recording
+  cpp-client-matrix
+  cpp-client-harness
   node-harness
   browser-harness
   matrix
@@ -61,6 +64,8 @@ Available groups:
   cpp-integration   服务端 QoS 集成测试（包含 uplink/downlink QoS 集成测试）
   cpp-accuracy      QoS accuracy 测试
   cpp-recording     QoS recording accuracy 测试
+  cpp-client-matrix PlainTransport C++ client weak-network matrix（run_cpp_client_matrix.mjs）
+  cpp-client-harness PlainTransport C++ client signaling / publish snapshot / override harness
   node-harness      Node QoS harness 场景
   browser-harness   browser_server_signal + browser_loopback + downlink browser harnesses
   matrix            browser loopback full matrix（run_matrix.mjs）
@@ -134,6 +139,7 @@ cleanup_test_processes_fallback() {
     "mediasoup-sfu.*--port=${port}"
     "mediasoup_qos_integration_tests"
     "tests/qos_harness/run.mjs"
+    "tests/qos_harness/run_cpp_client_matrix.mjs"
     "tests/qos_harness/browser_server_signal.mjs"
     "tests/qos_harness/browser_loopback.mjs"
     "tests/qos_harness/browser_downlink_controls.mjs"
@@ -142,6 +148,7 @@ cleanup_test_processes_fallback() {
     "tests/qos_harness/browser_downlink_v2.mjs"
     "tests/qos_harness/browser_downlink_v3.mjs"
     "tests/qos_harness/run_matrix.mjs"
+    "client/build/plain-client 127.0.0.1 14"
   )
 
   for pattern in "${patterns[@]}"; do
@@ -220,6 +227,31 @@ ensure_target_built() {
       --cwd "$ROOT_DIR" \
       cmake --build "$BUILD_DIR" --target "$target"
   fi
+}
+
+ensure_plain_client_built() {
+  local build_dir="$ROOT_DIR/client/build"
+  local binary="$build_dir/plain-client"
+
+  require_file "$build_dir/Makefile"
+
+  local rebuild=0
+  if [[ ! -x "$binary" ]]; then
+    rebuild=1
+  elif find "$ROOT_DIR/client" -maxdepth 2 \
+      \( -name '*.cpp' -o -name '*.h' -o -name 'CMakeLists.txt' \) \
+      -newer "$binary" | grep -q .; then
+    rebuild=1
+  fi
+
+  if ((rebuild)); then
+    run_cmd \
+      "build:plain-client" \
+      --cwd "$build_dir" \
+      cmake --build . --target plain-client
+  fi
+
+  require_file "$binary"
 }
 
 run_cmd() {
@@ -483,7 +515,7 @@ normalize_groups() {
         requested=("${ALL_GROUPS[@]}")
         break
       fi
-      if [[ "$group" == node-harness:* || "$group" == browser-harness:* ]]; then
+      if [[ "$group" == node-harness:* || "$group" == browser-harness:* || "$group" == cpp-client-harness:* ]]; then
         requested+=("$group")
         continue
       fi
@@ -559,6 +591,18 @@ run_cpp_unit() {
   ensure_target_built \
     mediasoup_tests \
     "$BUILD_DIR/mediasoup_tests" \
+    "$ROOT_DIR/tests/test_client_qos.cpp" \
+    "$ROOT_DIR/client/qos/QosConstants.h" \
+    "$ROOT_DIR/client/qos/QosController.h" \
+    "$ROOT_DIR/client/qos/QosCoordinator.h" \
+    "$ROOT_DIR/client/qos/QosExecutor.h" \
+    "$ROOT_DIR/client/qos/QosPlanner.h" \
+    "$ROOT_DIR/client/qos/QosProbe.h" \
+    "$ROOT_DIR/client/qos/QosProfiles.h" \
+    "$ROOT_DIR/client/qos/QosProtocol.h" \
+    "$ROOT_DIR/client/qos/QosSignals.h" \
+    "$ROOT_DIR/client/qos/QosStateMachine.h" \
+    "$ROOT_DIR/client/qos/QosTypes.h" \
     "$ROOT_DIR/tests/test_downlink_allocator.cpp" \
     "$ROOT_DIR/tests/test_downlink_health.cpp" \
     "$ROOT_DIR/tests/test_qos_protocol.cpp" \
@@ -571,7 +615,7 @@ run_cpp_unit() {
     "cpp-unit" \
     --cwd "$ROOT_DIR" \
     "$BUILD_DIR/mediasoup_tests" \
-    "--gtest_filter=DownlinkAllocatorTest.*:DownlinkHealthMonitorTest.*:QosProtocolTest.*:QosValidatorTest.*:QosRegistryTest.*:QosAggregatorTest.*:QosRoomAggregatorTest.*:QosOverrideBuilderTest.*"
+    "--gtest_filter=ClientQos*:DownlinkAllocatorTest.*:DownlinkHealthMonitorTest.*:QosProtocolTest.*:QosValidatorTest.*:QosRegistryTest.*:QosAggregatorTest.*:QosRoomAggregatorTest.*:QosOverrideBuilderTest.*"
 }
 
 run_cpp_integration() {
@@ -610,6 +654,63 @@ run_cpp_recording() {
     "cpp-recording" \
     --cwd "$ROOT_DIR" \
     "$BUILD_DIR/mediasoup_qos_recording_accuracy_tests"
+}
+
+run_cpp_client_matrix() {
+  require_file "$BUILD_DIR/mediasoup-sfu"
+  ensure_target_built \
+    mediasoup-sfu \
+    "$BUILD_DIR/mediasoup-sfu" \
+    "$ROOT_DIR/src/main.cpp" \
+    "$ROOT_DIR/src/SignalingServer.cpp" \
+    "$ROOT_DIR/src/RoomService.cpp"
+  ensure_plain_client_built
+  prepare_test_port 14019 "QoS cpp-client matrix SFU port 14019"
+  local matrix_args=()
+  if ((MATRIX_INCLUDE_EXTENDED)); then
+    matrix_args+=("--include-extended")
+  fi
+  if [[ -n "$MATRIX_CASES" ]]; then
+    matrix_args+=("--cases=$MATRIX_CASES")
+  fi
+  run_cmd \
+    "cpp-client-matrix" \
+    --cwd "$ROOT_DIR" \
+    node "$ROOT_DIR/tests/qos_harness/run_cpp_client_matrix.mjs" "${matrix_args[@]}"
+}
+
+run_cpp_client_harness() {
+  require_file "$BUILD_DIR/mediasoup-sfu"
+  ensure_target_built \
+    mediasoup-sfu \
+    "$BUILD_DIR/mediasoup-sfu" \
+    "$ROOT_DIR/src/main.cpp" \
+    "$ROOT_DIR/src/SignalingServer.cpp" \
+    "$ROOT_DIR/src/RoomService.cpp"
+  ensure_plain_client_built
+  prepare_test_port 14020 "QoS cpp-client harness SFU port 14020"
+  local scenarios=(
+    publish_snapshot
+    stale_seq
+    policy_update
+    auto_override_poor
+    override_force_audio_only
+    manual_clear
+    multi_video_budget
+    multi_track_snapshot
+  )
+
+  local failed=0
+  for scenario in "${scenarios[@]}"; do
+    if ! run_cmd \
+      "cpp-client-harness:$scenario" \
+      --cwd "$ROOT_DIR" \
+      env QOS_CPP_CLIENT_HARNESS_PORT=14020 \
+      node "$ROOT_DIR/tests/qos_harness/run_cpp_client_harness.mjs" "$scenario"; then
+      failed=1
+    fi
+  done
+  return "$failed"
 }
 
 run_node_harness() {
@@ -729,6 +830,8 @@ run_group() {
     cpp-integration) run_cpp_integration ;;
     cpp-accuracy) run_cpp_accuracy ;;
     cpp-recording) run_cpp_recording ;;
+    cpp-client-matrix) run_cpp_client_matrix ;;
+    cpp-client-harness) run_cpp_client_harness ;;
     node-harness) run_node_harness ;;
     browser-harness) run_browser_harness ;;
     matrix) run_matrix ;;
@@ -740,8 +843,17 @@ run_group() {
 run_target() {
   local target="$1"
   case "$target" in
-    client-js|cpp-unit|cpp-integration|cpp-accuracy|cpp-recording|node-harness|browser-harness|matrix|downlink-matrix)
+    client-js|cpp-unit|cpp-integration|cpp-accuracy|cpp-recording|cpp-client-matrix|cpp-client-harness|node-harness|browser-harness|matrix|downlink-matrix)
       run_group "$target"
+      ;;
+    cpp-client-harness:*)
+      prepare_test_port 14020 "QoS cpp-client harness SFU port 14020"
+      local scenario="${target#cpp-client-harness:}"
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        env QOS_CPP_CLIENT_HARNESS_PORT=14020 \
+        node "$ROOT_DIR/tests/qos_harness/run_cpp_client_harness.mjs" "$scenario"
       ;;
     node-harness:*)
       prepare_test_port 14011 "QoS node harness SFU port 14011"
@@ -849,6 +961,9 @@ for group in "${GROUPS_TO_RUN[@]}"; do
   if [[ "$group" == "downlink-matrix" ]]; then
     GENERATE_DOWNLINK_CASE_REPORT=1
   fi
+  if [[ "$group" == "cpp-client-matrix" ]]; then
+    GENERATE_CPP_CLIENT_CASE_REPORT=1
+  fi
 done
 
 FAILED_TASKS=()
@@ -859,6 +974,7 @@ if ((RESUME_MODE)); then
 else
   echo "Groups:"
 fi
+
 for group in "${GROUPS_TO_RUN[@]}"; do
   echo "  - $group"
 done
@@ -905,6 +1021,33 @@ if ((GENERATE_CASE_REPORT)) && [[ -f "$CASE_REPORT_SCRIPT" ]]; then
   else
     echo "<== [case-report] WARN (generation failed)" >&2
   fi
+  fi
+fi
+
+CPP_CLIENT_CASE_REPORT_SCRIPT="$ROOT_DIR/tests/qos_harness/render_cpp_client_case_report.mjs"
+if ((GENERATE_CPP_CLIENT_CASE_REPORT)) && [[ -f "$CPP_CLIENT_CASE_REPORT_SCRIPT" ]]; then
+  if [[ -n "$MATRIX_CASES" ]]; then
+    CPP_CLIENT_CASE_REPORT_JSON="$ROOT_DIR/docs/generated/uplink-qos-cpp-client-matrix-report.targeted.json"
+    CPP_CLIENT_CASE_REPORT_OUTPUT="$ROOT_DIR/docs/generated/uplink-qos-cpp-client-case-results.targeted.md"
+  else
+    CPP_CLIENT_CASE_REPORT_JSON="$ROOT_DIR/docs/generated/uplink-qos-cpp-client-matrix-report.json"
+    CPP_CLIENT_CASE_REPORT_OUTPUT="$ROOT_DIR/docs/plain-client-qos-case-results.md"
+  fi
+
+  if [[ ! -f "$CPP_CLIENT_CASE_REPORT_JSON" ]]; then
+    echo
+    echo "<== [cpp-client-case-report] WARN (matrix json not found: $CPP_CLIENT_CASE_REPORT_JSON)" >&2
+  else
+    echo
+    echo "==> [cpp-client-case-report]"
+    if node \
+      "$CPP_CLIENT_CASE_REPORT_SCRIPT" \
+      "--input=$CPP_CLIENT_CASE_REPORT_JSON" \
+      "--output=$CPP_CLIENT_CASE_REPORT_OUTPUT"; then
+      echo "<== [cpp-client-case-report] PASS"
+    else
+      echo "<== [cpp-client-case-report] WARN (generation failed)" >&2
+    fi
   fi
 fi
 

@@ -1,6 +1,8 @@
 #pragma once
 #include "QosTypes.h"
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 namespace qos {
 
@@ -25,7 +27,28 @@ inline bool isRecoveryHealthy(const DerivedSignals& s, const Thresholds& t) {
 		&& s.jitterEwma < recoveryJitter && !s.bandwidthLimited && !s.cpuLimited;
 }
 
-inline Quality mapStateToQuality(State state) {
+inline bool isFastRecoveryHealthy(const DerivedSignals& s, const Thresholds& t) {
+	double recoveryJitter = std::max(t.stableJitterMs, t.warnJitterMs);
+	double rawJitter = std::isfinite(s.jitterMs) ? std::max(0.0, s.jitterMs) : std::numeric_limits<double>::infinity();
+	double targetBitrateBps = std::max(0.0, s.targetBitrateBps);
+	bool sendReady = targetBitrateBps <= 0.0 || s.sendBitrateBps >= targetBitrateBps * 0.85;
+	return s.lossEwma < t.stableLossRate && s.rttEwma < t.stableRttMs
+		&& rawJitter < recoveryJitter && sendReady && !s.bandwidthLimited && !s.cpuLimited;
+}
+
+inline int nextCounter(int current, bool matched) {
+	return matched ? current + 1 : 0;
+}
+
+inline StateMachineContext createInitialQosStateMachineContext(int64_t nowMs) {
+	StateMachineContext context;
+	context.state = State::Stable;
+	context.enteredAtMs = nowMs;
+	return context;
+}
+
+inline Quality mapStateToQuality(State state, const DerivedSignals& signals) {
+	if (state == State::Congested && signals.sendBitrateBps <= 0) return Quality::Lost;
 	switch (state) {
 		case State::Stable: return Quality::Excellent;
 		case State::EarlyWarning: return Quality::Good;
@@ -35,81 +58,71 @@ inline Quality mapStateToQuality(State state) {
 	return Quality::Good;
 }
 
+inline Quality mapStateToQuality(State state) {
+	return mapStateToQuality(state, DerivedSignals{});
+}
+
 inline StateTransitionResult evaluateStateTransition(
 	const StateMachineContext& ctx, const DerivedSignals& signals,
 	const Profile& profile, int64_t nowMs)
 {
 	auto& t = profile.thresholds;
+	bool healthy = isHealthy(signals, t);
+	bool recoveryHealthy = isRecoveryHealthy(signals, t);
+	bool fastRecoveryHealthy = !recoveryHealthy && isFastRecoveryHealthy(signals, t);
+	bool warning = isWarning(signals, t);
+	bool congested = isCongested(signals, t);
+
 	StateMachineContext next = ctx;
+	next.consecutiveHealthySamples = nextCounter(ctx.consecutiveHealthySamples, healthy);
+	next.consecutiveRecoverySamples = nextCounter(ctx.consecutiveRecoverySamples, recoveryHealthy);
+	next.consecutiveFastRecoverySamples = nextCounter(ctx.consecutiveFastRecoverySamples, fastRecoveryHealthy);
+	next.consecutiveWarningSamples = nextCounter(ctx.consecutiveWarningSamples, warning);
+	next.consecutiveCongestedSamples = nextCounter(ctx.consecutiveCongestedSamples, congested);
+
+	State nextState = ctx.state;
 	bool transitioned = false;
 
-	// Update consecutive counters
-	next.consecutiveHealthySamples = isHealthy(signals, t) ? ctx.consecutiveHealthySamples + 1 : 0;
-	next.consecutiveRecoverySamples = isRecoveryHealthy(signals, t) ? ctx.consecutiveRecoverySamples + 1 : 0;
-	next.consecutiveWarningSamples = isWarning(signals, t) ? ctx.consecutiveWarningSamples + 1 : 0;
-	next.consecutiveCongestedSamples = isCongested(signals, t) ? ctx.consecutiveCongestedSamples + 1 : 0;
-
 	switch (ctx.state) {
-	case State::Stable:
-		if (isCongested(signals, t)) {
-			next.state = State::Congested;
-			next.enteredAtMs = nowMs;
-			next.lastCongestedAtMs = nowMs;
-			transitioned = true;
-		} else if (isWarning(signals, t)) {
-			next.state = State::EarlyWarning;
-			next.enteredAtMs = nowMs;
-			transitioned = true;
-		}
-		break;
+		case State::Stable:
+			if (next.consecutiveWarningSamples >= 2) nextState = State::EarlyWarning;
+			break;
 
-	case State::EarlyWarning:
-		if (isCongested(signals, t)) {
-			next.state = State::Congested;
-			next.enteredAtMs = nowMs;
-			next.lastCongestedAtMs = nowMs;
-			transitioned = true;
-		} else if (next.consecutiveHealthySamples >= 3) {
-			next.state = State::Stable;
-			next.enteredAtMs = nowMs;
-			transitioned = true;
-		}
-		break;
-
-	case State::Congested:
-		if (next.consecutiveRecoverySamples >= 3) {
-			int64_t cooldown = profile.recoveryCooldownMs;
-			if (nowMs - ctx.lastCongestedAtMs >= cooldown) {
-				next.state = State::Recovering;
-				next.enteredAtMs = nowMs;
-				next.lastRecoveryAtMs = nowMs;
-				transitioned = true;
+		case State::EarlyWarning:
+			if (next.consecutiveCongestedSamples >= 2) {
+				nextState = State::Congested;
+			} else if (next.consecutiveHealthySamples >= 3) {
+				nextState = State::Stable;
 			}
-		}
-		break;
+			break;
 
-	case State::Recovering:
-		if (isCongested(signals, t)) {
-			next.state = State::Congested;
-			next.enteredAtMs = nowMs;
-			next.lastCongestedAtMs = nowMs;
-			transitioned = true;
-		} else if (next.consecutiveHealthySamples >= 5) {
-			next.state = State::Stable;
-			next.enteredAtMs = nowMs;
-			transitioned = true;
+		case State::Congested: {
+			int64_t congestedSinceMs = ctx.lastCongestedAtMs > 0 ? ctx.lastCongestedAtMs : ctx.enteredAtMs;
+			bool cooldownElapsed = nowMs - congestedSinceMs >= profile.recoveryCooldownMs;
+			bool regularRecoveryReady = next.consecutiveRecoverySamples >= 5;
+			bool fastRecoveryReady = next.consecutiveFastRecoverySamples >= 2;
+			if (cooldownElapsed && (regularRecoveryReady || fastRecoveryReady)) nextState = State::Recovering;
+			break;
 		}
-		break;
+
+		case State::Recovering:
+			if (next.consecutiveCongestedSamples >= 2) {
+				nextState = State::Congested;
+			} else if (next.consecutiveHealthySamples >= 5) {
+				nextState = State::Stable;
+			}
+			break;
 	}
 
-	if (transitioned) {
-		next.consecutiveHealthySamples = 0;
-		next.consecutiveRecoverySamples = 0;
-		next.consecutiveWarningSamples = 0;
-		next.consecutiveCongestedSamples = 0;
+	if (nextState != ctx.state) {
+		transitioned = true;
+		next.state = nextState;
+		next.enteredAtMs = nowMs;
+		if (nextState == State::Congested) next.lastCongestedAtMs = nowMs;
+		if (nextState == State::Recovering) next.lastRecoveryAtMs = nowMs;
 	}
 
-	return {next, mapStateToQuality(next.state), transitioned};
+	return {next, mapStateToQuality(next.state, signals), transitioned};
 }
 
 } // namespace qos

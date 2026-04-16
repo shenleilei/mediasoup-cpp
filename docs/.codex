@@ -1,53 +1,46 @@
-# Codex Handoff — Downlink QoS Implementation
+# Codex Handoff
 
-## 完成状态
+## 当前文档状态
 
-下行 QoS v1 的 6 个阶段全部完成（阶段 7 dynacast 按计划不进入 v1）。
+本轮已经把 Linux `PlainTransport C++ client` 与 plain-client QoS 文档收敛到当前文档体系：
 
-### 阶段 1：Consumer 控制接口 ✅
-- Consumer.h/cpp: 加了 preferredSpatialLayer_, preferredTemporalLayer_, priority_ 字段 + toJson
-- RoomService.h/cpp: 加了 pauseConsumer, resumeConsumer, setConsumerPreferredLayers, setConsumerPriority, requestConsumerKeyFrame
-- SignalingServer.cpp: 加了 5 个 signaling method 路由
-- test_integration.cpp: 3 个集成测试通过
+- 主入口：
+  - `README.md`
+  - `docs/README.md`
+- 主架构：
+  - `docs/architecture_cn.md`
+  - `docs/full-architecture-flow_cn.md`
+  - `docs/DEVELOPMENT.md`
+  - `docs/linux-client-architecture_cn.md`
+- 当前 Linux client / plain-client QoS 结果口径：
+  - `docs/plain-client-qos-parity-checklist.md`
+  - `docs/plain-client-qos-case-results.md`
 
-### 阶段 2：浏览器黑盒验证 ✅
-- tests/qos_harness/browser/downlink-controls-entry.js
-- tests/qos_harness/browser_downlink_controls.mjs
-- 3 个 browser case 通过 (pause/resume/keyframe)
+已经删除的过时过程稿：
 
-### 阶段 3：downlink snapshot schema 与服务端存储 ✅
-- src/qos/DownlinkQosTypes.h: DownlinkSubscription, DownlinkSnapshot
-- src/qos/DownlinkQosRegistry.h/cpp: 存储 + seq 校验
-- QosValidator: ParseDownlinkSnapshot
-- RoomService: setDownlinkClientStats
-- SignalingServer: downlinkClientStats 路由
-- test_qos_integration.cpp: 3 个测试通过
+- `docs/plain-client-qos-migration-plan.md`
+- `docs/plain-client-qos-remaining-work.md`
+- `docs/linux_client_review.md`
+- `docs/plain-client-qos-matrix-overview.md`
+- `docs/plain-client-qos-matrix-implementation-plan.md`
+- `review.md`
 
-### 阶段 4：最小 downlink QoS v1 ✅
-- src/qos/DownlinkAllocator.h/cpp: 3 条规则 (hidden→pause, small→low layer, large/pinned→high layer)
-- src/qos/SubscriberQosController.h/cpp: 执行 actions
-- RoomService: 接入 allocator
-- test_downlink_allocator.cpp: 9 个单测通过
-- test_qos_integration.cpp: 3 个集成测试通过
+## 当前建议阅读顺序
 
-### 阶段 5：健康度驱动的降档与恢复 ✅
-- src/qos/DownlinkHealthMonitor.h/cpp: 状态机 (stable/early_warning/congested/recovering)
-- DownlinkAllocator: degradeLevel 参数，clamp layers
-- test_downlink_health.cpp: 5 个单测通过
+1. `docs/README.md`
+2. `docs/qos-status.md`
+3. `docs/linux-client-architecture_cn.md`
+4. `docs/plain-client-qos-parity-checklist.md`
+5. `docs/plain-client-qos-case-results.md`
+6. `docs/architecture_cn.md`
 
-### 阶段 6：优先级与房间级分配 ✅
-- DownlinkAllocator: ComputePriority, kSetPriority action
-- SubscriberQosController: 执行 setPriority
-- 优先级模型: screenshare(255) > pinned(220) > activeSpeaker(180) > visible(120) > hidden(0)
-- test_downlink_allocator.cpp: 更新为 9 个测试含优先级验证
+## 如果下一步继续做
 
-## 测试汇总
-- 14 个 downlink 单测全部通过
-- 20 个 integration 测试全部通过
-- 6 个 downlink QoS 集成测试全部通过
-- browser harness 3 个 case 全部通过
+优先看三类事情：
 
-## 下一步
-- 阶段 7 (dynacast) 不进入 v1，待前 6 阶段稳定后再做
-- 客户端 JS SDK 需要补 downlinkSampler / downlinkHints（src/client/lib/qos/）
-- 建议按 docs/downlink-qos-implementation-plan_cn.md 第 11 节的 commit 节奏提交
+1. 文档和代码口径是否继续保持一致
+   - 新增 Linux client / QoS 能力时，优先更新上面 5 份主文档
+2. generated artifact 是否需要补摘要入口
+   - `docs/generated/uplink-qos-cpp-client-*.json|md`
+3. downlink 与 dynacast 后续能力
+   - 不要把它们写回当前 plain-client 已完成口径里

@@ -15,6 +15,7 @@ enum class TrackKind { Audio, Video };
 enum class TrackMode { AudioOnly, AudioVideo };
 enum class ActionType { SetEncodingParameters, SetMaxSpatialLayer, EnterAudioOnly, ExitAudioOnly, PauseUpstream, ResumeUpstream, Noop };
 enum class QualityLimitationReason { Bandwidth, Cpu, Other, None, Unknown };
+enum class OverrideScope { Peer, Track };
 
 struct EncodingParameters {
 	std::optional<uint32_t> maxBitrateBps;
@@ -65,15 +66,15 @@ struct Thresholds {
 	double warnLossRate = 0.04;
 	double congestedLossRate = 0.08;
 	double warnRttMs = 220;
-	double congestedRttMs = 400;
-	double warnJitterMs = 1e9;       // infinity = disabled
-	double congestedJitterMs = 1e9;
+	double congestedRttMs = 320;
+	double warnJitterMs = 30;
+	double congestedJitterMs = 60;
 	double warnBitrateUtilization = 0.85;
 	double congestedBitrateUtilization = 0.65;
-	double stableLossRate = 0.01;
-	double stableRttMs = 150;
-	double stableJitterMs = 1e9;
-	double stableBitrateUtilization = 0.9;
+	double stableLossRate = 0.03;
+	double stableRttMs = 180;
+	double stableJitterMs = 20;
+	double stableBitrateUtilization = 0.92;
 };
 
 struct LadderStep {
@@ -97,6 +98,44 @@ struct Profile {
 	Thresholds thresholds;
 	std::vector<LadderStep> ladder;
 };
+
+struct ProfileSelection {
+	std::string camera;
+	std::string screenShare;
+	std::string audio;
+};
+
+struct QosPolicy {
+	std::string schema = "mediasoup.qos.policy.v1";
+	int sampleIntervalMs = 1000;
+	int snapshotIntervalMs = 2000;
+	bool allowAudioOnly = true;
+	bool allowVideoPause = true;
+	ProfileSelection profiles;
+};
+
+struct QosOverride {
+	std::string schema = "mediasoup.qos.override.v1";
+	OverrideScope scope = OverrideScope::Peer;
+	std::optional<std::string> trackId;
+	std::optional<int> maxLevelClamp;
+	std::optional<bool> forceAudioOnly;
+	std::optional<bool> disableRecovery;
+	std::optional<bool> pauseUpstream;
+	std::optional<bool> resumeUpstream;
+	int ttlMs = 0;
+	std::string reason;
+};
+
+struct RuntimeSettings {
+	int sampleIntervalMs = 1000;
+	int snapshotIntervalMs = 2000;
+	bool allowAudioOnly = true;
+	bool allowVideoPause = true;
+	bool probeActive = false;
+};
+
+constexpr size_t kQosMaxTracksPerSnapshot = 32u;
 
 struct StateMachineContext {
 	State state = State::Stable;
@@ -158,6 +197,8 @@ struct PeerTrackState {
 	Quality quality = Quality::Excellent;
 	int level = 0;
 	bool inAudioOnlyMode = false;
+	std::string producerId;
+	Reason reason = Reason::Unknown;
 };
 
 struct PeerDecision {
@@ -167,6 +208,38 @@ struct PeerDecision {
 	bool keepAudioAlive = false;
 	bool preferScreenShare = false;
 	bool allowVideoRecovery = false;
+};
+
+struct CoordinationOverride {
+	std::optional<int> maxLevelClamp;
+	std::optional<bool> disableRecovery;
+	std::optional<bool> forceAudioOnly;
+	std::optional<bool> pauseUpstream;
+	std::optional<bool> resumeUpstream;
+	std::optional<uint32_t> maxBitrateCapBps;
+};
+
+struct TrackBudgetRequest {
+	std::string trackId;
+	Source source = Source::Camera;
+	TrackKind kind = TrackKind::Video;
+	uint32_t minBitrateBps = 0;
+	uint32_t desiredBitrateBps = 0;
+	uint32_t maxBitrateBps = 0;
+	double weight = 1.0;
+	bool paused = false;
+};
+
+struct TrackBudgetAllocation {
+	std::string trackId;
+	uint32_t allocatedBitrateBps = 0;
+	bool capped = false;
+};
+
+struct PeerBudgetDecision {
+	uint32_t totalBudgetBps = 0;
+	uint32_t allocatedBudgetBps = 0;
+	std::vector<TrackBudgetAllocation> allocations;
 };
 
 // Quality/State string helpers

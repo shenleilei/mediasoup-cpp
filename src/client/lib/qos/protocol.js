@@ -283,6 +283,10 @@ function parseQosOverride(payload) {
         throw new TypeError(`qosOverride.schema must be '${constants_1.QOS_OVERRIDE_SCHEMA_V1}', got '${schema}'`);
     }
     const scope = asStringEnum(obj.scope, 'qosOverride.scope', ['peer', 'track']);
+    if (scope === 'track' &&
+        (!('trackId' in obj) || obj.trackId === null || obj.trackId === undefined)) {
+        throw new TypeError('qosOverride.trackId is required when scope is track');
+    }
     let trackId;
     if ('trackId' in obj) {
         if (obj.trackId === null || obj.trackId === undefined) {

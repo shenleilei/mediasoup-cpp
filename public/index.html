@@ -188,6 +188,45 @@ button:disabled {
   gap: 16px;
 }
 
+.remote-peer-groups {
+  display: grid;
+  gap: 16px;
+}
+
+.remote-peer-group {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  background: rgba(2, 6, 23, 0.62);
+  border: 1px solid #1e293b;
+  border-radius: 18px;
+}
+
+.remote-peer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.remote-peer-title {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.remote-peer-subtitle {
+  margin-top: 4px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.remote-peer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+  gap: 14px;
+}
+
 .video-card {
   background: var(--surface);
   border: 1px solid #1e293b;
@@ -220,16 +259,18 @@ button:disabled {
   align-items: center;
   justify-content: center;
   padding: 12px;
+  min-height: 220px;
+  aspect-ratio: 16 / 9;
   background: #020617;
   border-bottom: 1px solid #1e293b;
 }
 
 .video-frame video {
   display: block;
-  width: auto;
-  height: auto;
-  max-width: min(100%, 960px);
-  max-height: min(56vh, 540px);
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
   object-fit: contain;
   background: #000;
   border-radius: 12px;
@@ -517,10 +558,10 @@ button:disabled {
     <div class="panel">
       <div class="panel-header">
         <h2>远端订阅</h2>
-        <p>每路远端视频下方直接显示这一路的 downlink QoS 数据。</p>
+        <p>按 peer 分组显示所有远端 video track，并在卡片里标出 track 身份和对应的 downlink QoS 数据。</p>
       </div>
       <div class="panel-body">
-        <div class="video-grid" id="remoteVideos"></div>
+        <div class="remote-peer-groups" id="remoteVideos"></div>
       </div>
     </div>
   </div>

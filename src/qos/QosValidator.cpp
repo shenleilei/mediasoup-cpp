@@ -344,6 +344,10 @@ ParseResult<QosOverride> QosValidator::ParseOverride(const json& payload) {
 	if (!OneOf(scope, { "peer", "track" })) {
 		return MakeError<QosOverride>("invalid scope");
 	}
+	if (scope == "track" &&
+		(!payload.contains("trackId") || payload["trackId"].is_null())) {
+		return MakeError<QosOverride>("track scope requires trackId");
+	}
 
 	QosOverride overrideData;
 	overrideData.schema = payload["schema"].get<std::string>();
