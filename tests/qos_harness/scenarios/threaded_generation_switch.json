@@ -1,0 +1,28 @@
+{
+  "name": "threaded_generation_switch",
+  "roomId": "qos_harness_room_threaded_generation_switch",
+  "peerId": "alice",
+  "matrixProfile": {
+    "warmupMs": 4000,
+    "phases": [
+      {
+        "name": "baseline",
+        "durationMs": 2000,
+        "sendCeilingBps": 900000,
+        "lossRate": 0,
+        "rttMs": 80,
+        "jitterMs": 8,
+        "qualityLimitationReason": "none"
+      },
+      {
+        "name": "impairment",
+        "durationMs": 10000,
+        "sendCeilingBps": 300000,
+        "lossRate": 0.08,
+        "rttMs": 260,
+        "jitterMs": 24,
+        "qualityLimitationReason": "bandwidth"
+      }
+    ]
+  }
+}

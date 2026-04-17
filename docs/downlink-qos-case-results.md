@@ -1,16 +1,16 @@
 # 下行 QoS 逐项最终结果
 
-生成时间：`2026-04-15T00:57:57.842Z`
+生成时间：`2026-04-17T09:43:02.961Z`
 
 ## 1. 汇总
 
 - 总任务：`8`
-- 已执行：`1`
-- 通过：`1`
+- 已执行：`0`
+- 通过：`0`
 - 失败：`0`
-- 未执行：`7`
+- 未执行：`8`
 - 执行脚本：`scripts/run_qos_tests.sh`
-- 本次选择目标：`browser-harness:downlink-controls`
+- 本次选择目标：`cpp-client-harness:threaded_quick`
 
 ### 1.1 失败任务
 
@@ -53,8 +53,8 @@
 | 任务 ID | `browser-harness:downlink-controls` |
 | 类别 | `browser` |
 | 说明 | 浏览器信令控制验证：pause / resume / requestKeyFrame 基本控制链路 |
-| 状态 | `PASS` |
-| 耗时 | `5s` |
+| 状态 | `NOT_RUN` |
+| 耗时 | `-` |
 | 对应命令 | `node tests/qos_harness/browser_downlink_controls.mjs` |
 
 ### browser-harness:downlink-e2e

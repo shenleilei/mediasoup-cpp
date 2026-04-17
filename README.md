@@ -110,7 +110,10 @@ RTCP side path
 
 Current architecture docs:
 
+- [docs/dependencies_cn.md](./docs/dependencies_cn.md)
 - [docs/linux-client-architecture_cn.md](./docs/linux-client-architecture_cn.md)
+- [docs/linux-client-multi-source-thread-model_cn.md](./docs/linux-client-multi-source-thread-model_cn.md)
+- [docs/linux-client-threaded-implementation-checklist_cn.md](./docs/linux-client-threaded-implementation-checklist_cn.md)
 - [docs/architecture_cn.md](./docs/architecture_cn.md)
 - [docs/plain-client-qos-parity-checklist.md](./docs/plain-client-qos-parity-checklist.md)
 
@@ -483,14 +486,28 @@ Recorder responsibilities include:
 
 ### Prerequisites
 
+Dependency reference:
+
+- [docs/dependencies_cn.md](./docs/dependencies_cn.md)
+
 - Linux
 - CMake 3.16+
 - GCC 10+ or Clang 12+
 - OpenSSL
 - zlib
-- FFmpeg (`libavformat`, `libavcodec`, `libavutil`)
-- hiredis if you want Redis-backed multi-node support
+- FFmpeg
+  - `libavformat`
+  - `libavcodec`
+  - `libavutil`
+  - `libswscale`
+  - `libavdevice`
+- hiredis
 - `curl` and `tar` (used by `setup.sh` to fetch and unpack `mediasoup-worker`)
+
+Notes:
+
+- Redis is optional at runtime for single-node local-only mode, but the current default build still links `hiredis`.
+- The current `plain-client` threaded path directly includes `libavdevice`, so `libavdevice-dev` / `ffmpeg-devel` is part of the build requirement, not just a camera-only afterthought.
 
 ### Build
 
@@ -610,6 +627,13 @@ If Redis multi-node routing is enabled, every node must publish a `ws://` addres
 All tests must be run from the project root directory.
 
 ```bash
+# non-QoS full regression
+./scripts/run_all_tests.sh
+
+# QoS-only regression
+./scripts/run_qos_tests.sh
+
+# individual binaries
 ./build/mediasoup_tests
 ./build/mediasoup_review_fix_tests
 ./build/mediasoup_stability_integration_tests
@@ -642,6 +666,9 @@ For local verification before review:
 # configure + build
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
+
+# non-QoS full regression
+./scripts/run_all_tests.sh
 
 # fast baseline (unit)
 ./build/mediasoup_tests --gtest_filter='-QosAccuracyTest.*:QosRecordingAccuracyTest.*'
@@ -697,9 +724,9 @@ Behavior:
 - `Cannot find source file ... third_party/ip2region/binding/c/xdb_searcher.c`  
   Ensure you are on the latest branch and the bundled `third_party/ip2region` directory exists.
 - `Could NOT find ... avformat/avcodec/avutil`  
-  Install FFmpeg development packages (for example `libavformat-dev libavcodec-dev libavutil-dev` on Debian/Ubuntu).
+  Install FFmpeg development packages (for example `libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libavdevice-dev` on Debian/Ubuntu), or see [docs/dependencies_cn.md](./docs/dependencies_cn.md).
 - `hiredis not found` or link errors for Redis symbols  
-  Install the hiredis development package (`libhiredis-dev`).
+  Install the hiredis development package (`libhiredis-dev` / `hiredis-devel`), or see [docs/dependencies_cn.md](./docs/dependencies_cn.md).
 
 ## Monitoring
 

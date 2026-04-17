@@ -30,6 +30,12 @@ public:
 
 	void reset() { lastKey_.clear(); }
 
+	// Record idempotent key without calling sink (for async confirm path)
+	void recordKey(const PlannedAction& action) {
+		if (action.type == ActionType::Noop) return;
+		lastKey_ = makeKey(action);
+	}
+
 private:
 	static std::string makeKey(const PlannedAction& a) {
 		std::string k = actionStr(a.type);

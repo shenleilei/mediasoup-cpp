@@ -23,6 +23,7 @@ ALL_GROUPS=(
   cpp-recording
   cpp-client-matrix
   cpp-client-harness
+  cpp-threaded
   node-harness
   browser-harness
   matrix
@@ -66,6 +67,7 @@ Available groups:
   cpp-recording     QoS recording accuracy 测试
   cpp-client-matrix PlainTransport C++ client weak-network matrix（run_cpp_client_matrix.mjs）
   cpp-client-harness PlainTransport C++ client signaling / publish snapshot / override harness
+  cpp-threaded      PlainTransport C++ client threaded gtest / threaded harness regression
   node-harness      Node QoS harness 场景
   browser-harness   browser_server_signal + browser_loopback + downlink browser harnesses
   matrix            browser loopback full matrix（run_matrix.mjs）
@@ -610,12 +612,14 @@ run_cpp_unit() {
     "$ROOT_DIR/tests/test_qos_registry.cpp" \
     "$ROOT_DIR/tests/test_qos_aggregator.cpp" \
     "$ROOT_DIR/tests/test_qos_room_aggregator.cpp" \
-    "$ROOT_DIR/tests/test_qos_override.cpp"
+    "$ROOT_DIR/tests/test_qos_override.cpp" \
+    "$ROOT_DIR/tests/test_thread_model.cpp" \
+    "$ROOT_DIR/client/ThreadedControlHelpers.h"
   run_cmd \
     "cpp-unit" \
     --cwd "$ROOT_DIR" \
     "$BUILD_DIR/mediasoup_tests" \
-    "--gtest_filter=ClientQos*:DownlinkAllocatorTest.*:DownlinkHealthMonitorTest.*:QosProtocolTest.*:QosValidatorTest.*:QosRegistryTest.*:QosAggregatorTest.*:QosRoomAggregatorTest.*:QosOverrideBuilderTest.*"
+    "--gtest_filter=ClientQos*:DownlinkAllocatorTest.*:DownlinkHealthMonitorTest.*:QosProtocolTest.*:QosValidatorTest.*:QosRegistryTest.*:QosAggregatorTest.*:QosRoomAggregatorTest.*:QosOverrideBuilderTest.*:ThreadedControlHelpers.*"
 }
 
 run_cpp_integration() {
@@ -698,6 +702,7 @@ run_cpp_client_harness() {
     manual_clear
     multi_video_budget
     multi_track_snapshot
+    threaded_quick
   )
 
   local failed=0
@@ -711,6 +716,28 @@ run_cpp_client_harness() {
     fi
   done
   return "$failed"
+}
+
+run_cpp_threaded() {
+  require_file "$BUILD_DIR/mediasoup_thread_integration_tests"
+  ensure_target_built \
+    mediasoup_thread_integration_tests \
+    "$BUILD_DIR/mediasoup_thread_integration_tests" \
+    "$ROOT_DIR/tests/test_thread_integration.cpp" \
+    "$ROOT_DIR/tests/TestWsClient.h" \
+    "$ROOT_DIR/tests/TestProcessUtils.h" \
+    "$ROOT_DIR/client/ThreadTypes.h" \
+    "$ROOT_DIR/client/ThreadedControlHelpers.h" \
+    "$ROOT_DIR/client/NetworkThread.h" \
+    "$ROOT_DIR/client/SourceWorker.h" \
+    "$ROOT_DIR/client/main.cpp"
+  ensure_plain_client_built
+  prepare_test_port 14021 "threaded integration SFU port 14021"
+  run_cmd \
+    "cpp-threaded:gtest" \
+    --cwd "$ROOT_DIR" \
+    env QOS_THREAD_INTEGRATION_PORT=14021 \
+    "$BUILD_DIR/mediasoup_thread_integration_tests"
 }
 
 run_node_harness() {
@@ -832,6 +859,7 @@ run_group() {
     cpp-recording) run_cpp_recording ;;
     cpp-client-matrix) run_cpp_client_matrix ;;
     cpp-client-harness) run_cpp_client_harness ;;
+    cpp-threaded) run_cpp_threaded ;;
     node-harness) run_node_harness ;;
     browser-harness) run_browser_harness ;;
     matrix) run_matrix ;;
@@ -843,7 +871,7 @@ run_group() {
 run_target() {
   local target="$1"
   case "$target" in
-    client-js|cpp-unit|cpp-integration|cpp-accuracy|cpp-recording|cpp-client-matrix|cpp-client-harness|node-harness|browser-harness|matrix|downlink-matrix)
+    client-js|cpp-unit|cpp-integration|cpp-accuracy|cpp-recording|cpp-client-matrix|cpp-client-harness|cpp-threaded|node-harness|browser-harness|matrix|downlink-matrix)
       run_group "$target"
       ;;
     cpp-client-harness:*)
@@ -854,6 +882,14 @@ run_target() {
         --cwd "$ROOT_DIR" \
         env QOS_CPP_CLIENT_HARNESS_PORT=14020 \
         node "$ROOT_DIR/tests/qos_harness/run_cpp_client_harness.mjs" "$scenario"
+      ;;
+    cpp-threaded:*)
+      prepare_test_port 14021 "threaded integration SFU port 14021"
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        env QOS_THREAD_INTEGRATION_PORT=14021 \
+        "$BUILD_DIR/mediasoup_thread_integration_tests"
       ;;
     node-harness:*)
       prepare_test_port 14011 "QoS node harness SFU port 14011"
