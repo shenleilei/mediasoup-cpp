@@ -1,11 +1,6 @@
 # 上行 QoS 逐 Case 最终结果
 
-> 当前状态说明
->
-> 这是 browser uplink full matrix 的逐 case 展开页。
-> 如果只想先看当前总口径和入口，先看 [qos-status.md](./qos-status.md)。
-
-生成时间：`2026-04-13T03:34:38.058Z`
+生成时间：`2026-04-17T02:01:01.157Z`
 
 ## 1. 汇总
 
@@ -47,9 +42,9 @@
 | 实际动作 | 无非 noop 动作 |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=stable/L0，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T02:41:19.483Z；firstRecovering=-；firstStable=186ms (2026-04-13T02:41:19.669Z)；firstL0=- |
-| 恢复诊断 | raw=loss<3%=186ms (2026-04-13T02:41:19.669Z), rtt<120ms=186ms (2026-04-13T02:41:19.669Z), jitter<28ms=186ms (2026-04-13T02:41:19.669Z), jitter<18ms=186ms (2026-04-13T02:41:19.669Z)；target=target>=120kbps=186ms (2026-04-13T02:41:19.669Z), target>=300kbps=186ms (2026-04-13T02:41:19.669Z), target>=500kbps=186ms (2026-04-13T02:41:19.669Z), target>=700kbps=186ms (2026-04-13T02:41:19.669Z), target>=900kbps=186ms (2026-04-13T02:41:19.669Z)；send=send>=300kbps=186ms (2026-04-13T02:41:19.669Z), send>=500kbps=186ms (2026-04-13T02:41:19.669Z), send>=700kbps=186ms (2026-04-13T02:41:19.669Z), send>=900kbps=186ms (2026-04-13T02:41:19.669Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=-, recovering=-, stable=347ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=-, stable=186ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:10:02.583Z；firstRecovering=-；firstStable=418ms (2026-04-17T01:10:03.001Z)；firstL0=- |
+| 恢复诊断 | raw=loss<3%=418ms (2026-04-17T01:10:03.001Z), rtt<120ms=418ms (2026-04-17T01:10:03.001Z), jitter<28ms=418ms (2026-04-17T01:10:03.001Z), jitter<18ms=418ms (2026-04-17T01:10:03.001Z)；target=target>=120kbps=418ms (2026-04-17T01:10:03.001Z), target>=300kbps=418ms (2026-04-17T01:10:03.001Z), target>=500kbps=418ms (2026-04-17T01:10:03.001Z), target>=700kbps=418ms (2026-04-17T01:10:03.001Z), target>=900kbps=418ms (2026-04-17T01:10:03.001Z)；send=send>=300kbps=418ms (2026-04-17T01:10:03.001Z), send>=500kbps=418ms (2026-04-17T01:10:03.001Z), send>=700kbps=418ms (2026-04-17T01:10:03.001Z), send>=900kbps=418ms (2026-04-17T01:10:03.001Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=-, recovering=-, stable=455ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=-, stable=418ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### B2
 
@@ -70,9 +65,9 @@
 | 实际动作 | 无非 noop 动作 |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=stable/L0，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T02:42:28.190Z；firstRecovering=-；firstStable=294ms (2026-04-13T02:42:28.484Z)；firstL0=- |
-| 恢复诊断 | raw=loss<3%=294ms (2026-04-13T02:42:28.484Z), rtt<120ms=294ms (2026-04-13T02:42:28.484Z), jitter<28ms=294ms (2026-04-13T02:42:28.484Z), jitter<18ms=294ms (2026-04-13T02:42:28.484Z)；target=target>=120kbps=294ms (2026-04-13T02:42:28.484Z), target>=300kbps=294ms (2026-04-13T02:42:28.484Z), target>=500kbps=294ms (2026-04-13T02:42:28.484Z), target>=700kbps=294ms (2026-04-13T02:42:28.484Z), target>=900kbps=294ms (2026-04-13T02:42:28.484Z)；send=send>=300kbps=294ms (2026-04-13T02:42:28.484Z), send>=500kbps=294ms (2026-04-13T02:42:28.484Z), send>=700kbps=294ms (2026-04-13T02:42:28.484Z), send>=900kbps=294ms (2026-04-13T02:42:28.484Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=-, recovering=-, stable=396ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=-, stable=294ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:11:10.995Z；firstRecovering=-；firstStable=418ms (2026-04-17T01:11:11.413Z)；firstL0=- |
+| 恢复诊断 | raw=loss<3%=918ms (2026-04-17T01:11:11.913Z), rtt<120ms=418ms (2026-04-17T01:11:11.413Z), jitter<28ms=418ms (2026-04-17T01:11:11.413Z), jitter<18ms=418ms (2026-04-17T01:11:11.413Z)；target=target>=120kbps=418ms (2026-04-17T01:11:11.413Z), target>=300kbps=418ms (2026-04-17T01:11:11.413Z), target>=500kbps=418ms (2026-04-17T01:11:11.413Z), target>=700kbps=418ms (2026-04-17T01:11:11.413Z), target>=900kbps=418ms (2026-04-17T01:11:11.413Z)；send=send>=300kbps=418ms (2026-04-17T01:11:11.413Z), send>=500kbps=418ms (2026-04-17T01:11:11.413Z), send>=700kbps=418ms (2026-04-17T01:11:11.413Z), send>=900kbps=418ms (2026-04-17T01:11:11.413Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=-, recovering=-, stable=454ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=-, stable=418ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### B3
 
@@ -89,13 +84,13 @@
 | 预期动作 | 应触发本地降级动作（以 setEncodingParameters 为主），允许进入 early_warning / congested，最高不超过 L4 |
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
-| 实际 QoS 状态 | baseline(current=early_warning/L1)；impairment(评估取 peak=early_warning/L1, current=early_warning/L1)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 25 次非 noop） |
+| 实际 QoS 状态 | baseline(current=early_warning/L1)；impairment(评估取 peak=early_warning/L1, current=early_warning/L1)；recovery(评估取 best=early_warning/L1, current=early_warning/L1) |
+| 实际动作 | setEncodingParameters（共 1 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
-| 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T02:43:37.279Z；firstRecovering=14851ms (2026-04-13T02:43:52.130Z)；firstStable=17351ms (2026-04-13T02:43:54.630Z)；firstL0=18351ms (2026-04-13T02:43:55.630Z) |
-| 恢复诊断 | raw=loss<3%=351ms (2026-04-13T02:43:37.630Z), rtt<120ms=351ms (2026-04-13T02:43:37.630Z), jitter<28ms=351ms (2026-04-13T02:43:37.630Z), jitter<18ms=-；target=target>=120kbps=351ms (2026-04-13T02:43:37.630Z), target>=300kbps=351ms (2026-04-13T02:43:37.630Z), target>=500kbps=351ms (2026-04-13T02:43:37.630Z), target>=700kbps=17851ms (2026-04-13T02:43:55.130Z), target>=900kbps=18851ms (2026-04-13T02:43:56.130Z)；send=send>=300kbps=351ms (2026-04-13T02:43:37.630Z), send>=500kbps=351ms (2026-04-13T02:43:37.630Z), send>=700kbps=351ms (2026-04-13T02:43:37.630Z), send>=900kbps=351ms (2026-04-13T02:43:37.630Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=171ms, recovering=-, stable=-, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=351ms, recovering=14851ms, stable=17351ms, congested=4851ms, firstAction=4851ms, L0=18351ms, L1=17351ms, L2=4851ms, L3=5351ms, L4=5851ms, audioOnly=- |
+| 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=early_warning/L1。 |
+| 恢复里程碑 | start=2026-04-17T01:12:19.404Z；firstRecovering=-；firstStable=-；firstL0=- |
+| 恢复诊断 | raw=loss<3%=416ms (2026-04-17T01:12:19.820Z), rtt<120ms=416ms (2026-04-17T01:12:19.820Z), jitter<28ms=5416ms (2026-04-17T01:12:24.820Z), jitter<18ms=-；target=target>=120kbps=416ms (2026-04-17T01:12:19.820Z), target>=300kbps=416ms (2026-04-17T01:12:19.820Z), target>=500kbps=416ms (2026-04-17T01:12:19.820Z), target>=700kbps=416ms (2026-04-17T01:12:19.820Z), target>=900kbps=-；send=send>=300kbps=416ms (2026-04-17T01:12:19.820Z), send>=500kbps=416ms (2026-04-17T01:12:19.820Z), send>=700kbps=416ms (2026-04-17T01:12:19.820Z), send>=900kbps=1416ms (2026-04-17T01:12:20.820Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=455ms, recovering=-, stable=-, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=416ms, recovering=-, stable=-, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### BW1
 
@@ -116,9 +111,9 @@
 | 实际动作 | 无非 noop 动作 |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=stable/L0，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T02:44:46.399Z；firstRecovering=-；firstStable=168ms (2026-04-13T02:44:46.567Z)；firstL0=- |
-| 恢复诊断 | raw=loss<3%=168ms (2026-04-13T02:44:46.567Z), rtt<120ms=168ms (2026-04-13T02:44:46.567Z), jitter<28ms=168ms (2026-04-13T02:44:46.567Z), jitter<18ms=168ms (2026-04-13T02:44:46.567Z)；target=target>=120kbps=168ms (2026-04-13T02:44:46.567Z), target>=300kbps=168ms (2026-04-13T02:44:46.567Z), target>=500kbps=168ms (2026-04-13T02:44:46.567Z), target>=700kbps=168ms (2026-04-13T02:44:46.567Z), target>=900kbps=168ms (2026-04-13T02:44:46.567Z)；send=send>=300kbps=168ms (2026-04-13T02:44:46.567Z), send>=500kbps=168ms (2026-04-13T02:44:46.567Z), send>=700kbps=168ms (2026-04-13T02:44:46.567Z), send>=900kbps=168ms (2026-04-13T02:44:46.567Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=-, recovering=-, stable=358ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=-, stable=168ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:13:27.810Z；firstRecovering=-；firstStable=416ms (2026-04-17T01:13:28.226Z)；firstL0=- |
+| 恢复诊断 | raw=loss<3%=916ms (2026-04-17T01:13:28.726Z), rtt<120ms=416ms (2026-04-17T01:13:28.226Z), jitter<28ms=416ms (2026-04-17T01:13:28.226Z), jitter<18ms=416ms (2026-04-17T01:13:28.226Z)；target=target>=120kbps=416ms (2026-04-17T01:13:28.226Z), target>=300kbps=416ms (2026-04-17T01:13:28.226Z), target>=500kbps=416ms (2026-04-17T01:13:28.226Z), target>=700kbps=416ms (2026-04-17T01:13:28.226Z), target>=900kbps=416ms (2026-04-17T01:13:28.226Z)；send=send>=300kbps=416ms (2026-04-17T01:13:28.226Z), send>=500kbps=416ms (2026-04-17T01:13:28.226Z), send>=700kbps=416ms (2026-04-17T01:13:28.226Z), send>=900kbps=416ms (2026-04-17T01:13:28.226Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=-, recovering=-, stable=454ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=-, stable=416ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### BW3
 
@@ -135,13 +130,13 @@
 | 预期动作 | 应触发本地降级动作（以 setEncodingParameters 为主），允许进入 congested，最高不超过 L4 |
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
-| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=stable/L0)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 71 次非 noop） |
+| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
+| 实际动作 | setEncodingParameters（共 44 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T02:45:55.577Z；firstRecovering=9319ms (2026-04-13T02:46:04.896Z)；firstStable=11819ms (2026-04-13T02:46:07.396Z)；firstL0=13819ms (2026-04-13T02:46:09.396Z) |
-| 恢复诊断 | raw=loss<3%=319ms (2026-04-13T02:45:55.896Z), rtt<120ms=1319ms (2026-04-13T02:45:56.896Z), jitter<28ms=7819ms (2026-04-13T02:46:03.396Z), jitter<18ms=18819ms (2026-04-13T02:46:14.396Z)；target=target>=120kbps=319ms (2026-04-13T02:45:55.896Z), target>=300kbps=819ms (2026-04-13T02:45:56.396Z), target>=500kbps=1819ms (2026-04-13T02:45:57.396Z), target>=700kbps=13319ms (2026-04-13T02:46:08.896Z), target>=900kbps=29819ms (2026-04-13T02:46:25.396Z)；send=send>=300kbps=319ms (2026-04-13T02:45:55.896Z), send>=500kbps=319ms (2026-04-13T02:45:55.896Z), send>=700kbps=10319ms (2026-04-13T02:46:05.896Z), send>=900kbps=13819ms (2026-04-13T02:46:09.396Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=1349ms, recovering=14349ms, stable=349ms, congested=1849ms, firstAction=1349ms, L0=18849ms, L1=1349ms, L2=1849ms, L3=2349ms, L4=2850ms, audioOnly=-；recovery: warning=319ms, recovering=9319ms, stable=11819ms, congested=1319ms, firstAction=1319ms, L0=13819ms, L1=1319ms, L2=1819ms, L3=2319ms, L4=2819ms, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:14:36.222Z；firstRecovering=6419ms (2026-04-17T01:14:42.641Z)；firstStable=8919ms (2026-04-17T01:14:45.141Z)；firstL0=10419ms (2026-04-17T01:14:46.641Z) |
+| 恢复诊断 | raw=loss<3%=419ms (2026-04-17T01:14:36.641Z), rtt<120ms=419ms (2026-04-17T01:14:36.641Z), jitter<28ms=5919ms (2026-04-17T01:14:42.141Z), jitter<18ms=6419ms (2026-04-17T01:14:42.641Z)；target=target>=120kbps=2919ms (2026-04-17T01:14:39.141Z), target>=300kbps=6919ms (2026-04-17T01:14:43.141Z), target>=500kbps=8439ms (2026-04-17T01:14:44.661Z), target>=700kbps=9419ms (2026-04-17T01:14:45.641Z), target>=900kbps=10919ms (2026-04-17T01:14:47.141Z)；send=send>=300kbps=6919ms (2026-04-17T01:14:43.141Z), send>=500kbps=8439ms (2026-04-17T01:14:44.661Z), send>=700kbps=9419ms (2026-04-17T01:14:45.641Z), send>=900kbps=9419ms (2026-04-17T01:14:45.641Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=1454ms, recovering=9954ms, stable=455ms, congested=1954ms, firstAction=1454ms, L0=14454ms, L1=1454ms, L2=1954ms, L3=2454ms, L4=2955ms, audioOnly=-；recovery: warning=-, recovering=6419ms, stable=8919ms, congested=419ms, firstAction=419ms, L0=10419ms, L1=8919ms, L2=7919ms, L3=6419ms, L4=419ms, audioOnly=- |
 
 ### BW4
 
@@ -158,13 +153,13 @@
 | 预期动作 | 应触发本地降级动作（以 setEncodingParameters 为主），允许进入 congested，最高不超过 L4 |
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
-| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=early_warning/L1)；recovery(评估取 best=stable/L0, current=congested/L4) |
-| 实际动作 | setEncodingParameters（共 80 次非 noop） |
+| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L3)；recovery(评估取 best=stable/L0, current=stable/L0) |
+| 实际动作 | setEncodingParameters（共 72 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
-| 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。注意：recovery window 内最佳状态已恢复，但 case 结束时 current=congested/L4，说明收尾阶段仍有波动。 |
-| 恢复里程碑 | start=2026-04-13T02:47:04.846Z；firstRecovering=14721ms (2026-04-13T02:47:19.567Z)；firstStable=17221ms (2026-04-13T02:47:22.067Z)；firstL0=19222ms (2026-04-13T02:47:24.068Z) |
-| 恢复诊断 | raw=loss<3%=723ms (2026-04-13T02:47:05.569Z), rtt<120ms=1222ms (2026-04-13T02:47:06.068Z), jitter<28ms=14224ms (2026-04-13T02:47:19.070Z), jitter<18ms=14224ms (2026-04-13T02:47:19.070Z)；target=target>=120kbps=222ms (2026-04-13T02:47:05.068Z), target>=300kbps=15221ms (2026-04-13T02:47:20.067Z), target>=500kbps=18721ms (2026-04-13T02:47:23.567Z), target>=700kbps=20722ms (2026-04-13T02:47:25.568Z), target>=900kbps=-；send=send>=300kbps=222ms (2026-04-13T02:47:05.068Z), send>=500kbps=15221ms (2026-04-13T02:47:20.067Z), send>=700kbps=18721ms (2026-04-13T02:47:23.567Z), send>=900kbps=21721ms (2026-04-13T02:47:26.567Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=1833ms, recovering=15833ms, stable=334ms, congested=2333ms, firstAction=1833ms, L0=-, L1=1833ms, L2=2333ms, L3=2844ms, L4=3333ms, audioOnly=-；recovery: warning=222ms, recovering=14721ms, stable=17221ms, congested=723ms, firstAction=723ms, L0=19222ms, L1=17722ms, L2=723ms, L3=1222ms, L4=1722ms, audioOnly=- |
+| 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
+| 恢复里程碑 | start=2026-04-17T01:15:44.630Z；firstRecovering=9416ms (2026-04-17T01:15:54.046Z)；firstStable=11916ms (2026-04-17T01:15:56.546Z)；firstL0=13916ms (2026-04-17T01:15:58.546Z) |
+| 恢复诊断 | raw=loss<3%=417ms (2026-04-17T01:15:45.047Z), rtt<120ms=1916ms (2026-04-17T01:15:46.546Z), jitter<28ms=8916ms (2026-04-17T01:15:53.546Z), jitter<18ms=9916ms (2026-04-17T01:15:54.546Z)；target=target>=120kbps=417ms (2026-04-17T01:15:45.047Z), target>=300kbps=417ms (2026-04-17T01:15:45.047Z), target>=500kbps=12916ms (2026-04-17T01:15:57.546Z), target>=700kbps=15417ms (2026-04-17T01:16:00.047Z), target>=900kbps=-；send=send>=300kbps=417ms (2026-04-17T01:15:45.047Z), send>=500kbps=1417ms (2026-04-17T01:15:46.047Z), send>=700kbps=14417ms (2026-04-17T01:15:59.047Z), send>=900kbps=28915ms (2026-04-17T01:16:13.545Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=1457ms, recovering=11960ms, stable=457ms, congested=1957ms, firstAction=1457ms, L0=16457ms, L1=1457ms, L2=1957ms, L3=2457ms, L4=2957ms, audioOnly=-；recovery: warning=16416ms, recovering=9416ms, stable=11916ms, congested=417ms, firstAction=417ms, L0=13916ms, L1=12416ms, L2=10916ms, L3=9416ms, L4=417ms, audioOnly=- |
 
 ### BW5
 
@@ -181,13 +176,13 @@
 | 预期动作 | 应触发本地降级动作（以 setEncodingParameters 为主），允许进入 congested，最高不超过 L4 |
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
-| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 74 次非 noop） |
+| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=recovering/L3)；recovery(评估取 best=stable/L0, current=stable/L0) |
+| 实际动作 | setEncodingParameters（共 60 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T02:48:14.333Z；firstRecovering=15999ms (2026-04-13T02:48:30.332Z)；firstStable=18498ms (2026-04-13T02:48:32.831Z)；firstL0=20499ms (2026-04-13T02:48:34.832Z) |
-| 恢复诊断 | raw=loss<3%=1000ms (2026-04-13T02:48:15.333Z), rtt<120ms=500ms (2026-04-13T02:48:14.833Z), jitter<28ms=15498ms (2026-04-13T02:48:29.831Z), jitter<18ms=20499ms (2026-04-13T02:48:34.832Z)；target=target>=120kbps=13999ms (2026-04-13T02:48:28.332Z), target>=300kbps=16498ms (2026-04-13T02:48:30.831Z), target>=500kbps=17999ms (2026-04-13T02:48:32.332Z), target>=700kbps=19499ms (2026-04-13T02:48:33.832Z), target>=900kbps=21001ms (2026-04-13T02:48:35.334Z)；send=send>=300kbps=1000ms (2026-04-13T02:48:15.333Z), send>=500kbps=17999ms (2026-04-13T02:48:32.332Z), send>=700kbps=19499ms (2026-04-13T02:48:33.832Z), send>=900kbps=19499ms (2026-04-13T02:48:33.832Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=1851ms, recovering=-, stable=351ms, congested=2351ms, firstAction=1851ms, L0=-, L1=1851ms, L2=2351ms, L3=2851ms, L4=3351ms, audioOnly=-；recovery: warning=-, recovering=15999ms, stable=18498ms, congested=500ms, firstAction=500ms, L0=20499ms, L1=18999ms, L2=17498ms, L3=15999ms, L4=500ms, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:16:53.031Z；firstRecovering=420ms (2026-04-17T01:16:53.451Z)；firstStable=2920ms (2026-04-17T01:16:55.951Z)；firstL0=3920ms (2026-04-17T01:16:56.951Z) |
+| 恢复诊断 | raw=loss<3%=920ms (2026-04-17T01:16:53.951Z), rtt<120ms=420ms (2026-04-17T01:16:53.451Z), jitter<28ms=14920ms (2026-04-17T01:17:07.951Z), jitter<18ms=23420ms (2026-04-17T01:17:16.451Z)；target=target>=120kbps=420ms (2026-04-17T01:16:53.451Z), target>=300kbps=3920ms (2026-04-17T01:16:56.951Z), target>=500kbps=17421ms (2026-04-17T01:17:10.452Z), target>=700kbps=19420ms (2026-04-17T01:17:12.451Z), target>=900kbps=22420ms (2026-04-17T01:17:15.451Z)；send=send>=300kbps=420ms (2026-04-17T01:16:53.451Z), send>=500kbps=6421ms (2026-04-17T01:16:59.452Z), send>=700kbps=18920ms (2026-04-17T01:17:11.951Z), send>=900kbps=20920ms (2026-04-17T01:17:13.951Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=2956ms, recovering=18956ms, stable=455ms, congested=3455ms, firstAction=2956ms, L0=-, L1=2956ms, L2=3455ms, L3=3955ms, L4=4455ms, audioOnly=-；recovery: warning=6421ms, recovering=420ms, stable=2920ms, congested=6920ms, firstAction=920ms, L0=3920ms, L1=2420ms, L2=920ms, L3=7421ms, L4=7920ms, audioOnly=- |
 
 ### BW6
 
@@ -205,12 +200,12 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 72 次非 noop） |
+| 实际动作 | setEncodingParameters（共 75 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T02:49:24.817Z；firstRecovering=15011ms (2026-04-13T02:49:39.828Z)；firstStable=17511ms (2026-04-13T02:49:42.328Z)；firstL0=19011ms (2026-04-13T02:49:43.828Z) |
-| 恢复诊断 | raw=loss<3%=11ms (2026-04-13T02:49:24.828Z), rtt<120ms=1011ms (2026-04-13T02:49:25.828Z), jitter<28ms=14511ms (2026-04-13T02:49:39.328Z), jitter<18ms=15511ms (2026-04-13T02:49:40.328Z)；target=target>=120kbps=7511ms (2026-04-13T02:49:32.328Z), target>=300kbps=15511ms (2026-04-13T02:49:40.328Z), target>=500kbps=17012ms (2026-04-13T02:49:41.829Z), target>=700kbps=18011ms (2026-04-13T02:49:42.828Z), target>=900kbps=19511ms (2026-04-13T02:49:44.328Z)；send=send>=300kbps=15511ms (2026-04-13T02:49:40.328Z), send>=500kbps=17012ms (2026-04-13T02:49:41.829Z), send>=700kbps=17511ms (2026-04-13T02:49:42.328Z), send>=900kbps=18011ms (2026-04-13T02:49:42.828Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=2855ms, recovering=-, stable=355ms, congested=3355ms, firstAction=2855ms, L0=-, L1=2855ms, L2=3355ms, L3=3855ms, L4=4355ms, audioOnly=-；recovery: warning=-, recovering=15011ms, stable=17511ms, congested=11ms, firstAction=11ms, L0=19011ms, L1=17511ms, L2=16511ms, L3=15011ms, L4=11ms, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:18:01.416Z；firstRecovering=20440ms (2026-04-17T01:18:21.856Z)；firstStable=22941ms (2026-04-17T01:18:24.357Z)；firstL0=24441ms (2026-04-17T01:18:25.857Z) |
+| 恢复诊断 | raw=loss<3%=440ms (2026-04-17T01:18:01.856Z), rtt<120ms=1941ms (2026-04-17T01:18:03.357Z), jitter<28ms=19940ms (2026-04-17T01:18:21.356Z), jitter<18ms=24441ms (2026-04-17T01:18:25.857Z)；target=target>=120kbps=15441ms (2026-04-17T01:18:16.857Z), target>=300kbps=20941ms (2026-04-17T01:18:22.357Z), target>=500kbps=22441ms (2026-04-17T01:18:23.857Z), target>=700kbps=23442ms (2026-04-17T01:18:24.858Z), target>=900kbps=24941ms (2026-04-17T01:18:26.357Z)；send=send>=300kbps=20941ms (2026-04-17T01:18:22.357Z), send>=500kbps=22441ms (2026-04-17T01:18:23.857Z), send>=700kbps=23442ms (2026-04-17T01:18:24.858Z), send>=900kbps=23442ms (2026-04-17T01:18:24.858Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=3458ms, recovering=-, stable=458ms, congested=5458ms, firstAction=3458ms, L0=-, L1=3458ms, L2=5458ms, L3=5958ms, L4=6458ms, audioOnly=-；recovery: warning=-, recovering=20440ms, stable=22941ms, congested=440ms, firstAction=440ms, L0=24441ms, L1=22941ms, L2=21941ms, L3=20440ms, L4=440ms, audioOnly=- |
 
 ### BW7
 
@@ -227,13 +222,13 @@
 | 预期动作 | 应触发本地降级动作（以 setEncodingParameters 为主），允许进入 congested，最高不超过 L4 |
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
-| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 123 次非 noop） |
+| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=stable/L0)；recovery(评估取 best=stable/L0, current=congested/L4) |
+| 实际动作 | setEncodingParameters（共 69 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
-| 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T02:51:01.209Z；firstRecovering=16111ms (2026-04-13T02:51:17.320Z)；firstStable=18611ms (2026-04-13T02:51:19.820Z)；firstL0=20611ms (2026-04-13T02:51:21.820Z) |
-| 恢复诊断 | raw=loss<3%=111ms (2026-04-13T02:51:01.320Z), rtt<120ms=111ms (2026-04-13T02:51:01.320Z), jitter<28ms=15611ms (2026-04-13T02:51:16.820Z), jitter<18ms=21611ms (2026-04-13T02:51:22.820Z)；target=target>=120kbps=13111ms (2026-04-13T02:51:14.320Z), target>=300kbps=16612ms (2026-04-13T02:51:17.821Z), target>=500kbps=18111ms (2026-04-13T02:51:19.320Z), target>=700kbps=19611ms (2026-04-13T02:51:20.820Z), target>=900kbps=21611ms (2026-04-13T02:51:22.820Z)；send=send>=300kbps=611ms (2026-04-13T02:51:01.820Z), send>=500kbps=1111ms (2026-04-13T02:51:02.320Z), send>=700kbps=18611ms (2026-04-13T02:51:19.820Z), send>=900kbps=21111ms (2026-04-13T02:51:22.320Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=4309ms, recovering=-, stable=309ms, congested=4809ms, firstAction=4309ms, L0=-, L1=4309ms, L2=4809ms, L3=5309ms, L4=5809ms, audioOnly=-；recovery: warning=-, recovering=16111ms, stable=18611ms, congested=111ms, firstAction=111ms, L0=20611ms, L1=19112ms, L2=17611ms, L3=16111ms, L4=111ms, audioOnly=- |
+| 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。注意：recovery window 内最佳状态已恢复，但 case 结束时 current=congested/L4，说明收尾阶段仍有波动。 |
+| 恢复里程碑 | start=2026-04-17T01:19:09.814Z；firstRecovering=17939ms (2026-04-17T01:19:27.753Z)；firstStable=436ms (2026-04-17T01:19:10.250Z)；firstL0=22440ms (2026-04-17T01:19:32.254Z) |
+| 恢复诊断 | raw=loss<3%=436ms (2026-04-17T01:19:10.250Z), rtt<120ms=436ms (2026-04-17T01:19:10.250Z), jitter<28ms=436ms (2026-04-17T01:19:10.250Z), jitter<18ms=436ms (2026-04-17T01:19:10.250Z)；target=target>=120kbps=12939ms (2026-04-17T01:19:22.753Z), target>=300kbps=19939ms (2026-04-17T01:19:29.753Z), target>=500kbps=19939ms (2026-04-17T01:19:29.753Z), target>=700kbps=21940ms (2026-04-17T01:19:31.754Z), target>=900kbps=23939ms (2026-04-17T01:19:33.753Z)；send=send>=300kbps=436ms (2026-04-17T01:19:10.250Z), send>=500kbps=436ms (2026-04-17T01:19:10.250Z), send>=700kbps=436ms (2026-04-17T01:19:10.250Z), send>=900kbps=936ms (2026-04-17T01:19:10.750Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=4455ms, recovering=14455ms, stable=455ms, congested=6455ms, firstAction=4455ms, L0=18955ms, L1=4455ms, L2=6455ms, L3=6955ms, L4=7455ms, audioOnly=-；recovery: warning=1436ms, recovering=17939ms, stable=436ms, congested=1936ms, firstAction=1436ms, L0=22440ms, L1=1436ms, L2=1936ms, L3=2436ms, L4=2936ms, audioOnly=- |
 
 ### L1
 
@@ -254,9 +249,9 @@
 | 实际动作 | 无非 noop 动作 |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=stable/L0，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T02:52:10.146Z；firstRecovering=-；firstStable=203ms (2026-04-13T02:52:10.349Z)；firstL0=- |
-| 恢复诊断 | raw=loss<3%=203ms (2026-04-13T02:52:10.349Z), rtt<120ms=203ms (2026-04-13T02:52:10.349Z), jitter<28ms=203ms (2026-04-13T02:52:10.349Z), jitter<18ms=203ms (2026-04-13T02:52:10.349Z)；target=target>=120kbps=203ms (2026-04-13T02:52:10.349Z), target>=300kbps=203ms (2026-04-13T02:52:10.349Z), target>=500kbps=203ms (2026-04-13T02:52:10.349Z), target>=700kbps=203ms (2026-04-13T02:52:10.349Z), target>=900kbps=203ms (2026-04-13T02:52:10.349Z)；send=send>=300kbps=203ms (2026-04-13T02:52:10.349Z), send>=500kbps=203ms (2026-04-13T02:52:10.349Z), send>=700kbps=203ms (2026-04-13T02:52:10.349Z), send>=900kbps=203ms (2026-04-13T02:52:10.349Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=-, recovering=-, stable=348ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=-, stable=203ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:20:18.223Z；firstRecovering=-；firstStable=418ms (2026-04-17T01:20:18.641Z)；firstL0=- |
+| 恢复诊断 | raw=loss<3%=418ms (2026-04-17T01:20:18.641Z), rtt<120ms=418ms (2026-04-17T01:20:18.641Z), jitter<28ms=418ms (2026-04-17T01:20:18.641Z), jitter<18ms=418ms (2026-04-17T01:20:18.641Z)；target=target>=120kbps=418ms (2026-04-17T01:20:18.641Z), target>=300kbps=418ms (2026-04-17T01:20:18.641Z), target>=500kbps=418ms (2026-04-17T01:20:18.641Z), target>=700kbps=418ms (2026-04-17T01:20:18.641Z), target>=900kbps=418ms (2026-04-17T01:20:18.641Z)；send=send>=300kbps=418ms (2026-04-17T01:20:18.641Z), send>=500kbps=418ms (2026-04-17T01:20:18.641Z), send>=700kbps=418ms (2026-04-17T01:20:18.641Z), send>=900kbps=418ms (2026-04-17T01:20:18.641Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=-, recovering=-, stable=455ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=-, stable=418ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### L2
 
@@ -277,9 +272,9 @@
 | 实际动作 | 无非 noop 动作 |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=stable/L0，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T02:53:18.942Z；firstRecovering=-；firstStable=215ms (2026-04-13T02:53:19.157Z)；firstL0=- |
-| 恢复诊断 | raw=loss<3%=215ms (2026-04-13T02:53:19.157Z), rtt<120ms=215ms (2026-04-13T02:53:19.157Z), jitter<28ms=215ms (2026-04-13T02:53:19.157Z), jitter<18ms=215ms (2026-04-13T02:53:19.157Z)；target=target>=120kbps=215ms (2026-04-13T02:53:19.157Z), target>=300kbps=215ms (2026-04-13T02:53:19.157Z), target>=500kbps=215ms (2026-04-13T02:53:19.157Z), target>=700kbps=215ms (2026-04-13T02:53:19.157Z), target>=900kbps=215ms (2026-04-13T02:53:19.157Z)；send=send>=300kbps=215ms (2026-04-13T02:53:19.157Z), send>=500kbps=215ms (2026-04-13T02:53:19.157Z), send>=700kbps=215ms (2026-04-13T02:53:19.157Z), send>=900kbps=215ms (2026-04-13T02:53:19.157Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=-, recovering=-, stable=358ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=-, stable=215ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:21:26.672Z；firstRecovering=-；firstStable=399ms (2026-04-17T01:21:27.071Z)；firstL0=- |
+| 恢复诊断 | raw=loss<3%=899ms (2026-04-17T01:21:27.571Z), rtt<120ms=399ms (2026-04-17T01:21:27.071Z), jitter<28ms=399ms (2026-04-17T01:21:27.071Z), jitter<18ms=399ms (2026-04-17T01:21:27.071Z)；target=target>=120kbps=399ms (2026-04-17T01:21:27.071Z), target>=300kbps=399ms (2026-04-17T01:21:27.071Z), target>=500kbps=399ms (2026-04-17T01:21:27.071Z), target>=700kbps=399ms (2026-04-17T01:21:27.071Z), target>=900kbps=899ms (2026-04-17T01:21:27.571Z)；send=send>=300kbps=399ms (2026-04-17T01:21:27.071Z), send>=500kbps=399ms (2026-04-17T01:21:27.071Z), send>=700kbps=399ms (2026-04-17T01:21:27.071Z), send>=900kbps=399ms (2026-04-17T01:21:27.071Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=-, recovering=-, stable=442ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=-, stable=399ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### L3
 
@@ -300,9 +295,9 @@
 | 实际动作 | 无非 noop 动作 |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=stable/L0，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T02:54:27.723Z；firstRecovering=-；firstStable=204ms (2026-04-13T02:54:27.927Z)；firstL0=- |
-| 恢复诊断 | raw=loss<3%=204ms (2026-04-13T02:54:27.927Z), rtt<120ms=204ms (2026-04-13T02:54:27.927Z), jitter<28ms=204ms (2026-04-13T02:54:27.927Z), jitter<18ms=204ms (2026-04-13T02:54:27.927Z)；target=target>=120kbps=204ms (2026-04-13T02:54:27.927Z), target>=300kbps=204ms (2026-04-13T02:54:27.927Z), target>=500kbps=204ms (2026-04-13T02:54:27.927Z), target>=700kbps=204ms (2026-04-13T02:54:27.927Z), target>=900kbps=204ms (2026-04-13T02:54:27.927Z)；send=send>=300kbps=204ms (2026-04-13T02:54:27.927Z), send>=500kbps=204ms (2026-04-13T02:54:27.927Z), send>=700kbps=204ms (2026-04-13T02:54:27.927Z), send>=900kbps=204ms (2026-04-13T02:54:27.927Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=-, recovering=-, stable=346ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=-, stable=204ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:22:35.087Z；firstRecovering=-；firstStable=418ms (2026-04-17T01:22:35.505Z)；firstL0=- |
+| 恢复诊断 | raw=loss<3%=918ms (2026-04-17T01:22:36.005Z), rtt<120ms=418ms (2026-04-17T01:22:35.505Z), jitter<28ms=418ms (2026-04-17T01:22:35.505Z), jitter<18ms=418ms (2026-04-17T01:22:35.505Z)；target=target>=120kbps=418ms (2026-04-17T01:22:35.505Z), target>=300kbps=418ms (2026-04-17T01:22:35.505Z), target>=500kbps=418ms (2026-04-17T01:22:35.505Z), target>=700kbps=418ms (2026-04-17T01:22:35.505Z), target>=900kbps=418ms (2026-04-17T01:22:35.505Z)；send=send>=300kbps=418ms (2026-04-17T01:22:35.505Z), send>=500kbps=418ms (2026-04-17T01:22:35.505Z), send>=700kbps=418ms (2026-04-17T01:22:35.505Z), send>=900kbps=418ms (2026-04-17T01:22:35.505Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=-, recovering=-, stable=454ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=-, stable=418ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### L4
 
@@ -319,13 +314,13 @@
 | 预期动作 | 应触发本地降级动作（以 setEncodingParameters 为主），允许进入 early_warning / congested，最高不超过 L2 |
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
-| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=early_warning/L1, current=early_warning/L0)；recovery(评估取 best=stable/L0, current=stable/L0) |
+| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=early_warning/L1, current=early_warning/L1)；recovery(评估取 best=stable/L0, current=stable/L0) |
 | 实际动作 | setEncodingParameters（共 2 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T02:55:36.742Z；firstRecovering=-；firstStable=3478ms (2026-04-13T02:55:40.220Z)；firstL0=- |
-| 恢复诊断 | raw=loss<3%=978ms (2026-04-13T02:55:37.720Z), rtt<120ms=478ms (2026-04-13T02:55:37.220Z), jitter<28ms=478ms (2026-04-13T02:55:37.220Z), jitter<18ms=13979ms (2026-04-13T02:55:50.721Z)；target=target>=120kbps=478ms (2026-04-13T02:55:37.220Z), target>=300kbps=478ms (2026-04-13T02:55:37.220Z), target>=500kbps=478ms (2026-04-13T02:55:37.220Z), target>=700kbps=478ms (2026-04-13T02:55:37.220Z), target>=900kbps=478ms (2026-04-13T02:55:37.220Z)；send=send>=300kbps=478ms (2026-04-13T02:55:37.220Z), send>=500kbps=478ms (2026-04-13T02:55:37.220Z), send>=700kbps=478ms (2026-04-13T02:55:37.220Z), send>=900kbps=478ms (2026-04-13T02:55:37.220Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=2356ms, recovering=-, stable=356ms, congested=-, firstAction=2356ms, L0=15356ms, L1=2356ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=478ms, recovering=-, stable=3478ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:23:43.520Z；firstRecovering=-；firstStable=409ms (2026-04-17T01:23:43.929Z)；firstL0=409ms (2026-04-17T01:23:43.929Z) |
+| 恢复诊断 | raw=loss<3%=409ms (2026-04-17T01:23:43.929Z), rtt<120ms=409ms (2026-04-17T01:23:43.929Z), jitter<28ms=409ms (2026-04-17T01:23:43.929Z), jitter<18ms=409ms (2026-04-17T01:23:43.929Z)；target=target>=120kbps=409ms (2026-04-17T01:23:43.929Z), target>=300kbps=409ms (2026-04-17T01:23:43.929Z), target>=500kbps=409ms (2026-04-17T01:23:43.929Z), target>=700kbps=409ms (2026-04-17T01:23:43.929Z), target>=900kbps=909ms (2026-04-17T01:23:44.429Z)；send=send>=300kbps=409ms (2026-04-17T01:23:43.929Z), send>=500kbps=409ms (2026-04-17T01:23:43.929Z), send>=700kbps=409ms (2026-04-17T01:23:43.929Z), send>=900kbps=409ms (2026-04-17T01:23:43.929Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=8448ms, recovering=-, stable=448ms, congested=-, firstAction=8448ms, L0=-, L1=8448ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=-, stable=409ms, congested=-, firstAction=409ms, L0=409ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### L5
 
@@ -343,12 +338,12 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 35 次非 noop） |
+| 实际动作 | setEncodingParameters（共 47 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T02:56:45.571Z；firstRecovering=5186ms (2026-04-13T02:56:50.757Z)；firstStable=5686ms (2026-04-13T02:56:51.257Z)；firstL0=9686ms (2026-04-13T02:56:55.257Z) |
-| 恢复诊断 | raw=loss<3%=186ms (2026-04-13T02:56:45.757Z), rtt<120ms=186ms (2026-04-13T02:56:45.757Z), jitter<28ms=186ms (2026-04-13T02:56:45.757Z), jitter<18ms=186ms (2026-04-13T02:56:45.757Z)；target=target>=120kbps=1186ms (2026-04-13T02:56:46.757Z), target>=300kbps=7186ms (2026-04-13T02:56:52.757Z), target>=500kbps=8686ms (2026-04-13T02:56:54.257Z), target>=700kbps=10186ms (2026-04-13T02:56:55.757Z), target>=900kbps=17186ms (2026-04-13T02:57:02.757Z)；send=send>=300kbps=5686ms (2026-04-13T02:56:51.257Z), send>=500kbps=5686ms (2026-04-13T02:56:51.257Z), send>=700kbps=5686ms (2026-04-13T02:56:51.257Z), send>=900kbps=6186ms (2026-04-13T02:56:51.757Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=2839ms, recovering=-, stable=339ms, congested=11339ms, firstAction=2839ms, L0=-, L1=2839ms, L2=11339ms, L3=11839ms, L4=12339ms, audioOnly=-；recovery: warning=12186ms, recovering=5186ms, stable=5686ms, congested=186ms, firstAction=186ms, L0=9686ms, L1=8186ms, L2=6686ms, L3=5186ms, L4=186ms, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:24:51.979Z；firstRecovering=4422ms (2026-04-17T01:24:56.401Z)；firstStable=4922ms (2026-04-17T01:24:56.901Z)；firstL0=8922ms (2026-04-17T01:25:00.901Z) |
+| 恢复诊断 | raw=loss<3%=924ms (2026-04-17T01:24:52.903Z), rtt<120ms=422ms (2026-04-17T01:24:52.401Z), jitter<28ms=422ms (2026-04-17T01:24:52.401Z), jitter<18ms=422ms (2026-04-17T01:24:52.401Z)；target=target>=120kbps=4922ms (2026-04-17T01:24:56.901Z), target>=300kbps=6422ms (2026-04-17T01:24:58.401Z), target>=500kbps=7922ms (2026-04-17T01:24:59.901Z), target>=700kbps=9422ms (2026-04-17T01:25:01.401Z), target>=900kbps=11422ms (2026-04-17T01:25:03.401Z)；send=send>=300kbps=4922ms (2026-04-17T01:24:56.901Z), send>=500kbps=4922ms (2026-04-17T01:24:56.901Z), send>=700kbps=4922ms (2026-04-17T01:24:56.901Z), send>=900kbps=5422ms (2026-04-17T01:24:57.401Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=2957ms, recovering=-, stable=457ms, congested=4457ms, firstAction=2957ms, L0=-, L1=2957ms, L2=4457ms, L3=4957ms, L4=5457ms, audioOnly=-；recovery: warning=11422ms, recovering=4422ms, stable=4922ms, congested=422ms, firstAction=422ms, L0=8922ms, L1=7422ms, L2=5922ms, L3=4422ms, L4=422ms, audioOnly=- |
 
 ### L6
 
@@ -366,12 +361,12 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 50 次非 noop） |
+| 实际动作 | setEncodingParameters（共 53 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T02:57:54.330Z；firstRecovering=5218ms (2026-04-13T02:57:59.548Z)；firstStable=7718ms (2026-04-13T02:58:02.048Z)；firstL0=9218ms (2026-04-13T02:58:03.548Z) |
-| 恢复诊断 | raw=loss<3%=718ms (2026-04-13T02:57:55.048Z), rtt<120ms=218ms (2026-04-13T02:57:54.548Z), jitter<28ms=4718ms (2026-04-13T02:57:59.048Z), jitter<18ms=13718ms (2026-04-13T02:58:08.048Z)；target=target>=120kbps=218ms (2026-04-13T02:57:54.548Z), target>=300kbps=7218ms (2026-04-13T02:58:01.548Z), target>=500kbps=8218ms (2026-04-13T02:58:02.548Z), target>=700kbps=8718ms (2026-04-13T02:58:03.048Z), target>=900kbps=11718ms (2026-04-13T02:58:06.048Z)；send=send>=300kbps=5718ms (2026-04-13T02:58:00.048Z), send>=500kbps=5718ms (2026-04-13T02:58:00.048Z), send>=700kbps=5718ms (2026-04-13T02:58:00.048Z), send>=900kbps=6218ms (2026-04-13T02:58:00.548Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=1872ms, recovering=-, stable=372ms, congested=3872ms, firstAction=1872ms, L0=-, L1=1872ms, L2=3872ms, L3=4372ms, L4=4872ms, audioOnly=-；recovery: warning=11718ms, recovering=5218ms, stable=7718ms, congested=218ms, firstAction=218ms, L0=9218ms, L1=7718ms, L2=6718ms, L3=5218ms, L4=218ms, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:26:00.375Z；firstRecovering=5929ms (2026-04-17T01:26:06.304Z)；firstStable=7929ms (2026-04-17T01:26:08.304Z)；firstL0=9929ms (2026-04-17T01:26:10.304Z) |
+| 恢复诊断 | raw=loss<3%=429ms (2026-04-17T01:26:00.804Z), rtt<120ms=429ms (2026-04-17T01:26:00.804Z), jitter<28ms=2429ms (2026-04-17T01:26:02.804Z), jitter<18ms=3929ms (2026-04-17T01:26:04.304Z)；target=target>=120kbps=1929ms (2026-04-17T01:26:02.304Z), target>=300kbps=7929ms (2026-04-17T01:26:08.304Z), target>=500kbps=8929ms (2026-04-17T01:26:09.304Z), target>=700kbps=8929ms (2026-04-17T01:26:09.304Z), target>=900kbps=19428ms (2026-04-17T01:26:19.803Z)；send=send>=300kbps=6429ms (2026-04-17T01:26:06.804Z), send>=500kbps=6429ms (2026-04-17T01:26:06.804Z), send>=700kbps=6429ms (2026-04-17T01:26:06.804Z), send>=900kbps=7929ms (2026-04-17T01:26:08.304Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=1944ms, recovering=-, stable=468ms, congested=2946ms, firstAction=1944ms, L0=-, L1=1944ms, L2=2946ms, L3=3447ms, L4=3947ms, audioOnly=-；recovery: warning=12429ms, recovering=5929ms, stable=7929ms, congested=429ms, firstAction=429ms, L0=9929ms, L1=8432ms, L2=7429ms, L3=5929ms, L4=429ms, audioOnly=- |
 
 ### L7
 
@@ -389,12 +384,12 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 73 次非 noop） |
+| 实际动作 | setEncodingParameters（共 80 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T02:59:03.328Z；firstRecovering=16977ms (2026-04-13T02:59:20.305Z)；firstStable=19477ms (2026-04-13T02:59:22.805Z)；firstL0=20478ms (2026-04-13T02:59:23.806Z) |
-| 恢复诊断 | raw=loss<3%=978ms (2026-04-13T02:59:04.306Z), rtt<120ms=478ms (2026-04-13T02:59:03.806Z), jitter<28ms=15977ms (2026-04-13T02:59:19.305Z), jitter<18ms=15977ms (2026-04-13T02:59:19.305Z)；target=target>=120kbps=11978ms (2026-04-13T02:59:15.306Z), target>=300kbps=17478ms (2026-04-13T02:59:20.806Z), target>=500kbps=18977ms (2026-04-13T02:59:22.305Z), target>=700kbps=19977ms (2026-04-13T02:59:23.305Z), target>=900kbps=20978ms (2026-04-13T02:59:24.306Z)；send=send>=300kbps=17478ms (2026-04-13T02:59:20.806Z), send>=500kbps=17478ms (2026-04-13T02:59:20.806Z), send>=700kbps=18977ms (2026-04-13T02:59:22.305Z), send>=900kbps=18977ms (2026-04-13T02:59:22.305Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=2830ms, recovering=-, stable=329ms, congested=3329ms, firstAction=2830ms, L0=-, L1=2830ms, L2=3329ms, L3=3830ms, L4=4329ms, audioOnly=-；recovery: warning=-, recovering=16977ms, stable=19477ms, congested=478ms, firstAction=478ms, L0=20478ms, L1=19477ms, L2=18477ms, L3=16977ms, L4=478ms, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:27:08.795Z；firstRecovering=9415ms (2026-04-17T01:27:18.210Z)；firstStable=11915ms (2026-04-17T01:27:20.710Z)；firstL0=12915ms (2026-04-17T01:27:21.710Z) |
+| 恢复诊断 | raw=loss<3%=415ms (2026-04-17T01:27:09.210Z), rtt<120ms=415ms (2026-04-17T01:27:09.210Z), jitter<28ms=8915ms (2026-04-17T01:27:17.710Z), jitter<18ms=15415ms (2026-04-17T01:27:24.210Z)；target=target>=120kbps=3915ms (2026-04-17T01:27:12.710Z), target>=300kbps=9915ms (2026-04-17T01:27:18.710Z), target>=500kbps=11415ms (2026-04-17T01:27:20.210Z), target>=700kbps=12915ms (2026-04-17T01:27:21.710Z), target>=900kbps=13915ms (2026-04-17T01:27:22.710Z)；send=send>=300kbps=2415ms (2026-04-17T01:27:11.210Z), send>=500kbps=9915ms (2026-04-17T01:27:18.710Z), send>=700kbps=11415ms (2026-04-17T01:27:20.210Z), send>=900kbps=11415ms (2026-04-17T01:27:20.210Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=1455ms, recovering=-, stable=455ms, congested=2455ms, firstAction=1455ms, L0=-, L1=1455ms, L2=2455ms, L3=2955ms, L4=3455ms, audioOnly=-；recovery: warning=15415ms, recovering=9415ms, stable=11915ms, congested=415ms, firstAction=415ms, L0=12915ms, L1=11915ms, L2=10915ms, L3=9415ms, L4=415ms, audioOnly=- |
 
 ### L8
 
@@ -412,12 +407,12 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 59 次非 noop） |
+| 实际动作 | setEncodingParameters（共 73 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:00:13.805Z；firstRecovering=12006ms (2026-04-13T03:00:25.811Z)；firstStable=14507ms (2026-04-13T03:00:28.312Z)；firstL0=16506ms (2026-04-13T03:00:30.311Z) |
-| 恢复诊断 | raw=loss<3%=507ms (2026-04-13T03:00:14.312Z), rtt<120ms=7ms (2026-04-13T03:00:13.812Z), jitter<28ms=11507ms (2026-04-13T03:00:25.312Z), jitter<18ms=15507ms (2026-04-13T03:00:29.312Z)；target=target>=120kbps=12506ms (2026-04-13T03:00:26.311Z), target>=300kbps=14006ms (2026-04-13T03:00:27.811Z), target>=500kbps=14006ms (2026-04-13T03:00:27.811Z), target>=700kbps=15507ms (2026-04-13T03:00:29.312Z), target>=900kbps=17007ms (2026-04-13T03:00:30.812Z)；send=send>=300kbps=12506ms (2026-04-13T03:00:26.311Z), send>=500kbps=12506ms (2026-04-13T03:00:26.311Z), send>=700kbps=12506ms (2026-04-13T03:00:26.311Z), send>=900kbps=14006ms (2026-04-13T03:00:27.811Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=5508ms, recovering=-, stable=8ms, congested=6008ms, firstAction=5508ms, L0=-, L1=5508ms, L2=6008ms, L3=6508ms, L4=7007ms, audioOnly=-；recovery: warning=-, recovering=12006ms, stable=14507ms, congested=7ms, firstAction=7ms, L0=16506ms, L1=15007ms, L2=13507ms, L3=12006ms, L4=7ms, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:28:17.193Z；firstRecovering=17933ms (2026-04-17T01:28:35.126Z)；firstStable=20433ms (2026-04-17T01:28:37.626Z)；firstL0=21433ms (2026-04-17T01:28:38.626Z) |
+| 恢复诊断 | raw=loss<3%=933ms (2026-04-17T01:28:18.126Z), rtt<120ms=433ms (2026-04-17T01:28:17.626Z), jitter<28ms=17433ms (2026-04-17T01:28:34.626Z), jitter<18ms=17933ms (2026-04-17T01:28:35.126Z)；target=target>=120kbps=12933ms (2026-04-17T01:28:30.126Z), target>=300kbps=18433ms (2026-04-17T01:28:35.626Z), target>=500kbps=19933ms (2026-04-17T01:28:37.126Z), target>=700kbps=20933ms (2026-04-17T01:28:38.126Z), target>=900kbps=21933ms (2026-04-17T01:28:39.126Z)；send=send>=300kbps=18433ms (2026-04-17T01:28:35.626Z), send>=500kbps=19933ms (2026-04-17T01:28:37.126Z), send>=700kbps=19933ms (2026-04-17T01:28:37.126Z), send>=900kbps=20933ms (2026-04-17T01:28:38.126Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=3451ms, recovering=-, stable=451ms, congested=3951ms, firstAction=3451ms, L0=-, L1=3451ms, L2=3951ms, L3=4451ms, L4=4951ms, audioOnly=-；recovery: warning=-, recovering=17933ms, stable=20433ms, congested=433ms, firstAction=433ms, L0=21433ms, L1=20433ms, L2=19433ms, L3=17933ms, L4=433ms, audioOnly=- |
 
 ### R1
 
@@ -438,9 +433,9 @@
 | 实际动作 | 无非 noop 动作 |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=stable/L0，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:01:22.634Z；firstRecovering=-；firstStable=186ms (2026-04-13T03:01:22.820Z)；firstL0=- |
-| 恢复诊断 | raw=loss<3%=186ms (2026-04-13T03:01:22.820Z), rtt<120ms=186ms (2026-04-13T03:01:22.820Z), jitter<28ms=186ms (2026-04-13T03:01:22.820Z), jitter<18ms=186ms (2026-04-13T03:01:22.820Z)；target=target>=120kbps=186ms (2026-04-13T03:01:22.820Z), target>=300kbps=186ms (2026-04-13T03:01:22.820Z), target>=500kbps=186ms (2026-04-13T03:01:22.820Z), target>=700kbps=186ms (2026-04-13T03:01:22.820Z), target>=900kbps=186ms (2026-04-13T03:01:22.820Z)；send=send>=300kbps=186ms (2026-04-13T03:01:22.820Z), send>=500kbps=186ms (2026-04-13T03:01:22.820Z), send>=700kbps=186ms (2026-04-13T03:01:22.820Z), send>=900kbps=186ms (2026-04-13T03:01:22.820Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=-, recovering=-, stable=386ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=-, stable=186ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:29:25.607Z；firstRecovering=-；firstStable=423ms (2026-04-17T01:29:26.030Z)；firstL0=- |
+| 恢复诊断 | raw=loss<3%=423ms (2026-04-17T01:29:26.030Z), rtt<120ms=423ms (2026-04-17T01:29:26.030Z), jitter<28ms=423ms (2026-04-17T01:29:26.030Z), jitter<18ms=423ms (2026-04-17T01:29:26.030Z)；target=target>=120kbps=423ms (2026-04-17T01:29:26.030Z), target>=300kbps=423ms (2026-04-17T01:29:26.030Z), target>=500kbps=423ms (2026-04-17T01:29:26.030Z), target>=700kbps=423ms (2026-04-17T01:29:26.030Z), target>=900kbps=423ms (2026-04-17T01:29:26.030Z)；send=send>=300kbps=423ms (2026-04-17T01:29:26.030Z), send>=500kbps=423ms (2026-04-17T01:29:26.030Z), send>=700kbps=423ms (2026-04-17T01:29:26.030Z), send>=900kbps=423ms (2026-04-17T01:29:26.030Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=-, recovering=-, stable=453ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=-, stable=423ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### R2
 
@@ -458,12 +453,12 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=early_warning/L1, current=stable/L0)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 2 次非 noop） |
+| 实际动作 | setEncodingParameters（共 4 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:02:31.541Z；firstRecovering=-；firstStable=106ms (2026-04-13T03:02:31.647Z)；firstL0=- |
-| 恢复诊断 | raw=loss<3%=106ms (2026-04-13T03:02:31.647Z), rtt<120ms=106ms (2026-04-13T03:02:31.647Z), jitter<28ms=106ms (2026-04-13T03:02:31.647Z), jitter<18ms=106ms (2026-04-13T03:02:31.647Z)；target=target>=120kbps=106ms (2026-04-13T03:02:31.647Z), target>=300kbps=106ms (2026-04-13T03:02:31.647Z), target>=500kbps=106ms (2026-04-13T03:02:31.647Z), target>=700kbps=106ms (2026-04-13T03:02:31.647Z), target>=900kbps=106ms (2026-04-13T03:02:31.647Z)；send=send>=300kbps=106ms (2026-04-13T03:02:31.647Z), send>=500kbps=106ms (2026-04-13T03:02:31.647Z), send>=700kbps=106ms (2026-04-13T03:02:31.647Z), send>=900kbps=106ms (2026-04-13T03:02:31.647Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=3334ms, recovering=-, stable=334ms, congested=-, firstAction=3334ms, L0=13833ms, L1=3334ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=-, stable=106ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:30:34.018Z；firstRecovering=-；firstStable=416ms (2026-04-17T01:30:34.434Z)；firstL0=17416ms (2026-04-17T01:30:51.434Z) |
+| 恢复诊断 | raw=loss<3%=416ms (2026-04-17T01:30:34.434Z), rtt<120ms=416ms (2026-04-17T01:30:34.434Z), jitter<28ms=416ms (2026-04-17T01:30:34.434Z), jitter<18ms=416ms (2026-04-17T01:30:34.434Z)；target=target>=120kbps=416ms (2026-04-17T01:30:34.434Z), target>=300kbps=416ms (2026-04-17T01:30:34.434Z), target>=500kbps=416ms (2026-04-17T01:30:34.434Z), target>=700kbps=416ms (2026-04-17T01:30:34.434Z), target>=900kbps=416ms (2026-04-17T01:30:34.434Z)；send=send>=300kbps=416ms (2026-04-17T01:30:34.434Z), send>=500kbps=416ms (2026-04-17T01:30:34.434Z), send>=700kbps=416ms (2026-04-17T01:30:34.434Z), send>=900kbps=416ms (2026-04-17T01:30:34.434Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=2454ms, recovering=-, stable=454ms, congested=-, firstAction=2454ms, L0=16454ms, L1=2454ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=3416ms, recovering=-, stable=416ms, congested=-, firstAction=3416ms, L0=17416ms, L1=3416ms, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### R3
 
@@ -480,13 +475,13 @@
 | 预期动作 | 应保持 stable 或轻度降级到 stable / early_warning，动作以 noop / setEncodingParameters 为主，最高不超过 L1 |
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
-| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=early_warning/L1, current=early_warning/L1)；recovery(评估取 best=stable/L0, current=stable/L0) |
+| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=stable/L0, current=stable/L0)；recovery(评估取 best=stable/L0, current=stable/L0) |
 | 实际动作 | setEncodingParameters（共 2 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
-| 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:03:40.546Z；firstRecovering=-；firstStable=3019ms (2026-04-13T03:03:43.565Z)；firstL0=3019ms (2026-04-13T03:03:43.565Z) |
-| 恢复诊断 | raw=loss<3%=19ms (2026-04-13T03:03:40.565Z), rtt<120ms=1519ms (2026-04-13T03:03:42.065Z), jitter<28ms=19ms (2026-04-13T03:03:40.565Z), jitter<18ms=19ms (2026-04-13T03:03:40.565Z)；target=target>=120kbps=19ms (2026-04-13T03:03:40.565Z), target>=300kbps=19ms (2026-04-13T03:03:40.565Z), target>=500kbps=19ms (2026-04-13T03:03:40.565Z), target>=700kbps=19ms (2026-04-13T03:03:40.565Z), target>=900kbps=4519ms (2026-04-13T03:03:45.065Z)；send=send>=300kbps=19ms (2026-04-13T03:03:40.565Z), send>=500kbps=19ms (2026-04-13T03:03:40.565Z), send>=700kbps=19ms (2026-04-13T03:03:40.565Z), send>=900kbps=519ms (2026-04-13T03:03:41.065Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=4818ms, recovering=-, stable=318ms, congested=-, firstAction=4818ms, L0=-, L1=4818ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=19ms, recovering=-, stable=3019ms, congested=-, firstAction=3019ms, L0=3019ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=stable/L0，recovered=stable/L0。 |
+| 恢复里程碑 | start=2026-04-17T01:31:42.465Z；firstRecovering=-；firstStable=415ms (2026-04-17T01:31:42.880Z)；firstL0=15915ms (2026-04-17T01:31:58.380Z) |
+| 恢复诊断 | raw=loss<3%=415ms (2026-04-17T01:31:42.880Z), rtt<120ms=1915ms (2026-04-17T01:31:44.380Z), jitter<28ms=415ms (2026-04-17T01:31:42.880Z), jitter<18ms=415ms (2026-04-17T01:31:42.880Z)；target=target>=120kbps=415ms (2026-04-17T01:31:42.880Z), target>=300kbps=415ms (2026-04-17T01:31:42.880Z), target>=500kbps=415ms (2026-04-17T01:31:42.880Z), target>=700kbps=415ms (2026-04-17T01:31:42.880Z), target>=900kbps=16415ms (2026-04-17T01:31:58.880Z)；send=send>=300kbps=415ms (2026-04-17T01:31:42.880Z), send>=500kbps=415ms (2026-04-17T01:31:42.880Z), send>=700kbps=415ms (2026-04-17T01:31:42.880Z), send>=900kbps=415ms (2026-04-17T01:31:42.880Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=-, recovering=-, stable=452ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=2915ms, recovering=-, stable=415ms, congested=-, firstAction=2915ms, L0=15915ms, L1=2915ms, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### R4
 
@@ -507,9 +502,9 @@
 | 实际动作 | setEncodingParameters（共 2 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:04:49.645Z；firstRecovering=-；firstStable=14903ms (2026-04-13T03:05:04.548Z)；firstL0=14903ms (2026-04-13T03:05:04.548Z) |
-| 恢复诊断 | raw=loss<3%=902ms (2026-04-13T03:04:50.547Z), rtt<120ms=1403ms (2026-04-13T03:04:51.048Z), jitter<28ms=403ms (2026-04-13T03:04:50.048Z), jitter<18ms=10403ms (2026-04-13T03:05:00.048Z)；target=target>=120kbps=403ms (2026-04-13T03:04:50.048Z), target>=300kbps=403ms (2026-04-13T03:04:50.048Z), target>=500kbps=403ms (2026-04-13T03:04:50.048Z), target>=700kbps=4403ms (2026-04-13T03:04:54.048Z), target>=900kbps=15403ms (2026-04-13T03:05:05.048Z)；send=send>=300kbps=403ms (2026-04-13T03:04:50.048Z), send>=500kbps=403ms (2026-04-13T03:04:50.048Z), send>=700kbps=403ms (2026-04-13T03:04:50.048Z), send>=900kbps=902ms (2026-04-13T03:04:50.547Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=2282ms, recovering=-, stable=282ms, congested=-, firstAction=2282ms, L0=-, L1=2282ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=403ms, recovering=-, stable=14903ms, congested=-, firstAction=14903ms, L0=14903ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:32:50.882Z；firstRecovering=-；firstStable=14922ms (2026-04-17T01:33:05.804Z)；firstL0=14922ms (2026-04-17T01:33:05.804Z) |
+| 恢复诊断 | raw=loss<3%=922ms (2026-04-17T01:32:51.804Z), rtt<120ms=1922ms (2026-04-17T01:32:52.804Z), jitter<28ms=423ms (2026-04-17T01:32:51.305Z), jitter<18ms=12922ms (2026-04-17T01:33:03.804Z)；target=target>=120kbps=423ms (2026-04-17T01:32:51.305Z), target>=300kbps=423ms (2026-04-17T01:32:51.305Z), target>=500kbps=423ms (2026-04-17T01:32:51.305Z), target>=700kbps=6422ms (2026-04-17T01:32:57.304Z), target>=900kbps=15422ms (2026-04-17T01:33:06.304Z)；send=send>=300kbps=423ms (2026-04-17T01:32:51.305Z), send>=500kbps=423ms (2026-04-17T01:32:51.305Z), send>=700kbps=423ms (2026-04-17T01:32:51.305Z), send>=900kbps=423ms (2026-04-17T01:32:51.305Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=1960ms, recovering=-, stable=460ms, congested=-, firstAction=1960ms, L0=-, L1=1960ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=423ms, recovering=-, stable=14922ms, congested=-, firstAction=14922ms, L0=14922ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### R5
 
@@ -527,12 +522,12 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 69 次非 noop） |
+| 实际动作 | setEncodingParameters（共 68 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:05:58.996Z；firstRecovering=4264ms (2026-04-13T03:06:03.260Z)；firstStable=4764ms (2026-04-13T03:06:03.760Z)；firstL0=8764ms (2026-04-13T03:06:07.760Z) |
-| 恢复诊断 | raw=loss<3%=264ms (2026-04-13T03:05:59.260Z), rtt<120ms=1264ms (2026-04-13T03:06:00.260Z), jitter<28ms=264ms (2026-04-13T03:05:59.260Z), jitter<18ms=264ms (2026-04-13T03:05:59.260Z)；target=target>=120kbps=264ms (2026-04-13T03:05:59.260Z), target>=300kbps=4764ms (2026-04-13T03:06:03.760Z), target>=500kbps=6264ms (2026-04-13T03:06:05.260Z), target>=700kbps=9264ms (2026-04-13T03:06:08.260Z), target>=900kbps=24764ms (2026-04-13T03:06:23.760Z)；send=send>=300kbps=4764ms (2026-04-13T03:06:03.760Z), send>=500kbps=4764ms (2026-04-13T03:06:03.760Z), send>=700kbps=5264ms (2026-04-13T03:06:04.260Z), send>=900kbps=7264ms (2026-04-13T03:06:06.260Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=1758ms, recovering=-, stable=258ms, congested=3258ms, firstAction=1758ms, L0=-, L1=1758ms, L2=3258ms, L3=3758ms, L4=4258ms, audioOnly=-；recovery: warning=11264ms, recovering=4264ms, stable=4764ms, congested=264ms, firstAction=264ms, L0=8764ms, L1=7264ms, L2=5764ms, L3=4264ms, L4=264ms, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:33:59.311Z；firstRecovering=4899ms (2026-04-17T01:34:04.210Z)；firstStable=5399ms (2026-04-17T01:34:04.710Z)；firstL0=9399ms (2026-04-17T01:34:08.710Z) |
+| 恢复诊断 | raw=loss<3%=399ms (2026-04-17T01:33:59.710Z), rtt<120ms=1899ms (2026-04-17T01:34:01.210Z), jitter<28ms=399ms (2026-04-17T01:33:59.710Z), jitter<18ms=399ms (2026-04-17T01:33:59.710Z)；target=target>=120kbps=399ms (2026-04-17T01:33:59.710Z), target>=300kbps=5399ms (2026-04-17T01:34:04.710Z), target>=500kbps=6899ms (2026-04-17T01:34:06.210Z), target>=700kbps=8899ms (2026-04-17T01:34:08.210Z), target>=900kbps=11399ms (2026-04-17T01:34:10.710Z)；send=send>=300kbps=5399ms (2026-04-17T01:34:04.710Z), send>=500kbps=5399ms (2026-04-17T01:34:04.710Z), send>=700kbps=5399ms (2026-04-17T01:34:04.710Z), send>=900kbps=6899ms (2026-04-17T01:34:06.210Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=1443ms, recovering=-, stable=443ms, congested=3943ms, firstAction=1443ms, L0=-, L1=1443ms, L2=3943ms, L3=4443ms, L4=4943ms, audioOnly=-；recovery: warning=11899ms, recovering=4899ms, stable=5399ms, congested=399ms, firstAction=399ms, L0=9399ms, L1=7899ms, L2=6399ms, L3=4899ms, L4=399ms, audioOnly=- |
 
 ### R6
 
@@ -550,12 +545,12 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 72 次非 noop） |
+| 实际动作 | setEncodingParameters（共 75 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:07:08.452Z；firstRecovering=4518ms (2026-04-13T03:07:12.970Z)；firstStable=5018ms (2026-04-13T03:07:13.470Z)；firstL0=9018ms (2026-04-13T03:07:17.470Z) |
-| 恢复诊断 | raw=loss<3%=18ms (2026-04-13T03:07:08.470Z), rtt<120ms=1018ms (2026-04-13T03:07:09.470Z), jitter<28ms=18ms (2026-04-13T03:07:08.470Z), jitter<18ms=18ms (2026-04-13T03:07:08.470Z)；target=target>=120kbps=18ms (2026-04-13T03:07:08.470Z), target>=300kbps=5018ms (2026-04-13T03:07:13.470Z), target>=500kbps=6518ms (2026-04-13T03:07:14.970Z), target>=700kbps=10518ms (2026-04-13T03:07:18.970Z), target>=900kbps=24018ms (2026-04-13T03:07:32.470Z)；send=send>=300kbps=5018ms (2026-04-13T03:07:13.470Z), send>=500kbps=5018ms (2026-04-13T03:07:13.470Z), send>=700kbps=5018ms (2026-04-13T03:07:13.470Z), send>=900kbps=6518ms (2026-04-13T03:07:14.970Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=1188ms, recovering=-, stable=189ms, congested=2188ms, firstAction=1188ms, L0=-, L1=1188ms, L2=2188ms, L3=2688ms, L4=3188ms, audioOnly=-；recovery: warning=11518ms, recovering=4518ms, stable=5018ms, congested=18ms, firstAction=18ms, L0=9018ms, L1=7519ms, L2=6018ms, L3=4518ms, L4=18ms, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:35:07.718Z；firstRecovering=5415ms (2026-04-17T01:35:13.133Z)；firstStable=5916ms (2026-04-17T01:35:13.634Z)；firstL0=9915ms (2026-04-17T01:35:17.633Z) |
+| 恢复诊断 | raw=loss<3%=415ms (2026-04-17T01:35:08.133Z), rtt<120ms=1915ms (2026-04-17T01:35:09.633Z), jitter<28ms=415ms (2026-04-17T01:35:08.133Z), jitter<18ms=415ms (2026-04-17T01:35:08.133Z)；target=target>=120kbps=415ms (2026-04-17T01:35:08.133Z), target>=300kbps=7415ms (2026-04-17T01:35:15.133Z), target>=500kbps=8915ms (2026-04-17T01:35:16.633Z), target>=700kbps=12915ms (2026-04-17T01:35:20.633Z), target>=900kbps=25917ms (2026-04-17T01:35:33.635Z)；send=send>=300kbps=5916ms (2026-04-17T01:35:13.634Z), send>=500kbps=5916ms (2026-04-17T01:35:13.634Z), send>=700kbps=5916ms (2026-04-17T01:35:13.634Z), send>=900kbps=7415ms (2026-04-17T01:35:15.133Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=1453ms, recovering=-, stable=453ms, congested=1953ms, firstAction=1453ms, L0=-, L1=1453ms, L2=1953ms, L3=2453ms, L4=2953ms, audioOnly=-；recovery: warning=12415ms, recovering=5415ms, stable=5916ms, congested=415ms, firstAction=415ms, L0=9915ms, L1=8416ms, L2=6915ms, L3=5415ms, L4=415ms, audioOnly=- |
 
 ### J1
 
@@ -576,9 +571,9 @@
 | 实际动作 | 无非 noop 动作 |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=stable/L0，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:08:17.296Z；firstRecovering=-；firstStable=131ms (2026-04-13T03:08:17.427Z)；firstL0=- |
-| 恢复诊断 | raw=loss<3%=131ms (2026-04-13T03:08:17.427Z), rtt<120ms=131ms (2026-04-13T03:08:17.427Z), jitter<28ms=131ms (2026-04-13T03:08:17.427Z), jitter<18ms=131ms (2026-04-13T03:08:17.427Z)；target=target>=120kbps=131ms (2026-04-13T03:08:17.427Z), target>=300kbps=131ms (2026-04-13T03:08:17.427Z), target>=500kbps=131ms (2026-04-13T03:08:17.427Z), target>=700kbps=131ms (2026-04-13T03:08:17.427Z), target>=900kbps=131ms (2026-04-13T03:08:17.427Z)；send=send>=300kbps=131ms (2026-04-13T03:08:17.427Z), send>=500kbps=131ms (2026-04-13T03:08:17.427Z), send>=700kbps=131ms (2026-04-13T03:08:17.427Z), send>=900kbps=131ms (2026-04-13T03:08:17.427Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=-, recovering=-, stable=346ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=-, stable=131ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:36:16.148Z；firstRecovering=-；firstStable=416ms (2026-04-17T01:36:16.564Z)；firstL0=- |
+| 恢复诊断 | raw=loss<3%=416ms (2026-04-17T01:36:16.564Z), rtt<120ms=416ms (2026-04-17T01:36:16.564Z), jitter<28ms=416ms (2026-04-17T01:36:16.564Z), jitter<18ms=416ms (2026-04-17T01:36:16.564Z)；target=target>=120kbps=416ms (2026-04-17T01:36:16.564Z), target>=300kbps=416ms (2026-04-17T01:36:16.564Z), target>=500kbps=416ms (2026-04-17T01:36:16.564Z), target>=700kbps=416ms (2026-04-17T01:36:16.564Z), target>=900kbps=416ms (2026-04-17T01:36:16.564Z)；send=send>=300kbps=416ms (2026-04-17T01:36:16.564Z), send>=500kbps=416ms (2026-04-17T01:36:16.564Z), send>=700kbps=416ms (2026-04-17T01:36:16.564Z), send>=900kbps=416ms (2026-04-17T01:36:16.564Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=-, recovering=-, stable=458ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=-, stable=416ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### J2
 
@@ -599,9 +594,9 @@
 | 实际动作 | 无非 noop 动作 |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=stable/L0，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:09:26.231Z；firstRecovering=-；firstStable=117ms (2026-04-13T03:09:26.348Z)；firstL0=- |
-| 恢复诊断 | raw=loss<3%=117ms (2026-04-13T03:09:26.348Z), rtt<120ms=117ms (2026-04-13T03:09:26.348Z), jitter<28ms=117ms (2026-04-13T03:09:26.348Z), jitter<18ms=117ms (2026-04-13T03:09:26.348Z)；target=target>=120kbps=117ms (2026-04-13T03:09:26.348Z), target>=300kbps=117ms (2026-04-13T03:09:26.348Z), target>=500kbps=117ms (2026-04-13T03:09:26.348Z), target>=700kbps=117ms (2026-04-13T03:09:26.348Z), target>=900kbps=117ms (2026-04-13T03:09:26.348Z)；send=send>=300kbps=117ms (2026-04-13T03:09:26.348Z), send>=500kbps=117ms (2026-04-13T03:09:26.348Z), send>=700kbps=117ms (2026-04-13T03:09:26.348Z), send>=900kbps=117ms (2026-04-13T03:09:26.348Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=-, recovering=-, stable=296ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=-, stable=117ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:37:24.583Z；firstRecovering=-；firstStable=412ms (2026-04-17T01:37:24.995Z)；firstL0=- |
+| 恢复诊断 | raw=loss<3%=912ms (2026-04-17T01:37:25.495Z), rtt<120ms=412ms (2026-04-17T01:37:24.995Z), jitter<28ms=412ms (2026-04-17T01:37:24.995Z), jitter<18ms=1912ms (2026-04-17T01:37:26.495Z)；target=target>=120kbps=412ms (2026-04-17T01:37:24.995Z), target>=300kbps=412ms (2026-04-17T01:37:24.995Z), target>=500kbps=412ms (2026-04-17T01:37:24.995Z), target>=700kbps=412ms (2026-04-17T01:37:24.995Z), target>=900kbps=412ms (2026-04-17T01:37:24.995Z)；send=send>=300kbps=412ms (2026-04-17T01:37:24.995Z), send>=500kbps=412ms (2026-04-17T01:37:24.995Z), send>=700kbps=412ms (2026-04-17T01:37:24.995Z), send>=900kbps=412ms (2026-04-17T01:37:24.995Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=-, recovering=-, stable=444ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=-, stable=412ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### J3
 
@@ -622,9 +617,9 @@
 | 实际动作 | setEncodingParameters（共 2 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:10:35.145Z；firstRecovering=-；firstStable=7575ms (2026-04-13T03:10:42.720Z)；firstL0=7575ms (2026-04-13T03:10:42.720Z) |
-| 恢复诊断 | raw=loss<3%=75ms (2026-04-13T03:10:35.220Z), rtt<120ms=75ms (2026-04-13T03:10:35.220Z), jitter<28ms=1075ms (2026-04-13T03:10:36.220Z), jitter<18ms=3575ms (2026-04-13T03:10:38.720Z)；target=target>=120kbps=75ms (2026-04-13T03:10:35.220Z), target>=300kbps=75ms (2026-04-13T03:10:35.220Z), target>=500kbps=75ms (2026-04-13T03:10:35.220Z), target>=700kbps=75ms (2026-04-13T03:10:35.220Z), target>=900kbps=8075ms (2026-04-13T03:10:43.220Z)；send=send>=300kbps=75ms (2026-04-13T03:10:35.220Z), send>=500kbps=75ms (2026-04-13T03:10:35.220Z), send>=700kbps=75ms (2026-04-13T03:10:35.220Z), send>=900kbps=575ms (2026-04-13T03:10:35.720Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=12373ms, recovering=-, stable=373ms, congested=-, firstAction=12373ms, L0=-, L1=12373ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=75ms, recovering=-, stable=7575ms, congested=-, firstAction=7575ms, L0=7575ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:38:32.998Z；firstRecovering=-；firstStable=13419ms (2026-04-17T01:38:46.417Z)；firstL0=13419ms (2026-04-17T01:38:46.417Z) |
+| 恢复诊断 | raw=loss<3%=419ms (2026-04-17T01:38:33.417Z), rtt<120ms=1919ms (2026-04-17T01:38:34.917Z), jitter<28ms=919ms (2026-04-17T01:38:33.917Z), jitter<18ms=1919ms (2026-04-17T01:38:34.917Z)；target=target>=120kbps=419ms (2026-04-17T01:38:33.417Z), target>=300kbps=419ms (2026-04-17T01:38:33.417Z), target>=500kbps=419ms (2026-04-17T01:38:33.417Z), target>=700kbps=419ms (2026-04-17T01:38:33.417Z), target>=900kbps=13919ms (2026-04-17T01:38:46.917Z)；send=send>=300kbps=419ms (2026-04-17T01:38:33.417Z), send>=500kbps=419ms (2026-04-17T01:38:33.417Z), send>=700kbps=419ms (2026-04-17T01:38:33.417Z), send>=900kbps=4419ms (2026-04-17T01:38:37.417Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=5454ms, recovering=-, stable=454ms, congested=-, firstAction=5454ms, L0=-, L1=5454ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=419ms, recovering=-, stable=13419ms, congested=-, firstAction=13419ms, L0=13419ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### J4
 
@@ -642,12 +637,12 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 67 次非 noop） |
+| 实际动作 | setEncodingParameters（共 56 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:11:44.033Z；firstRecovering=5099ms (2026-04-13T03:11:49.132Z)；firstStable=7099ms (2026-04-13T03:11:51.132Z)；firstL0=9599ms (2026-04-13T03:11:53.632Z) |
-| 恢复诊断 | raw=loss<3%=99ms (2026-04-13T03:11:44.132Z), rtt<120ms=1599ms (2026-04-13T03:11:45.632Z), jitter<28ms=99ms (2026-04-13T03:11:44.132Z), jitter<18ms=3099ms (2026-04-13T03:11:47.132Z)；target=target>=120kbps=99ms (2026-04-13T03:11:44.132Z), target>=300kbps=5599ms (2026-04-13T03:11:49.632Z), target>=500kbps=7099ms (2026-04-13T03:11:51.132Z), target>=700kbps=10599ms (2026-04-13T03:11:54.632Z), target>=900kbps=25599ms (2026-04-13T03:12:09.632Z)；send=send>=300kbps=5599ms (2026-04-13T03:11:49.632Z), send>=500kbps=5599ms (2026-04-13T03:11:49.632Z), send>=700kbps=6099ms (2026-04-13T03:11:50.132Z), send>=900kbps=7599ms (2026-04-13T03:11:51.632Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=2372ms, recovering=-, stable=372ms, congested=5872ms, firstAction=2372ms, L0=-, L1=2372ms, L2=5872ms, L3=6372ms, L4=6872ms, audioOnly=-；recovery: warning=12099ms, recovering=5099ms, stable=7099ms, congested=99ms, firstAction=99ms, L0=9599ms, L1=8099ms, L2=6599ms, L3=5099ms, L4=99ms, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:39:41.418Z；firstRecovering=2914ms (2026-04-17T01:39:44.332Z)；firstStable=5414ms (2026-04-17T01:39:46.832Z)；firstL0=6913ms (2026-04-17T01:39:48.331Z) |
+| 恢复诊断 | raw=loss<3%=422ms (2026-04-17T01:39:41.840Z), rtt<120ms=1914ms (2026-04-17T01:39:43.332Z), jitter<28ms=1413ms (2026-04-17T01:39:42.831Z), jitter<18ms=15413ms (2026-04-17T01:39:56.831Z)；target=target>=120kbps=422ms (2026-04-17T01:39:41.840Z), target>=300kbps=3414ms (2026-04-17T01:39:44.832Z), target>=500kbps=4913ms (2026-04-17T01:39:46.331Z), target>=700kbps=5914ms (2026-04-17T01:39:47.332Z), target>=900kbps=9413ms (2026-04-17T01:39:50.831Z)；send=send>=300kbps=3414ms (2026-04-17T01:39:44.832Z), send>=500kbps=3414ms (2026-04-17T01:39:44.832Z), send>=700kbps=3414ms (2026-04-17T01:39:44.832Z), send>=900kbps=4913ms (2026-04-17T01:39:46.331Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=1956ms, recovering=-, stable=456ms, congested=7956ms, firstAction=1956ms, L0=-, L1=1956ms, L2=7956ms, L3=8456ms, L4=8957ms, audioOnly=-；recovery: warning=9413ms, recovering=2914ms, stable=5414ms, congested=422ms, firstAction=422ms, L0=6913ms, L1=5414ms, L2=4414ms, L3=2914ms, L4=422ms, audioOnly=- |
 
 ### J5
 
@@ -665,12 +660,12 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 69 次非 noop） |
+| 实际动作 | setEncodingParameters（共 68 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:12:52.997Z；firstRecovering=3530ms (2026-04-13T03:12:56.527Z)；firstStable=6030ms (2026-04-13T03:12:59.027Z)；firstL0=8030ms (2026-04-13T03:13:01.027Z) |
-| 恢复诊断 | raw=loss<3%=30ms (2026-04-13T03:12:53.027Z), rtt<120ms=1530ms (2026-04-13T03:12:54.527Z), jitter<28ms=3030ms (2026-04-13T03:12:56.027Z), jitter<18ms=18030ms (2026-04-13T03:13:11.027Z)；target=target>=120kbps=30ms (2026-04-13T03:12:53.027Z), target>=300kbps=4030ms (2026-04-13T03:12:57.027Z), target>=500kbps=7530ms (2026-04-13T03:13:00.527Z), target>=700kbps=22030ms (2026-04-13T03:13:15.027Z), target>=900kbps=23030ms (2026-04-13T03:13:16.027Z)；send=send>=300kbps=4030ms (2026-04-13T03:12:57.027Z), send>=500kbps=4030ms (2026-04-13T03:12:57.027Z), send>=700kbps=7030ms (2026-04-13T03:13:00.027Z), send>=900kbps=22030ms (2026-04-13T03:13:15.027Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=1302ms, recovering=-, stable=302ms, congested=2302ms, firstAction=1302ms, L0=-, L1=1302ms, L2=2302ms, L3=2802ms, L4=3302ms, audioOnly=-；recovery: warning=10530ms, recovering=3530ms, stable=6030ms, congested=30ms, firstAction=30ms, L0=8030ms, L1=6530ms, L2=5030ms, L3=3530ms, L4=30ms, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:40:49.842Z；firstRecovering=3915ms (2026-04-17T01:40:53.757Z)；firstStable=6415ms (2026-04-17T01:40:56.257Z)；firstL0=8415ms (2026-04-17T01:40:58.257Z) |
+| 恢复诊断 | raw=loss<3%=415ms (2026-04-17T01:40:50.257Z), rtt<120ms=415ms (2026-04-17T01:40:50.257Z), jitter<28ms=2915ms (2026-04-17T01:40:52.757Z), jitter<18ms=19415ms (2026-04-17T01:41:09.257Z)；target=target>=120kbps=415ms (2026-04-17T01:40:50.257Z), target>=300kbps=4415ms (2026-04-17T01:40:54.257Z), target>=500kbps=7415ms (2026-04-17T01:40:57.257Z), target>=700kbps=22415ms (2026-04-17T01:41:12.257Z), target>=900kbps=23415ms (2026-04-17T01:41:13.257Z)；send=send>=300kbps=4415ms (2026-04-17T01:40:54.257Z), send>=500kbps=4415ms (2026-04-17T01:40:54.257Z), send>=700kbps=4415ms (2026-04-17T01:40:54.257Z), send>=900kbps=6415ms (2026-04-17T01:40:56.257Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=1952ms, recovering=-, stable=452ms, congested=2952ms, firstAction=1952ms, L0=-, L1=1952ms, L2=2952ms, L3=3452ms, L4=3952ms, audioOnly=-；recovery: warning=10915ms, recovering=3915ms, stable=6415ms, congested=415ms, firstAction=415ms, L0=8415ms, L1=6915ms, L2=5415ms, L3=3915ms, L4=415ms, audioOnly=- |
 
 ### T1
 
@@ -691,9 +686,9 @@
 | 实际动作 | setEncodingParameters（共 2 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:14:01.892Z；firstRecovering=-；firstStable=15078ms (2026-04-13T03:14:16.970Z)；firstL0=15078ms (2026-04-13T03:14:16.970Z) |
-| 恢复诊断 | raw=loss<3%=81ms (2026-04-13T03:14:01.973Z), rtt<120ms=81ms (2026-04-13T03:14:01.973Z), jitter<28ms=81ms (2026-04-13T03:14:01.973Z), jitter<18ms=12578ms (2026-04-13T03:14:14.470Z)；target=target>=120kbps=81ms (2026-04-13T03:14:01.973Z), target>=300kbps=81ms (2026-04-13T03:14:01.973Z), target>=500kbps=81ms (2026-04-13T03:14:01.973Z), target>=700kbps=81ms (2026-04-13T03:14:01.973Z), target>=900kbps=15578ms (2026-04-13T03:14:17.470Z)；send=send>=300kbps=81ms (2026-04-13T03:14:01.973Z), send>=500kbps=81ms (2026-04-13T03:14:01.973Z), send>=700kbps=81ms (2026-04-13T03:14:01.973Z), send>=900kbps=1079ms (2026-04-13T03:14:02.971Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=3374ms, recovering=-, stable=374ms, congested=-, firstAction=3374ms, L0=-, L1=3374ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=81ms, recovering=-, stable=15078ms, congested=-, firstAction=15078ms, L0=15078ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:41:58.272Z；firstRecovering=-；firstStable=3918ms (2026-04-17T01:42:02.190Z)；firstL0=3918ms (2026-04-17T01:42:02.190Z) |
+| 恢复诊断 | raw=loss<3%=418ms (2026-04-17T01:41:58.690Z), rtt<120ms=418ms (2026-04-17T01:41:58.690Z), jitter<28ms=418ms (2026-04-17T01:41:58.690Z), jitter<18ms=918ms (2026-04-17T01:41:59.190Z)；target=target>=120kbps=418ms (2026-04-17T01:41:58.690Z), target>=300kbps=418ms (2026-04-17T01:41:58.690Z), target>=500kbps=418ms (2026-04-17T01:41:58.690Z), target>=700kbps=418ms (2026-04-17T01:41:58.690Z), target>=900kbps=5418ms (2026-04-17T01:42:03.690Z)；send=send>=300kbps=418ms (2026-04-17T01:41:58.690Z), send>=500kbps=418ms (2026-04-17T01:41:58.690Z), send>=700kbps=918ms (2026-04-17T01:41:59.190Z), send>=900kbps=4418ms (2026-04-17T01:42:02.690Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=6455ms, recovering=-, stable=455ms, congested=-, firstAction=6455ms, L0=-, L1=6455ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=418ms, recovering=-, stable=3918ms, congested=-, firstAction=3918ms, L0=3918ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### T2
 
@@ -710,13 +705,13 @@
 | 预期动作 | 应触发本地降级动作（以 setEncodingParameters 为主），允许进入 congested，最高不超过 L4 |
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
-| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 64 次非 noop） |
+| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=early_warning/L0)；recovery(评估取 best=stable/L0, current=stable/L0) |
+| 实际动作 | setEncodingParameters（共 42 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:15:10.984Z；firstRecovering=5405ms (2026-04-13T03:15:16.389Z)；firstStable=5905ms (2026-04-13T03:15:16.889Z)；firstL0=9905ms (2026-04-13T03:15:20.889Z) |
-| 恢复诊断 | raw=loss<3%=405ms (2026-04-13T03:15:11.389Z), rtt<120ms=405ms (2026-04-13T03:15:11.389Z), jitter<28ms=405ms (2026-04-13T03:15:11.389Z), jitter<18ms=905ms (2026-04-13T03:15:11.889Z)；target=target>=120kbps=405ms (2026-04-13T03:15:11.389Z), target>=300kbps=5905ms (2026-04-13T03:15:16.889Z), target>=500kbps=8405ms (2026-04-13T03:15:19.389Z), target>=700kbps=11920ms (2026-04-13T03:15:22.904Z), target>=900kbps=25405ms (2026-04-13T03:15:36.389Z)；send=send>=300kbps=5905ms (2026-04-13T03:15:16.889Z), send>=500kbps=5905ms (2026-04-13T03:15:16.889Z), send>=700kbps=7405ms (2026-04-13T03:15:18.389Z), send>=900kbps=11405ms (2026-04-13T03:15:22.389Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=1345ms, recovering=9845ms, stable=345ms, congested=1845ms, firstAction=1345ms, L0=14345ms, L1=1345ms, L2=1845ms, L3=2345ms, L4=2845ms, audioOnly=-；recovery: warning=12405ms, recovering=5405ms, stable=5905ms, congested=405ms, firstAction=405ms, L0=9905ms, L1=8405ms, L2=6905ms, L3=5405ms, L4=405ms, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:43:06.681Z；firstRecovering=8428ms (2026-04-17T01:43:15.109Z)；firstStable=10916ms (2026-04-17T01:43:17.597Z)；firstL0=12918ms (2026-04-17T01:43:19.599Z) |
+| 恢复诊断 | raw=loss<3%=416ms (2026-04-17T01:43:07.097Z), rtt<120ms=1916ms (2026-04-17T01:43:08.597Z), jitter<28ms=7916ms (2026-04-17T01:43:14.597Z), jitter<18ms=14419ms (2026-04-17T01:43:21.100Z)；target=target>=120kbps=416ms (2026-04-17T01:43:07.097Z), target>=300kbps=416ms (2026-04-17T01:43:07.097Z), target>=500kbps=10916ms (2026-04-17T01:43:17.597Z), target>=700kbps=11916ms (2026-04-17T01:43:18.597Z), target>=900kbps=13418ms (2026-04-17T01:43:20.099Z)；send=send>=300kbps=416ms (2026-04-17T01:43:07.097Z), send>=500kbps=416ms (2026-04-17T01:43:07.097Z), send>=700kbps=11416ms (2026-04-17T01:43:18.097Z), send>=900kbps=11916ms (2026-04-17T01:43:18.597Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=2457ms, recovering=13457ms, stable=457ms, congested=4957ms, firstAction=2457ms, L0=17957ms, L1=2457ms, L2=4957ms, L3=5457ms, L4=5958ms, audioOnly=-；recovery: warning=15416ms, recovering=8428ms, stable=10916ms, congested=416ms, firstAction=2416ms, L0=12918ms, L1=2416ms, L2=2917ms, L3=3417ms, L4=3916ms, audioOnly=- |
 
 ### T3
 
@@ -733,13 +728,13 @@
 | 预期动作 | 应触发本地降级动作（以 setEncodingParameters 为主），允许进入 congested，最高不超过 L4 |
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
-| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 75 次非 noop） |
+| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=congested/L4) |
+| 实际动作 | setEncodingParameters（共 84 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
-| 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:16:20.460Z；firstRecovering=16030ms (2026-04-13T03:16:36.490Z)；firstStable=18530ms (2026-04-13T03:16:38.990Z)；firstL0=20530ms (2026-04-13T03:16:40.990Z) |
-| 恢复诊断 | raw=loss<3%=30ms (2026-04-13T03:16:20.490Z), rtt<120ms=30ms (2026-04-13T03:16:20.490Z), jitter<28ms=15530ms (2026-04-13T03:16:35.990Z), jitter<18ms=23030ms (2026-04-13T03:16:43.490Z)；target=target>=120kbps=30ms (2026-04-13T03:16:20.490Z), target>=300kbps=16530ms (2026-04-13T03:16:36.990Z), target>=500kbps=18030ms (2026-04-13T03:16:38.490Z), target>=700kbps=19530ms (2026-04-13T03:16:39.990Z), target>=900kbps=21030ms (2026-04-13T03:16:41.490Z)；send=send>=300kbps=16530ms (2026-04-13T03:16:36.990Z), send>=500kbps=18030ms (2026-04-13T03:16:38.490Z), send>=700kbps=18030ms (2026-04-13T03:16:38.490Z), send>=900kbps=18530ms (2026-04-13T03:16:38.990Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=2363ms, recovering=-, stable=363ms, congested=2863ms, firstAction=2363ms, L0=-, L1=2363ms, L2=2863ms, L3=3363ms, L4=3863ms, audioOnly=-；recovery: warning=23030ms, recovering=16030ms, stable=18530ms, congested=30ms, firstAction=30ms, L0=20530ms, L1=19030ms, L2=17530ms, L3=16030ms, L4=30ms, audioOnly=- |
+| 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。注意：recovery window 内最佳状态已恢复，但 case 结束时 current=congested/L4，说明收尾阶段仍有波动。 |
+| 恢复里程碑 | start=2026-04-17T01:44:15.082Z；firstRecovering=17428ms (2026-04-17T01:44:32.510Z)；firstStable=19928ms (2026-04-17T01:44:35.010Z)；firstL0=21928ms (2026-04-17T01:44:37.010Z) |
+| 恢复诊断 | raw=loss<3%=928ms (2026-04-17T01:44:16.010Z), rtt<120ms=428ms (2026-04-17T01:44:15.510Z), jitter<28ms=16928ms (2026-04-17T01:44:32.010Z), jitter<18ms=23928ms (2026-04-17T01:44:39.010Z)；target=target>=120kbps=428ms (2026-04-17T01:44:15.510Z), target>=300kbps=19428ms (2026-04-17T01:44:34.510Z), target>=500kbps=19428ms (2026-04-17T01:44:34.510Z), target>=700kbps=20928ms (2026-04-17T01:44:36.010Z), target>=900kbps=22428ms (2026-04-17T01:44:37.510Z)；send=send>=300kbps=17928ms (2026-04-17T01:44:33.010Z), send>=500kbps=19428ms (2026-04-17T01:44:34.510Z), send>=700kbps=19928ms (2026-04-17T01:44:35.010Z), send>=900kbps=19928ms (2026-04-17T01:44:35.010Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=3456ms, recovering=-, stable=456ms, congested=3956ms, firstAction=3456ms, L0=-, L1=3456ms, L2=3956ms, L3=4456ms, L4=4957ms, audioOnly=-；recovery: warning=24428ms, recovering=17428ms, stable=19928ms, congested=428ms, firstAction=428ms, L0=21928ms, L1=20427ms, L2=18928ms, L3=17428ms, L4=428ms, audioOnly=- |
 
 ### T4
 
@@ -756,13 +751,13 @@
 | 预期动作 | 应触发本地降级动作（以 setEncodingParameters 为主），允许进入 early_warning / congested，最高不超过 L4 |
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
-| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=early_warning/L1, current=early_warning/L1)；recovery(评估取 best=stable/L0, current=stable/L0) |
+| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=early_warning/L1, current=stable/L0)；recovery(评估取 best=stable/L0, current=stable/L0) |
 | 实际动作 | setEncodingParameters（共 2 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:17:29.478Z；firstRecovering=-；firstStable=2974ms (2026-04-13T03:17:32.452Z)；firstL0=2974ms (2026-04-13T03:17:32.452Z) |
-| 恢复诊断 | raw=loss<3%=974ms (2026-04-13T03:17:30.452Z), rtt<120ms=474ms (2026-04-13T03:17:29.952Z), jitter<28ms=474ms (2026-04-13T03:17:29.952Z), jitter<18ms=974ms (2026-04-13T03:17:30.452Z)；target=target>=120kbps=474ms (2026-04-13T03:17:29.952Z), target>=300kbps=474ms (2026-04-13T03:17:29.952Z), target>=500kbps=474ms (2026-04-13T03:17:29.952Z), target>=700kbps=974ms (2026-04-13T03:17:30.452Z), target>=900kbps=12974ms (2026-04-13T03:17:42.452Z)；send=send>=300kbps=474ms (2026-04-13T03:17:29.952Z), send>=500kbps=474ms (2026-04-13T03:17:29.952Z), send>=700kbps=474ms (2026-04-13T03:17:29.952Z), send>=900kbps=474ms (2026-04-13T03:17:29.952Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=1361ms, recovering=-, stable=361ms, congested=-, firstAction=1361ms, L0=-, L1=1361ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=474ms, recovering=-, stable=2974ms, congested=-, firstAction=2974ms, L0=2974ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:45:23.503Z；firstRecovering=-；firstStable=409ms (2026-04-17T01:45:23.912Z)；firstL0=- |
+| 恢复诊断 | raw=loss<3%=409ms (2026-04-17T01:45:23.912Z), rtt<120ms=409ms (2026-04-17T01:45:23.912Z), jitter<28ms=409ms (2026-04-17T01:45:23.912Z), jitter<18ms=1409ms (2026-04-17T01:45:24.912Z)；target=target>=120kbps=409ms (2026-04-17T01:45:23.912Z), target>=300kbps=409ms (2026-04-17T01:45:23.912Z), target>=500kbps=409ms (2026-04-17T01:45:23.912Z), target>=700kbps=409ms (2026-04-17T01:45:23.912Z), target>=900kbps=409ms (2026-04-17T01:45:23.912Z)；send=send>=300kbps=409ms (2026-04-17T01:45:23.912Z), send>=500kbps=409ms (2026-04-17T01:45:23.912Z), send>=700kbps=409ms (2026-04-17T01:45:23.912Z), send>=900kbps=409ms (2026-04-17T01:45:23.912Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=2449ms, recovering=-, stable=450ms, congested=-, firstAction=2449ms, L0=19450ms, L1=2449ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=-, stable=409ms, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### T5
 
@@ -780,12 +775,12 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 66 次非 noop） |
+| 实际动作 | setEncodingParameters（共 60 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:18:38.285Z；firstRecovering=14663ms (2026-04-13T03:18:52.948Z)；firstStable=17163ms (2026-04-13T03:18:55.448Z)；firstL0=18163ms (2026-04-13T03:18:56.448Z) |
-| 恢复诊断 | raw=loss<3%=163ms (2026-04-13T03:18:38.448Z), rtt<120ms=163ms (2026-04-13T03:18:38.448Z), jitter<28ms=14163ms (2026-04-13T03:18:52.448Z), jitter<18ms=14663ms (2026-04-13T03:18:52.948Z)；target=target>=120kbps=2163ms (2026-04-13T03:18:40.448Z), target>=300kbps=15163ms (2026-04-13T03:18:53.448Z), target>=500kbps=16663ms (2026-04-13T03:18:54.948Z), target>=700kbps=17663ms (2026-04-13T03:18:55.948Z), target>=900kbps=18663ms (2026-04-13T03:18:56.948Z)；send=send>=300kbps=7663ms (2026-04-13T03:18:45.948Z), send>=500kbps=16663ms (2026-04-13T03:18:54.948Z), send>=700kbps=16663ms (2026-04-13T03:18:54.948Z), send>=900kbps=17663ms (2026-04-13T03:18:55.948Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=1819ms, recovering=-, stable=319ms, congested=4319ms, firstAction=1819ms, L0=-, L1=1819ms, L2=4319ms, L3=4819ms, L4=5319ms, audioOnly=-；recovery: warning=-, recovering=14663ms, stable=17163ms, congested=163ms, firstAction=163ms, L0=18163ms, L1=17163ms, L2=16163ms, L3=14663ms, L4=163ms, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:46:31.915Z；firstRecovering=10914ms (2026-04-17T01:46:42.829Z)；firstStable=13414ms (2026-04-17T01:46:45.329Z)；firstL0=14414ms (2026-04-17T01:46:46.329Z) |
+| 恢复诊断 | raw=loss<3%=914ms (2026-04-17T01:46:32.829Z), rtt<120ms=414ms (2026-04-17T01:46:32.329Z), jitter<28ms=10414ms (2026-04-17T01:46:42.329Z), jitter<18ms=13414ms (2026-04-17T01:46:45.329Z)；target=target>=120kbps=11414ms (2026-04-17T01:46:43.329Z), target>=300kbps=11914ms (2026-04-17T01:46:43.829Z), target>=500kbps=12914ms (2026-04-17T01:46:44.829Z), target>=700kbps=13914ms (2026-04-17T01:46:45.829Z), target>=900kbps=14914ms (2026-04-17T01:46:46.829Z)；send=send>=300kbps=11414ms (2026-04-17T01:46:43.329Z), send>=500kbps=12914ms (2026-04-17T01:46:44.829Z), send>=700kbps=12914ms (2026-04-17T01:46:44.829Z), send>=900kbps=13914ms (2026-04-17T01:46:45.829Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=1951ms, recovering=-, stable=451ms, congested=3451ms, firstAction=1951ms, L0=-, L1=1951ms, L2=3451ms, L3=3951ms, L4=4451ms, audioOnly=-；recovery: warning=-, recovering=10914ms, stable=13414ms, congested=414ms, firstAction=414ms, L0=14414ms, L1=13414ms, L2=12414ms, L3=10914ms, L4=414ms, audioOnly=- |
 
 ### T6
 
@@ -806,9 +801,9 @@
 | 实际动作 | setEncodingParameters（共 2 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:19:47.368Z；firstRecovering=-；firstStable=3407ms (2026-04-13T03:19:50.775Z)；firstL0=3407ms (2026-04-13T03:19:50.775Z) |
-| 恢复诊断 | raw=loss<3%=408ms (2026-04-13T03:19:47.776Z), rtt<120ms=1408ms (2026-04-13T03:19:48.776Z), jitter<28ms=408ms (2026-04-13T03:19:47.776Z), jitter<18ms=408ms (2026-04-13T03:19:47.776Z)；target=target>=120kbps=408ms (2026-04-13T03:19:47.776Z), target>=300kbps=408ms (2026-04-13T03:19:47.776Z), target>=500kbps=408ms (2026-04-13T03:19:47.776Z), target>=700kbps=408ms (2026-04-13T03:19:47.776Z), target>=900kbps=5414ms (2026-04-13T03:19:52.782Z)；send=send>=300kbps=408ms (2026-04-13T03:19:47.776Z), send>=500kbps=408ms (2026-04-13T03:19:47.776Z), send>=700kbps=408ms (2026-04-13T03:19:47.776Z), send>=900kbps=2408ms (2026-04-13T03:19:49.776Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=1785ms, recovering=-, stable=284ms, congested=-, firstAction=1785ms, L0=-, L1=1785ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=408ms, recovering=-, stable=3407ms, congested=-, firstAction=3407ms, L0=3407ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:47:40.358Z；firstRecovering=-；firstStable=16901ms (2026-04-17T01:47:57.259Z)；firstL0=16901ms (2026-04-17T01:47:57.259Z) |
+| 恢复诊断 | raw=loss<3%=401ms (2026-04-17T01:47:40.759Z), rtt<120ms=1902ms (2026-04-17T01:47:42.260Z), jitter<28ms=401ms (2026-04-17T01:47:40.759Z), jitter<18ms=401ms (2026-04-17T01:47:40.759Z)；target=target>=120kbps=401ms (2026-04-17T01:47:40.759Z), target>=300kbps=401ms (2026-04-17T01:47:40.759Z), target>=500kbps=401ms (2026-04-17T01:47:40.759Z), target>=700kbps=401ms (2026-04-17T01:47:40.759Z), target>=900kbps=17401ms (2026-04-17T01:47:57.759Z)；send=send>=300kbps=401ms (2026-04-17T01:47:40.759Z), send>=500kbps=401ms (2026-04-17T01:47:40.759Z), send>=700kbps=401ms (2026-04-17T01:47:40.759Z), send>=900kbps=1902ms (2026-04-17T01:47:42.260Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=2951ms, recovering=-, stable=451ms, congested=-, firstAction=2951ms, L0=-, L1=2951ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=401ms, recovering=-, stable=16901ms, congested=-, firstAction=16901ms, L0=16901ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### T7
 
@@ -829,9 +824,9 @@
 | 实际动作 | setEncodingParameters（共 2 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:20:56.220Z；firstRecovering=-；firstStable=7116ms (2026-04-13T03:21:03.336Z)；firstL0=7116ms (2026-04-13T03:21:03.336Z) |
-| 恢复诊断 | raw=loss<3%=116ms (2026-04-13T03:20:56.336Z), rtt<120ms=116ms (2026-04-13T03:20:56.336Z), jitter<28ms=1616ms (2026-04-13T03:20:57.836Z), jitter<18ms=1616ms (2026-04-13T03:20:57.836Z)；target=target>=120kbps=116ms (2026-04-13T03:20:56.336Z), target>=300kbps=116ms (2026-04-13T03:20:56.336Z), target>=500kbps=116ms (2026-04-13T03:20:56.336Z), target>=700kbps=116ms (2026-04-13T03:20:56.336Z), target>=900kbps=7616ms (2026-04-13T03:21:03.836Z)；send=send>=300kbps=116ms (2026-04-13T03:20:56.336Z), send>=500kbps=116ms (2026-04-13T03:20:56.336Z), send>=700kbps=116ms (2026-04-13T03:20:56.336Z), send>=900kbps=1116ms (2026-04-13T03:20:57.336Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=3841ms, recovering=-, stable=341ms, congested=-, firstAction=3841ms, L0=-, L1=3841ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=116ms, recovering=-, stable=7116ms, congested=-, firstAction=7116ms, L0=7116ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:48:48.775Z；firstRecovering=-；firstStable=14913ms (2026-04-17T01:49:03.688Z)；firstL0=14913ms (2026-04-17T01:49:03.688Z) |
+| 恢复诊断 | raw=loss<3%=413ms (2026-04-17T01:48:49.188Z), rtt<120ms=1913ms (2026-04-17T01:48:50.688Z), jitter<28ms=413ms (2026-04-17T01:48:49.188Z), jitter<18ms=7413ms (2026-04-17T01:48:56.188Z)；target=target>=120kbps=413ms (2026-04-17T01:48:49.188Z), target>=300kbps=413ms (2026-04-17T01:48:49.188Z), target>=500kbps=413ms (2026-04-17T01:48:49.188Z), target>=700kbps=413ms (2026-04-17T01:48:49.188Z), target>=900kbps=15413ms (2026-04-17T01:49:04.188Z)；send=send>=300kbps=413ms (2026-04-17T01:48:49.188Z), send>=500kbps=413ms (2026-04-17T01:48:49.188Z), send>=700kbps=413ms (2026-04-17T01:48:49.188Z), send>=900kbps=913ms (2026-04-17T01:48:49.688Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=5453ms, recovering=-, stable=453ms, congested=-, firstAction=5453ms, L0=-, L1=5453ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=413ms, recovering=-, stable=14913ms, congested=-, firstAction=14913ms, L0=14913ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### T8
 
@@ -849,12 +844,12 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=early_warning/L1)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=congested/L4, current=congested/L4) |
-| 实际动作 | setEncodingParameters（共 38 次非 noop） |
+| 实际动作 | setEncodingParameters（共 39 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=congested/L4。 |
-| 恢复里程碑 | start=2026-04-13T03:22:05.974Z；firstRecovering=-；firstStable=-；firstL0=- |
+| 恢复里程碑 | start=2026-04-17T01:49:57.182Z；firstRecovering=-；firstStable=-；firstL0=- |
 | 恢复诊断 | - |
-| 关键时间指标 | impairment: warning=124ms, recovering=-, stable=-, congested=2124ms, firstAction=2124ms, L0=-, L1=-, L2=2124ms, L3=2624ms, L4=3124ms, audioOnly=-；recovery: warning=-, recovering=-, stable=-, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 关键时间指标 | impairment: warning=457ms, recovering=-, stable=-, congested=1457ms, firstAction=1457ms, L0=-, L1=-, L2=1457ms, L3=1957ms, L4=2457ms, audioOnly=-；recovery: warning=-, recovering=-, stable=-, congested=-, firstAction=-, L0=-, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### T9
 
@@ -872,12 +867,12 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 239 次非 noop） |
+| 实际动作 | setEncodingParameters（共 229 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:24:32.300Z；firstRecovering=19921ms (2026-04-13T03:24:52.221Z)；firstStable=22397ms (2026-04-13T03:24:54.697Z)；firstL0=23397ms (2026-04-13T03:24:55.697Z) |
-| 恢复诊断 | raw=loss<3%=397ms (2026-04-13T03:24:32.697Z), rtt<120ms=1397ms (2026-04-13T03:24:33.697Z), jitter<28ms=19397ms (2026-04-13T03:24:51.697Z), jitter<18ms=19397ms (2026-04-13T03:24:51.697Z)；target=target>=120kbps=15397ms (2026-04-13T03:24:47.697Z), target>=300kbps=20397ms (2026-04-13T03:24:52.697Z), target>=500kbps=21897ms (2026-04-13T03:24:54.197Z), target>=700kbps=22897ms (2026-04-13T03:24:55.197Z), target>=900kbps=23897ms (2026-04-13T03:24:56.197Z)；send=send>=300kbps=20397ms (2026-04-13T03:24:52.697Z), send>=500kbps=21897ms (2026-04-13T03:24:54.197Z), send>=700kbps=22897ms (2026-04-13T03:24:55.197Z), send>=900kbps=22897ms (2026-04-13T03:24:55.197Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=-, recovering=-, stable=-, congested=29666ms, firstAction=29666ms, L0=-, L1=-, L2=-, L3=-, L4=29666ms, audioOnly=-；recovery: warning=-, recovering=19921ms, stable=22397ms, congested=397ms, firstAction=397ms, L0=23397ms, L1=22397ms, L2=21397ms, L3=19921ms, L4=397ms, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:51:55.579Z；firstRecovering=18385ms (2026-04-17T01:52:13.964Z)；firstStable=20885ms (2026-04-17T01:52:16.464Z)；firstL0=22885ms (2026-04-17T01:52:18.464Z) |
+| 恢复诊断 | raw=loss<3%=885ms (2026-04-17T01:51:56.464Z), rtt<120ms=1385ms (2026-04-17T01:51:56.964Z), jitter<28ms=17885ms (2026-04-17T01:52:13.464Z), jitter<18ms=17885ms (2026-04-17T01:52:13.464Z)；target=target>=120kbps=14885ms (2026-04-17T01:52:10.464Z), target>=300kbps=18885ms (2026-04-17T01:52:14.464Z), target>=500kbps=20385ms (2026-04-17T01:52:15.964Z), target>=700kbps=21885ms (2026-04-17T01:52:17.464Z), target>=900kbps=23384ms (2026-04-17T01:52:18.963Z)；send=send>=300kbps=19385ms (2026-04-17T01:52:14.964Z), send>=500kbps=20385ms (2026-04-17T01:52:15.964Z), send>=700kbps=21885ms (2026-04-17T01:52:17.464Z), send>=900kbps=21885ms (2026-04-17T01:52:17.464Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=2948ms, recovering=19448ms, stable=2448ms, congested=4448ms, firstAction=2948ms, L0=-, L1=2948ms, L2=4448ms, L3=4948ms, L4=5448ms, audioOnly=-；recovery: warning=-, recovering=18385ms, stable=20885ms, congested=385ms, firstAction=385ms, L0=22885ms, L1=21385ms, L2=19885ms, L3=18385ms, L4=385ms, audioOnly=- |
 
 ### T10
 
@@ -894,13 +889,13 @@
 | 预期动作 | 应触发本地降级动作（以 setEncodingParameters 为主），允许进入 congested，最高不超过 L4 |
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
-| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=early_warning/L1) |
-| 实际动作 | setEncodingParameters（共 246 次非 noop） |
+| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
+| 实际动作 | setEncodingParameters（共 234 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
-| 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。注意：recovery window 内最佳状态已恢复，但 case 结束时 current=early_warning/L1，说明收尾阶段仍有波动。 |
-| 恢复里程碑 | start=2026-04-13T03:27:25.004Z；firstRecovering=22785ms (2026-04-13T03:27:47.789Z)；firstStable=25285ms (2026-04-13T03:27:50.289Z)；firstL0=27285ms (2026-04-13T03:27:52.289Z) |
-| 恢复诊断 | raw=loss<3%=285ms (2026-04-13T03:27:25.289Z), rtt<120ms=785ms (2026-04-13T03:27:25.789Z), jitter<28ms=22285ms (2026-04-13T03:27:47.289Z), jitter<18ms=23285ms (2026-04-13T03:27:48.289Z)；target=target>=120kbps=16785ms (2026-04-13T03:27:41.789Z), target>=300kbps=23285ms (2026-04-13T03:27:48.289Z), target>=500kbps=24785ms (2026-04-13T03:27:49.789Z), target>=700kbps=26785ms (2026-04-13T03:27:51.789Z), target>=900kbps=-；send=send>=300kbps=23285ms (2026-04-13T03:27:48.289Z), send>=500kbps=24785ms (2026-04-13T03:27:49.789Z), send>=700kbps=26285ms (2026-04-13T03:27:51.289Z), send>=900kbps=29285ms (2026-04-13T03:27:54.289Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=-, recovering=-, stable=-, congested=26142ms, firstAction=26142ms, L0=-, L1=-, L2=-, L3=-, L4=26142ms, audioOnly=-；recovery: warning=29785ms, recovering=22785ms, stable=25285ms, congested=285ms, firstAction=285ms, L0=27285ms, L1=25785ms, L2=24285ms, L3=22785ms, L4=285ms, audioOnly=- |
+| 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
+| 恢复里程碑 | start=2026-04-17T01:54:24.023Z；firstRecovering=17898ms (2026-04-17T01:54:41.921Z)；firstStable=20398ms (2026-04-17T01:54:44.421Z)；firstL0=22398ms (2026-04-17T01:54:46.421Z) |
+| 恢复诊断 | raw=loss<3%=398ms (2026-04-17T01:54:24.421Z), rtt<120ms=1398ms (2026-04-17T01:54:25.421Z), jitter<28ms=17398ms (2026-04-17T01:54:41.421Z), jitter<18ms=25898ms (2026-04-17T01:54:49.921Z)；target=target>=120kbps=11898ms (2026-04-17T01:54:35.921Z), target>=300kbps=18403ms (2026-04-17T01:54:42.426Z), target>=500kbps=19898ms (2026-04-17T01:54:43.921Z), target>=700kbps=23898ms (2026-04-17T01:54:47.921Z), target>=900kbps=28900ms (2026-04-17T01:54:52.923Z)；send=send>=300kbps=18898ms (2026-04-17T01:54:42.921Z), send>=500kbps=19898ms (2026-04-17T01:54:43.921Z), send>=700kbps=21398ms (2026-04-17T01:54:45.421Z), send>=900kbps=29399ms (2026-04-17T01:54:53.422Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=2460ms, recovering=-, stable=-, congested=3960ms, firstAction=3960ms, L0=-, L1=-, L2=3960ms, L3=4460ms, L4=4960ms, audioOnly=-；recovery: warning=24898ms, recovering=17898ms, stable=20398ms, congested=398ms, firstAction=398ms, L0=22398ms, L1=20898ms, L2=19398ms, L3=17898ms, L4=398ms, audioOnly=- |
 
 ### T11
 
@@ -917,13 +912,13 @@
 | 预期动作 | 应触发本地降级动作（以 setEncodingParameters 为主），允许进入 congested，最高不超过 L4 |
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
-| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=congested/L4) |
-| 实际动作 | setEncodingParameters（共 246 次非 noop） |
+| 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
+| 实际动作 | setEncodingParameters（共 216 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
-| 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。注意：recovery window 内最佳状态已恢复，但 case 结束时 current=congested/L4，说明收尾阶段仍有波动。 |
-| 恢复里程碑 | start=2026-04-13T03:30:12.009Z；firstRecovering=18907ms (2026-04-13T03:30:30.916Z)；firstStable=21408ms (2026-04-13T03:30:33.417Z)；firstL0=23407ms (2026-04-13T03:30:35.416Z) |
-| 恢复诊断 | raw=loss<3%=907ms (2026-04-13T03:30:12.916Z), rtt<120ms=2408ms (2026-04-13T03:30:14.417Z), jitter<28ms=18408ms (2026-04-13T03:30:30.417Z), jitter<18ms=18907ms (2026-04-13T03:30:30.916Z)；target=target>=120kbps=22407ms (2026-04-13T03:30:34.416Z), target>=300kbps=-, target>=500kbps=-, target>=700kbps=-, target>=900kbps=-；send=send>=300kbps=-, send>=500kbps=-, send>=700kbps=-, send>=900kbps=-；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=-, recovering=-, stable=-, congested=20641ms, firstAction=20641ms, L0=-, L1=-, L2=-, L3=-, L4=20641ms, audioOnly=-；recovery: warning=25907ms, recovering=18907ms, stable=21408ms, congested=407ms, firstAction=407ms, L0=23407ms, L1=21408ms, L2=20408ms, L3=18907ms, L4=407ms, audioOnly=- |
+| 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
+| 恢复里程碑 | start=2026-04-17T01:56:52.486Z；firstRecovering=17383ms (2026-04-17T01:57:09.869Z)；firstStable=19883ms (2026-04-17T01:57:12.369Z)；firstL0=21883ms (2026-04-17T01:57:14.369Z) |
+| 恢复诊断 | raw=loss<3%=883ms (2026-04-17T01:56:53.369Z), rtt<120ms=1383ms (2026-04-17T01:56:53.869Z), jitter<28ms=16883ms (2026-04-17T01:57:09.369Z), jitter<18ms=22383ms (2026-04-17T01:57:14.869Z)；target=target>=120kbps=11883ms (2026-04-17T01:57:04.369Z), target>=300kbps=17883ms (2026-04-17T01:57:10.369Z), target>=500kbps=19383ms (2026-04-17T01:57:11.869Z), target>=700kbps=20883ms (2026-04-17T01:57:13.369Z), target>=900kbps=22383ms (2026-04-17T01:57:14.869Z)；send=send>=300kbps=18383ms (2026-04-17T01:57:10.869Z), send>=500kbps=19383ms (2026-04-17T01:57:11.869Z), send>=700kbps=20883ms (2026-04-17T01:57:13.369Z), send>=900kbps=20883ms (2026-04-17T01:57:13.369Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=4449ms, recovering=20449ms, stable=2449ms, congested=12449ms, firstAction=4449ms, L0=5949ms, L1=4449ms, L2=12449ms, L3=12949ms, L4=13449ms, audioOnly=-；recovery: warning=-, recovering=17383ms, stable=19883ms, congested=383ms, firstAction=383ms, L0=21883ms, L1=20383ms, L2=18883ms, L3=17383ms, L4=383ms, audioOnly=- |
 
 ### S1
 
@@ -941,12 +936,12 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=early_warning/L1, current=early_warning/L1)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 22 次非 noop） |
+| 实际动作 | setEncodingParameters（共 21 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:31:05.647Z；firstRecovering=8734ms (2026-04-13T03:31:14.381Z)；firstStable=9234ms (2026-04-13T03:31:14.881Z)；firstL0=13234ms (2026-04-13T03:31:18.881Z) |
-| 恢复诊断 | raw=loss<3%=734ms (2026-04-13T03:31:06.381Z), rtt<120ms=235ms (2026-04-13T03:31:05.882Z), jitter<28ms=235ms (2026-04-13T03:31:05.882Z), jitter<18ms=3234ms (2026-04-13T03:31:08.881Z)；target=target>=120kbps=235ms (2026-04-13T03:31:05.882Z), target>=300kbps=235ms (2026-04-13T03:31:05.882Z), target>=500kbps=235ms (2026-04-13T03:31:05.882Z), target>=700kbps=12734ms (2026-04-13T03:31:18.381Z), target>=900kbps=13735ms (2026-04-13T03:31:19.382Z)；send=send>=300kbps=235ms (2026-04-13T03:31:05.882Z), send>=500kbps=235ms (2026-04-13T03:31:05.882Z), send>=700kbps=235ms (2026-04-13T03:31:05.882Z), send>=900kbps=235ms (2026-04-13T03:31:05.882Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=2351ms, recovering=-, stable=353ms, congested=-, firstAction=2351ms, L0=-, L1=2351ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=8734ms, stable=9234ms, congested=235ms, firstAction=235ms, L0=13234ms, L1=11734ms, L2=235ms, L3=734ms, L4=1234ms, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:57:45.882Z；firstRecovering=8434ms (2026-04-17T01:57:54.316Z)；firstStable=8934ms (2026-04-17T01:57:54.816Z)；firstL0=12934ms (2026-04-17T01:57:58.816Z) |
+| 恢复诊断 | raw=loss<3%=934ms (2026-04-17T01:57:46.816Z), rtt<120ms=434ms (2026-04-17T01:57:46.316Z), jitter<28ms=434ms (2026-04-17T01:57:46.316Z), jitter<18ms=3434ms (2026-04-17T01:57:49.316Z)；target=target>=120kbps=434ms (2026-04-17T01:57:46.316Z), target>=300kbps=434ms (2026-04-17T01:57:46.316Z), target>=500kbps=434ms (2026-04-17T01:57:46.316Z), target>=700kbps=11934ms (2026-04-17T01:57:57.816Z), target>=900kbps=13434ms (2026-04-17T01:57:59.316Z)；send=send>=300kbps=434ms (2026-04-17T01:57:46.316Z), send>=500kbps=434ms (2026-04-17T01:57:46.316Z), send>=700kbps=434ms (2026-04-17T01:57:46.316Z), send>=900kbps=434ms (2026-04-17T01:57:46.316Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=1953ms, recovering=-, stable=453ms, congested=-, firstAction=1953ms, L0=-, L1=1953ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=-, recovering=8434ms, stable=8934ms, congested=434ms, firstAction=434ms, L0=12934ms, L1=11434ms, L2=434ms, L3=934ms, L4=1434ms, audioOnly=- |
 
 ### S2
 
@@ -958,18 +953,18 @@
 | baseline 网络 | 4000kbps / RTT 25ms / loss 0.1% / jitter 5ms |
 | impairment 网络 | 300kbps / RTT 25ms / loss 0.1% / jitter 5ms |
 | recovery 网络 | 4000kbps / RTT 25ms / loss 0.1% / jitter 5ms |
-| 持续时间 | baseline 15000ms / impairment 5000ms / recovery 30000ms |
+| 持续时间 | baseline 15000ms / impairment 8000ms / recovery 32000ms |
 | 预期 QoS 状态 | congested |
 | 预期动作 | 应触发本地降级动作（以 setEncodingParameters 为主），允许进入 congested，最高不超过 L4 |
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=congested/L4, current=congested/L4)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 82 次非 noop） |
+| 实际动作 | setEncodingParameters（共 50 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=congested/L4，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:32:19.733Z；firstRecovering=15899ms (2026-04-13T03:32:35.632Z)；firstStable=18399ms (2026-04-13T03:32:38.132Z)；firstL0=20399ms (2026-04-13T03:32:40.132Z) |
-| 恢复诊断 | raw=loss<3%=899ms (2026-04-13T03:32:20.632Z), rtt<120ms=399ms (2026-04-13T03:32:20.132Z), jitter<28ms=15399ms (2026-04-13T03:32:35.132Z), jitter<18ms=22399ms (2026-04-13T03:32:42.132Z)；target=target>=120kbps=2899ms (2026-04-13T03:32:22.632Z), target>=300kbps=16399ms (2026-04-13T03:32:36.132Z), target>=500kbps=17899ms (2026-04-13T03:32:37.632Z), target>=700kbps=19399ms (2026-04-13T03:32:39.132Z), target>=900kbps=21399ms (2026-04-13T03:32:41.132Z)；send=send>=300kbps=16399ms (2026-04-13T03:32:36.132Z), send>=500kbps=17899ms (2026-04-13T03:32:37.632Z), send>=700kbps=18399ms (2026-04-13T03:32:38.132Z), send>=900kbps=18399ms (2026-04-13T03:32:38.132Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=3360ms, recovering=-, stable=360ms, congested=3860ms, firstAction=3360ms, L0=-, L1=3360ms, L2=3860ms, L3=4360ms, L4=4860ms, audioOnly=-；recovery: warning=22899ms, recovering=15899ms, stable=18399ms, congested=399ms, firstAction=399ms, L0=20399ms, L1=18899ms, L2=17399ms, L3=15899ms, L4=399ms, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:58:42.263Z；firstRecovering=16429ms (2026-04-17T01:58:58.692Z)；firstStable=18930ms (2026-04-17T01:59:01.193Z)；firstL0=20930ms (2026-04-17T01:59:03.193Z) |
+| 恢复诊断 | raw=loss<3%=433ms (2026-04-17T01:58:42.696Z), rtt<120ms=1430ms (2026-04-17T01:58:43.693Z), jitter<28ms=433ms (2026-04-17T01:58:42.696Z), jitter<18ms=15930ms (2026-04-17T01:58:58.193Z)；target=target>=120kbps=9430ms (2026-04-17T01:58:51.693Z), target>=300kbps=16930ms (2026-04-17T01:58:59.193Z), target>=500kbps=18429ms (2026-04-17T01:59:00.692Z), target>=700kbps=19930ms (2026-04-17T01:59:02.193Z), target>=900kbps=21431ms (2026-04-17T01:59:03.694Z)；send=send>=300kbps=16930ms (2026-04-17T01:58:59.193Z), send>=500kbps=18429ms (2026-04-17T01:59:00.692Z), send>=700kbps=18429ms (2026-04-17T01:59:00.692Z), send>=900kbps=19930ms (2026-04-17T01:59:02.193Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=1449ms, recovering=-, stable=450ms, congested=1949ms, firstAction=1449ms, L0=-, L1=1449ms, L2=1949ms, L3=2449ms, L4=2950ms, audioOnly=-；recovery: warning=-, recovering=16429ms, stable=18930ms, congested=433ms, firstAction=433ms, L0=20930ms, L1=19429ms, L2=17930ms, L3=16429ms, L4=433ms, audioOnly=- |
 
 ### S3
 
@@ -990,9 +985,9 @@
 | 实际动作 | setEncodingParameters（共 2 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:33:13.897Z；firstRecovering=-；firstStable=16359ms (2026-04-13T03:33:30.256Z)；firstL0=16359ms (2026-04-13T03:33:30.256Z) |
-| 恢复诊断 | raw=loss<3%=860ms (2026-04-13T03:33:14.757Z), rtt<120ms=1360ms (2026-04-13T03:33:15.257Z), jitter<28ms=9860ms (2026-04-13T03:33:23.757Z), jitter<18ms=12360ms (2026-04-13T03:33:26.257Z)；target=target>=120kbps=360ms (2026-04-13T03:33:14.257Z), target>=300kbps=360ms (2026-04-13T03:33:14.257Z), target>=500kbps=2360ms (2026-04-13T03:33:16.257Z), target>=700kbps=11859ms (2026-04-13T03:33:25.756Z), target>=900kbps=16859ms (2026-04-13T03:33:30.756Z)；send=send>=300kbps=360ms (2026-04-13T03:33:14.257Z), send>=500kbps=360ms (2026-04-13T03:33:14.257Z), send>=700kbps=360ms (2026-04-13T03:33:14.257Z), send>=900kbps=860ms (2026-04-13T03:33:14.757Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=1749ms, recovering=-, stable=250ms, congested=-, firstAction=1749ms, L0=-, L1=1749ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=360ms, recovering=-, stable=16359ms, congested=-, firstAction=16359ms, L0=16359ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T01:59:37.652Z；firstRecovering=-；firstStable=14933ms (2026-04-17T01:59:52.585Z)；firstL0=14933ms (2026-04-17T01:59:52.585Z) |
+| 恢复诊断 | raw=loss<3%=433ms (2026-04-17T01:59:38.085Z), rtt<120ms=933ms (2026-04-17T01:59:38.585Z), jitter<28ms=4933ms (2026-04-17T01:59:42.585Z), jitter<18ms=11933ms (2026-04-17T01:59:49.585Z)；target=target>=120kbps=433ms (2026-04-17T01:59:38.085Z), target>=300kbps=433ms (2026-04-17T01:59:38.085Z), target>=500kbps=433ms (2026-04-17T01:59:38.085Z), target>=700kbps=5933ms (2026-04-17T01:59:43.585Z), target>=900kbps=15433ms (2026-04-17T01:59:53.085Z)；send=send>=300kbps=433ms (2026-04-17T01:59:38.085Z), send>=500kbps=433ms (2026-04-17T01:59:38.085Z), send>=700kbps=433ms (2026-04-17T01:59:38.085Z), send>=900kbps=8933ms (2026-04-17T01:59:46.585Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=1956ms, recovering=-, stable=456ms, congested=-, firstAction=1956ms, L0=-, L1=1956ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=433ms, recovering=-, stable=14933ms, congested=-, firstAction=14933ms, L0=14933ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |
 
 ### S4
 
@@ -1010,9 +1005,9 @@
 | 预期服务端动作 | 无。matrix 为浏览器 loopback 弱网矩阵，仅验证客户端本地 QoS，不验证服务端 override 下发。 |
 | 实际结果 | PASS（符合） |
 | 实际 QoS 状态 | baseline(current=stable/L0)；impairment(评估取 peak=early_warning/L1, current=early_warning/L1)；recovery(评估取 best=stable/L0, current=stable/L0) |
-| 实际动作 | setEncodingParameters（共 43 次非 noop） |
+| 实际动作 | setEncodingParameters（共 2 次非 noop） |
 | 实际服务端动作 | 无。matrix runner 未覆盖服务端 automatic override / room pressure / clear 链路。 |
 | 重点分析 | 判定=符合。重点看 impairment phase 的 peak 和 recovery phase 的 best；本 case 实测为 impaired=early_warning/L1，recovered=stable/L0。 |
-| 恢复里程碑 | start=2026-04-13T03:34:07.828Z；firstRecovering=8560ms (2026-04-13T03:34:16.388Z)；firstStable=11060ms (2026-04-13T03:34:18.888Z)；firstL0=12059ms (2026-04-13T03:34:19.887Z) |
-| 恢复诊断 | raw=loss<3%=58ms (2026-04-13T03:34:07.886Z), rtt<120ms=560ms (2026-04-13T03:34:08.388Z), jitter<28ms=3560ms (2026-04-13T03:34:11.388Z), jitter<18ms=6059ms (2026-04-13T03:34:13.887Z)；target=target>=120kbps=58ms (2026-04-13T03:34:07.886Z), target>=300kbps=58ms (2026-04-13T03:34:07.886Z), target>=500kbps=58ms (2026-04-13T03:34:07.886Z), target>=700kbps=13059ms (2026-04-13T03:34:20.887Z), target>=900kbps=14560ms (2026-04-13T03:34:22.388Z)；send=send>=300kbps=58ms (2026-04-13T03:34:07.886Z), send>=500kbps=58ms (2026-04-13T03:34:07.886Z), send>=700kbps=58ms (2026-04-13T03:34:07.886Z), send>=900kbps=560ms (2026-04-13T03:34:08.388Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
-| 关键时间指标 | impairment: warning=2863ms, recovering=-, stable=364ms, congested=-, firstAction=2863ms, L0=-, L1=2863ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=58ms, recovering=8560ms, stable=11060ms, congested=560ms, firstAction=560ms, L0=12059ms, L1=11060ms, L2=560ms, L3=1060ms, L4=1560ms, audioOnly=- |
+| 恢复里程碑 | start=2026-04-17T02:00:31.065Z；firstRecovering=-；firstStable=12428ms (2026-04-17T02:00:43.493Z)；firstL0=12428ms (2026-04-17T02:00:43.493Z) |
+| 恢复诊断 | raw=loss<3%=928ms (2026-04-17T02:00:31.993Z), rtt<120ms=428ms (2026-04-17T02:00:31.493Z), jitter<28ms=6928ms (2026-04-17T02:00:37.993Z), jitter<18ms=7928ms (2026-04-17T02:00:38.993Z)；target=target>=120kbps=428ms (2026-04-17T02:00:31.493Z), target>=300kbps=428ms (2026-04-17T02:00:31.493Z), target>=500kbps=428ms (2026-04-17T02:00:31.493Z), target>=700kbps=6928ms (2026-04-17T02:00:37.993Z), target>=900kbps=13428ms (2026-04-17T02:00:44.493Z)；send=send>=300kbps=428ms (2026-04-17T02:00:31.493Z), send>=500kbps=428ms (2026-04-17T02:00:31.493Z), send>=700kbps=1428ms (2026-04-17T02:00:32.493Z), send>=900kbps=12928ms (2026-04-17T02:00:43.993Z)；注：诊断基于 recovery trace 中的 raw per-sample signals，不是状态机内部 EWMA。 |
+| 关键时间指标 | impairment: warning=2451ms, recovering=-, stable=451ms, congested=-, firstAction=2451ms, L0=-, L1=2451ms, L2=-, L3=-, L4=-, audioOnly=-；recovery: warning=428ms, recovering=-, stable=12428ms, congested=-, firstAction=12428ms, L0=12428ms, L1=-, L2=-, L3=-, L4=-, audioOnly=- |

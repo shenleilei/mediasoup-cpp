@@ -261,6 +261,45 @@ curl -s "http://127.0.0.1:3000/api/resolve?roomId=test-room&clientIp=1.2.3.4" | 
 - producer 是否在同一个 room/router
 - reconnect 是否把旧 producer 或旧 transport 替换掉了
 
+### 5.5 浏览器房间里看不到 plain-client 的多 track 视频
+
+这是本仓库已经实际遇到过的一类联调现象：
+
+- plain-client 日志里已经出现：
+  - `WS connected`
+  - `Joined room=...`
+  - `Publish -> ... videoTracks=3`
+- 但浏览器页面里仍然看不到任何远端视频。
+
+先不要默认判断为“SFU 需要重启”。
+
+优先排查顺序：
+
+1. 确认 plain-client 进程还活着，而不是源文件已经播完退出。
+2. 确认浏览器加入的是同一个 `roomId`。
+3. 如果浏览器是先 join，plain-client 后 plainPublish，先刷新页面并重新 join 一次。
+4. 再去查服务端是否真的完成了 `plainPublish -> auto-subscribe -> newConsumer` 链路。
+
+本次联调里已经确认：
+
+- 现有 `mediasoup-sfu` 不需要为这类 plain-client 多 track 发布专门重启。
+- 问题更常见地出在“浏览器订阅时机”或“plain-client 已经结束”。
+- 短视频源文件非常容易制造假象：服务端已经建起 producer，但用户打开页面时发送进程已经退出。
+
+手工联调建议：
+
+```bash
+ffmpeg -y -stream_loop 19 -i test_sweep.mp4 -c copy /tmp/test_sweep_x20.mp4
+env PLAIN_CLIENT_VIDEO_TRACK_COUNT=3 \
+  ./client/build/plain-client \
+  127.0.0.1 3000 <roomId> plain_3track_demo /tmp/test_sweep_x20.mp4
+```
+
+当 plain-client 日志已经出现 `Publish -> ... videoTracks=3` 时：
+
+- 优先看页面刷新后重新 join 是否恢复；
+- 只有在 `plainPublish` 本身失败、或服务端房间状态明显异常时，再考虑重启 SFU。
+
 ## 6. `mediasoup-worker` IPC 问题
 
 ### 6.1 典型症状

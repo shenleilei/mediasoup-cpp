@@ -31,6 +31,8 @@
 | 角色 | 建议起点 |
 |---|---|
 | 新接手开发 | [DEVELOPMENT.md](./DEVELOPMENT.md) |
+| 搭环境 / 查依赖 | [dependencies_cn.md](./dependencies_cn.md) → [README.md](../README.md) → [DEVELOPMENT.md](./DEVELOPMENT.md) |
+| 做仓库全量回归 | [README.md](../README.md) → [DEVELOPMENT.md](./DEVELOPMENT.md) → [run_all_tests.sh](../scripts/run_all_tests.sh) / [run_qos_tests.sh](../scripts/run_qos_tests.sh) |
 | 做线上排障 | [troubleshooting_cn.md](./troubleshooting_cn.md) → [architecture_cn.md](./architecture_cn.md) → [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) |
 | 做 QoS 改动 | [qos-status.md](./qos-status.md) → [uplink-qos-design_cn.md](./uplink-qos-design_cn.md) → [downlink-qos-design_cn.md](./downlink-qos-design_cn.md) → [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md) → [downlink-qos-v3-design_cn.md](./downlink-qos-v3-design_cn.md) → [downlink-qos-v3-implementation-plan_cn.md](./downlink-qos-v3-implementation-plan_cn.md) → [run_qos_tests.sh](../scripts/run_qos_tests.sh) |
 | 做 Linux client / PlainTransport C++ client | [plain-client-qos-status.md](./plain-client-qos-status.md) → [linux-client-architecture_cn.md](./linux-client-architecture_cn.md) → [plain-client-qos-parity-checklist.md](./plain-client-qos-parity-checklist.md) |
@@ -47,6 +49,7 @@
 |---|---|
 | [full-architecture-flow_cn.md](./full-architecture-flow_cn.md) | 全链路架构流程图：从信令加入到 Worker 媒体转发，覆盖进程模型、SDP/DTLS/ICE、IPC、BWE、Redis 多节点、QoS。 |
 | [architecture_cn.md](./architecture_cn.md) | 运行时架构详解，覆盖线程/进程模型、关键时序、IPC、多节点与故障恢复。 |
+| [dependencies_cn.md](./dependencies_cn.md) | 构建 / 运行 / 测试依赖总览，统一说明系统包、vendored 依赖、Node harness 依赖和 `setup.sh` / CMake 解析规则。 |
 | [linux-client-architecture_cn.md](./linux-client-architecture_cn.md) | Linux `PlainTransport C++ client` 架构说明，覆盖 FFmpeg、RTP/RTCP、QoS 控制器、多 track 和服务端交互。 |
 | [qos-status.md](./qos-status.md) | QoS 总状态摘要，统一给出 browser uplink / plain-client / downlink 的当前口径与结果入口。 |
 | [plain-client-qos-status.md](./plain-client-qos-status.md) | Linux `PlainTransport C++ client` QoS 当前状态摘要，集中给出签收范围、结果入口与主文档。 |

@@ -5,6 +5,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# ── FFmpeg: prefer pkg-config, fallback to explicit include hints ──
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
+include(ResolveFFmpeg)
+resolve_ffmpeg_include_dirs(MEDIASOUP_FFMPEG_INCLUDE_DIRS)
+message(STATUS "Using FFmpeg include dir: ${MEDIASOUP_FFMPEG_INCLUDE_DIRS}")
+
 # ── Third-party: FlatBuffers (header-only usage) ──
 set(FLATBUFFERS_INCLUDE ${CMAKE_SOURCE_DIR}/third_party/flatbuffers/include)
 
@@ -61,7 +67,7 @@ target_include_directories(mediasoup_lib PUBLIC
     ${GENERATED_INCLUDE}
     ${UWS_INCLUDE}
     ${USOCKETS_DIR}/src
-    /usr/include/ffmpeg
+    ${MEDIASOUP_FFMPEG_INCLUDE_DIRS}
 )
 
 target_link_libraries(mediasoup_lib PUBLIC spdlog::spdlog uSockets pthread avformat avcodec avutil)
@@ -90,7 +96,7 @@ target_include_directories(mediasoup-sfu PRIVATE
     ${GENERATED_INCLUDE}
     ${UWS_INCLUDE}
     ${USOCKETS_DIR}/src
-    /usr/include/ffmpeg
+    ${MEDIASOUP_FFMPEG_INCLUDE_DIRS}
     ${IP2REGION_DIR}
 )
 
@@ -125,6 +131,7 @@ if(BUILD_TESTS)
         tests/test_rtp_types.cpp
         tests/test_stability.cpp
         tests/test_supported_capabilities.cpp
+        tests/test_thread_model.cpp
         tests/test_utils.cpp
         tests/test_worker_queue.cpp
     )
@@ -135,6 +142,7 @@ if(BUILD_TESTS)
         ${JSON_INCLUDE}
         ${GENERATED_INCLUDE}
         ${IP2REGION_DIR}
+        ${MEDIASOUP_FFMPEG_INCLUDE_DIRS}
     )
     target_link_libraries(mediasoup_tests PRIVATE gtest gtest_main mediasoup_lib ip2region)
     add_test(NAME mediasoup_tests COMMAND mediasoup_tests
@@ -146,7 +154,7 @@ if(BUILD_TESTS)
         ${CMAKE_SOURCE_DIR}/tests
         ${CMAKE_SOURCE_DIR}/src
         ${JSON_INCLUDE}
-        /usr/include/ffmpeg
+        ${MEDIASOUP_FFMPEG_INCLUDE_DIRS}
     )
     target_link_libraries(mediasoup_integration_tests PRIVATE gtest gtest_main spdlog::spdlog pthread avformat avcodec avutil)
     add_test(NAME mediasoup_integration_tests COMMAND mediasoup_integration_tests
@@ -247,10 +255,21 @@ if(BUILD_TESTS)
         ${FLATBUFFERS_INCLUDE}
         ${JSON_INCLUDE}
         ${GENERATED_INCLUDE}
-        /usr/include/ffmpeg
+        ${MEDIASOUP_FFMPEG_INCLUDE_DIRS}
     )
     target_link_libraries(mediasoup_qos_recording_accuracy_tests PRIVATE
         gtest gtest_main mediasoup_lib pthread avformat avcodec avutil)
     add_test(NAME mediasoup_qos_recording_accuracy_tests COMMAND mediasoup_qos_recording_accuracy_tests
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+    # Thread model integration tests (requires ffmpeg)
+    add_executable(mediasoup_thread_integration_tests tests/test_thread_integration.cpp)
+    target_include_directories(mediasoup_thread_integration_tests PRIVATE
+        ${JSON_INCLUDE}
+        ${MEDIASOUP_FFMPEG_INCLUDE_DIRS}
+    )
+    target_link_libraries(mediasoup_thread_integration_tests PRIVATE
+        gtest gtest_main pthread avformat avcodec avutil swscale avdevice)
+    add_test(NAME mediasoup_thread_integration_tests COMMAND mediasoup_thread_integration_tests
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 endif()

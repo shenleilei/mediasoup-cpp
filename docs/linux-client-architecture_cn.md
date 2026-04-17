@@ -10,6 +10,9 @@
 > - [plain-client-qos-parity-checklist.md](./plain-client-qos-parity-checklist.md)
 > - [plain-client-qos-case-results.md](./plain-client-qos-case-results.md)
 > - [architecture_cn.md](./architecture_cn.md)
+>
+> 如果目标是评审 Linux client 在“多视频源、同一发布会话、多 track 推流”场景下的目标线程模型，请继续看：
+> - [linux-client-multi-source-thread-model_cn.md](./linux-client-multi-source-thread-model_cn.md)
 
 ## 1. 角色与边界
 
@@ -237,6 +240,32 @@ Linux client 现在支持多个 video track runtime。
 - `plainPublish` 必须使用唯一、非零的 `videoSsrcs`
 
 peer 级预算协调只发生在本地多个 video track 之间，不改变服务端房间模型。
+
+### 7.1 浏览器房间联调经验
+
+在现网 SFU 页面里手工验证 plain-client 多 track 推流时，本仓库已经确认过一条稳定路径：
+
+- 现有 `mediasoup-sfu` 不需要为了 plain-client 多 track 推流专门重启。
+- `PLAIN_CLIENT_VIDEO_TRACK_COUNT=3` 的 plain-client 可以正常对同一个房间发布 `3` 条 video track。
+- 如果浏览器页面是先 `join(roomId)`，之后 plain-client 才执行 `plainPublish`，页面侧可能需要刷新并重新 `join` 一次，才能稳定看到后加入的 plain producer。
+
+本次确认可用的手工验证方式是：
+
+```bash
+ffmpeg -y -stream_loop 19 -i test_sweep.mp4 -c copy /tmp/test_sweep_x20.mp4
+env PLAIN_CLIENT_VIDEO_TRACK_COUNT=3 \
+  ./client/build/plain-client \
+  127.0.0.1 3000 <roomId> plain_3track_demo /tmp/test_sweep_x20.mp4
+```
+
+经验结论：
+
+- 短文件容易在你打开页面前就结束，联调时优先用长文件或循环文件。
+- 如果 `plain-client` 日志已经出现：
+  - `WS connected`
+  - `Joined room=...`
+  - `Publish -> ... videoTracks=3`
+  那么优先怀疑的是浏览器订阅时机，而不是 SFU 没有建起 plain producer。
 
 ## 8. 推荐阅读顺序
 

@@ -309,6 +309,33 @@ public:
 
 	void setOverrideClampLevel(int level) { overrideClampLevel_ = level; }
 	void clearOverride() { overrideClampLevel_ = -1; }
+	void resetExecutor() { executor_.reset(); }
+
+	// For async command model: confirm that a previously queued action was applied by the worker.
+	// This advances controller state that was NOT advanced at queue time (because sink returned false).
+	void confirmAction(const PlannedAction& action) {
+		int prevLevel = currentLevel_;
+		bool prevAudioOnly = inAudioOnlyMode_;
+		if (action.type == ActionType::SetEncodingParameters) {
+			currentLevel_ = action.level;
+			executor_.recordKey(action);
+		} else if (action.type == ActionType::EnterAudioOnly || action.type == ActionType::PauseUpstream) {
+			inAudioOnlyMode_ = true;
+			currentLevel_ = action.level;
+			executor_.recordKey(action);
+		} else if (action.type == ActionType::ExitAudioOnly || action.type == ActionType::ResumeUpstream) {
+			inAudioOnlyMode_ = false;
+			currentLevel_ = action.level;
+			executor_.recordKey(action);
+		}
+		lastActionApplied_ = true;
+		// Start probe if level decreased or exited audio-only (same as onSample path)
+		bool levelDecreased = currentLevel_ < prevLevel;
+		bool exitedAudioOnly = prevAudioOnly && !inAudioOnlyMode_;
+		if ((levelDecreased || exitedAudioOnly) && !probeCtx_.active) {
+			probeCtx_ = beginProbe(prevLevel, currentLevel_, prevAudioOnly, inAudioOnlyMode_, nowMs());
+		}
+	}
 
 	int currentLevel() const { return currentLevel_; }
 	State currentState() const { return smCtx_.state; }

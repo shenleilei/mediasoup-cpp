@@ -10,6 +10,7 @@ const repoRoot = path.resolve(__dirname, '..', '..');
 const tcPath = '/usr/sbin/tc';
 const HARNESS_WARMUP_MS = 2000;
 const DEFAULT_HARNESS_MP4_PATH = path.join(repoRoot, 'test_sweep.mp4');
+const DEFAULT_HARNESS_AV_MP4_PATH = path.join(repoRoot, 'test_sweep_av.mp4');
 const DEFAULT_MATRIX_MP4_PATH = path.join(repoRoot, 'test_sweep_cpp_matrix.mp4');
 
 function runTc(args) {
@@ -87,6 +88,37 @@ export function ensureHarnessMp4(minDurationSeconds = 45) {
   );
 
   return DEFAULT_HARNESS_MP4_PATH;
+}
+
+export function ensureHarnessAvMp4(minDurationSeconds = 45) {
+  const duration = fs.existsSync(DEFAULT_HARNESS_AV_MP4_PATH)
+    ? readMediaDurationSeconds(DEFAULT_HARNESS_AV_MP4_PATH)
+    : null;
+
+  if (duration !== null && duration >= minDurationSeconds - 1) {
+    return DEFAULT_HARNESS_AV_MP4_PATH;
+  }
+
+  execFileSync(
+    'ffmpeg',
+    [
+      '-y',
+      '-f', 'lavfi',
+      '-i', `testsrc=d=${minDurationSeconds}:s=640x480:r=25`,
+      '-f', 'lavfi',
+      '-i', `sine=frequency=1000:duration=${minDurationSeconds}`,
+      '-pix_fmt', 'yuv420p',
+      '-c:v', 'libx264',
+      '-profile:v', 'baseline',
+      '-g', '25',
+      '-c:a', 'aac',
+      '-shortest',
+      DEFAULT_HARNESS_AV_MP4_PATH,
+    ],
+    { stdio: 'ignore' }
+  );
+
+  return DEFAULT_HARNESS_AV_MP4_PATH;
 }
 
 export function sleep(ms) {

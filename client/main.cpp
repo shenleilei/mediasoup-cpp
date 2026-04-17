@@ -1,10 +1,15 @@
 // plain-client: PlainTransport MP4 推流客户端 (zero external WS dependency)
 // Usage: ./plain-client SERVER_IP SERVER_PORT ROOM PEER file.mp4 [--copy]
 // --copy: skip re-encoding, use original H264 (no QoS bitrate control)
+// Env: PLAIN_CLIENT_THREADED=1 to enable multi-thread model (NetworkThread + SourceWorker)
 
 #include <nlohmann/json.hpp>
 #include "RtcpHandler.h"
 #include "qos/QosController.h"
+#include "ThreadTypes.h"
+#include "NetworkThread.h"
+#include "SourceWorker.h"
+#include "ThreadedControlHelpers.h"
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -45,6 +50,7 @@ extern "C" {
 #include <unordered_map>
 #include <vector>
 #include <random>
+#include <set>
 
 using json = nlohmann::json;
 static std::atomic<bool> g_running{true};
@@ -358,15 +364,7 @@ struct WsClient {
 // RTP packetizer
 // ═══════════════════════════════════════════════════════════
 
-static constexpr int kMaxRtpPayload = 1200;
-
-static void rtpHeader(uint8_t* buf, uint8_t pt, uint16_t seq, uint32_t ts, uint32_t ssrc, bool marker) {
-	buf[0] = 0x80;
-	buf[1] = (marker ? 0x80 : 0) | (pt & 0x7F);
-	buf[2] = seq >> 8; buf[3] = seq & 0xFF;
-	buf[4] = ts >> 24; buf[5] = ts >> 16; buf[6] = ts >> 8; buf[7] = ts;
-	buf[8] = ssrc >> 24; buf[9] = ssrc >> 16; buf[10] = ssrc >> 8; buf[11] = ssrc;
-}
+// (kMaxRtpPayload and rtpHeader moved to NetworkThread.h)
 
 // Global RTCP context for RTP packet store (NACK retransmission)
 static RtcpContext* g_rtcp = nullptr;
@@ -696,6 +694,17 @@ static size_t loadVideoTrackCountFromEnv() {
 	return static_cast<size_t>(std::clamp<long>(parsed, 1, 8));
 }
 
+static std::optional<size_t> loadOptionalTrackIndexEnv(const char* name, size_t maxTrackCount) {
+	const char* raw = std::getenv(name);
+	if (!raw || std::strlen(raw) == 0) return std::nullopt;
+	char* end = nullptr;
+	long parsed = std::strtol(raw, &end, 10);
+	if (!end || *end != '\0' || parsed < 0) return std::nullopt;
+	size_t index = static_cast<size_t>(parsed);
+	if (index >= maxTrackCount) return std::nullopt;
+	return index;
+}
+
 static std::vector<double> loadVideoTrackWeightsFromEnv(size_t trackCount) {
 	std::vector<double> weights(trackCount, 1.0);
 	const char* raw = std::getenv("PLAIN_CLIENT_VIDEO_TRACK_WEIGHTS");
@@ -714,6 +723,19 @@ static std::vector<double> loadVideoTrackWeightsFromEnv(size_t trackCount) {
 	}
 
 	return weights;
+}
+
+static std::vector<std::string> loadVideoSourcePathsFromEnv() {
+	std::vector<std::string> paths;
+	const char* raw = std::getenv("PLAIN_CLIENT_VIDEO_SOURCES");
+	if (!raw || std::strlen(raw) == 0) return paths;
+
+	std::istringstream ss(raw);
+	std::string item;
+	while (std::getline(ss, item, ',')) {
+		if (!item.empty()) paths.push_back(item);
+	}
+	return paths;
 }
 
 static std::optional<qos::EncodingParameters> getEncodingParametersForLevel(
@@ -885,29 +907,46 @@ int main(int argc, char* argv[]) {
 	const bool matrixLocalOnly = envFlagEnabled("QOS_TEST_MATRIX_LOCAL_ONLY");
 	const auto testClientStatsPayloads = loadTestClientStatsPayloadsFromEnv();
 	const auto testWsRequests = loadTestWsRequestsFromEnv();
+	const auto forcedStaleTrackIndex = loadOptionalTrackIndexEnv("QOS_TEST_FORCE_STALE_TRACK_INDEX", videoTrackCount);
+	const auto videoSourcePaths = loadVideoSourcePathsFromEnv();
 	MatrixTestRuntimeState matrixTestRuntime;
 	matrixTestRuntime.startMs = steadyNowMs();
+	const bool threadedRequested = envFlagEnabled("PLAIN_CLIENT_THREADED") && !copyMode;
+	const auto distinctSourceCount = videoSourcePaths.size();
+	// Threaded mode requires either a single track, or exactly one distinct source per track.
+	const bool threadedMode = threadedRequested && (videoTrackCount == 1 || distinctSourceCount >= videoTrackCount);
+	if (threadedRequested && !threadedMode) {
+		printf("WARN: PLAIN_CLIENT_THREADED ignored — need %zu distinct PLAIN_CLIENT_VIDEO_SOURCES (got %zu), using legacy path\n",
+			videoTrackCount, distinctSourceCount);
+	}
 
 	signal(SIGINT, onSignal);
 	signal(SIGPIPE, SIG_IGN);
 
-	// Open MP4
+	const bool threadedOwnsAllVideoInputs = threadedMode && videoSourcePaths.size() >= videoTrackCount;
+
+	// Open MP4 bootstrap only when the current runtime path still depends on argv[5].
 	AVFormatContext* fmtCtx = nullptr;
-	if (avformat_open_input(&fmtCtx, mp4Path, nullptr, nullptr) < 0) {
-		fprintf(stderr, "Cannot open %s\n", mp4Path); return 1;
-	}
-	avformat_find_stream_info(fmtCtx, nullptr);
 	int vidIdx = -1, audIdx = -1;
-	for (unsigned i = 0; i < fmtCtx->nb_streams; i++) {
-		if (fmtCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO && vidIdx < 0) vidIdx = i;
-		if (fmtCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO && audIdx < 0) audIdx = i;
+	if (!threadedOwnsAllVideoInputs) {
+		if (avformat_open_input(&fmtCtx, mp4Path, nullptr, nullptr) < 0) {
+			fprintf(stderr, "Cannot open %s\n", mp4Path); return 1;
+		}
+		avformat_find_stream_info(fmtCtx, nullptr);
+		for (unsigned i = 0; i < fmtCtx->nb_streams; i++) {
+			if (fmtCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO && vidIdx < 0) vidIdx = i;
+			if (fmtCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO && audIdx < 0) audIdx = i;
+		}
+	} else {
+		printf("[threaded] skipping MP4 bootstrap for %zu explicit video source(s)\n",
+			videoSourcePaths.size());
 	}
 	printf("MP4: video=%d audio=%d\n", vidIdx, audIdx);
 
 	// Setup H264 bitstream filter (MP4 AVCC → Annex-B for RTP)
 	const AVBitStreamFilter* bsf = av_bsf_get_by_name("h264_mp4toannexb");
 	AVBSFContext* bsfCtx = nullptr;
-	if (vidIdx >= 0 && bsf) {
+	if (fmtCtx && vidIdx >= 0 && bsf) {
 		av_bsf_alloc(bsf, &bsfCtx);
 		avcodec_parameters_copy(bsfCtx->par_in, fmtCtx->streams[vidIdx]->codecpar);
 		bsfCtx->time_base_in = fmtCtx->streams[vidIdx]->time_base;
@@ -917,7 +956,7 @@ int main(int argc, char* argv[]) {
 	// Audio transcode setup (AAC→Opus)
 	AVCodecContext* adec = nullptr, *aenc = nullptr;
 	AVFrame* aframe = nullptr;
-	if (audIdx >= 0) {
+	if (fmtCtx && audIdx >= 0) {
 		auto* par = fmtCtx->streams[audIdx]->codecpar;
 		auto* dec = avcodec_find_decoder(par->codec_id);
 		if (dec) {
@@ -1003,7 +1042,7 @@ int main(int argc, char* argv[]) {
 		track.configuredVideoFps = safeFps;
 		return true;
 	};
-	if (!copyMode && vidIdx >= 0) {
+	if (!copyMode && fmtCtx && vidIdx >= 0) {
 		auto* par = fmtCtx->streams[vidIdx]->codecpar;
 		auto* dec = avcodec_find_decoder(par->codec_id);
 		if (dec) {
@@ -1294,6 +1333,512 @@ int main(int argc, char* argv[]) {
 		}
 
 			int64_t lastPeerQosSampleMs = 0;
+
+		if (threadedMode) {
+			// ═══════════════════════════════════════════════════════════
+			// THREADED PATH: NetworkThread + SourceWorker(s)
+			// ═══════════════════════════════════════════════════════════
+			printf("[threaded] starting multi-thread pipeline (%zu tracks)\n", videoTracks.size());
+			g_rtcp = nullptr; // legacy RTCP not used in threaded mode
+
+			// Queues
+			struct PerTrackQueues {
+				mt::SpscQueue<mt::EncodedAccessUnit, mt::kEncodedAuQueueCapacity> auQueue;
+				mt::SpscQueue<mt::TrackControlCommand, mt::kControlCommandQueueCapacity> ctrlQueue;
+				mt::SpscQueue<mt::NetworkToSourceCommand, mt::kNetworkSourceQueueCapacity> netCmdQueue;
+				mt::SpscQueue<mt::CommandAck, mt::kCommandAckQueueCapacity> ackQueue;
+			};
+			std::vector<std::unique_ptr<PerTrackQueues>> queues(videoTracks.size());
+			for (auto& q : queues) q = std::make_unique<PerTrackQueues>();
+
+			mt::SpscQueue<mt::SenderStatsSnapshot, mt::kStatsQueueCapacity> statsQueue;
+			mt::SpscQueue<mt::NetworkControlCommand, mt::kControlCommandQueueCapacity> networkControlQueue;
+			mt::SpscQueue<mt::CommandAck, mt::kCommandAckQueueCapacity> networkAckQueue;
+
+			// Network thread
+			NetworkThread::Config netCfg;
+			netCfg.udpFd = udp;
+			netCfg.audioSsrc = aSsrc;
+			netCfg.audioPt = aPt;
+			NetworkThread netThread(netCfg);
+			netThread.statsQueue = &statsQueue;
+			netThread.controlQueue = &networkControlQueue;
+			netThread.commandAckQueue = &networkAckQueue;
+
+			for (size_t i = 0; i < videoTracks.size(); ++i) {
+				netThread.registerVideoTrack(static_cast<uint32_t>(i),
+					videoTracks[i].ssrc, videoTracks[i].payloadType);
+				NetworkThread::SourceInput si;
+				si.auQueue = &queues[i]->auQueue;
+				si.keyframeQueue = &queues[i]->netCmdQueue;
+				netThread.addSourceInput(si);
+			}
+
+			netThread.sendComediaProbe();
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+			// Audio path: dedicated thread opens MP4 independently, reads only audio, transcodes to Opus
+			mt::SpscQueue<mt::EncodedAccessUnit, mt::kEncodedAuQueueCapacity> audioAuQueue;
+			std::atomic<bool> audioRunning{false};
+			std::atomic<bool> audioActuallyStarted{false};
+			std::thread audioThread;
+			const bool hasAudioPrecondition = (audIdx >= 0 && adec && aenc);
+			if (hasAudioPrecondition) {
+				netThread.audioAuQueue = &audioAuQueue;
+				audioRunning = true;
+				audioThread = std::thread([&audioRunning, &audioActuallyStarted, &audioAuQueue, &netThread, mp4Path, aSsrc, aPt]() {
+					// Open MP4 independently for audio
+					AVFormatContext* aFmtCtx = nullptr;
+					if (avformat_open_input(&aFmtCtx, mp4Path, nullptr, nullptr) < 0) {
+						printf("[audio] cannot open %s\n", mp4Path); return;
+					}
+					avformat_find_stream_info(aFmtCtx, nullptr);
+					int aIdx = -1;
+					for (unsigned i = 0; i < aFmtCtx->nb_streams; i++)
+						if (aFmtCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) { aIdx = i; break; }
+					if (aIdx < 0) { avformat_close_input(&aFmtCtx); return; }
+
+					auto* par = aFmtCtx->streams[aIdx]->codecpar;
+					auto* dec = avcodec_find_decoder(par->codec_id);
+					if (!dec) { avformat_close_input(&aFmtCtx); return; }
+					auto* aDec = avcodec_alloc_context3(dec);
+					avcodec_parameters_to_context(aDec, par);
+					avcodec_open2(aDec, dec, nullptr);
+
+					auto* enc = avcodec_find_encoder(AV_CODEC_ID_OPUS);
+					if (!enc) { avcodec_free_context(&aDec); avformat_close_input(&aFmtCtx); return; }
+					auto* aEnc = avcodec_alloc_context3(enc);
+					aEnc->sample_rate = 48000; aEnc->channels = 2;
+					aEnc->channel_layout = AV_CH_LAYOUT_STEREO;
+					aEnc->bit_rate = 64000; aEnc->sample_fmt = AV_SAMPLE_FMT_FLT;
+					if (avcodec_open2(aEnc, enc, nullptr) < 0) {
+						avcodec_free_context(&aEnc); avcodec_free_context(&aDec);
+						avformat_close_input(&aFmtCtx); return;
+					}
+
+					AVFrame* aFrame = av_frame_alloc();
+					AVPacket* pkt = av_packet_alloc();
+					audioActuallyStarted = true;
+					auto t0 = std::chrono::steady_clock::now();
+					double firstPts = -1;
+
+					while (audioRunning.load() && av_read_frame(aFmtCtx, pkt) >= 0) {
+						if (pkt->stream_index != aIdx) { av_packet_unref(pkt); continue; }
+						double pts = pkt->pts * av_q2d(aFmtCtx->streams[aIdx]->time_base);
+						if (firstPts < 0) firstPts = pts;
+						auto target = t0 + std::chrono::microseconds((int64_t)((pts - firstPts) * 1e6));
+						std::this_thread::sleep_until(target);
+						if (!audioRunning.load()) { av_packet_unref(pkt); break; }
+
+						if (avcodec_send_packet(aDec, pkt) == 0) {
+							while (avcodec_receive_frame(aDec, aFrame) == 0) {
+								if (avcodec_send_frame(aEnc, aFrame) == 0) {
+									AVPacket* ep = av_packet_alloc();
+									while (avcodec_receive_packet(aEnc, ep) == 0) {
+										mt::EncodedAccessUnit au;
+										au.ssrc = aSsrc;
+										au.payloadType = aPt;
+										au.rtpTimestamp = (uint32_t)(pts * 48000);
+										au.assign(ep->data, ep->size);
+										audioAuQueue.tryPush(std::move(au));
+										netThread.wakeup();
+										av_packet_unref(ep);
+									}
+									av_packet_free(&ep);
+								}
+							}
+						}
+						av_packet_unref(pkt);
+					}
+					av_packet_free(&pkt); av_frame_free(&aFrame);
+					avcodec_free_context(&aEnc); avcodec_free_context(&aDec);
+					avformat_close_input(&aFmtCtx);
+					printf("[audio] thread finished\n");
+				});
+			}
+
+			netThread.start();
+
+			// Wait briefly for audio thread to report init status
+			if (hasAudioPrecondition) {
+				for (int w = 0; w < 20 && !audioActuallyStarted.load() && audioRunning.load(); ++w)
+					std::this_thread::sleep_for(std::chrono::milliseconds(50));
+			}
+			const bool hasAudio = audioActuallyStarted.load();
+			if (hasAudioPrecondition && !hasAudio)
+				printf("[threaded] WARN: audio thread failed to initialize, treating as no-audio peer\n");
+
+			// Source workers
+			std::vector<std::unique_ptr<SourceWorker>> workers;
+			for (size_t i = 0; i < videoTracks.size(); ++i) {
+				SourceWorker::Config swCfg;
+				swCfg.trackIndex = static_cast<uint32_t>(i);
+				swCfg.ssrc = videoTracks[i].ssrc;
+				swCfg.payloadType = videoTracks[i].payloadType;
+				swCfg.initialBitrate = videoTracks[i].encBitrate;
+				swCfg.initialFps = videoTracks[i].configuredVideoFps;
+				swCfg.scaleResolutionDownBy = videoTracks[i].scaleResolutionDownBy;
+
+				if (i < videoSourcePaths.size() && videoSourcePaths[i].rfind("/dev/", 0) == 0) {
+					swCfg.inputType = SourceWorker::InputType::V4L2Camera;
+					swCfg.inputPath = videoSourcePaths[i];
+					swCfg.captureWidth = 1280;
+					swCfg.captureHeight = 720;
+					swCfg.captureFps = swCfg.initialFps;
+					printf("[threaded] track %zu → camera %s\n", i, swCfg.inputPath.c_str());
+				} else {
+					swCfg.inputType = SourceWorker::InputType::File;
+					swCfg.inputPath = (i < videoSourcePaths.size()) ? videoSourcePaths[i] : std::string(mp4Path);
+					printf("[threaded] track %zu → file %s\n", i, swCfg.inputPath.c_str());
+				}
+				auto w = std::make_unique<SourceWorker>(swCfg);
+				w->outputQueue = &queues[i]->auQueue;
+				w->controlQueue = &queues[i]->ctrlQueue;
+				w->networkCmdQueue = &queues[i]->netCmdQueue;
+				w->ackQueue = &queues[i]->ackQueue;
+				w->networkWakeupFn = [&netThread]() { netThread.wakeup(); };
+				w->start();
+				workers.push_back(std::move(w));
+			}
+
+			// Per-track pending command state for ack matching
+			std::vector<mt::PendingTrackCommand> pendingCommands(videoTracks.size());
+			std::vector<mt::ThreadedTrackControlState> trackControlStates(videoTracks.size());
+			for (size_t i = 0; i < videoTracks.size(); ++i) {
+				trackControlStates[i].encBitrate = videoTracks[i].encBitrate;
+				trackControlStates[i].configuredVideoFps = videoTracks[i].configuredVideoFps;
+				trackControlStates[i].scaleResolutionDownBy = videoTracks[i].scaleResolutionDownBy;
+				trackControlStates[i].videoSuppressed = videoTracks[i].videoSuppressed;
+				trackControlStates[i].configGeneration = 0;
+			}
+			uint64_t nextCommandId = 1;
+
+			// Re-create QoS controllers with queue-based actionSink for threaded mode
+			for (size_t i = 0; i < videoTracks.size(); ++i) {
+				auto& track = videoTracks[i];
+				if (copyMode) continue;
+				auto* ctrlQ = &queues[i]->ctrlQueue;
+				qos::PublisherQosController::Options qosOpts;
+				qosOpts.source = qos::Source::Camera;
+				qosOpts.trackId = track.trackId;
+				qosOpts.producerId = track.producerId;
+				qosOpts.initialLevel = 0;
+				qosOpts.peerHasAudioTrack = hasAudio;
+				auto* trackControl = &trackControlStates[i];
+				qosOpts.actionSink = [ctrlQ, &networkControlQueue, &netThread, ssrc = track.ssrc,
+					payloadType = track.payloadType, idx = static_cast<uint32_t>(i),
+					&nextCommandId, &pendingCommands, trackControl](const qos::PlannedAction& action) -> bool {
+					if (idx >= pendingCommands.size()) return false;
+					const bool queued =
+						(action.type == qos::ActionType::SetEncodingParameters && action.encodingParameters.has_value())
+							? mt::enqueueTrackAction(action, idx, nextCommandId, *ctrlQ,
+								pendingCommands[idx], trackControl->configGeneration)
+							: mt::enqueueNetworkTrackAction(action, idx, ssrc, payloadType, nextCommandId,
+								networkControlQueue, pendingCommands[idx]);
+					if (!queued) return false;
+					netThread.wakeup();
+					return false; // pending — controller must not advance state
+				};
+				qosOpts.sendSnapshot = [&track](const nlohmann::json&) {
+					track.snapshotRequested = true;
+				};
+				track.qosCtrl = std::make_unique<qos::PublisherQosController>(qosOpts);
+				trackControlStates[i].qosCtrl = track.qosCtrl.get();
+			}
+
+			// Control loop: QoS sampling + stats collection
+			// Cache latest network stats per track
+			std::vector<mt::ThreadedTrackStatsState> trackStats(videoTracks.size());
+			int64_t lastPeerQosSampleMsT = 0;
+
+			while (g_running) {
+				ws.dispatchNotifications();
+
+				// Collect stats from network thread
+				mt::SenderStatsSnapshot snap;
+				while (statsQueue.tryPop(snap)) {
+					if (snap.trackIndex < videoTracks.size()) {
+						trackStats[snap.trackIndex].latest = snap;
+						trackStats[snap.trackIndex].hasData = true;
+					}
+				}
+
+				// Collect command acks from source workers — match by commandId
+				mt::CommandAck netAck;
+				while (networkAckQueue.tryPop(netAck)) {
+					if (netAck.trackIndex >= videoTracks.size()) continue;
+					auto& track = videoTracks[netAck.trackIndex];
+					auto& pc = pendingCommands[netAck.trackIndex];
+					auto& trackState = trackControlStates[netAck.trackIndex];
+					if (!mt::applyCommandAck(netAck, pc, trackState, trackStats[netAck.trackIndex])) continue;
+					track.encBitrate = trackState.encBitrate;
+					track.configuredVideoFps = trackState.configuredVideoFps;
+					track.scaleResolutionDownBy = trackState.scaleResolutionDownBy;
+					track.videoSuppressed = trackState.videoSuppressed;
+				}
+
+				for (size_t i = 0; i < queues.size(); ++i) {
+					mt::CommandAck ack;
+					while (queues[i]->ackQueue.tryPop(ack)) {
+						if (ack.trackIndex >= videoTracks.size()) continue;
+						auto& track = videoTracks[ack.trackIndex];
+						auto& pc = pendingCommands[ack.trackIndex];
+						auto& trackState = trackControlStates[ack.trackIndex];
+						if (!mt::applyCommandAck(ack, pc, trackState, trackStats[ack.trackIndex])) continue;
+						track.encBitrate = trackState.encBitrate;
+						track.configuredVideoFps = trackState.configuredVideoFps;
+						track.scaleResolutionDownBy = trackState.scaleResolutionDownBy;
+						track.videoSuppressed = trackState.videoSuppressed;
+						if (!ack.applied && !ack.reason.empty())
+							printf("[QoS:%s] command %llu rejected: %s\n",
+								track.trackId.c_str(), (unsigned long long)ack.commandId, ack.reason.c_str());
+					}
+				}
+
+				// QoS sampling (same cadence as legacy path)
+				bool hasVideoQos = false;
+				int sampleIntervalMs = std::numeric_limits<int>::max();
+				for (const auto& track : videoTracks) {
+					if (!track.qosCtrl) continue;
+					hasVideoQos = true;
+					sampleIntervalMs = std::min(sampleIntervalMs, track.qosCtrl->getRuntimeSettings().sampleIntervalMs);
+				}
+
+				if (hasVideoQos && sampleIntervalMs < std::numeric_limits<int>::max()) {
+					auto now = steadyNowMs();
+					if (now - lastPeerQosSampleMsT >= sampleIntervalMs) {
+						lastPeerQosSampleMsT = now;
+						requestServerProducerStats();
+
+						std::optional<json> cachedPeerStats;
+						{
+							std::lock_guard<std::mutex> lock(cachedServerStatsResponse->mutex);
+							const int64_t maxStatsAgeMs = std::max<int64_t>(5000, static_cast<int64_t>(sampleIntervalMs) * 4);
+							if (cachedServerStatsResponse->latestPeerStats.has_value()
+								&& now - cachedServerStatsResponse->updatedAtSteadyMs <= maxStatsAgeMs) {
+								cachedPeerStats = *cachedServerStatsResponse->latestPeerStats;
+							}
+						}
+
+						std::set<std::string> sampledTrackIds;
+						for (size_t ti = 0; ti < videoTracks.size(); ++ti) {
+							auto& track = videoTracks[ti];
+							if (!track.qosCtrl) continue;
+
+							qos::RawSenderSnapshot qSnap;
+							qSnap.timestampMs = trackStats[ti].hasData ? trackStats[ti].latest.timestampMs : now;
+							qSnap.trackId = track.trackId;
+							qSnap.producerId = track.producerId;
+							qSnap.source = qos::Source::Camera;
+							qSnap.kind = qos::TrackKind::Video;
+							qSnap.targetBitrateBps = track.encBitrate;
+							qSnap.configuredBitrateBps = track.encBitrate;
+
+							// Fill from network thread stats (only if fresh)
+							bool statsFresh = trackStats[ti].hasData
+								&& trackStats[ti].latest.generation > trackStats[ti].lastConsumedGeneration;
+
+							// Check if this specific track has server stats
+							std::optional<ServerProducerStats> serverStats;
+							if (cachedPeerStats.has_value() && !track.producerId.empty()) {
+								serverStats = parseServerProducerStats(*cachedPeerStats, track.producerId, "video");
+							}
+							if (forcedStaleTrackIndex.has_value() && ti == *forcedStaleTrackIndex) {
+								statsFresh = false;
+								serverStats = std::nullopt;
+							}
+
+							if (!mt::shouldSampleTrack(statsFresh, serverStats.has_value())) {
+								// No fresh local stats and no server stats for THIS track
+								continue;
+							}
+							if (statsFresh) {
+								trackStats[ti].lastConsumedGeneration = trackStats[ti].latest.generation;
+								auto& ns = trackStats[ti].latest;
+								qSnap.bytesSent = ns.octetCount;
+								qSnap.packetsSent = ns.packetCount;
+								qSnap.packetsLost = ns.rrCumulativeLost;
+								qSnap.roundTripTimeMs = ns.rrRttMs;
+								qSnap.jitterMs = ns.rrJitterMs;
+							}
+
+							// Server stats overlay
+							double observedBitrateBps = 0.0;
+							bool usingMatrixTestProfile = false;
+							if (serverStats.has_value()) {
+								auto parsed = *serverStats;
+								if (!track.lossBaseInitialized) {
+									track.lossBase = parsed.packetsLost;
+									track.lossBaseInitialized = true;
+								}
+								if (parsed.packetsLost >= track.lossBase)
+									parsed.packetsLost -= track.lossBase;
+								else { track.lossBase = parsed.packetsLost; parsed.packetsLost = 0; }
+								if (parsed.byteCount > 0) qSnap.bytesSent = parsed.byteCount;
+								if (parsed.packetCount > 0) qSnap.packetsSent = parsed.packetCount;
+								qSnap.packetsLost = parsed.packetsLost;
+								if (parsed.roundTripTimeMs >= 0) qSnap.roundTripTimeMs = parsed.roundTripTimeMs;
+								if (parsed.jitterMs >= 0) qSnap.jitterMs = parsed.jitterMs;
+								observedBitrateBps = parsed.bitrateBps;
+							}
+							if (matrixTestProfile.has_value() && track.index == 0) {
+								if (auto syntheticSendBps = applyMatrixTestProfile(
+									qSnap,
+									track.encBitrate,
+									*matrixTestProfile,
+									matrixTestRuntime,
+									now)) {
+									observedBitrateBps = *syntheticSendBps;
+									usingMatrixTestProfile = true;
+								}
+							}
+
+							if (trackStats[ti].actualWidth > 0) {
+								qSnap.frameWidth = trackStats[ti].actualWidth;
+								qSnap.frameHeight = trackStats[ti].actualHeight;
+							}
+							qSnap.framesPerSecond = track.configuredVideoFps;
+							if (observedBitrateBps > 0.0 && qSnap.targetBitrateBps > 0
+								&& observedBitrateBps < qSnap.targetBitrateBps * qos::NETWORK_CONGESTED_UTILIZATION) {
+								qSnap.qualityLimitationReason = qos::QualityLimitationReason::Bandwidth;
+							}
+
+							track.qosCtrl->onSample(qSnap);
+							printf("[QOS_TRACE] tsMs=%lld track=%s state=%s level=%d mode=%s sample=%s bitrateBps=%d sendBps=%.0f packetsLost=%llu rttMs=%.1f jitterMs=%.1f width=%d height=%d fps=%d suppressed=%d\n",
+								static_cast<long long>(wallNowMs()),
+								track.trackId.c_str(),
+								qos::stateStr(track.qosCtrl->currentState()),
+								track.qosCtrl->currentLevel(),
+								track.videoSuppressed ? "audio-only" : "audio-video",
+								usingMatrixTestProfile ? "matrix" : (serverStats.has_value() ? "server" : (statsFresh ? "local" : "stale")),
+								track.encBitrate,
+								observedBitrateBps > 0.0 ? observedBitrateBps : qSnap.targetBitrateBps,
+								static_cast<unsigned long long>(qSnap.packetsLost),
+								qSnap.roundTripTimeMs,
+								qSnap.jitterMs,
+								qSnap.frameWidth,
+								qSnap.frameHeight,
+								static_cast<int>(qSnap.framesPerSecond),
+								track.videoSuppressed ? 1 : 0);
+							sampledTrackIds.insert(track.trackId);
+						}
+
+						// Peer-level budget coordination (§13, same as legacy path)
+						std::vector<qos::PeerTrackState> peerTrackStates;
+						std::map<std::string, qos::DerivedSignals> peerTrackSignals;
+						std::map<std::string, qos::PlannedAction> peerLastActions;
+						std::map<std::string, qos::RawSenderSnapshot> peerRawSnapshots;
+						std::map<std::string, bool> peerActionApplied;
+						std::vector<qos::TrackBudgetRequest> trackBudgetRequests;
+						uint64_t totalDesiredBudgetBps = 0;
+						uint64_t totalObservedBudgetBps = 0;
+						bool anyBandwidthLimited = false;
+						bool peerSnapshotRequested = false;
+
+						for (auto& track : videoTracks) {
+							if (!track.qosCtrl) continue;
+							if (sampledTrackIds.find(track.trackId) == sampledTrackIds.end()) continue;
+							peerTrackStates.push_back(track.qosCtrl->getTrackState());
+							if (auto sig = track.qosCtrl->lastSignals())
+								peerTrackSignals[track.trackId] = *sig;
+							peerLastActions[track.trackId] = track.qosCtrl->lastAction();
+							peerActionApplied[track.trackId] = track.qosCtrl->lastActionWasApplied();
+							peerSnapshotRequested = peerSnapshotRequested || track.snapshotRequested;
+							track.snapshotRequested = false;  // reset after reading
+
+							// Fill raw snapshot for clientStats payload
+							{
+								qos::RawSenderSnapshot raw;
+								raw.timestampMs = steadyNowMs();
+								raw.trackId = track.trackId;
+								raw.producerId = track.producerId;
+								raw.source = qos::Source::Camera;
+								raw.kind = qos::TrackKind::Video;
+								raw.targetBitrateBps = track.encBitrate;
+								raw.configuredBitrateBps = track.encBitrate;
+								raw.framesPerSecond = track.configuredVideoFps;
+								size_t ti = track.index;
+								if (ti < trackStats.size() && trackStats[ti].hasData) {
+									auto& ns = trackStats[ti].latest;
+									raw.bytesSent = ns.octetCount;
+									raw.packetsSent = ns.packetCount;
+									raw.packetsLost = ns.rrCumulativeLost;
+									raw.roundTripTimeMs = ns.rrRttMs;
+									raw.jitterMs = ns.rrJitterMs;
+								}
+								if (ti < trackStats.size()) {
+									raw.frameWidth = trackStats[ti].actualWidth;
+									raw.frameHeight = trackStats[ti].actualHeight;
+								}
+								peerRawSnapshots[track.trackId] = raw;
+							}
+
+							const uint32_t desiredBps = getTrackDesiredBitrateBps(track);
+							totalDesiredBudgetBps += desiredBps;
+							if (auto sig = track.qosCtrl->lastSignals()) {
+								if (sig->bandwidthLimited) anyBandwidthLimited = true;
+								totalObservedBudgetBps += sig->sendBitrateBps > 0
+									? static_cast<uint64_t>(std::llround(sig->sendBitrateBps)) : desiredBps;
+							} else {
+								totalObservedBudgetBps += desiredBps;
+							}
+							trackBudgetRequests.push_back({
+								track.trackId, qos::Source::Camera, qos::TrackKind::Video,
+								getTrackMinBitrateBps(track), desiredBps, desiredBps, track.weight, false
+							});
+						}
+
+						if (trackBudgetRequests.size() > 1) {
+							uint32_t totalBudgetBps = static_cast<uint32_t>(
+								std::min<uint64_t>(std::numeric_limits<uint32_t>::max(), totalDesiredBudgetBps));
+							if (anyBandwidthLimited && totalObservedBudgetBps > 0)
+								totalBudgetBps = std::min<uint32_t>(totalBudgetBps, static_cast<uint32_t>(
+									std::min<uint64_t>(std::numeric_limits<uint32_t>::max(), totalObservedBudgetBps)));
+							auto budgetDecision = qos::allocatePeerTrackBudgets(totalBudgetBps, trackBudgetRequests);
+							auto overrides = qos::buildCoordinationOverrides(peerTrackStates, budgetDecision);
+							for (auto& track : videoTracks) {
+								if (!track.qosCtrl) continue;
+								auto it = overrides.find(track.trackId);
+								track.qosCtrl->setCoordinationOverride(it != overrides.end() ? it->second : std::optional<qos::CoordinationOverride>{});
+							}
+						} else {
+							for (auto& track : videoTracks)
+								if (track.qosCtrl) track.qosCtrl->setCoordinationOverride(std::nullopt);
+						}
+
+						// clientStats publish
+						if (peerSnapshotRequested && !peerTrackStates.empty()) {
+							static int peerSnapshotSeqT = 0;
+							if (ws.pendingRequestCount() < 8) {
+								auto peerDecision = qos::buildPeerDecision(peerTrackStates);
+								auto snap = qos::serializeSnapshot(
+									peerSnapshotSeqT++, wallNowMs(), peerDecision.peerQuality, false,
+									peerTrackStates, peerTrackSignals, peerLastActions, peerRawSnapshots,
+									peerActionApplied, hasAudio);
+								ws.requestAsync("clientStats", snap,
+									[](bool ok, const json&, const std::string& err) {
+										if (!ok) printf("[QoS] clientStats failed: %s\n", err.c_str());
+									});
+							}
+						}
+					}
+				}
+
+				std::this_thread::sleep_for(std::chrono::milliseconds(50));
+			}
+
+			// Shutdown: source workers first, then audio, then network thread
+			for (auto& w : workers) w->stop();
+			audioRunning = false;
+			if (audioThread.joinable()) audioThread.join();
+			netThread.stop();
+			::close(udp);
+			printf("[threaded] pipeline stopped\n");
+
+		} else {
+		// ═══════════════════════════════════════════════════════════
+		// LEGACY SINGLE-THREAD PATH (unchanged)
+		// ═══════════════════════════════════════════════════════════
 
 		// Stream
 		AVPacket* pkt = av_packet_alloc();
@@ -1655,6 +2200,8 @@ int main(int argc, char* argv[]) {
 		av_packet_free(&pkt);
 		::close(udp);
 		printf("Done: %d video frames sent\n", frameCnt);
+
+		} // end legacy single-thread path
 
 	} catch (const std::exception& e) {
 		fprintf(stderr, "Error: %s\n", e.what());
