@@ -182,6 +182,36 @@ TEST(ChannelThreadSafetyFixTest, ProcessAvailableDataRejectedInThreadedMode) {
 	::close(consumerPipe[1]);
 }
 
+TEST(ChannelThreadSafetyFixTest, ThreadedCloseDoesNotWaitForPeerWriterToClose) {
+	int producerPipe[2];
+	int consumerPipe[2];
+	ASSERT_EQ(::pipe(producerPipe), 0);
+	ASSERT_EQ(::pipe(consumerPipe), 0);
+
+	auto fut = std::async(std::launch::async, [&]() {
+		Channel ch(
+			/*producerFd=*/producerPipe[1],
+			/*consumerFd=*/consumerPipe[0],
+			/*pid=*/12345,
+			/*threaded=*/true);
+	});
+
+	// Keep consumerPipe[1] open on purpose. Before the fix, threaded close could block
+	// forever waiting for the read thread, which was stuck in a blocking read().
+	auto firstWait = fut.wait_for(std::chrono::milliseconds(500));
+	EXPECT_EQ(firstWait, std::future_status::ready)
+		<< "threaded Channel::close must not depend on the peer writer closing first";
+
+	if (firstWait != std::future_status::ready) {
+		::close(consumerPipe[1]);
+		consumerPipe[1] = -1;
+	}
+	fut.wait();
+
+	::close(producerPipe[0]);
+	if (consumerPipe[1] >= 0) ::close(consumerPipe[1]);
+}
+
 TEST(RtcpSuppressionFixTest, SuppressedVideoSkipsPliAndNackRetransmissions) {
 	int sv[2];
 	ASSERT_EQ(::socketpair(AF_UNIX, SOCK_DGRAM, 0, sv), 0);

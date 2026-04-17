@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 #include <algorithm>
@@ -12,6 +13,13 @@ static constexpr uint32_t MESSAGE_MAX_LEN = 4194308;
 static constexpr size_t RECV_BUFFER_MAX_LEN = 16 * 1024 * 1024;
 static constexpr int kPollTimeoutSliceMs = 100;
 static constexpr size_t kReadChunkSize = 65536;
+
+static bool channelTraceEnabled() {
+	const char* raw = std::getenv("MEDIASOUP_CHANNEL_TRACE");
+	if (!raw || raw[0] == '\0') return false;
+	return std::strcmp(raw, "0") != 0 && std::strcmp(raw, "false") != 0
+		&& std::strcmp(raw, "FALSE") != 0;
+}
 
 // Original constructor — threaded mode (backward compat)
 Channel::Channel(int producerFd, int consumerFd, int pid)
@@ -32,13 +40,22 @@ void Channel::init(int producerFd, int consumerFd, int pid, bool threaded) {
 	threaded_ = threaded;
 	logger_ = Logger::Get("Channel");
 
+	int flags = ::fcntl(consumerFd_, F_GETFL, 0);
+	if (flags >= 0)
+		::fcntl(consumerFd_, F_SETFL, flags | O_NONBLOCK);
+
+	if (channelTraceEnabled()) {
+		MS_WARN(
+			logger_,
+			"trace init [pid:{} threaded:{} producerFd:{} consumerFd:{}]",
+			pid_,
+			threaded_ ? 1 : 0,
+			producerFd_,
+			consumerFd_);
+	}
+
 	if (threaded_) {
 		readThread_ = std::thread(&Channel::readLoop, this);
-	} else {
-		// Non-threaded mode: set consumer fd to non-blocking
-		int flags = ::fcntl(consumerFd_, F_GETFL, 0);
-		if (flags >= 0)
-			::fcntl(consumerFd_, F_SETFL, flags | O_NONBLOCK);
 	}
 }
 
@@ -50,6 +67,16 @@ void Channel::close() {
 	if (closed_.exchange(true)) return;
 
 	MS_DEBUG(logger_, "close()");
+	if (channelTraceEnabled()) {
+		MS_WARN(
+			logger_,
+			"trace close start [pid:{} threaded:{} producerFd:{} consumerFd:{} readThreadJoinable:{}]",
+			pid_,
+			threaded_ ? 1 : 0,
+			producerFd_,
+			consumerFd_,
+			readThread_.joinable() ? 1 : 0);
+	}
 
 	// Reject all pending requests
 	{
@@ -61,13 +88,30 @@ void Channel::close() {
 		sents_.clear();
 	}
 
-	// Close fds to unblock the read thread (read() will return ≤0)
+	if (readThread_.joinable()) {
+		if (readThread_.get_id() != std::this_thread::get_id()) {
+			auto joinStart = std::chrono::steady_clock::now();
+			if (channelTraceEnabled()) {
+				MS_WARN(logger_, "trace close waiting for read thread [pid:{}]", pid_);
+			}
+			readThread_.join();
+			if (channelTraceEnabled()) {
+				auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::steady_clock::now() - joinStart).count();
+				MS_WARN(
+					logger_,
+					"trace close joined read thread [pid:{} waitMs:{}]",
+					pid_,
+					waitMs);
+			}
+		}
+	}
+
 	if (producerFd_ >= 0) { ::close(producerFd_); producerFd_ = -1; }
 	if (consumerFd_ >= 0) { ::close(consumerFd_); consumerFd_ = -1; }
 
-	if (readThread_.joinable()) {
-		if (readThread_.get_id() != std::this_thread::get_id())
-			readThread_.join();
+	if (channelTraceEnabled()) {
+		MS_WARN(logger_, "trace close done [pid:{}]", pid_);
 	}
 }
 
@@ -345,48 +389,110 @@ void Channel::readLoop() {
 	std::vector<uint8_t> recvBuf;
 	uint8_t tmp[kReadChunkSize];
 
+	if (channelTraceEnabled()) {
+		MS_WARN(logger_, "trace readLoop start [pid:{} consumerFd:{}]", pid_, consumerFd_);
+	}
+
 	while (!closed_) {
-		ssize_t n = ::read(consumerFd_, tmp, sizeof(tmp));
-		if (n <= 0) {
-			if (!closed_) MS_DEBUG(logger_, "consumer fd closed");
+		struct pollfd pfd{};
+		pfd.fd = consumerFd_;
+		pfd.events = POLLIN | POLLERR | POLLHUP;
+		int pollRet = ::poll(&pfd, 1, kPollTimeoutSliceMs);
+		if (pollRet == 0) continue;
+		if (pollRet < 0) {
+			if (errno == EINTR) continue;
+			if (channelTraceEnabled()) {
+				MS_WARN(
+					logger_,
+					"trace readLoop poll returned [pid:{} ret:{} errno:{} closed:{}]",
+					pid_,
+					pollRet,
+					errno,
+					closed_.load() ? 1 : 0);
+			}
+			if (!closed_) MS_DEBUG(logger_, "consumer fd poll error: {}", strerror(errno));
 			break;
 		}
 
-		recvBuf.insert(recvBuf.end(), tmp, tmp + static_cast<size_t>(n));
-		if (recvBuf.size() > RECV_BUFFER_MAX_LEN) {
-			MS_WARN(logger_,
-				"recv buffer exceeded limit [pid:{} size:{} limit:{}], closing channel",
-				pid_, recvBuf.size(), RECV_BUFFER_MAX_LEN);
-			close();
-			break;
+		if (channelTraceEnabled()) {
+			MS_WARN(
+				logger_,
+				"trace readLoop wake [pid:{} consumerFd:{} revents:{} closed:{}]",
+				pid_,
+				consumerFd_,
+				static_cast<int>(pfd.revents),
+				closed_.load() ? 1 : 0);
 		}
 
-		size_t offset = 0;
-		while (offset + 4 <= recvBuf.size()) {
-			uint32_t msgLen;
-			std::memcpy(&msgLen, recvBuf.data() + offset, 4);
-			if (msgLen == 0 || msgLen > MESSAGE_MAX_LEN) {
+		while (!closed_) {
+			ssize_t n = ::read(consumerFd_, tmp, sizeof(tmp));
+			if (n == 0) {
+				if (channelTraceEnabled()) {
+					MS_WARN(
+						logger_,
+						"trace readLoop EOF [pid:{} closed:{}]",
+						pid_,
+						closed_.load() ? 1 : 0);
+				}
+				if (!closed_) MS_DEBUG(logger_, "consumer fd closed");
+				return;
+			}
+			if (n < 0) {
+				if (errno == EAGAIN || errno == EWOULDBLOCK) break;
+				if (errno == EINTR) continue;
+				if (channelTraceEnabled()) {
+					MS_WARN(
+						logger_,
+						"trace readLoop read returned [pid:{} n:{} errno:{} closed:{}]",
+						pid_,
+						static_cast<int>(n),
+						errno,
+						closed_.load() ? 1 : 0);
+				}
+				if (!closed_) MS_DEBUG(logger_, "consumer fd read error: {}", strerror(errno));
+				return;
+			}
+
+			recvBuf.insert(recvBuf.end(), tmp, tmp + static_cast<size_t>(n));
+			if (recvBuf.size() > RECV_BUFFER_MAX_LEN) {
 				MS_WARN(logger_,
-					"invalid frame length [pid:{} msgLen:{} max:{}], closing channel",
-					pid_, msgLen, MESSAGE_MAX_LEN);
+					"recv buffer exceeded limit [pid:{} size:{} limit:{}], closing channel",
+					pid_, recvBuf.size(), RECV_BUFFER_MAX_LEN);
 				close();
-				offset = recvBuf.size();
 				break;
 			}
-			if (offset + 4 + msgLen > recvBuf.size()) break;
 
-			if (!processMessage(recvBuf.data() + offset + 4, msgLen)) {
-				MS_WARN(logger_, "invalid FlatBuffers message [pid:{} len:{}], closing channel", pid_, msgLen);
-				close();
-				offset = recvBuf.size();
-				break;
+			size_t offset = 0;
+			while (offset + 4 <= recvBuf.size()) {
+				uint32_t msgLen;
+				std::memcpy(&msgLen, recvBuf.data() + offset, 4);
+				if (msgLen == 0 || msgLen > MESSAGE_MAX_LEN) {
+					MS_WARN(logger_,
+						"invalid frame length [pid:{} msgLen:{} max:{}], closing channel",
+						pid_, msgLen, MESSAGE_MAX_LEN);
+					close();
+					offset = recvBuf.size();
+					break;
+				}
+				if (offset + 4 + msgLen > recvBuf.size()) break;
+
+				if (!processMessage(recvBuf.data() + offset + 4, msgLen)) {
+					MS_WARN(logger_, "invalid FlatBuffers message [pid:{} len:{}], closing channel", pid_, msgLen);
+					close();
+					offset = recvBuf.size();
+					break;
+				}
+				offset += 4 + msgLen;
 			}
-			offset += 4 + msgLen;
-		}
 
-		if (offset > 0) {
-			recvBuf.erase(recvBuf.begin(), recvBuf.begin() + static_cast<ptrdiff_t>(offset));
+			if (offset > 0) {
+				recvBuf.erase(recvBuf.begin(), recvBuf.begin() + static_cast<ptrdiff_t>(offset));
+			}
 		}
+	}
+
+	if (channelTraceEnabled()) {
+		MS_WARN(logger_, "trace readLoop exit [pid:{} closed:{}]", pid_, closed_.load() ? 1 : 0);
 	}
 }
 
