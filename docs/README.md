@@ -31,6 +31,7 @@
 | 角色 | 建议起点 |
 |---|---|
 | 新接手开发 | [DEVELOPMENT.md](./DEVELOPMENT.md) |
+| 整理 AI 协作规范 | [aicoding/README.md](./aicoding/README.md) |
 | 搭环境 / 查依赖 | [dependencies_cn.md](./dependencies_cn.md) → [README.md](../README.md) → [DEVELOPMENT.md](./DEVELOPMENT.md) |
 | 做仓库全量回归 | [README.md](../README.md) → [DEVELOPMENT.md](./DEVELOPMENT.md) → [run_all_tests.sh](../scripts/run_all_tests.sh) / [run_qos_tests.sh](../scripts/run_qos_tests.sh) |
 | 做线上排障 | [troubleshooting_cn.md](./troubleshooting_cn.md) → [architecture_cn.md](./architecture_cn.md) → [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) |

@@ -1,0 +1,1 @@
+../../ai-coding-project-template/.github/copilot-instructions.md
