@@ -47,6 +47,8 @@
 
 - 当前状态摘要：
   [downlink-qos-status.md](./downlink-qos-status.md)
+- 当前机器汇总页：
+  [downlink-qos-test-results-summary.md](./downlink-qos-test-results-summary.md)
 - 当前机器结果页：
   [downlink-qos-case-results.md](./downlink-qos-case-results.md)
 - 测试覆盖地图：

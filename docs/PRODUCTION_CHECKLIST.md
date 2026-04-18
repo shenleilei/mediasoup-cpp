@@ -40,7 +40,7 @@
 - [ ] OOM 保护：设置 cgroup 内存限制
 
 ### 测试
-- [ ] 全量测试通过：`mediasoup_tests` + 所有集成测试
+- [ ] 全量测试通过：`mediasoup_tests`、`mediasoup_qos_unit_tests`、所有集成测试及 QoS 精度测试
 - [ ] 压测验证：在目标机器上跑 `mediasoup_bench`，确认容量
 - [ ] 长时间运行测试：跑 24 小时，检查内存泄漏 / 文件描述符泄漏
 
