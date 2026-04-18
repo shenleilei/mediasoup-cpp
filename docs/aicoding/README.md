@@ -30,3 +30,5 @@ These stay at their conventional paths because the workflow depends on them:
 - `specs/current/`
 
 `changes/_templates/` and `specs/current/README.md` remain in place for discoverability at point of use.
+
+Active change folders may also carry an optional `implementation.md` when execution notes help keep progress and deferred work truthful during a long-running change. The required planning artifacts remain `requirements.md` or `bugfix.md`, `design.md`, and `tasks.md`.

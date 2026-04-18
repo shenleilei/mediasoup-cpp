@@ -790,12 +790,12 @@ respawn 有速率限制：
 
 | 关注点 | 入口文件 |
 |---|---|
-| 启动、参数、线程池、关闭顺序 | `src/main.cpp` |
-| WebSocket/HTTP、room dispatch、session 保护、主线程定时器 | `src/SignalingServer.*` |
-| worker 线程事件循环、task queue、epoll、respawn | `src/WorkerThread.h` |
-| join/leave/createTransport/produce/consume/QoS/录制 | `src/RoomService.*` |
+| 启动、参数、线程池、关闭顺序 | `src/main.cpp` + `src/MainBootstrap.*` + `src/RuntimeDaemon.*` |
+| WebSocket/HTTP、room dispatch、session 保护、主线程定时器 | `src/SignalingServer.h` + `src/SignalingServerWs.*` + `src/SignalingServerHttp.*` + `src/SignalingServerRuntime.cpp` |
+| worker 线程事件循环、task queue、epoll、respawn | `src/WorkerThread.{h,cpp}` |
+| join/leave/createTransport/produce/consume/QoS/录制 | `src/RoomService.h` + `src/RoomService*.cpp` |
 | 房间与 peer 容器 | `src/RoomManager.h`, `src/Peer.h` |
-| Redis 多节点路由与缓存 | `src/RoomRegistry.h` |
+| Redis 多节点路由与缓存 | `src/RoomRegistry.{h,cpp}` |
 | Worker 负载均衡 | `src/WorkerManager.h` |
 | 子进程管理 | `src/Worker.*` |
 | FlatBuffers pipe IPC | `src/Channel.*` |
@@ -974,14 +974,14 @@ WorkerThread event loop
 
 | 你要改的东西 | 第一入口 | 第二入口 | 最后才看 |
 |---|---|---|---|
-| WebSocket 协议、请求分发、session/reconnect | `SignalingServer.cpp` | `WorkerThread.h` | `RoomService.cpp` |
-| join/leave/房间生命周期 | `RoomService.cpp` | `RoomManager.h` | `Worker.cpp` |
-| transport / produce / consume | `RoomService.cpp` | `Router.cpp`, `Transport.cpp`, `WebRtcTransport.cpp` | `Channel.cpp` |
-| mediasoup IPC 超时 / 死锁 / 通知丢失 | `Channel.cpp` | `WorkerThread.h` | `Worker.cpp` |
-| 多节点路由 / Redis 缓存 | `RoomRegistry.h` | `SignalingServer.cpp` 的 registry worker | `GeoRouter.*` |
-| QoS 聚合 / override / policy | `RoomService.cpp` | `src/qos/*` | 客户端 `src/client/lib/qos/*` |
-| 录制链路 | `RoomService.cpp:autoRecord` | `Recorder.h`, `PlainTransport.*` | `Transport.cpp` |
-| worker 崩溃恢复 | `WorkerThread.h:onWorkerDied` | `RoomService.cpp:checkRoomHealth` | `Worker.cpp` |
+| WebSocket 协议、请求分发、session/reconnect | `SignalingServer.h` / `SignalingServerWs.cpp` | `WorkerThread.{h,cpp}` | `RoomService.h` |
+| join/leave/房间生命周期 | `RoomServiceLifecycle.cpp` | `RoomManager.h` | `Worker.cpp` |
+| transport / produce / consume | `RoomServiceMedia.cpp` | `Router.cpp`, `Transport.cpp`, `WebRtcTransport.cpp` | `Channel.cpp` |
+| mediasoup IPC 超时 / 死锁 / 通知丢失 | `Channel.cpp` | `WorkerThread.{h,cpp}` | `Worker.cpp` |
+| 多节点路由 / Redis 缓存 | `RoomRegistry.{h,cpp}` | `SignalingServerRuntime.cpp` 的 registry worker | `GeoRouter.*` |
+| QoS 聚合 / override / policy | `RoomServiceStats.cpp` | `src/qos/*` | 客户端 `src/client/lib/qos/*` |
+| 录制链路 | `RoomServiceMedia.cpp:autoRecord` + `RoomRecordingHelpers.*` | `Recorder.h`, `PlainTransport.*` | `Transport.cpp` |
+| worker 崩溃恢复 | `WorkerThread.cpp:onWorkerDied` | `RoomServiceLifecycle.cpp:checkRoomHealth` | `Worker.cpp` |
 
 ### 15.2 三条最应该先建立的心智模型
 
@@ -1009,9 +1009,9 @@ WorkerThread event loop
 如果你只有 20 分钟：
 
 1. 先读本文第 5、6、7 章
-2. 再看 `src/SignalingServer.cpp`
-3. 再看 `src/WorkerThread.h`
-4. 再看 `src/RoomService.cpp`
+2. 再看 `src/SignalingServer.h`、`src/SignalingServerWs.cpp`
+3. 再看 `src/WorkerThread.{h,cpp}`
+4. 再看 `src/RoomService.h`、`src/RoomServiceLifecycle.cpp`
 
 如果你要开始改 transport / publish 相关功能：
 
@@ -1022,6 +1022,6 @@ WorkerThread event loop
 
 如果你要开始改多节点：
 
-1. 先补 `src/RoomRegistry.h`
-2. 再看 `src/main.cpp`
-3. 再回来看 `SignalingServer.cpp` 里的 registry worker 和 `/api/resolve`
+1. 先补 `src/RoomRegistry.{h,cpp}`
+2. 再看 `src/main.cpp`、`src/MainBootstrap.cpp`
+3. 再回来看 `src/SignalingServerRuntime.cpp` 和 `src/SignalingServerHttp.cpp` 里的 registry worker 与 `/api/resolve`

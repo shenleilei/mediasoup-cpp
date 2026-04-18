@@ -32,6 +32,18 @@ changes/2026-04-17-fix-login-token-refresh/
 `-- tasks.md
 ```
 
+Optional execution notes:
+
+```text
+changes/2026-04-17-some-change/
+|-- requirements.md | bugfix.md
+|-- design.md
+|-- tasks.md
+`-- implementation.md
+```
+
+Use `implementation.md` only when it helps keep multi-wave execution, progress, or deferred items truthful during active work. It does not replace the required artifacts above.
+
 ## Lifecycle
 
 1. Create the folder.

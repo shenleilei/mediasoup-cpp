@@ -29,7 +29,7 @@
 
 当前已存在的关键代码：
 
-- [RoomService.cpp](../src/RoomService.cpp)
+- [RoomServiceDownlink.cpp](../src/RoomServiceDownlink.cpp)
 - [SubscriberBudgetAllocator.cpp](../src/qos/SubscriberBudgetAllocator.cpp)
 - [ProducerDemandAggregator.cpp](../src/qos/ProducerDemandAggregator.cpp)
 - [PublisherSupplyController.cpp](../src/qos/PublisherSupplyController.cpp)

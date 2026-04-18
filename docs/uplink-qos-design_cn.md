@@ -140,7 +140,7 @@ executor / adapter 层负责把这些抽象动作真正落到 producer / transpo
 
 - [protocol.js](../src/client/lib/qos/protocol.js)
 - [signalChannel.js](../src/client/lib/qos/adapters/signalChannel.js)
-- [SignalingServer.cpp](../src/SignalingServer.cpp)
+- [SignalingServerWs.cpp](../src/SignalingServerWs.cpp)
 
 ## 6. 服务端链路
 
@@ -152,13 +152,13 @@ executor / adapter 层负责把这些抽象动作真正落到 producer / transpo
 
 相关代码：
 
-- [SignalingServer.cpp](../src/SignalingServer.cpp)
+- [SignalingServerWs.cpp](../src/SignalingServerWs.cpp)
 
 ### 6.2 `RoomService::setClientStats`
 
 真正的 snapshot 处理发生在：
 
-- [RoomService.cpp](../src/RoomService.cpp)
+- [RoomServiceStats.cpp](../src/RoomServiceStats.cpp)
 
 这一步大致做这些事情：
 
@@ -185,7 +185,7 @@ executor / adapter 层负责把这些抽象动作真正落到 producer / transpo
 
 相关逻辑主要在：
 
-- [RoomService.cpp](../src/RoomService.cpp)
+- [RoomServiceStats.cpp](../src/RoomServiceStats.cpp)
 
 ## 7. 自动 override
 

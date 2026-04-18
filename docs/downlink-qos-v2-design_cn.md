@@ -32,7 +32,7 @@
 
 相关代码：
 
-- [RoomService.cpp](../src/RoomService.cpp)
+- [RoomServiceStats.cpp](../src/RoomServiceStats.cpp)
 - [DownlinkQosRegistry.h](../src/qos/DownlinkQosRegistry.h)
 - [DownlinkAllocator.h](../src/qos/DownlinkAllocator.h)
 - [DownlinkHealthMonitor.h](../src/qos/DownlinkHealthMonitor.h)
@@ -448,7 +448,8 @@ while budget remains:
 建议修改的现有组件：
 
 - [RoomService.h](../src/RoomService.h)
-- [RoomService.cpp](../src/RoomService.cpp)
+- [RoomServiceStats.cpp](../src/RoomServiceStats.cpp)
+- [RoomServiceDownlink.cpp](../src/RoomServiceDownlink.cpp)
 - [DownlinkAllocator.h](../src/qos/DownlinkAllocator.h)
 - [DownlinkAllocator.cpp](../src/qos/DownlinkAllocator.cpp)
 - [DownlinkQosRegistry.h](../src/qos/DownlinkQosRegistry.h)

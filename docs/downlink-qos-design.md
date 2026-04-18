@@ -44,7 +44,7 @@ The project already collects or exposes:
 
 Relevant files:
 
-- [RoomService.cpp](../src/RoomService.cpp)
+- [RoomServiceStats.cpp](../src/RoomServiceStats.cpp)
 - [qos-demo.js](../public/qos-demo.js)
 
 ### 3.2 Existing server-side control actions
@@ -286,11 +286,13 @@ The dedicated `v2` design lives in:
 
 ### Existing files to update
 
-- [SignalingServer.cpp](../src/SignalingServer.cpp)
+- [SignalingServerWs.cpp](../src/SignalingServerWs.cpp)
   add a `downlinkClientStats` method
 - [RoomService.h](../src/RoomService.h)
-- [RoomService.cpp](../src/RoomService.cpp)
-  store snapshots and run subscriber controllers
+- [RoomServiceStats.cpp](../src/RoomServiceStats.cpp)
+  store snapshots and update the downlink registries
+- [RoomServiceDownlink.cpp](../src/RoomServiceDownlink.cpp)
+  run subscriber controllers and the room-scoped planner
 - [qos-demo.js](../public/qos-demo.js)
   first demo entry point for end-to-end verification
 

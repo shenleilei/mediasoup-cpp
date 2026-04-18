@@ -16,7 +16,7 @@
 
 ### 代码分析
 
-问题在 `src/RoomRegistry.h` 的 `subscriberLoop()` 中：
+问题在 `src/RoomRegistry.cpp` 的 `subscriberLoop()` 中：
 
 ```cpp
 // 设置 2 秒读超时
@@ -74,7 +74,7 @@ while (!subStop_) {
 
 ## 影响范围
 
-- 仅修改 `src/RoomRegistry.h` 的 `subscriberLoop()` 方法
+- 仅修改 `src/RoomRegistry.cpp` 的 `subscriberLoop()` 方法
 - 不影响 Redis pub/sub 功能逻辑
 - 不影响其他 Redis 连接（命令连接使用独立 context）
 

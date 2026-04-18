@@ -194,6 +194,7 @@ join
 | mediasoup_qos_integration_tests | stats 采集、广播、policy / override、downlink / publisher supply、plainPublish 约束 |
 | mediasoup_e2e_tests | 多 peer 发布/订阅压力 |
 | mediasoup_topology_tests | 多节点 room affinity、crash takeover |
+| mediasoup_multinode_tests | 多节点 resolve、负载、TTL、fallback |
 | mediasoup_qos_accuracy_tests | QoS 精度（真实 UDP 收发） |
 | mediasoup_qos_recording_accuracy_tests | 录制 QoS 精度 |
 | mediasoup_bench | Worker 并发压测 |
@@ -207,13 +208,24 @@ cd /path/to/mediasoup-cpp
 # 单元测试（约 2.5 分钟，QoS 精度测试较慢）
 ./build/mediasoup_tests
 
-# 集成测试（需要 Redis）
+# 集成测试
 ./build/mediasoup_integration_tests
 ./build/mediasoup_review_fix_tests
 ./build/mediasoup_stability_integration_tests
 ./build/mediasoup_qos_integration_tests
 ./build/mediasoup_e2e_tests
 ./build/mediasoup_topology_tests
+./build/mediasoup_multinode_tests
+
+# Redis-backed 套件会自启临时 Redis（需要 PATH 中有 redis-server）
+# mediasoup_review_fix_tests
+# mediasoup_topology_tests
+# mediasoup_multinode_tests
+
+# run_all_tests.sh / run_qos_tests.sh 遇到单个测试失败后会继续跑剩余选中项，
+# 最终统一输出失败汇总并返回非 0。
+# run_all_tests.sh 同时会刷新 docs/non-qos-test-results.md，
+# 记录本次 non-QoS 选择项和逐任务结果。
 
 # 跳过 QoS 精度测试（快速验证）
 ./build/mediasoup_tests --gtest_filter='-QosAccuracyTest.*:QosRecordingAccuracyTest.*'
@@ -236,28 +248,45 @@ cd /path/to/mediasoup-cpp
 
 ```
 src/
-├── main.cpp              # 入口、参数解析、启动/关闭序列
-├── Constants.h           # 所有常量（kXx 命名）
-├── SignalingServer.h/cpp # WebSocket + HTTP + room dispatch + session 管理
-├── WorkerThread.h        # epoll 事件循环：task queue + Channel IPC + worker 生命周期
-├── RoomService.h/cpp     # 业务逻辑（join/leave/produce/consume/QoS/录制）
-├── RoomManager.h         # Room/Peer 生命周期、idle GC
-├── RoomRegistry.h        # Redis 多节点路由 + 本地缓存 + pub/sub
-├── GeoRouter.h           # IP 地理定位 + ISP 评分
-├── WorkerManager.h       # Worker 池、负载均衡、respawn 限流
-├── Channel.h/cpp         # Pipe IPC（FlatBuffers，request/response/notification）
-├── Worker.h/cpp          # fork+exec worker 进程管理
-├── Router.h/cpp          # Router：创建 transport、管理 producer
-├── Transport.h/cpp       # produce/consume/getStats FlatBuffers 协议
-├── WebRtcTransport.h/cpp # ICE/DTLS transport
-├── PlainTransport.h      # Plain RTP transport（录制用）
-├── Producer.h/cpp        # Producer（score 追踪、stats）
-├── Consumer.h/cpp        # Consumer（score 追踪、stats）
-├── Peer.h                # Peer 状态（transports、producers、consumers、sessionId）
-├── ortc.h                # ORTC 协商（codec 匹配、RTP mapping）
-├── Recorder.h            # RTP→WebM 录制 + QoS 时间线
-├── EventEmitter.h        # 轻量事件系统
-└── Logger.h              # spdlog 封装
+├── main.cpp                  # 薄入口：signal wiring + 最终 assemble/run
+├── MainBootstrap.{h,cpp}     # 参数解析、geo/bootstrap、WorkerThread 池创建
+├── RuntimeDaemon.{h,cpp}     # daemonize、启动状态通知
+├── Constants.h               # 所有常量（kXx 命名）
+├── SignalingServer.h         # signaling server facade
+├── SignalingServerWs.{h,cpp} # WebSocket 请求、session、stale 请求保护
+├── SignalingServerHttp.{h,cpp} # HTTP 路由、metrics、静态文件
+├── SignalingServerRuntime.cpp # runtime snapshot、registry worker、dispatch helper
+├── SignalingSocketState.h    # ws/session/rate-limit helper
+├── SignalingRequestDispatcher.h # method -> RoomService dispatch
+├── StaticFileResponder.h     # 静态文件 path resolve + streaming
+├── WorkerThread.{h,cpp}      # epoll 事件循环：task queue + Channel IPC + worker 生命周期
+├── RoomService.h             # 房间业务 facade
+├── RoomServiceLifecycle.cpp  # join/leave/health/cleanup
+├── RoomServiceMedia.cpp      # transport / produce / consume
+├── RoomServiceStats.cpp      # stats / QoS / broadcast
+├── RoomServiceDownlink.cpp   # downlink planning / publisher supply
+├── RoomMediaHelpers.h        # media helper
+├── RoomRecordingHelpers.{h,cpp} # recorder helper
+├── RoomDownlinkHelpers.h     # downlink helper
+├── RoomStatsQosHelpers.h     # stats / QoS helper
+├── RoomCleanupHelpers.h      # room cleanup helper
+├── RoomManager.h             # Room/Peer 生命周期、idle GC
+├── RoomRegistry.{h,cpp}      # Redis 多节点路由 + 本地缓存 + pub/sub
+├── GeoRouter.h               # IP 地理定位 + ISP 评分
+├── WorkerManager.h           # Worker 池、负载均衡、respawn 限流
+├── Channel.h/cpp             # Pipe IPC（FlatBuffers，request/response/notification）
+├── Worker.h/cpp              # fork+exec worker 进程管理
+├── Router.h/cpp              # Router：创建 transport、管理 producer
+├── Transport.h/cpp           # produce/consume/getStats FlatBuffers 协议
+├── WebRtcTransport.h/cpp     # ICE/DTLS transport
+├── PlainTransport.h          # Plain RTP transport（录制用）
+├── Producer.h/cpp            # Producer（score 追踪、stats）
+├── Consumer.h/cpp            # Consumer（score 追踪、stats）
+├── Peer.h                    # Peer 状态（transports、producers、consumers、sessionId）
+├── ortc.h                    # ORTC 协商（codec 匹配、RTP mapping）
+├── Recorder.h                # RTP→WebM 录制 + QoS 时间线
+├── EventEmitter.h            # 轻量事件系统
+└── Logger.h                  # spdlog 封装
 tests/
 ├── test_ortc.cpp                      # ORTC 协商
 ├── test_room.cpp                      # Room/Peer 管理

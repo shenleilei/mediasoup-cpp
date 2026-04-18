@@ -46,11 +46,11 @@ Browser
   ▼
 uWS Main Thread
   │
-  ├─ parses requests
-  ├─ validates socket/session state
+  ├─ SignalingServer main-thread glue
+  ├─ SignalingServerWs request/session handling
+  ├─ SignalingServerHttp route handling
   ├─ binds roomId -> WorkerThread
-  ├─ sends responses / notifications
-  └─ serves HTTP endpoints
+  └─ sends responses / notifications
   │
   ▼
 WorkerThread Pool (N)
@@ -62,15 +62,12 @@ WorkerThread Pool (N)
   └─ runs room business logic single-threaded
   │
   ▼
-RoomService
+RoomService Facade
   │
-  ├─ join / leave
-  ├─ transport create / connect
-  ├─ produce / consume
-  ├─ restartIce
-  ├─ auto-subscribe
-  ├─ recording setup
-  └─ stats / QoS aggregation
+  ├─ lifecycle slice
+  ├─ media slice
+  ├─ stats / QoS slice
+  └─ downlink planning slice
   │
   ▼
 Router / Transport / Producer / Consumer
@@ -645,6 +642,17 @@ All tests must be run from the project root directory.
 ./build/mediasoup_bench
 ```
 
+`mediasoup_review_fix_tests`, `mediasoup_multinode_tests`, and `mediasoup_topology_tests`
+start an isolated `redis-server` automatically. They require the `redis-server` binary in
+`PATH`, but they do not rely on a shared Redis on `127.0.0.1:6379`.
+
+`./scripts/run_all_tests.sh` and `./scripts/run_qos_tests.sh` both keep running the remaining
+selected test groups after a test failure and return non-zero only after printing a final
+failure summary.
+
+`./scripts/run_all_tests.sh` also rewrites the latest non-QoS regression report:
+[docs/non-qos-test-results.md](./docs/non-qos-test-results.md)
+
 The regression-heavy suites currently cover:
 
 - reconnect semantics
@@ -766,13 +774,29 @@ Real-world estimate: roughly **30-40** 1v1 rooms per mediasoup worker for typica
 
 ```text
 src/
-├── main.cpp              # startup, config, node identity
+├── main.cpp              # thin process entry + signal wiring
+├── MainBootstrap.*       # runtime options, geo/bootstrap, worker-thread pool creation
+├── RuntimeDaemon.*       # daemonize + startup notification plumbing
 ├── Constants.h           # runtime constants
-├── SignalingServer.*     # uWS server, room dispatch, session lifecycle
-├── WorkerThread.h        # epoll event loop per signaling worker thread
-├── RoomService.*         # room business logic
+├── SignalingServer.h     # signaling server facade
+├── SignalingServerWs.*   # WebSocket request/session dispatch
+├── SignalingServerHttp.* # HTTP routes, metrics, file serving
+├── SignalingServerRuntime.cpp # runtime snapshot, registry worker, room dispatch helpers
+├── SignalingSocketState.h     # ws session / rate-limit helpers
+├── SignalingRequestDispatcher.h # method -> RoomService dispatch glue
+├── StaticFileResponder.h      # static-file path resolution + streaming
+├── WorkerThread.*        # epoll event loop per signaling worker thread
+├── RoomService.h         # room-service facade
+├── RoomServiceLifecycle.cpp # join/leave/health/cleanup
+├── RoomServiceMedia.cpp  # transport / produce / consume flows
+├── RoomServiceStats.cpp  # stats / QoS / room-state broadcast
+├── RoomServiceDownlink.cpp # downlink planning + publisher supply
+├── RoomRecordingHelpers.* # recorder setup / cleanup helpers
+├── RoomMediaHelpers.h    # media-side helper routines
+├── RoomDownlinkHelpers.h # downlink helper routines
+├── RoomStatsQosHelpers.h # stats/QoS helper routines
 ├── RoomManager.h         # room container and lifecycle
-├── RoomRegistry.h        # Redis routing, cache, pub/sub sync
+├── RoomRegistry.*        # Redis routing, cache, pub/sub sync
 ├── GeoRouter.h           # geolocation and scoring
 ├── WorkerManager.h       # worker selection / capacity helpers
 ├── Worker.*              # mediasoup-worker child process wrapper

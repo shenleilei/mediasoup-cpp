@@ -19,8 +19,8 @@
 当前仓库已经有这些可直接复用的能力：
 
 - 服务端接收 `downlinkClientStats`
-  - [SignalingServer.cpp](../src/SignalingServer.cpp)
-  - [RoomService.cpp](../src/RoomService.cpp)
+  - [SignalingServerWs.cpp](../src/SignalingServerWs.cpp)
+  - [RoomServiceStats.cpp](../src/RoomServiceStats.cpp)
 - 服务端下行注册表
   - [DownlinkQosRegistry.h](../src/qos/DownlinkQosRegistry.h)
 - 服务端下行健康状态机
@@ -76,7 +76,8 @@
 ### 5.2 需要修改的文件
 
 - [RoomService.h](../src/RoomService.h)
-- [RoomService.cpp](../src/RoomService.cpp)
+- [RoomServiceStats.cpp](../src/RoomServiceStats.cpp)
+- [RoomServiceDownlink.cpp](../src/RoomServiceDownlink.cpp)
 
 ### 5.3 `RoomService` 新增字段
 
