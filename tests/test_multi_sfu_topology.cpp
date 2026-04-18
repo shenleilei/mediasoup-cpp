@@ -13,6 +13,7 @@
 //   5. Full 3-node conference: peers follow redirects and end up in the same room
 
 #include <gtest/gtest.h>
+#include "TestRedisServer.h"
 #include "TestWsClient.h"
 #include "TestProcessUtils.h"
 #include <signal.h>
@@ -45,14 +46,17 @@ class MultiSfuTopologyTest : public ::testing::Test {
 protected:
 	std::vector<SfuNode> nodes_;
 	std::string testPrefix_;
+	TestRedisServer redisServer_;
 
-	static pid_t startSfu(int port, int workers) {
+	static pid_t startSfu(int port, int workers, int redisPort) {
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(port) +
 			" --workers=" + std::to_string(workers) +
 			" --workerBin=./mediasoup-worker"
 			" --announcedIp=127.0.0.1"
 			" --listenIp=127.0.0.1"
+			" --redisHost=127.0.0.1"
+			" --redisPort=" + std::to_string(redisPort) +
 			" > /dev/null 2>&1 & echo $!";
 		FILE* fp = popen(cmd.c_str(), "r");
 		if (!fp) return -1;
@@ -100,7 +104,7 @@ protected:
 
 	// Flush all sfu:room:* and sfu:node:* keys from Redis to avoid cross-test pollution
 	void flushTestKeys() {
-		auto* ctx = redisConnect("127.0.0.1", 6379);
+		auto* ctx = redisConnect("127.0.0.1", redisServer_.port());
 		if (!ctx || ctx->err) { if (ctx) redisFree(ctx); return; }
 		// Delete room keys
 		auto* reply = (redisReply*)redisCommand(ctx, "KEYS sfu:room:*");
@@ -123,6 +127,8 @@ protected:
 		testPrefix_ = "topo_" + std::to_string(getpid()) + "_" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 
+		ASSERT_TRUE(redisServer_.start()) << redisServer_.failureMessage();
+
 		flushTestKeys();
 
 		nodes_ = {
@@ -132,7 +138,7 @@ protected:
 		};
 
 		for (auto& n : nodes_) {
-			n.pid = startSfu(n.port, n.workers);
+			n.pid = startSfu(n.port, n.workers, redisServer_.port());
 			ASSERT_GT(n.pid, 0) << "Failed to start SFU on port " << n.port;
 		}
 		for (auto& n : nodes_) {
@@ -259,7 +265,7 @@ TEST_F(MultiSfuTopologyTest, NodeCrashRoomTakeover) {
 	// Wait for Redis sfu:node:* key to expire (nodeTTL=30s is too long for test).
 	// Instead, manually delete the node key to simulate expiry.
 	{
-		auto* ctx = redisConnect("127.0.0.1", 6379);
+		auto* ctx = redisConnect("127.0.0.1", redisServer_.port());
 		ASSERT_NE(ctx, nullptr);
 		// Find SFU-A's node key and delete it
 		auto* reply = (redisReply*)redisCommand(ctx, "KEYS sfu:node:*14003*");

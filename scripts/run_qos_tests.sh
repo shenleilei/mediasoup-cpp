@@ -73,7 +73,7 @@ Available groups:
   matrix            browser loopback full matrix（run_matrix.mjs）
 
 Notes:
-  - 默认会顺序执行所有分组。
+  - 默认会顺序执行所有分组；单个任务失败后会继续执行其余选中项，最后统一汇总失败。
   - matrix 运行时间最长，并且依赖浏览器 / netem 环境。
   - 可用环境变量 QOS_MATRIX_SPEED 调整 matrix 用时。
   - 默认 matrix 已包含 `T9/T10/T11`；`--matrix-include-extended` 会额外加入剩余 extended 场景。

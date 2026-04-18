@@ -1,6 +1,7 @@
 # Build outputs
 build/
 build_dbg/
+build-*/
 
 # Generated files (can regenerate from fbs/)
 generated/
@@ -31,6 +32,7 @@ __pycache__/
 # Logs & runtime
 # ip2region.xdb in root is a build-time copy, source lives in third_party/
 /ip2region.xdb
+/nohup.out
 log/
 *.log
 recordings/
