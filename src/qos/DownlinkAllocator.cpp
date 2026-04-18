@@ -26,6 +26,36 @@ void ApplyActionToLastState(const DownlinkAction& action,
 	}
 }
 
+bool IsRedundantAction(const DownlinkAction& action, const ConsumerLastState& state)
+{
+	switch (action.type) {
+	case DownlinkAction::Type::kPause:
+		return state.paused;
+	case DownlinkAction::Type::kResume:
+		return !state.paused;
+	case DownlinkAction::Type::kSetLayers:
+		return !action.requestKeyFrame &&
+			state.spatialLayer == action.spatialLayer &&
+			state.temporalLayer == action.temporalLayer;
+	case DownlinkAction::Type::kSetPriority:
+		return state.priority == action.priority;
+	case DownlinkAction::Type::kNone:
+		return true;
+	}
+
+	return true;
+}
+
+void SyncPauseState(const std::vector<DownlinkSubscription>& subscriptions,
+	const std::vector<bool>& currentlyPaused,
+	std::unordered_map<std::string, ConsumerLastState>& lastState)
+{
+	for (size_t i = 0; i < subscriptions.size(); ++i) {
+		auto& state = lastState[subscriptions[i].consumerId];
+		state.paused = (i < currentlyPaused.size()) ? currentlyPaused[i] : false;
+	}
+}
+
 } // namespace
 
 uint8_t DownlinkAllocator::ComputePriority(const DownlinkSubscription& sub) {
@@ -97,39 +127,14 @@ std::vector<DownlinkAction> DownlinkAllocator::ComputeDiff(
 	auto fullActions = Compute(subscriptions, currentlyPaused, degradeLevel);
 	std::vector<DownlinkAction> filtered;
 	filtered.reserve(fullActions.size());
-	std::unordered_map<std::string, bool> actualPaused;
-	actualPaused.reserve(subscriptions.size());
-	for (size_t i = 0; i < subscriptions.size(); ++i) {
-		actualPaused[subscriptions[i].consumerId] =
-			(i < currentlyPaused.size()) ? currentlyPaused[i] : false;
-		auto& state = lastState[subscriptions[i].consumerId];
-		state.paused = actualPaused[subscriptions[i].consumerId];
-	}
+	SyncPauseState(subscriptions, currentlyPaused, lastState);
 
-	for (auto& action : fullActions) {
+	for (const auto& action : fullActions) {
 		auto it = lastState.find(action.consumerId);
-		if (it != lastState.end()) {
-			auto& prev = it->second;
-			switch (action.type) {
-			case DownlinkAction::Type::kPause:
-				if (actualPaused[action.consumerId]) continue; // already paused
-				break;
-			case DownlinkAction::Type::kResume:
-				if (!actualPaused[action.consumerId]) continue; // already resumed
-				break;
-			case DownlinkAction::Type::kSetLayers:
-				if (!action.requestKeyFrame &&
-					prev.spatialLayer == action.spatialLayer &&
-					prev.temporalLayer == action.temporalLayer)
-					continue; // layers unchanged
-				break;
-			case DownlinkAction::Type::kSetPriority:
-				if (prev.priority == action.priority) continue; // priority unchanged
-				break;
-			case DownlinkAction::Type::kNone:
-				continue;
-			}
+		if (it != lastState.end() && IsRedundantAction(action, it->second)) {
+			continue;
 		}
+
 		filtered.push_back(action);
 		ApplyActionToLastState(action, lastState);
 	}
@@ -144,56 +149,31 @@ std::vector<DownlinkAction> DownlinkAllocator::ComputeBudgetDiff(
 	std::vector<DownlinkAction> filtered;
 	filtered.reserve(planActions.size());
 
-	// Build desired end-state per consumer from the plan
-	std::unordered_map<std::string, ConsumerLastState> desired;
-	std::unordered_map<std::string, bool> initiallyPaused;
-	initiallyPaused.reserve(lastState.size());
-	for (const auto& [consumerId, state] : lastState)
-		initiallyPaused[consumerId] = state.paused;
-	for (auto& a : planActions) {
-		auto& d = desired[a.consumerId];
-		switch (a.type) {
-		case DownlinkAction::Type::kPause:
-			d.paused = true; break;
-		case DownlinkAction::Type::kResume:
-			d.paused = false; break;
-		case DownlinkAction::Type::kSetLayers:
-			d.spatialLayer = a.spatialLayer;
-			d.temporalLayer = a.temporalLayer; break;
-		case DownlinkAction::Type::kSetPriority:
-			d.priority = a.priority; break;
-		case DownlinkAction::Type::kNone: break;
-		}
+	const auto initialState = lastState;
+	auto desiredState = initialState;
+	for (const auto& action : planActions) {
+		ApplyActionToLastState(action, desiredState);
 	}
 
-	// Diff against lastState
-	for (auto& a : planActions) {
-		auto action = a;
-		auto it = lastState.find(a.consumerId);
-		if (it != lastState.end()) {
-			auto& prev = it->second;
-			auto desiredIt = desired.find(a.consumerId);
+	for (const auto& plannedAction : planActions) {
+		auto action = plannedAction;
+		if (action.type == DownlinkAction::Type::kSetLayers) {
+			auto initialIt = initialState.find(action.consumerId);
+			auto desiredIt = desiredState.find(action.consumerId);
 			bool resumingFromPause =
-				desiredIt != desired.end() &&
-				initiallyPaused[a.consumerId] &&
+				desiredIt != desiredState.end() &&
+				initialIt != initialState.end() &&
+				initialIt->second.paused &&
 				!desiredIt->second.paused;
 
-			if (action.type == DownlinkAction::Type::kSetLayers && resumingFromPause)
+			if (resumingFromPause) {
 				action.requestKeyFrame = true;
-
-			switch (a.type) {
-			case DownlinkAction::Type::kPause:
-				if (prev.paused) continue; break;
-			case DownlinkAction::Type::kResume:
-				if (!prev.paused) continue; break;
-			case DownlinkAction::Type::kSetLayers:
-				if (!action.requestKeyFrame &&
-					prev.spatialLayer == action.spatialLayer &&
-					prev.temporalLayer == action.temporalLayer) continue; break;
-			case DownlinkAction::Type::kSetPriority:
-				if (prev.priority == action.priority) continue; break;
-			case DownlinkAction::Type::kNone: continue;
 			}
+		}
+
+		auto it = lastState.find(action.consumerId);
+		if (it != lastState.end() && IsRedundantAction(action, it->second)) {
+			continue;
 		}
 		filtered.push_back(std::move(action));
 		ApplyActionToLastState(filtered.back(), lastState);

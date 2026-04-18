@@ -1,4 +1,5 @@
 #include "Consumer.h"
+#include "RtpStreamStatsJson.h"
 #include "request_generated.h"
 #include "transport_generated.h"
 #include "consumer_generated.h"
@@ -150,31 +151,7 @@ json Consumer::getStats(int timeoutMs) {
 		auto* stat = statsResp->stats()->Get(i);
 		if (!stat || !stat->data()) continue;
 
-		json entry;
-		auto dataType = stat->data_type();
-
-		if (dataType == FBS::RtpStream::StatsData::SendStats) {
-			auto send = stat->data_as_SendStats();
-			if (!send || !send->base() || !send->base()->data()) continue;
-			auto base = send->base()->data_as_BaseStats();
-			if (!base) continue;
-
-			entry["type"] = "outbound-rtp";
-			entry["ssrc"] = base->ssrc();
-			entry["kind"] = base->kind() == FBS::RtpParameters::MediaKind::AUDIO ? "audio" : "video";
-			entry["mimeType"] = base->mime_type() ? base->mime_type()->str() : "";
-			entry["packetsLost"] = base->packets_lost();
-			entry["fractionLost"] = base->fraction_lost();
-			entry["nackCount"] = base->nack_count();
-			entry["pliCount"] = base->pli_count();
-			entry["firCount"] = base->fir_count();
-			entry["score"] = base->score();
-			entry["roundTripTime"] = base->round_trip_time();
-			entry["packetCount"] = send->packet_count();
-			entry["byteCount"] = send->byte_count();
-			entry["bitrate"] = send->bitrate();
-		}
-
+		json entry = ConsumerSendStatsToJson(stat);
 		if (!entry.empty()) result.push_back(entry);
 	}
 	return result;

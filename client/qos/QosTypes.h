@@ -1,4 +1,5 @@
 #pragma once
+#include "qos/QosContract.h"
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -106,7 +107,7 @@ struct ProfileSelection {
 };
 
 struct QosPolicy {
-	std::string schema = "mediasoup.qos.policy.v1";
+	std::string schema = mediasoup::qos::contract::kPolicySchema;
 	int sampleIntervalMs = 1000;
 	int snapshotIntervalMs = 2000;
 	bool allowAudioOnly = true;
@@ -115,7 +116,7 @@ struct QosPolicy {
 };
 
 struct QosOverride {
-	std::string schema = "mediasoup.qos.override.v1";
+	std::string schema = mediasoup::qos::contract::kOverrideSchema;
 	OverrideScope scope = OverrideScope::Peer;
 	std::optional<std::string> trackId;
 	std::optional<int> maxLevelClamp;
@@ -135,7 +136,7 @@ struct RuntimeSettings {
 	bool probeActive = false;
 };
 
-constexpr size_t kQosMaxTracksPerSnapshot = 32u;
+constexpr size_t kQosMaxTracksPerSnapshot = mediasoup::qos::contract::kMaxTracksPerSnapshot;
 
 struct StateMachineContext {
 	State state = State::Stable;

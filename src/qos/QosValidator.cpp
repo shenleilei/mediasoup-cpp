@@ -241,7 +241,7 @@ ParseResult<ClientQosSnapshot> QosValidator::ParseClientSnapshot(const json& pay
 	}
 
 	if (!RequireStringField(payload, "schema", errorResult)) return errorResult;
-	if (payload["schema"].get_ref<const std::string&>() != "mediasoup.qos.client.v1") {
+	if (payload["schema"].get_ref<const std::string&>() != contract::kClientSchema) {
 		return MakeError<ClientQosSnapshot>("invalid schema");
 	}
 	if (!RequireNonNegativeIntegerField(payload, "seq", errorResult)) return errorResult;
@@ -298,7 +298,7 @@ ParseResult<QosPolicy> QosValidator::ParsePolicy(const json& payload) {
 		return MakeError<QosPolicy>("payload must be an object");
 	}
 	if (!RequireStringField(payload, "schema", errorResult)) return errorResult;
-	if (payload["schema"].get_ref<const std::string&>() != "mediasoup.qos.policy.v1") {
+	if (payload["schema"].get_ref<const std::string&>() != contract::kPolicySchema) {
 		return MakeError<QosPolicy>("invalid schema");
 	}
 	if (!RequireNonNegativeIntegerField(payload, "sampleIntervalMs", errorResult)) return errorResult;
@@ -333,7 +333,7 @@ ParseResult<QosOverride> QosValidator::ParseOverride(const json& payload) {
 		return MakeError<QosOverride>("payload must be an object");
 	}
 	if (!RequireStringField(payload, "schema", errorResult)) return errorResult;
-	if (payload["schema"].get_ref<const std::string&>() != "mediasoup.qos.override.v1") {
+	if (payload["schema"].get_ref<const std::string&>() != contract::kOverrideSchema) {
 		return MakeError<QosOverride>("invalid schema");
 	}
 	if (!RequireStringField(payload, "scope", errorResult)) return errorResult;

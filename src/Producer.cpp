@@ -1,4 +1,5 @@
 #include "Producer.h"
+#include "RtpStreamStatsJson.h"
 #include "request_generated.h"
 #include "transport_generated.h"
 #include "producer_generated.h"
@@ -96,37 +97,7 @@ json Producer::getStats(int timeoutMs) {
 		auto* stat = statsResp->stats()->Get(i);
 		if (!stat || !stat->data()) continue;
 
-		json entry;
-		auto dataType = stat->data_type();
-
-		if (dataType == FBS::RtpStream::StatsData::RecvStats) {
-			auto recv = stat->data_as_RecvStats();
-			if (!recv || !recv->base() || !recv->base()->data()) continue;
-			auto base = recv->base()->data_as_BaseStats();
-			if (!base) continue;
-
-			entry["type"] = "inbound-rtp";
-			entry["ssrc"] = base->ssrc();
-			entry["kind"] = base->kind() == FBS::RtpParameters::MediaKind::AUDIO ? "audio" : "video";
-			entry["mimeType"] = base->mime_type() ? base->mime_type()->str() : "";
-			entry["packetsLost"] = base->packets_lost();
-			entry["fractionLost"] = base->fraction_lost();
-			entry["packetsDiscarded"] = base->packets_discarded();
-			entry["packetsRetransmitted"] = base->packets_retransmitted();
-			entry["packetsRepaired"] = base->packets_repaired();
-			entry["nackCount"] = base->nack_count();
-			entry["nackPacketCount"] = base->nack_packet_count();
-			entry["pliCount"] = base->pli_count();
-			entry["firCount"] = base->fir_count();
-			entry["score"] = base->score();
-			entry["roundTripTime"] = base->round_trip_time();
-			if (base->rid()) entry["rid"] = base->rid()->str();
-			entry["jitter"] = recv->jitter();
-			entry["packetCount"] = recv->packet_count();
-			entry["byteCount"] = recv->byte_count();
-			entry["bitrate"] = recv->bitrate();
-		}
-
+		json entry = ProducerRecvStatsToJson(stat);
 		if (!entry.empty()) result.push_back(entry);
 	}
 	return result;

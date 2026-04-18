@@ -8,7 +8,7 @@ QosOverride MakeOverride(
 	std::optional<bool> forceAudioOnly, std::optional<bool> disableRecovery)
 {
 	QosOverride overrideData;
-	overrideData.schema = "mediasoup.qos.override.v1";
+	overrideData.schema = contract::kOverrideSchema;
 	overrideData.scope = "peer";
 	overrideData.ttlMs = ttlMs;
 	overrideData.reason = reason;

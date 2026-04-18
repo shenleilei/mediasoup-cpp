@@ -1,22 +1,25 @@
 #pragma once
-#include "RoomService.h"
-#include "WorkerThread.h"
 #include <nlohmann/json.hpp>
-#include <string>
-#include <queue>
-#include <mutex>
+#include <atomic>
 #include <condition_variable>
-#include <thread>
 #include <functional>
-#include <vector>
 #include <memory>
+#include <mutex>
+#include <queue>
+#include <string>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
-#include <atomic>
+#include <vector>
 
 namespace mediasoup {
 
 using json = nlohmann::json;
+
+class RoomRegistry;
+class WorkerThread;
+struct SignalingServerHttp;
+struct SignalingServerWs;
 
 class SignalingServer {
 public:
@@ -35,6 +38,9 @@ public:
 	void stopRegistryWorker();
 
 private:
+	friend struct SignalingServerHttp;
+	friend struct SignalingServerWs;
+
 		struct RuntimeSnapshot {
 			size_t totalRooms = 0;
 			size_t totalWorkers = 0;
