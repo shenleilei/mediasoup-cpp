@@ -22,7 +22,7 @@
 | 层级 | 作用 | 典型入口 |
 |---|---|---|
 | client JS / Node 逻辑层 | 验证纯逻辑、状态机、协议和控制器行为 | `src/client/lib/test/test.qos.*.js` |
-| C++ 服务端层 | 验证 ingest / validate / aggregate / override / allocator / cleanup | `mediasoup_tests` / `mediasoup_qos_integration_tests` |
+| C++ 服务端层 | 验证 ingest / validate / aggregate / override / allocator / cleanup | `mediasoup_qos_unit_tests` / `mediasoup_qos_integration_tests` |
 | browser harness 层 | 验证真实浏览器中的 signaling / WebRTC / consumer-producer 控制链路 | `tests/qos_harness/browser_*.mjs` |
 | matrix 层 | 验证弱网矩阵、恢复路径、边界场景和趋势分析 | `run_matrix.mjs` / `run_downlink_matrix.mjs` |
 
@@ -69,9 +69,12 @@
 
 覆盖内容：
 
+- client QoS controller / planner / protocol / state machine
 - QoS protocol / validator
 - QoS registry / aggregator / room aggregator
 - override builder
+- downlink allocator / health / planner / demand / publisher supply
+- threaded control helper / QoS thread model
 
 测试目的：
 
@@ -421,6 +424,7 @@ node tests/qos_harness/run_matrix.mjs --cases=T9,T10,T11
 - [uplink-qos-briefing.md](./uplink-qos-briefing.md)
 - [uplink-qos-final-report.md](./uplink-qos-final-report.md)
 - [uplink-qos-test-results-summary.md](./uplink-qos-test-results-summary.md)
+- [downlink-qos-test-results-summary.md](./downlink-qos-test-results-summary.md)
 - [downlink-qos-case-results.md](./downlink-qos-case-results.md)
 - [downlink-qos-v3-worker-validation_cn.md](./downlink-qos-v3-worker-validation_cn.md)
 - [README.md](../README.md)

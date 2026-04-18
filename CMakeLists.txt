@@ -131,16 +131,11 @@ if(BUILD_TESTS)
     add_subdirectory(third_party/googletest EXCLUDE_FROM_ALL)
     enable_testing()
 
-    set(MEDIASOUP_UNIT_TEST_SOURCES
+    set(MEDIASOUP_QOS_UNIT_TEST_SOURCES
         tests/test_client_qos.cpp
         tests/test_downlink_allocator.cpp
         tests/test_downlink_health.cpp
         tests/test_downlink_v2.cpp
-        tests/test_geo_db_resolver.cpp
-        tests/test_geo_router.cpp
-        tests/test_multinode.cpp
-        tests/test_ortc.cpp
-        tests/test_qos_accuracy.cpp
         tests/test_qos_aggregator.cpp
         tests/test_qos_override.cpp
         tests/test_qos_protocol.cpp
@@ -148,19 +143,34 @@ if(BUILD_TESTS)
         tests/test_qos_room_aggregator.cpp
         tests/test_qos_unit.cpp
         tests/test_qos_validator.cpp
+        tests/test_thread_model.cpp
+    )
+
+    set(MEDIASOUP_UNIT_TEST_SOURCES
+        tests/test_geo_db_resolver.cpp
+        tests/test_geo_router.cpp
+        tests/test_multinode.cpp
+        tests/test_ortc.cpp
         tests/test_request_timeout.cpp
         tests/test_review_fixes.cpp
         tests/test_room.cpp
         tests/test_rtp_types.cpp
         tests/test_stability.cpp
         tests/test_supported_capabilities.cpp
-        tests/test_thread_model.cpp
         tests/test_utils.cpp
         tests/test_worker_queue.cpp
     )
 
     mediasoup_add_gtest_target(mediasoup_tests
         SOURCES ${MEDIASOUP_UNIT_TEST_SOURCES}
+        LINK_LIBRARIES
+            mediasoup_build_test_support
+            mediasoup_lib
+            ip2region
+    )
+
+    mediasoup_add_gtest_target(mediasoup_qos_unit_tests
+        SOURCES ${MEDIASOUP_QOS_UNIT_TEST_SOURCES}
         LINK_LIBRARIES
             mediasoup_build_test_support
             mediasoup_lib

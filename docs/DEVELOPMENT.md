@@ -187,7 +187,8 @@ join
 
 | 套件 | 内容 |
 |------|------|
-| mediasoup_tests | ORTC、RTP 类型、Room/Peer、QoS 单测、Recorder、WorkerQueue、plain-client QoS 单测、review fixes |
+| mediasoup_tests | ORTC、RTP 类型、Room/Peer、geo、多节点辅助、request timeout、review fixes、基础稳定性单测 |
+| mediasoup_qos_unit_tests | uplink/downlink QoS 单测、plain-client QoS 单测、downlink planner / demand / supply、threaded control helper / thread-model 单测 |
 | mediasoup_integration_tests | 黑盒：真实 SFU + WebSocket 客户端 |
 | mediasoup_review_fix_tests | 重连、geo 路由、country isolation、缓存、session identity |
 | mediasoup_stability_integration_tests | close/disconnect 各种时序 |
@@ -205,8 +206,9 @@ join
 # 必须从项目根目录运行（worker binary 用相对路径）
 cd /path/to/mediasoup-cpp
 
-# 单元测试（约 2.5 分钟，QoS 精度测试较慢）
+# 单元测试
 ./build/mediasoup_tests
+./build/mediasoup_qos_unit_tests
 
 # 集成测试
 ./build/mediasoup_integration_tests
@@ -224,11 +226,12 @@ cd /path/to/mediasoup-cpp
 
 # run_all_tests.sh / run_qos_tests.sh 遇到单个测试失败后会继续跑剩余选中项，
 # 最终统一输出失败汇总并返回非 0。
-# run_all_tests.sh 同时会刷新 docs/non-qos-test-results.md，
-# 记录本次 non-QoS 选择项和逐任务结果。
+# run_all_tests.sh 同时会刷新 docs/full-cpp-test-results.md，
+# 记录本次 full C++ 选择项和逐任务结果。
 
-# 跳过 QoS 精度测试（快速验证）
-./build/mediasoup_tests --gtest_filter='-QosAccuracyTest.*:QosRecordingAccuracyTest.*'
+# 快速验证：核心 unit + QoS unit
+./build/mediasoup_tests
+./build/mediasoup_qos_unit_tests
 ```
 
 ### 已知 flaky test

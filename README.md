@@ -624,14 +624,15 @@ If Redis multi-node routing is enabled, every node must publish a `ws://` addres
 All tests must be run from the project root directory.
 
 ```bash
-# non-QoS full regression
+# full C++ regression
 ./scripts/run_all_tests.sh
 
-# QoS-only regression
+# QoS JS / harness / matrix regression
 ./scripts/run_qos_tests.sh
 
 # individual binaries
 ./build/mediasoup_tests
+./build/mediasoup_qos_unit_tests
 ./build/mediasoup_review_fix_tests
 ./build/mediasoup_stability_integration_tests
 ./build/mediasoup_multinode_tests
@@ -650,8 +651,8 @@ start an isolated `redis-server` automatically. They require the `redis-server` 
 selected test groups after a test failure and return non-zero only after printing a final
 failure summary.
 
-`./scripts/run_all_tests.sh` also rewrites the latest non-QoS regression report:
-[docs/non-qos-test-results.md](./docs/non-qos-test-results.md)
+`./scripts/run_all_tests.sh` also rewrites the latest full C++ regression report:
+[docs/full-cpp-test-results.md](./docs/full-cpp-test-results.md)
 
 The regression-heavy suites currently cover:
 
@@ -675,14 +676,14 @@ For local verification before review:
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
 
-# non-QoS full regression
+# full C++ regression
 ./scripts/run_all_tests.sh
 
-# fast baseline (unit)
-./build/mediasoup_tests --gtest_filter='-QosAccuracyTest.*:QosRecordingAccuracyTest.*'
-
-# full baseline
+# fast baseline (core unit)
 ./build/mediasoup_tests
+
+# QoS unit baseline
+./build/mediasoup_qos_unit_tests
 ```
 
 ### QoS Test Entry

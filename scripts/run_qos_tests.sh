@@ -8,7 +8,7 @@ JEST_BIN="$CLIENT_DIR/node_modules/.bin/jest"
 CASE_REPORT_SCRIPT="$ROOT_DIR/tests/qos_harness/render_case_report.mjs"
 ARTIFACTS_DIR="$ROOT_DIR/tests/qos_harness/artifacts"
 FAILURES_FILE="$ARTIFACTS_DIR/last-failures.txt"
-DOWNLINK_REPORT_FILE="$ROOT_DIR/docs/downlink-qos-case-results.md"
+DOWNLINK_SUMMARY_FILE="$ROOT_DIR/docs/downlink-qos-test-results-summary.md"
 GENERATE_CASE_REPORT=0
 GENERATE_DOWNLINK_CASE_REPORT=0
 GENERATE_CPP_CLIENT_CASE_REPORT=0
@@ -364,10 +364,10 @@ downlink_task_command() {
   local label="$1"
   case "$label" in
     cpp-unit)
-      printf './build/mediasoup_tests --gtest_filter=*Downlink*:*ProducerDemand*:*PublisherSupply*:*SubscriberBudgetAllocator*\n'
+      printf './build/mediasoup_qos_unit_tests\n'
       ;;
     cpp-integration)
-      printf './build/mediasoup_qos_integration_tests --gtest_filter=QosIntegrationTest.Downlink*\n'
+      printf './build/mediasoup_qos_integration_tests\n'
       ;;
     browser-harness:downlink-controls)
       printf 'node tests/qos_harness/browser_downlink_controls.mjs\n'
@@ -441,9 +441,9 @@ write_downlink_report() {
     esac
   done
 
-  mkdir -p "$(dirname "$DOWNLINK_REPORT_FILE")"
+  mkdir -p "$(dirname "$DOWNLINK_SUMMARY_FILE")"
   {
-    echo "# 下行 QoS 逐项最终结果"
+    echo "# 下行 QoS 测试结果汇总"
     echo
     echo "生成时间：\`$generated_at\`"
     echo
@@ -499,7 +499,7 @@ write_downlink_report() {
       echo "| 对应命令 | \`$(downlink_task_command "$label")\` |"
       echo
     done
-  } > "$DOWNLINK_REPORT_FILE"
+  } > "$DOWNLINK_SUMMARY_FILE"
 }
 
 normalize_groups() {
@@ -589,10 +589,11 @@ run_client_js() {
 }
 
 run_cpp_unit() {
-  require_file "$BUILD_DIR/mediasoup_tests"
+  require_file "$BUILD_DIR/mediasoup_qos_unit_tests"
   ensure_target_built \
-    mediasoup_tests \
-    "$BUILD_DIR/mediasoup_tests" \
+    mediasoup_qos_unit_tests \
+    "$BUILD_DIR/mediasoup_qos_unit_tests" \
+    "$ROOT_DIR/CMakeLists.txt" \
     "$ROOT_DIR/tests/test_client_qos.cpp" \
     "$ROOT_DIR/client/qos/QosConstants.h" \
     "$ROOT_DIR/client/qos/QosController.h" \
@@ -607,6 +608,8 @@ run_cpp_unit() {
     "$ROOT_DIR/client/qos/QosTypes.h" \
     "$ROOT_DIR/tests/test_downlink_allocator.cpp" \
     "$ROOT_DIR/tests/test_downlink_health.cpp" \
+    "$ROOT_DIR/tests/test_downlink_v2.cpp" \
+    "$ROOT_DIR/tests/test_qos_unit.cpp" \
     "$ROOT_DIR/tests/test_qos_protocol.cpp" \
     "$ROOT_DIR/tests/test_qos_validator.cpp" \
     "$ROOT_DIR/tests/test_qos_registry.cpp" \
@@ -618,8 +621,7 @@ run_cpp_unit() {
   run_cmd \
     "cpp-unit" \
     --cwd "$ROOT_DIR" \
-    "$BUILD_DIR/mediasoup_tests" \
-    "--gtest_filter=ClientQos*:DownlinkAllocatorTest.*:DownlinkHealthMonitorTest.*:QosProtocolTest.*:QosValidatorTest.*:QosRegistryTest.*:QosAggregatorTest.*:QosRoomAggregatorTest.*:QosOverrideBuilderTest.*:ThreadedControlHelpers.*"
+    "$BUILD_DIR/mediasoup_qos_unit_tests"
 }
 
 run_cpp_integration() {
@@ -627,13 +629,13 @@ run_cpp_integration() {
   ensure_target_built \
     mediasoup_qos_integration_tests \
     "$BUILD_DIR/mediasoup_qos_integration_tests" \
+    "$ROOT_DIR/CMakeLists.txt" \
     "$ROOT_DIR/tests/test_qos_integration.cpp"
   prepare_test_port 14011 "QoS integration test SFU port 14011"
   run_cmd \
     "cpp-integration" \
     --cwd "$ROOT_DIR" \
-    "$BUILD_DIR/mediasoup_qos_integration_tests" \
-    "--gtest_filter=QosIntegrationTest.ClientStatsQosStoredAndAggregated:QosIntegrationTest.ClientStatsQosInBroadcast:QosIntegrationTest.InvalidClientStatsRejected:QosIntegrationTest.OlderClientStatsSeqIsIgnored:QosIntegrationTest.JoinReceivesQosPolicyNotification:QosIntegrationTest.SetQosOverrideNotifiesTargetPeer:QosIntegrationTest.ManualQosOverrideClear:QosIntegrationTest.SetQosPolicyNotifiesTargetPeer:QosIntegrationTest.AutomaticQosOverrideOnPoorQuality:QosIntegrationTest.AutomaticQosOverrideOnLostQuality:QosIntegrationTest.AutomaticQosOverrideClearsWhenQualityRecovers:QosIntegrationTest.ConnectionQualityNotificationDelivered:QosIntegrationTest.RoomQosStateAndRoomPressureOverride:QosIntegrationTest.RoomLostPeerPressureOverride:QosIntegrationTest.DownlinkClientStatsStored:QosIntegrationTest.DownlinkClientStatsRejectsMalformedPayload:QosIntegrationTest.DownlinkClientStatsAcceptsLegacySchema:QosIntegrationTest.DownlinkClientStatsRejectsStaleSeq:QosIntegrationTest.DownlinkHiddenAutoPauses:QosIntegrationTest.DownlinkVisibleAutoResumes:QosIntegrationTest.DownlinkLargeSmallGetDifferentLayers:QosIntegrationTest.DownlinkStateCleanedOnLeave:QosIntegrationTest.DownlinkStateCleanedOnReconnect:QosIntegrationTest.DownlinkV3SustainedZeroDemandTriggersPauseUpstream:QosIntegrationTest.DownlinkV3DemandRestoredAfterPauseTriggersClearOrResume"
+    "$BUILD_DIR/mediasoup_qos_integration_tests"
 }
 
 run_cpp_accuracy() {
@@ -1117,7 +1119,7 @@ fi
 echo
 echo "==> [downlink-report]"
 if write_downlink_report; then
-  echo "<== [downlink-report] PASS ($DOWNLINK_REPORT_FILE)"
+  echo "<== [downlink-report] PASS ($DOWNLINK_SUMMARY_FILE)"
 else
   echo "<== [downlink-report] WARN (generation failed)" >&2
 fi

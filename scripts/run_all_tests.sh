@@ -4,12 +4,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build"
 CLIENT_BUILD_DIR="$ROOT_DIR/client/build"
-REPORT_FILE="$ROOT_DIR/docs/non-qos-test-results.md"
+REPORT_FILE="$ROOT_DIR/docs/full-cpp-test-results.md"
 JOBS="${JOBS:-$(nproc)}"
 
 ALL_GROUPS=(
   unit
   integration
+  qos
   topology
   threaded
 )
@@ -34,18 +35,17 @@ Options:
   -h, --help     show help
 
 Groups:
-  unit         non-QoS suites inside mediasoup_tests
+  unit         core unit suites inside mediasoup_tests
   integration  integration / e2e / stability / review-fix binaries
+  qos          qos unit / integration / accuracy / recording binaries
   topology     topology + multinode binaries
   threaded     threaded plain-client integration binary
 
 Notes:
-  - This script is the non-QoS full-test entry.
+  - This script is the full C++ gtest regression entry.
   - Selected groups keep running after a test failure; the script exits non-zero at the end if any group failed.
-  - It intentionally excludes scripts/run_qos_tests.sh and dedicated QoS binaries:
-    mediasoup_qos_integration_tests
-    mediasoup_qos_accuracy_tests
-    mediasoup_qos_recording_accuracy_tests
+  - It covers all C++ gtest targets defined in CMakeLists.txt.
+  - QoS JS tests, harnesses, and browser / matrix runs remain under scripts/run_qos_tests.sh.
   - threaded tests require client/build/plain-client.
   - mediasoup_review_fix_tests, mediasoup_multinode_tests, and mediasoup_topology_tests
     start an isolated Redis and require redis-server in PATH.
@@ -119,7 +119,7 @@ write_report() {
 
   mkdir -p "$(dirname "$REPORT_FILE")"
   {
-    echo "# Non-QoS Test Results"
+    echo "# Full C++ Test Results"
     echo
     echo "Generated at: \`$generated_at\`"
     echo
@@ -204,15 +204,19 @@ cleanup_test_ports() {
 }
 
 build_targets() {
-  echo "==> building non-QoS test targets"
+  echo "==> building full C++ test targets"
   cmake --build "$BUILD_DIR" -j"$JOBS" --target \
     mediasoup_tests \
+    mediasoup_qos_unit_tests \
     mediasoup_integration_tests \
     mediasoup_e2e_tests \
+    mediasoup_qos_integration_tests \
     mediasoup_topology_tests \
     mediasoup_stability_integration_tests \
     mediasoup_multinode_tests \
     mediasoup_review_fix_tests \
+    mediasoup_qos_accuracy_tests \
+    mediasoup_qos_recording_accuracy_tests \
     mediasoup_thread_integration_tests
   cmake --build "$CLIENT_BUILD_DIR" -j"$JOBS" --target plain-client
 }
@@ -245,8 +249,7 @@ run_unit() {
   require_file "$BUILD_DIR/mediasoup_tests" "unit:preflight:mediasoup_tests" || return 1
   run_cmd \
     "unit" \
-    "$BUILD_DIR/mediasoup_tests" \
-    "--gtest_filter=-ClientQos*:DownlinkAllocatorTest.*:DownlinkHealthMonitorTest.*:QosProtocolTest.*:QosValidatorTest.*:QosRegistryTest.*:QosAggregatorTest.*:QosRoomAggregatorTest.*:QosOverrideBuilderTest.*:QosAccuracyTest.*:QosRecordingAccuracyTest.*"
+    "$BUILD_DIR/mediasoup_tests"
 }
 
 run_integration() {
@@ -270,6 +273,30 @@ run_integration() {
   cleanup_test_ports
   require_command redis-server "integration:preflight:redis-server" || return 1
   if ! run_cmd "integration:mediasoup_review_fix_tests" "$BUILD_DIR/mediasoup_review_fix_tests"; then
+    failed=1
+  fi
+  return "$failed"
+}
+
+run_qos() {
+  local failed=0
+  cleanup_test_ports
+  require_file "$BUILD_DIR/mediasoup_qos_unit_tests" "qos:preflight:mediasoup_qos_unit_tests" || return 1
+  require_file "$BUILD_DIR/mediasoup_qos_integration_tests" "qos:preflight:mediasoup_qos_integration_tests" || return 1
+  require_file "$BUILD_DIR/mediasoup_qos_accuracy_tests" "qos:preflight:mediasoup_qos_accuracy_tests" || return 1
+  require_file "$BUILD_DIR/mediasoup_qos_recording_accuracy_tests" "qos:preflight:mediasoup_qos_recording_accuracy_tests" || return 1
+  if ! run_cmd "qos:mediasoup_qos_unit_tests" "$BUILD_DIR/mediasoup_qos_unit_tests"; then
+    failed=1
+  fi
+  cleanup_test_ports
+  if ! run_cmd "qos:mediasoup_qos_integration_tests" "$BUILD_DIR/mediasoup_qos_integration_tests"; then
+    failed=1
+  fi
+  cleanup_test_ports
+  if ! run_cmd "qos:mediasoup_qos_accuracy_tests" "$BUILD_DIR/mediasoup_qos_accuracy_tests"; then
+    failed=1
+  fi
+  if ! run_cmd "qos:mediasoup_qos_recording_accuracy_tests" "$BUILD_DIR/mediasoup_qos_recording_accuracy_tests"; then
     failed=1
   fi
   return "$failed"
@@ -305,6 +332,7 @@ run_group() {
   case "$group" in
     unit) run_unit ;;
     integration) run_integration ;;
+    qos) run_qos ;;
     topology) run_topology ;;
     threaded) run_threaded ;;
     *) echo "error: unknown group '$group'" >&2; return 1 ;;
@@ -341,9 +369,9 @@ main() {
 
   echo
   if ((${#FAILED_GROUPS[@]} == 0)); then
-    echo "non-QoS test run passed"
+    echo "full C++ test run passed"
   else
-    echo "non-QoS test run completed with failures in group(s): ${FAILED_GROUPS[*]}" >&2
+    echo "full C++ test run completed with failures in group(s): ${FAILED_GROUPS[*]}" >&2
     exit 1
   fi
 }

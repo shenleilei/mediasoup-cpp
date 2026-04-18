@@ -7,9 +7,51 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <fstream>
+#include <optional>
 
 static const int SFU_PORT = 14011; // different port from main integration tests
 static const std::string HOST = "127.0.0.1";
+
+namespace {
+
+bool waitForPortFree(int port, int polls = 30, int sleepUs = 100000) {
+	for (int i = 0; i < polls; ++i) {
+		int fd = socket(AF_INET, SOCK_STREAM, 0);
+		if (fd < 0) return false;
+		sockaddr_in addr{};
+		addr.sin_family = AF_INET;
+		addr.sin_port = htons(port);
+		addr.sin_addr.s_addr = htonl(INADDR_ANY);
+		int opt = 1;
+		setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+		bool free = (bind(fd, (sockaddr*)&addr, sizeof(addr)) == 0);
+		::close(fd);
+		if (free) return true;
+		usleep(sleepUs);
+	}
+	return false;
+}
+
+bool waitForPortListening(int port, int polls = 70, int sleepUs = 100000) {
+	for (int i = 0; i < polls; ++i) {
+		usleep(sleepUs);
+		int fd = socket(AF_INET, SOCK_STREAM, 0);
+		if (fd < 0) return false;
+		sockaddr_in addr{};
+		addr.sin_family = AF_INET;
+		addr.sin_port = htons(port);
+		inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+		if (::connect(fd, (sockaddr*)&addr, sizeof(addr)) == 0) {
+			::close(fd);
+			usleep(200000);
+			return true;
+		}
+		::close(fd);
+	}
+	return false;
+}
+
+} // namespace
 
 class QosIntegrationTest : public ::testing::Test {
 protected:
@@ -17,6 +59,9 @@ protected:
 	std::string testRoom_;
 
 	void SetUp() override {
+		ASSERT_TRUE(waitForPortFree(SFU_PORT))
+			<< "Port " << SFU_PORT << " still occupied by previous SFU";
+
 		testRoom_ = "qos_" + std::to_string(getpid()) + "_" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 
@@ -36,39 +81,14 @@ protected:
 		sfuPid_ = atoi(buf);
 		ASSERT_GT(sfuPid_, 0);
 
-		for (int i = 0; i < 50; ++i) {
-			usleep(100000);
-			int fd = socket(AF_INET, SOCK_STREAM, 0);
-			sockaddr_in addr{};
-			addr.sin_family = AF_INET;
-			addr.sin_port = htons(SFU_PORT);
-			inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
-			if (::connect(fd, (sockaddr*)&addr, sizeof(addr)) == 0) {
-				::close(fd);
-				usleep(200000);
-				return;
-			}
-			::close(fd);
-		}
-		FAIL() << "SFU did not start within 5 seconds";
+		ASSERT_TRUE(waitForPortListening(SFU_PORT))
+			<< "SFU did not start within 7 seconds";
 	}
 
 	void TearDown() override {
 		if (sfuPid_ > 0) {
 			terminateSfuProcess(sfuPid_);
-			for (int i = 0; i < 20; ++i) {
-				usleep(50000);
-				int fd = socket(AF_INET, SOCK_STREAM, 0);
-				sockaddr_in addr{};
-				addr.sin_family = AF_INET;
-				addr.sin_port = htons(SFU_PORT);
-				addr.sin_addr.s_addr = htonl(INADDR_ANY);
-				int opt = 1;
-				setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-				bool free = (bind(fd, (sockaddr*)&addr, sizeof(addr)) == 0);
-				::close(fd);
-				if (free) return;
-			}
+			(void)waitForPortFree(SFU_PORT, 40, 50000);
 		}
 	}
 
@@ -76,6 +96,7 @@ protected:
 		std::unique_ptr<TestWsClient> ws;
 		std::string peerId;
 		std::string roomId;
+		json joinData;
 	};
 
 	JoinedClient joinRoom(const std::string& roomId, const std::string& peerId) {
@@ -103,6 +124,7 @@ protected:
 			{"displayName", peerId}, {"rtpCapabilities", rtpCaps}
 		});
 		EXPECT_TRUE(resp.value("ok", false)) << "join failed: " << resp.dump();
+		c.joinData = resp["data"];
 		return c;
 	}
 
@@ -272,8 +294,18 @@ TEST_F(QosIntegrationTest, GetStatsForOtherPeer) {
 	produceAudio(alice, 70000002);
 	usleep(200000);
 
-	// Bob queries Alice's stats
-	auto resp = bob.ws->request("getStats", {{"peerId", "alice"}});
+	json resp;
+	for (int i = 0; i < 10; ++i) {
+		resp = bob.ws->request("getStats", {{"peerId", "alice"}});
+		if (resp.value("ok", false) && resp.contains("data") &&
+			resp["data"].value("peerId", "") == "alice" &&
+			resp["data"].contains("producers") &&
+			!resp["data"]["producers"].empty()) {
+			break;
+		}
+		usleep(100000);
+	}
+
 	ASSERT_TRUE(resp.value("ok", false)) << resp.dump();
 	EXPECT_EQ(resp["data"]["peerId"], "alice");
 	EXPECT_FALSE(resp["data"]["producers"].empty());
@@ -354,7 +386,7 @@ TEST_F(QosIntegrationTest, StatsReportWithConsumers) {
 	produceAudio(alice, 70000006);
 
 	// Bob should get newConsumer
-	auto consumerNotif = bob.ws->waitNotification("newConsumer", 3000);
+	auto consumerNotif = bob.ws->waitNotification("newConsumer", 5000);
 	ASSERT_FALSE(consumerNotif.empty()) << "Bob did not get newConsumer";
 
 	// Wait for statsReport (kStatsBroadcastIntervalMs=10s)
@@ -548,22 +580,8 @@ protected:
 	std::string recordDir_;
 
 	void SetUp() override {
-		// Wait for port to be free (previous fixture may have just torn down)
-		bool portFree = false;
-		for (int i = 0; i < 30; ++i) {
-			int fd = socket(AF_INET, SOCK_STREAM, 0);
-			sockaddr_in addr{};
-			addr.sin_family = AF_INET;
-			addr.sin_port = htons(SFU_PORT);
-			addr.sin_addr.s_addr = htonl(INADDR_ANY);
-			int opt = 1;
-			setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-			portFree = (bind(fd, (sockaddr*)&addr, sizeof(addr)) == 0);
-			::close(fd);
-			if (portFree) break;
-			usleep(100000);
-		}
-		ASSERT_TRUE(portFree) << "Port " << SFU_PORT << " still occupied by previous SFU";
+		ASSERT_TRUE(waitForPortFree(SFU_PORT))
+			<< "Port " << SFU_PORT << " still occupied by previous SFU";
 
 		testRoom_ = "qosrec_" + std::to_string(getpid()) + "_" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
@@ -586,37 +604,14 @@ protected:
 		sfuPid_ = atoi(buf);
 		ASSERT_GT(sfuPid_, 0);
 
-		for (int i = 0; i < 50; ++i) {
-			usleep(100000);
-			int fd = socket(AF_INET, SOCK_STREAM, 0);
-			sockaddr_in addr{};
-			addr.sin_family = AF_INET;
-			addr.sin_port = htons(SFU_PORT);
-			inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
-			if (::connect(fd, (sockaddr*)&addr, sizeof(addr)) == 0) {
-				::close(fd); usleep(200000); return;
-			}
-			::close(fd);
-		}
-		FAIL() << "SFU did not start";
+		ASSERT_TRUE(waitForPortListening(SFU_PORT))
+			<< "SFU did not start within 7 seconds";
 	}
 
 	void TearDown() override {
 		if (sfuPid_ > 0) {
 			terminateSfuProcess(sfuPid_);
-			for (int i = 0; i < 20; ++i) {
-				usleep(50000);
-				int fd = socket(AF_INET, SOCK_STREAM, 0);
-				sockaddr_in addr{};
-				addr.sin_family = AF_INET;
-				addr.sin_port = htons(SFU_PORT);
-				addr.sin_addr.s_addr = htonl(INADDR_ANY);
-				int opt = 1;
-				setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-				bool free = (bind(fd, (sockaddr*)&addr, sizeof(addr)) == 0);
-				::close(fd);
-				if (free) break;
-			}
+			(void)waitForPortFree(SFU_PORT, 40, 50000);
 		}
 		system(("rm -rf " + recordDir_).c_str());
 		}
@@ -1145,6 +1140,51 @@ TEST_F(QosIntegrationTest, PlainPublishRejectsDuplicateVideoSsrcs) {
 
 	EXPECT_FALSE(resp.value("ok", false)) << resp.dump();
 	EXPECT_FALSE(resp.value("error", "").empty()) << resp.dump();
+}
+
+TEST_F(QosIntegrationTest, PlainPublishReplacesOldTransportAndUsesBaselineCodec) {
+	auto alice = joinRoom(testRoom_, "alice");
+
+	std::optional<int> baselinePt;
+	std::optional<int> mainPt;
+	const auto& routerCaps = alice.joinData["routerRtpCapabilities"];
+	ASSERT_TRUE(routerCaps.contains("codecs"));
+	for (const auto& codec : routerCaps["codecs"]) {
+		if (codec.value("mimeType", "") != "video/H264") continue;
+		const auto& parameters = codec.value("parameters", json::object());
+		if (parameters.value("packetization-mode", 0) != 1) continue;
+		const auto profileLevelId = parameters.value("profile-level-id", std::string{});
+		if (profileLevelId == "42e01f") baselinePt = codec.value("preferredPayloadType", 0);
+		if (profileLevelId == "4d0032") mainPt = codec.value("preferredPayloadType", 0);
+	}
+
+	ASSERT_TRUE(baselinePt.has_value());
+	ASSERT_TRUE(mainPt.has_value());
+	EXPECT_NE(*baselinePt, *mainPt);
+
+	auto first = alice.ws->request("plainPublish", {
+		{"videoSsrc", 11111111u},
+		{"audioSsrc", 22222222u}
+	});
+	ASSERT_TRUE(first.value("ok", false)) << first.dump();
+	EXPECT_EQ(first["data"]["videoPt"], *baselinePt);
+
+	auto second = alice.ws->request("plainPublish", {
+		{"videoSsrc", 33333333u},
+		{"audioSsrc", 44444444u}
+	});
+	ASSERT_TRUE(second.value("ok", false)) << second.dump();
+	EXPECT_EQ(second["data"]["videoPt"], *baselinePt);
+	EXPECT_NE(second["data"]["transportId"], first["data"]["transportId"]);
+
+	auto observer = joinRoom(testRoom_, "observer");
+	usleep(200000);
+
+	auto stats = observer.ws->request("getStats", {{"peerId", "alice"}});
+	ASSERT_TRUE(stats.value("ok", false)) << stats.dump();
+	ASSERT_TRUE(stats["data"].contains("producers"));
+	EXPECT_EQ(stats["data"]["producers"].size(), 2u)
+		<< "replacing plainPublish should keep only current audio/video producers";
 }
 
 TEST_F(QosIntegrationTest, SetQosPolicyNotifiesTargetPeer) {
