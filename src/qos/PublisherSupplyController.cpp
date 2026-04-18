@@ -7,7 +7,7 @@ QosOverride MakeTrackClamp(const std::string& trackId, uint32_t maxLevelClamp,
 	uint32_t ttlMs, const std::string& reason)
 {
 	QosOverride o;
-	o.schema = "mediasoup.qos.override.v1";
+	o.schema = contract::kOverrideSchema;
 	o.scope = "track";
 	o.trackId = trackId;
 	o.hasTrackId = true;
@@ -24,7 +24,7 @@ QosOverride MakeTrackClamp(const std::string& trackId, uint32_t maxLevelClamp,
 
 QosOverride MakeTrackClear(const std::string& trackId, const std::string& reason) {
 	QosOverride o;
-	o.schema = "mediasoup.qos.override.v1";
+	o.schema = contract::kOverrideSchema;
 	o.scope = "track";
 	o.trackId = trackId;
 	o.hasTrackId = true;
@@ -40,7 +40,7 @@ QosOverride MakeTrackClear(const std::string& trackId, const std::string& reason
 
 QosOverride MakeTrackPause(const std::string& trackId, uint32_t ttlMs) {
 	QosOverride o;
-	o.schema = "mediasoup.qos.override.v1";
+	o.schema = contract::kOverrideSchema;
 	o.scope = "track";
 	o.trackId = trackId;
 	o.hasTrackId = true;
@@ -57,7 +57,7 @@ QosOverride MakeTrackPause(const std::string& trackId, uint32_t ttlMs) {
 
 QosOverride MakeTrackResume(const std::string& trackId, uint32_t ttlMs) {
 	QosOverride o;
-	o.schema = "mediasoup.qos.override.v1";
+	o.schema = contract::kOverrideSchema;
 	o.scope = "track";
 	o.trackId = trackId;
 	o.hasTrackId = true;

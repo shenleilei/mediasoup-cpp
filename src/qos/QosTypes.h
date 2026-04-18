@@ -1,4 +1,5 @@
 #pragma once
+#include "qos/QosContract.h"
 #include <nlohmann/json.hpp>
 #include <cstdint>
 #include <string>
@@ -94,7 +95,7 @@ struct RoomQosAggregate {
 };
 
 constexpr uint64_t kQosMaxSeq = 9007199254740991ULL;
-constexpr size_t kQosMaxTracksPerSnapshot = 32u;
+constexpr size_t kQosMaxTracksPerSnapshot = contract::kMaxTracksPerSnapshot;
 constexpr int64_t kQosStaleAfterMs = 6000;
 constexpr int64_t kQosLostAfterMs = 15000;
 

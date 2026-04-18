@@ -5,37 +5,63 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# ── FFmpeg: prefer pkg-config, fallback to explicit include hints ──
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 include(ResolveFFmpeg)
+include(MediasoupTargetHelpers)
 resolve_ffmpeg_include_dirs(MEDIASOUP_FFMPEG_INCLUDE_DIRS)
 message(STATUS "Using FFmpeg include dir: ${MEDIASOUP_FFMPEG_INCLUDE_DIRS}")
 
-# ── Third-party: FlatBuffers (header-only usage) ──
 set(FLATBUFFERS_INCLUDE ${CMAKE_SOURCE_DIR}/third_party/flatbuffers/include)
-
-# ── Third-party: nlohmann/json (header-only) ──
 set(JSON_INCLUDE ${CMAKE_SOURCE_DIR}/third_party/nlohmann_json/include)
+set(GENERATED_INCLUDE ${CMAKE_SOURCE_DIR}/generated)
+set(UWS_INCLUDE ${CMAKE_SOURCE_DIR}/third_party/uWebSockets/src)
+set(USOCKETS_DIR ${CMAKE_SOURCE_DIR}/third_party/uWebSockets/uSockets)
+set(IP2REGION_DIR ${CMAKE_SOURCE_DIR}/third_party/ip2region/binding/c)
 
-# ── Third-party: spdlog ──
+set(MEDIASOUP_BUILD_COMMON_INCLUDE_DIRS
+    ${CMAKE_SOURCE_DIR}/src
+    ${FLATBUFFERS_INCLUDE}
+    ${JSON_INCLUDE}
+    ${GENERATED_INCLUDE}
+    ${UWS_INCLUDE}
+    ${USOCKETS_DIR}/src
+    ${MEDIASOUP_FFMPEG_INCLUDE_DIRS}
+)
+
 add_subdirectory(third_party/spdlog EXCLUDE_FROM_ALL)
 
-# ── Third-party: uSockets (build as static lib) ──
-set(USOCKETS_DIR ${CMAKE_SOURCE_DIR}/third_party/uWebSockets/uSockets)
-file(GLOB USOCKETS_SRC ${USOCKETS_DIR}/src/*.c ${USOCKETS_DIR}/src/crypto/*.c ${USOCKETS_DIR}/src/crypto/*.cpp ${USOCKETS_DIR}/src/eventing/*.c)
+mediasoup_add_interface_target(mediasoup_build_ssl_crypto
+    LINK_LIBRARIES ssl crypto
+)
+mediasoup_add_interface_target(mediasoup_build_pthread
+    LINK_LIBRARIES pthread
+)
+mediasoup_add_interface_target(mediasoup_build_ffmpeg_core
+    LINK_LIBRARIES avformat avcodec avutil
+)
+mediasoup_add_interface_target(mediasoup_build_ffmpeg_extended
+    LINK_LIBRARIES mediasoup_build_ffmpeg_core swscale avdevice
+)
+mediasoup_add_interface_target(mediasoup_build_common
+    INCLUDE_DIRS ${MEDIASOUP_BUILD_COMMON_INCLUDE_DIRS}
+)
+mediasoup_add_interface_target(mediasoup_build_test_support
+    INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/tests
+    LINK_LIBRARIES mediasoup_build_common
+)
+
+file(GLOB USOCKETS_SRC
+    ${USOCKETS_DIR}/src/*.c
+    ${USOCKETS_DIR}/src/crypto/*.c
+    ${USOCKETS_DIR}/src/crypto/*.cpp
+    ${USOCKETS_DIR}/src/eventing/*.c
+)
 add_library(uSockets STATIC ${USOCKETS_SRC})
 target_include_directories(uSockets PUBLIC ${USOCKETS_DIR}/src)
 target_compile_definitions(uSockets PUBLIC LIBUS_USE_OPENSSL)
-target_link_libraries(uSockets PUBLIC ssl crypto)
+target_link_libraries(uSockets PUBLIC mediasoup_build_ssl_crypto)
 
-# ── Generated FlatBuffers headers ──
-set(GENERATED_INCLUDE ${CMAKE_SOURCE_DIR}/generated)
-
-# ── uWebSockets (header-only) ──
-set(UWS_INCLUDE ${CMAKE_SOURCE_DIR}/third_party/uWebSockets/src)
-
-# ── Main library ──
-add_library(mediasoup_lib STATIC
+set(MEDIASOUP_LIBRARY_SOURCES
     src/Channel.cpp
     src/GeoDbResolver.cpp
     src/Worker.cpp
@@ -59,56 +85,53 @@ add_library(mediasoup_lib STATIC
     src/qos/PublisherSupplyController.cpp
     src/qos/RoomDownlinkPlanner.cpp
 )
+add_library(mediasoup_lib STATIC ${MEDIASOUP_LIBRARY_SOURCES})
 
-target_include_directories(mediasoup_lib PUBLIC
-    ${CMAKE_SOURCE_DIR}/src
-    ${FLATBUFFERS_INCLUDE}
-    ${JSON_INCLUDE}
-    ${GENERATED_INCLUDE}
-    ${UWS_INCLUDE}
-    ${USOCKETS_DIR}/src
-    ${MEDIASOUP_FFMPEG_INCLUDE_DIRS}
+target_link_libraries(mediasoup_lib PUBLIC
+    mediasoup_build_common
+    mediasoup_build_pthread
+    mediasoup_build_ffmpeg_core
+    spdlog::spdlog
+    uSockets
 )
 
-target_link_libraries(mediasoup_lib PUBLIC spdlog::spdlog uSockets pthread avformat avcodec avutil)
-
-# ── Third-party: ip2region (C library) ──
-set(IP2REGION_DIR ${CMAKE_SOURCE_DIR}/third_party/ip2region/binding/c)
 add_library(ip2region STATIC ${IP2REGION_DIR}/xdb_searcher.c ${IP2REGION_DIR}/xdb_util.c)
 target_include_directories(ip2region PUBLIC ${IP2REGION_DIR})
 
-# Copy ip2region.xdb to build output directory
 configure_file(
     ${CMAKE_SOURCE_DIR}/third_party/ip2region/ip2region.xdb
     ${CMAKE_BINARY_DIR}/ip2region.xdb COPYONLY)
 
-# ── Main executable ──
-add_executable(mediasoup-sfu
-    src/main.cpp
-    src/SignalingServer.cpp
-    src/RoomService.cpp
+mediasoup_add_configured_executable(mediasoup-sfu
+    SOURCES
+        src/main.cpp
+        src/MainBootstrap.cpp
+        src/RoomRegistry.cpp
+        src/RuntimeDaemon.cpp
+        src/SignalingServer.cpp
+        src/SignalingServerHttp.cpp
+        src/SignalingServerRuntime.cpp
+        src/SignalingServerWs.cpp
+        src/RoomService.cpp
+        src/RoomServiceDownlink.cpp
+        src/RoomServiceLifecycle.cpp
+        src/RoomServiceMedia.cpp
+        src/RoomServiceStats.cpp
+        src/RoomRecordingHelpers.cpp
+        src/WorkerThread.cpp
+    LINK_LIBRARIES
+        mediasoup_lib
+        ip2region
+        z
+        hiredis
 )
 
-target_include_directories(mediasoup-sfu PRIVATE
-    ${CMAKE_SOURCE_DIR}/src
-    ${FLATBUFFERS_INCLUDE}
-    ${JSON_INCLUDE}
-    ${GENERATED_INCLUDE}
-    ${UWS_INCLUDE}
-    ${USOCKETS_DIR}/src
-    ${MEDIASOUP_FFMPEG_INCLUDE_DIRS}
-    ${IP2REGION_DIR}
-)
-
-target_link_libraries(mediasoup-sfu PRIVATE mediasoup_lib ip2region z hiredis avformat avcodec avutil)
-
-# ── Tests ──
 option(BUILD_TESTS "Build unit tests" ON)
 if(BUILD_TESTS)
     add_subdirectory(third_party/googletest EXCLUDE_FROM_ALL)
     enable_testing()
 
-    set(TEST_SOURCES
+    set(MEDIASOUP_UNIT_TEST_SOURCES
         tests/test_client_qos.cpp
         tests/test_downlink_allocator.cpp
         tests/test_downlink_health.cpp
@@ -135,141 +158,98 @@ if(BUILD_TESTS)
         tests/test_utils.cpp
         tests/test_worker_queue.cpp
     )
-    add_executable(mediasoup_tests ${TEST_SOURCES})
-    target_include_directories(mediasoup_tests PRIVATE
-        ${CMAKE_SOURCE_DIR}/src
-        ${FLATBUFFERS_INCLUDE}
-        ${JSON_INCLUDE}
-        ${GENERATED_INCLUDE}
-        ${IP2REGION_DIR}
-        ${MEDIASOUP_FFMPEG_INCLUDE_DIRS}
-    )
-    target_link_libraries(mediasoup_tests PRIVATE gtest gtest_main mediasoup_lib ip2region)
-    add_test(NAME mediasoup_tests COMMAND mediasoup_tests
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-    # Integration (black-box) tests - requires built mediasoup-sfu + mediasoup-worker
-    add_executable(mediasoup_integration_tests tests/test_integration.cpp)
-    target_include_directories(mediasoup_integration_tests PRIVATE
-        ${CMAKE_SOURCE_DIR}/tests
-        ${CMAKE_SOURCE_DIR}/src
-        ${JSON_INCLUDE}
-        ${MEDIASOUP_FFMPEG_INCLUDE_DIRS}
+    mediasoup_add_gtest_target(mediasoup_tests
+        SOURCES ${MEDIASOUP_UNIT_TEST_SOURCES}
+        LINK_LIBRARIES
+            mediasoup_build_test_support
+            mediasoup_lib
+            ip2region
     )
-    target_link_libraries(mediasoup_integration_tests PRIVATE gtest gtest_main spdlog::spdlog pthread avformat avcodec avutil)
-    add_test(NAME mediasoup_integration_tests COMMAND mediasoup_integration_tests
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-    # E2E publish/subscribe stress test
-    add_executable(mediasoup_e2e_tests tests/test_e2e_pubsub.cpp)
-    target_include_directories(mediasoup_e2e_tests PRIVATE
-        ${CMAKE_SOURCE_DIR}/tests
-        ${CMAKE_SOURCE_DIR}/src
-        ${JSON_INCLUDE}
+    mediasoup_add_gtest_target(mediasoup_integration_tests
+        SOURCES tests/test_integration.cpp
+        LINK_LIBRARIES
+            mediasoup_build_test_support
+            mediasoup_build_pthread
+            mediasoup_build_ffmpeg_core
+            spdlog::spdlog
     )
-    target_link_libraries(mediasoup_e2e_tests PRIVATE gtest gtest_main pthread)
-    add_test(NAME mediasoup_e2e_tests COMMAND mediasoup_e2e_tests
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-    # QoS integration tests
-    add_executable(mediasoup_qos_integration_tests tests/test_qos_integration.cpp)
-    target_include_directories(mediasoup_qos_integration_tests PRIVATE
-        ${CMAKE_SOURCE_DIR}/tests
-        ${CMAKE_SOURCE_DIR}/src
-        ${JSON_INCLUDE}
+    mediasoup_add_gtest_target(mediasoup_e2e_tests
+        SOURCES tests/test_e2e_pubsub.cpp
+        LINK_LIBRARIES
+            mediasoup_build_test_support
+            mediasoup_build_pthread
     )
-    target_link_libraries(mediasoup_qos_integration_tests PRIVATE gtest gtest_main pthread)
-    add_test(NAME mediasoup_qos_integration_tests COMMAND mediasoup_qos_integration_tests
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-    # Multi-SFU topology test
-    add_executable(mediasoup_topology_tests tests/test_multi_sfu_topology.cpp)
-    target_include_directories(mediasoup_topology_tests PRIVATE
-        ${CMAKE_SOURCE_DIR}/tests
-        ${CMAKE_SOURCE_DIR}/src
-        ${JSON_INCLUDE}
+    mediasoup_add_gtest_target(mediasoup_qos_integration_tests
+        SOURCES tests/test_qos_integration.cpp
+        LINK_LIBRARIES
+            mediasoup_build_test_support
+            mediasoup_build_pthread
     )
-    target_link_libraries(mediasoup_topology_tests PRIVATE gtest gtest_main pthread hiredis)
-    add_test(NAME mediasoup_topology_tests COMMAND mediasoup_topology_tests
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-    # Stability integration tests
-    add_executable(mediasoup_stability_integration_tests tests/test_stability_integration.cpp)
-    target_include_directories(mediasoup_stability_integration_tests PRIVATE
-        ${CMAKE_SOURCE_DIR}/tests
-        ${CMAKE_SOURCE_DIR}/src
-        ${JSON_INCLUDE}
+    mediasoup_add_gtest_target(mediasoup_topology_tests
+        SOURCES tests/test_multi_sfu_topology.cpp
+        LINK_LIBRARIES
+            mediasoup_build_test_support
+            mediasoup_build_pthread
+            hiredis
     )
-    target_link_libraries(mediasoup_stability_integration_tests PRIVATE gtest gtest_main pthread)
-    add_test(NAME mediasoup_stability_integration_tests COMMAND mediasoup_stability_integration_tests
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-    # Multi-node integration tests (requires Redis + mediasoup-worker)
-    add_executable(mediasoup_multinode_tests tests/test_multinode_integration.cpp)
-    target_include_directories(mediasoup_multinode_tests PRIVATE
-        ${CMAKE_SOURCE_DIR}/tests
-        ${CMAKE_SOURCE_DIR}/src
-        ${JSON_INCLUDE}
+    mediasoup_add_gtest_target(mediasoup_stability_integration_tests
+        SOURCES tests/test_stability_integration.cpp
+        LINK_LIBRARIES
+            mediasoup_build_test_support
+            mediasoup_build_pthread
     )
-    target_link_libraries(mediasoup_multinode_tests PRIVATE gtest gtest_main pthread hiredis)
-    add_test(NAME mediasoup_multinode_tests COMMAND mediasoup_multinode_tests
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-    # Review fixes integration tests (2026-04-08)
-    add_executable(mediasoup_review_fix_tests tests/test_review_fixes_integration.cpp)
-    target_include_directories(mediasoup_review_fix_tests PRIVATE
-        ${CMAKE_SOURCE_DIR}/tests
-        ${CMAKE_SOURCE_DIR}/src
-        ${JSON_INCLUDE}
+    mediasoup_add_gtest_target(mediasoup_multinode_tests
+        SOURCES tests/test_multinode_integration.cpp
+        LINK_LIBRARIES
+            mediasoup_build_test_support
+            mediasoup_build_pthread
+            hiredis
     )
-    target_link_libraries(mediasoup_review_fix_tests PRIVATE gtest gtest_main pthread hiredis)
-    add_test(NAME mediasoup_review_fix_tests COMMAND mediasoup_review_fix_tests
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-    # Worker load benchmark (not a test, standalone binary)
-    add_executable(mediasoup_bench tests/bench_worker_load.cpp)
-    target_include_directories(mediasoup_bench PRIVATE
-        ${CMAKE_SOURCE_DIR}/src
-        ${FLATBUFFERS_INCLUDE}
-        ${JSON_INCLUDE}
-        ${GENERATED_INCLUDE}
+    mediasoup_add_gtest_target(mediasoup_review_fix_tests
+        SOURCES tests/test_review_fixes_integration.cpp
+        LINK_LIBRARIES
+            mediasoup_build_test_support
+            mediasoup_build_pthread
+            hiredis
     )
-    target_link_libraries(mediasoup_bench PRIVATE mediasoup_lib pthread)
 
-    # QoS accuracy tests (requires mediasoup-worker binary)
-    add_executable(mediasoup_qos_accuracy_tests tests/test_qos_accuracy.cpp)
-    target_include_directories(mediasoup_qos_accuracy_tests PRIVATE
-        ${CMAKE_SOURCE_DIR}/src
-        ${FLATBUFFERS_INCLUDE}
-        ${JSON_INCLUDE}
-        ${GENERATED_INCLUDE}
+    mediasoup_add_configured_executable(mediasoup_bench
+        SOURCES tests/bench_worker_load.cpp
+        LINK_LIBRARIES
+            mediasoup_lib
+            mediasoup_build_pthread
     )
-    target_link_libraries(mediasoup_qos_accuracy_tests PRIVATE gtest gtest_main mediasoup_lib pthread)
-    add_test(NAME mediasoup_qos_accuracy_tests COMMAND mediasoup_qos_accuracy_tests
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-    # QoS recording accuracy tests (requires mediasoup-worker + ffmpeg)
-    add_executable(mediasoup_qos_recording_accuracy_tests tests/test_qos_recording_accuracy.cpp)
-    target_include_directories(mediasoup_qos_recording_accuracy_tests PRIVATE
-        ${CMAKE_SOURCE_DIR}/src
-        ${FLATBUFFERS_INCLUDE}
-        ${JSON_INCLUDE}
-        ${GENERATED_INCLUDE}
-        ${MEDIASOUP_FFMPEG_INCLUDE_DIRS}
+    mediasoup_add_gtest_target(mediasoup_qos_accuracy_tests
+        SOURCES tests/test_qos_accuracy.cpp
+        LINK_LIBRARIES
+            mediasoup_build_test_support
+            mediasoup_lib
+            mediasoup_build_pthread
     )
-    target_link_libraries(mediasoup_qos_recording_accuracy_tests PRIVATE
-        gtest gtest_main mediasoup_lib pthread avformat avcodec avutil)
-    add_test(NAME mediasoup_qos_recording_accuracy_tests COMMAND mediasoup_qos_recording_accuracy_tests
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-    # Thread model integration tests (requires ffmpeg)
-    add_executable(mediasoup_thread_integration_tests tests/test_thread_integration.cpp)
-    target_include_directories(mediasoup_thread_integration_tests PRIVATE
-        ${JSON_INCLUDE}
-        ${MEDIASOUP_FFMPEG_INCLUDE_DIRS}
+    mediasoup_add_gtest_target(mediasoup_qos_recording_accuracy_tests
+        SOURCES tests/test_qos_recording_accuracy.cpp
+        LINK_LIBRARIES
+            mediasoup_build_test_support
+            mediasoup_lib
+            mediasoup_build_pthread
+            mediasoup_build_ffmpeg_core
     )
-    target_link_libraries(mediasoup_thread_integration_tests PRIVATE
-        gtest gtest_main pthread avformat avcodec avutil swscale avdevice)
-    add_test(NAME mediasoup_thread_integration_tests COMMAND mediasoup_thread_integration_tests
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+    mediasoup_add_gtest_target(mediasoup_thread_integration_tests
+        SOURCES tests/test_thread_integration.cpp
+        LINK_LIBRARIES
+            mediasoup_build_test_support
+            mediasoup_build_pthread
+            mediasoup_build_ffmpeg_extended
+    )
 endif()

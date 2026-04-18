@@ -1,6 +1,5 @@
 #pragma once
 #include "RoomManager.h"
-#include "RoomRegistry.h"
 #include "WebRtcTransport.h"
 #include "PipeTransport.h"
 #include "PlainTransport.h"
@@ -33,6 +32,7 @@
 namespace mediasoup {
 
 using json = nlohmann::json;
+class RoomRegistry;
 
 class RoomService {
 public:
@@ -141,6 +141,7 @@ private:
 	void autoRecord(const std::string& roomId, const std::string& peerId,
 		std::shared_ptr<Room> room, std::shared_ptr<Producer> producer);
 	void cleanupRoomResources(const std::string& roomId);
+	void destroyRoom(const std::string& roomId);
 	void broadcastStatsForRoom(const std::string& roomId);
 	void continueBroadcastStats();
 	void maybeSendAutomaticQosOverride(const std::string& roomId,

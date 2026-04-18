@@ -1,11 +1,11 @@
 #include "Transport.h"
 #include "Producer.h"
 #include "Consumer.h"
+#include "RtpParametersFbs.h"
 #include "ortc.h"
 #include "Utils.h"
 #include "request_generated.h"
 #include "transport_generated.h"
-#include "rtpParameters_generated.h"
 #include "router_generated.h"
 #include "webRtcTransport_generated.h"
 #include "plainTransport_generated.h"
@@ -44,133 +44,6 @@ static void validateNotificationArgs(const std::vector<std::any>& args,
 	}
 }
 
-// Helper: build FBS RtpParameters from our types
-static flatbuffers::Offset<FBS::RtpParameters::RtpParameters> buildFbsRtpParameters(
-	flatbuffers::FlatBufferBuilder& builder, const RtpParameters& params)
-{
-	// Codecs
-	std::vector<flatbuffers::Offset<FBS::RtpParameters::RtpCodecParameters>> fbCodecs;
-	for (auto& codec : params.codecs) {
-		std::vector<flatbuffers::Offset<FBS::RtpParameters::Parameter>> fbParams;
-		for (auto& [k, v] : codec.parameters.items()) {
-			flatbuffers::Offset<void> valOff;
-			FBS::RtpParameters::Value valType;
-			if (v.is_number_integer()) {
-				valOff = FBS::RtpParameters::CreateInteger32(builder, v.get<int32_t>()).Union();
-				valType = FBS::RtpParameters::Value::Integer32;
-			} else if (v.is_number_float()) {
-				valOff = FBS::RtpParameters::CreateDouble(builder, v.get<double>()).Union();
-				valType = FBS::RtpParameters::Value::Double;
-			} else if (v.is_string()) {
-				valOff = FBS::RtpParameters::CreateString(builder, builder.CreateString(v.get<std::string>())).Union();
-				valType = FBS::RtpParameters::Value::String;
-			} else {
-				valOff = FBS::RtpParameters::CreateBoolean(builder, v.is_boolean() ? (v.get<bool>() ? 1 : 0) : 0).Union();
-				valType = FBS::RtpParameters::Value::Boolean;
-			}
-			fbParams.push_back(FBS::RtpParameters::CreateParameter(
-				builder, builder.CreateString(k), valType, valOff));
-		}
-
-		std::vector<flatbuffers::Offset<FBS::RtpParameters::RtcpFeedback>> fbFeedback;
-		for (auto& fb : codec.rtcpFeedback) {
-			fbFeedback.push_back(FBS::RtpParameters::CreateRtcpFeedback(
-				builder, builder.CreateString(fb.type),
-				fb.parameter.empty() ? 0 : builder.CreateString(fb.parameter)));
-		}
-
-		fbCodecs.push_back(FBS::RtpParameters::CreateRtpCodecParameters(
-			builder, builder.CreateString(codec.mimeType), codec.payloadType,
-			codec.clockRate, codec.channels > 0 ? codec.channels : flatbuffers::Optional<uint8_t>(),
-			builder.CreateVector(fbParams), builder.CreateVector(fbFeedback)));
-	}
-
-	// Header extensions
-	std::vector<flatbuffers::Offset<FBS::RtpParameters::RtpHeaderExtensionParameters>> fbExts;
-	for (auto& ext : params.headerExtensions) {
-		auto uri = FBS::RtpParameters::RtpHeaderExtensionUri::Mid; // default
-		if (ext.uri.find("abs-send-time") != std::string::npos)
-			uri = FBS::RtpParameters::RtpHeaderExtensionUri::AbsSendTime;
-		else if (ext.uri.find("transport-wide-cc") != std::string::npos)
-			uri = FBS::RtpParameters::RtpHeaderExtensionUri::TransportWideCcDraft01;
-		else if (ext.uri.find("ssrc-audio-level") != std::string::npos)
-			uri = FBS::RtpParameters::RtpHeaderExtensionUri::AudioLevel;
-		else if (ext.uri.find("video-orientation") != std::string::npos)
-			uri = FBS::RtpParameters::RtpHeaderExtensionUri::VideoOrientation;
-		else if (ext.uri.find("rtp-stream-id") != std::string::npos)
-			uri = FBS::RtpParameters::RtpHeaderExtensionUri::RtpStreamId;
-		else if (ext.uri.find("repaired-rtp-stream-id") != std::string::npos)
-			uri = FBS::RtpParameters::RtpHeaderExtensionUri::RepairRtpStreamId;
-		else if (ext.uri.find("sdes:mid") != std::string::npos)
-			uri = FBS::RtpParameters::RtpHeaderExtensionUri::Mid;
-		else if (ext.uri.find("toffset") != std::string::npos)
-			uri = FBS::RtpParameters::RtpHeaderExtensionUri::TimeOffset;
-		else if (ext.uri.find("abs-capture-time") != std::string::npos)
-			uri = FBS::RtpParameters::RtpHeaderExtensionUri::AbsCaptureTime;
-		else if (ext.uri.find("playout-delay") != std::string::npos)
-			uri = FBS::RtpParameters::RtpHeaderExtensionUri::PlayoutDelay;
-		else if (ext.uri.find("dependency-descriptor") != std::string::npos)
-			uri = FBS::RtpParameters::RtpHeaderExtensionUri::Mid; // fallback, not in 3.14
-
-		fbExts.push_back(FBS::RtpParameters::CreateRtpHeaderExtensionParameters(
-			builder, uri, ext.id, ext.encrypt, 0));
-	}
-
-	// Encodings
-	std::vector<flatbuffers::Offset<FBS::RtpParameters::RtpEncodingParameters>> fbEncodings;
-	for (auto& enc : params.encodings) {
-		flatbuffers::Offset<FBS::RtpParameters::Rtx> rtxOff = 0;
-		if (enc.rtxSsrc) {
-			rtxOff = FBS::RtpParameters::CreateRtx(builder, *enc.rtxSsrc);
-		}
-
-		fbEncodings.push_back(FBS::RtpParameters::CreateRtpEncodingParameters(
-			builder,
-			enc.ssrc ? flatbuffers::Optional<uint32_t>(*enc.ssrc) : flatbuffers::Optional<uint32_t>(),
-			enc.rid.empty() ? 0 : builder.CreateString(enc.rid),
-			enc.codecPayloadType ? flatbuffers::Optional<uint8_t>(*enc.codecPayloadType) : flatbuffers::Optional<uint8_t>(),
-			rtxOff, enc.dtx,
-			enc.scalabilityMode.empty() ? 0 : builder.CreateString(enc.scalabilityMode),
-			enc.maxBitrate ? flatbuffers::Optional<uint32_t>(*enc.maxBitrate) : flatbuffers::Optional<uint32_t>()));
-	}
-
-	// RTCP
-	auto rtcpOff = FBS::RtpParameters::CreateRtcpParameters(
-		builder, params.rtcp.cname.empty() ? 0 : builder.CreateString(params.rtcp.cname),
-		params.rtcp.reducedSize);
-
-	return FBS::RtpParameters::CreateRtpParameters(
-		builder,
-		params.mid.empty() ? 0 : builder.CreateString(params.mid),
-		builder.CreateVector(fbCodecs),
-		builder.CreateVector(fbExts),
-		builder.CreateVector(fbEncodings),
-		rtcpOff);
-}
-
-static flatbuffers::Offset<FBS::RtpParameters::RtpMapping> buildFbsRtpMapping(
-	flatbuffers::FlatBufferBuilder& builder, const RtpMapping& mapping)
-{
-	std::vector<flatbuffers::Offset<FBS::RtpParameters::CodecMapping>> fbCodecs;
-	for (auto& cm : mapping.codecs) {
-		fbCodecs.push_back(FBS::RtpParameters::CreateCodecMapping(
-			builder, cm.payloadType, cm.mappedPayloadType));
-	}
-
-	std::vector<flatbuffers::Offset<FBS::RtpParameters::EncodingMapping>> fbEncodings;
-	for (auto& em : mapping.encodings) {
-		fbEncodings.push_back(FBS::RtpParameters::CreateEncodingMapping(
-			builder,
-			em.rid.empty() ? 0 : builder.CreateString(em.rid),
-			em.ssrc ? flatbuffers::Optional<uint32_t>(*em.ssrc) : flatbuffers::Optional<uint32_t>(),
-			em.scalabilityMode.empty() ? 0 : builder.CreateString(em.scalabilityMode),
-			em.mappedSsrc));
-	}
-
-	return FBS::RtpParameters::CreateRtpMapping(
-		builder, builder.CreateVector(fbCodecs), builder.CreateVector(fbEncodings));
-}
-
 std::shared_ptr<Producer> Transport::produce(const json& options) {
 	if (closed_) throw std::runtime_error("Transport closed");
 
@@ -205,8 +78,8 @@ std::shared_ptr<Producer> Transport::produce(const json& options) {
 		[producerId, &kind, &rtpParameters, &rtpMapping, paused](flatbuffers::FlatBufferBuilder& builder) {
 			auto producerIdOff = builder.CreateString(producerId);
 			auto fbKind = (kind == "audio") ? FBS::RtpParameters::MediaKind::AUDIO : FBS::RtpParameters::MediaKind::VIDEO;
-			auto rtpParamsOff = buildFbsRtpParameters(builder, rtpParameters);
-			auto rtpMappingOff = buildFbsRtpMapping(builder, rtpMapping);
+			auto rtpParamsOff = BuildFbsRtpParameters(builder, rtpParameters);
+			auto rtpMappingOff = BuildFbsRtpMapping(builder, rtpMapping);
 			auto reqOff = FBS::Transport::CreateProduceRequest(
 				builder, producerIdOff, fbKind, rtpParamsOff, rtpMappingOff, 0, paused);
 			return reqOff.Union();
@@ -289,7 +162,7 @@ std::shared_ptr<Consumer> Transport::consume(const json& options) {
 			auto producerIdOff = builder.CreateString(producerId);
 			auto fbKind = (consumableRtpParameters.codecs[0].mimeType.find("audio") != std::string::npos)
 				? FBS::RtpParameters::MediaKind::AUDIO : FBS::RtpParameters::MediaKind::VIDEO;
-			auto rtpParamsOff = buildFbsRtpParameters(builder, consumerRtpParams);
+			auto rtpParamsOff = BuildFbsRtpParameters(builder, consumerRtpParams);
 			auto fbType = pipe ? FBS::RtpParameters::Type::PIPE : FBS::RtpParameters::Type::SIMPLE;
 
 			std::vector<flatbuffers::Offset<FBS::RtpParameters::RtpEncodingParameters>> fbConsumableEncodings;

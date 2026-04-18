@@ -3,15 +3,17 @@
 #include <map>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
+#include <string>
 
 namespace qos {
 
 using json = nlohmann::json;
+namespace contract = mediasoup::qos::contract;
 
 inline const json& parseClientQosSnapshot(const json& payload) {
 	if (!payload.is_object()) throw std::invalid_argument("clientQosSnapshot must be an object");
-	if (!payload.contains("schema") || !payload["schema"].is_string() || payload["schema"].get<std::string>() != "mediasoup.qos.client.v1")
-		throw std::invalid_argument("clientQosSnapshot.schema must be mediasoup.qos.client.v1");
+	if (!payload.contains("schema") || !payload["schema"].is_string() || payload["schema"].get<std::string>() != contract::kClientSchema)
+		throw std::invalid_argument(std::string("clientQosSnapshot.schema must be ") + contract::kClientSchema);
 	if (!payload.contains("seq") || !payload["seq"].is_number_integer() || payload["seq"].get<int64_t>() < 0)
 		throw std::invalid_argument("clientQosSnapshot.seq must be a non-negative integer");
 	if (!payload.contains("tsMs") || !payload["tsMs"].is_number() || payload["tsMs"].get<double>() < 0)
@@ -40,8 +42,8 @@ inline json serializeClientQosSnapshot(const json& snapshot) {
 
 inline QosPolicy parseQosPolicy(const json& payload) {
 	if (!payload.is_object()) throw std::invalid_argument("qosPolicy must be an object");
-	if (!payload.contains("schema") || !payload["schema"].is_string() || payload["schema"].get<std::string>() != "mediasoup.qos.policy.v1")
-		throw std::invalid_argument("qosPolicy.schema must be mediasoup.qos.policy.v1");
+	if (!payload.contains("schema") || !payload["schema"].is_string() || payload["schema"].get<std::string>() != contract::kPolicySchema)
+		throw std::invalid_argument(std::string("qosPolicy.schema must be ") + contract::kPolicySchema);
 	if (!payload.contains("sampleIntervalMs") || !payload["sampleIntervalMs"].is_number_integer() || payload["sampleIntervalMs"].get<int>() < 0)
 		throw std::invalid_argument("qosPolicy.sampleIntervalMs must be a non-negative integer");
 	if (!payload.contains("snapshotIntervalMs") || !payload["snapshotIntervalMs"].is_number_integer() || payload["snapshotIntervalMs"].get<int>() < 0)
@@ -82,8 +84,8 @@ inline bool isQosPolicy(const json& payload) {
 
 inline QosOverride parseQosOverride(const json& payload) {
 	if (!payload.is_object()) throw std::invalid_argument("qosOverride must be an object");
-	if (!payload.contains("schema") || !payload["schema"].is_string() || payload["schema"].get<std::string>() != "mediasoup.qos.override.v1")
-		throw std::invalid_argument("qosOverride.schema must be mediasoup.qos.override.v1");
+	if (!payload.contains("schema") || !payload["schema"].is_string() || payload["schema"].get<std::string>() != contract::kOverrideSchema)
+		throw std::invalid_argument(std::string("qosOverride.schema must be ") + contract::kOverrideSchema);
 	if (!payload.contains("scope") || !payload["scope"].is_string())
 		throw std::invalid_argument("qosOverride.scope must be a string");
 
@@ -225,7 +227,7 @@ inline json serializeSnapshot(int seq, int64_t tsMs, Quality peerQuality, bool s
 	const char* peerMode = resolvePeerMode(tracks, peerHasAudioTrack);
 
 	return {
-		{"schema", "mediasoup.qos.client.v1"}, {"seq", seq}, {"tsMs", tsMs},
+		{"schema", contract::kClientSchema}, {"seq", seq}, {"tsMs", tsMs},
 		{"peerState", {
 			{"mode", peerMode},
 			{"quality", qualityStr(peerQuality)}, {"stale", stale}
