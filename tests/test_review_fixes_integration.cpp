@@ -1,6 +1,7 @@
 // Black-box integration tests for the 5 code review fixes (2026-04-08).
 // Requires a running mediasoup-sfu + mediasoup-worker.
 #include <gtest/gtest.h>
+#include "TestRedisServer.h"
 #include "TestWsClient.h"
 #include "TestProcessUtils.h"
 #include <signal.h>
@@ -428,8 +429,9 @@ class GeoJoinTest : public ::testing::Test {
 protected:
 	pid_t pidA_ = -1, pidB_ = -1;
 	std::string testRoom_;
+	TestRedisServer redisServer_;
 
-	static pid_t startSfu(int port, double lat, double lng, const std::string& isp) {
+	static pid_t startSfu(int port, double lat, double lng, const std::string& isp, int redisPort) {
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(port) +
 			" --workers=1"
@@ -439,6 +441,8 @@ protected:
 			" --lat=" + std::to_string(lat) +
 			" --lng=" + std::to_string(lng) +
 			" --isp=" + isp +
+			" --redisHost=127.0.0.1"
+			" --redisPort=" + std::to_string(redisPort) +
 			" > /dev/null 2>&1 & echo $!";
 		FILE* fp = popen(cmd.c_str(), "r");
 		if (!fp) return -1;
@@ -496,9 +500,11 @@ protected:
 		}
 		usleep(200000);
 
+		ASSERT_TRUE(redisServer_.start()) << redisServer_.failureMessage();
+
 		// Clean stale room and node entries from Redis
 		{
-			redisContext* ctx = redisConnect("127.0.0.1", 6379);
+			redisContext* ctx = redisConnect("127.0.0.1", redisServer_.port());
 			if (ctx && !ctx->err) {
 				auto* r = (redisReply*)redisCommand(ctx, "KEYS sfu:room:geo_*");
 				if (r && r->type == REDIS_REPLY_ARRAY)
@@ -515,9 +521,9 @@ protected:
 		}
 
 		// Node A: 杭州电信 (30.27, 120.15)
-		pidA_ = startSfu(GEO_PORT_A, 30.27, 120.15, "电信");
+		pidA_ = startSfu(GEO_PORT_A, 30.27, 120.15, "电信", redisServer_.port());
 		// Node B: 广州联通 (23.13, 113.26)
-		pidB_ = startSfu(GEO_PORT_B, 23.13, 113.26, "联通");
+		pidB_ = startSfu(GEO_PORT_B, 23.13, 113.26, "联通", redisServer_.port());
 		ASSERT_GT(pidA_, 0);
 		ASSERT_GT(pidB_, 0);
 		ASSERT_TRUE(waitForPort(GEO_PORT_A)) << "SFU-A (杭州) did not start";
@@ -594,9 +600,10 @@ class CountryIsolationTest : public ::testing::Test {
 protected:
 	pid_t pidCN_ = -1, pidUS_ = -1;
 	std::string testRoom_;
+	TestRedisServer redisServer_;
 
 	static pid_t startSfu(int port, double lat, double lng,
-		const std::string& isp, const std::string& country, bool isolation)
+		const std::string& isp, const std::string& country, bool isolation, int redisPort)
 	{
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(port) +
@@ -607,6 +614,8 @@ protected:
 			" --lat=" + std::to_string(lat) +
 			" --lng=" + std::to_string(lng) +
 			" --isp=" + isp +
+			" --redisHost=127.0.0.1"
+			" --redisPort=" + std::to_string(redisPort) +
 			" '--country=" + country + "'" +
 			(isolation ? " --countryIsolation" : " --noCountryIsolation") +
 			" > /dev/null 2>&1 & echo $!";
@@ -658,9 +667,11 @@ protected:
 		testRoom_ = "iso_" + std::to_string(getpid()) + "_" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 
+		ASSERT_TRUE(redisServer_.start()) << redisServer_.failureMessage();
+
 		// Clean stale room and node entries from other geo tests
 		{
-			redisContext* ctx = redisConnect("127.0.0.1", 6379);
+			redisContext* ctx = redisConnect("127.0.0.1", redisServer_.port());
 			if (ctx && !ctx->err) {
 				auto* r = (redisReply*)redisCommand(ctx, "KEYS sfu:room:iso_*");
 				if (r && r->type == REDIS_REPLY_ARRAY) {
@@ -678,8 +689,8 @@ protected:
 			}
 		}
 
-		pidCN_ = startSfu(ISO_PORT_CN, 30.27, 120.15, "电信", "中国", true);
-		pidUS_ = startSfu(ISO_PORT_US, 37.39, -122.08, "Amazon", "United States", true);
+		pidCN_ = startSfu(ISO_PORT_CN, 30.27, 120.15, "电信", "中国", true, redisServer_.port());
+		pidUS_ = startSfu(ISO_PORT_US, 37.39, -122.08, "Amazon", "United States", true, redisServer_.port());
 		ASSERT_GT(pidCN_, 0);
 		ASSERT_GT(pidUS_, 0);
 		ASSERT_TRUE(waitForPort(ISO_PORT_CN)) << "CN node did not start";
@@ -918,14 +929,17 @@ class CacheTest : public ::testing::Test {
 protected:
 	pid_t pidA_ = -1, pidB_ = -1;
 	std::string testRoom_;
+	TestRedisServer redisServer_;
 
-	static pid_t startSfu(int port, const std::string& extraArgs = "") {
+	static pid_t startSfu(int port, int redisPort, const std::string& extraArgs = "") {
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(port) +
 			" --workers=1"
 			" --workerBin=./mediasoup-worker"
 			" --announcedIp=127.0.0.1"
 			" --listenIp=127.0.0.1"
+			" --redisHost=127.0.0.1"
+			" --redisPort=" + std::to_string(redisPort) +
 			" --noCountryIsolation"
 			" " + extraArgs +
 			" > /dev/null 2>&1 & echo $!";
@@ -988,9 +1002,11 @@ protected:
 		testRoom_ = "cache_" + std::to_string(getpid()) + "_" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 
+		ASSERT_TRUE(redisServer_.start()) << redisServer_.failureMessage();
+
 		// Clean Redis
 		{
-			redisContext* ctx = redisConnect("127.0.0.1", 6379);
+			redisContext* ctx = redisConnect("127.0.0.1", redisServer_.port());
 			if (ctx && !ctx->err) {
 				auto* r = (redisReply*)redisCommand(ctx, "KEYS sfu:node:*");
 				if (r && r->type == REDIS_REPLY_ARRAY)
@@ -1006,8 +1022,8 @@ protected:
 			}
 		}
 
-		pidA_ = startSfu(CACHE_PORT_A, "--lat=30.27 --lng=120.15 --isp=电信");
-		pidB_ = startSfu(CACHE_PORT_B, "--lat=23.13 --lng=113.26 --isp=联通");
+		pidA_ = startSfu(CACHE_PORT_A, redisServer_.port(), "--lat=30.27 --lng=120.15 --isp=电信");
+		pidB_ = startSfu(CACHE_PORT_B, redisServer_.port(), "--lat=23.13 --lng=113.26 --isp=联通");
 		ASSERT_GT(pidA_, 0);
 		ASSERT_GT(pidB_, 0);
 		ASSERT_TRUE(waitForPort(CACHE_PORT_A));
@@ -1140,14 +1156,17 @@ class FullNodeRedirectTest : public ::testing::Test {
 protected:
 	pid_t pidA_ = -1, pidB_ = -1;
 	std::string testRoom_;
+	TestRedisServer redisServer_;
 
-	static pid_t startSfu(int port, int maxRouters = 0) {
+	static pid_t startSfu(int port, int redisPort, int maxRouters = 0) {
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(port) +
 			" --workers=1"
 			" --workerBin=./mediasoup-worker"
 			" --announcedIp=127.0.0.1"
 			" --listenIp=127.0.0.1"
+			" --redisHost=127.0.0.1"
+			" --redisPort=" + std::to_string(redisPort) +
 			" --noCountryIsolation";
 		if (maxRouters > 0)
 			cmd += " --maxRoutersPerWorker=" + std::to_string(maxRouters);
@@ -1210,8 +1229,9 @@ protected:
 	void SetUp() override {
 		testRoom_ = "full_" + std::to_string(getpid()) + "_" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+		ASSERT_TRUE(redisServer_.start()) << redisServer_.failureMessage();
 		{
-				redisContext* ctx = redisConnect("127.0.0.1", 6379);
+				redisContext* ctx = redisConnect("127.0.0.1", redisServer_.port());
 				if (ctx && !ctx->err) {
 					auto* r = (redisReply*)redisCommand(ctx, "KEYS sfu:node:*");
 					if (r && r->type == REDIS_REPLY_ARRAY)
@@ -1222,9 +1242,9 @@ protected:
 			}
 		}
 		// Node A: normal capacity
-		pidA_ = startSfu(FULL_PORT_A);
+		pidA_ = startSfu(FULL_PORT_A, redisServer_.port());
 		// Node B: maxRoutersPerWorker=1 (will be full after 1 room)
-		pidB_ = startSfu(FULL_PORT_B, 1);
+		pidB_ = startSfu(FULL_PORT_B, redisServer_.port(), 1);
 		ASSERT_GT(pidA_, 0);
 		ASSERT_GT(pidB_, 0);
 		ASSERT_TRUE(waitForPort(FULL_PORT_A));

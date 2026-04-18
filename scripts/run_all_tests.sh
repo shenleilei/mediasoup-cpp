@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build"
 CLIENT_BUILD_DIR="$ROOT_DIR/client/build"
+REPORT_FILE="$ROOT_DIR/docs/non-qos-test-results.md"
 JOBS="${JOBS:-$(nproc)}"
 
 ALL_GROUPS=(
@@ -15,6 +16,10 @@ ALL_GROUPS=(
 
 SELECTED_GROUPS=()
 SKIP_BUILD=0
+FAILED_GROUPS=()
+TASK_ORDER=()
+declare -A TASK_RESULTS=()
+declare -A TASK_DURATIONS=()
 
 usage() {
   cat <<'EOF'
@@ -31,17 +36,19 @@ Options:
 Groups:
   unit         non-QoS suites inside mediasoup_tests
   integration  integration / e2e / stability / review-fix binaries
-  topology     topology + multinode binaries (requires Redis)
+  topology     topology + multinode binaries
   threaded     threaded plain-client integration binary
 
 Notes:
   - This script is the non-QoS full-test entry.
+  - Selected groups keep running after a test failure; the script exits non-zero at the end if any group failed.
   - It intentionally excludes scripts/run_qos_tests.sh and dedicated QoS binaries:
     mediasoup_qos_integration_tests
     mediasoup_qos_accuracy_tests
     mediasoup_qos_recording_accuracy_tests
   - threaded tests require client/build/plain-client.
-  - topology tests require a reachable Redis on 127.0.0.1:6379.
+  - mediasoup_review_fix_tests, mediasoup_multinode_tests, and mediasoup_topology_tests
+    start an isolated Redis and require redis-server in PATH.
 EOF
 }
 
@@ -49,11 +56,135 @@ list_groups() {
   printf '%s\n' "${ALL_GROUPS[@]}"
 }
 
+record_task_result() {
+  local label="$1"
+  local status="$2"
+  local duration="${3:--}"
+  TASK_ORDER+=("$label")
+  TASK_RESULTS["$label"]="$status"
+  TASK_DURATIONS["$label"]="$duration"
+}
+
+join_markdown_codes() {
+  local result=""
+  local item
+
+  for item in "$@"; do
+    if [[ -n "$result" ]]; then
+      result+=", "
+    fi
+    result+="\`$item\`"
+  done
+
+  printf '%s' "${result:-none}"
+}
+
+task_group() {
+  local label="$1"
+  if [[ "$label" == *:* ]]; then
+    printf '%s' "${label%%:*}"
+  else
+    printf '%s' "$label"
+  fi
+}
+
+write_report() {
+  local generated_at overall_status
+  local attempted=0
+  local passed=0
+  local failed=0
+  local label status duration group
+  local -a failed_tasks=()
+
+  generated_at="$(date '+%Y-%m-%d %H:%M:%S %Z')"
+  overall_status="PASS"
+  if ((${#FAILED_GROUPS[@]} > 0)); then
+    overall_status="FAIL"
+  fi
+
+  for label in "${TASK_ORDER[@]}"; do
+    status="${TASK_RESULTS[$label]:-NOT_RUN}"
+    case "$status" in
+      PASS)
+        ((attempted += 1))
+        ((passed += 1))
+        ;;
+      FAIL)
+        ((attempted += 1))
+        ((failed += 1))
+        failed_tasks+=("$label")
+        ;;
+    esac
+  done
+
+  mkdir -p "$(dirname "$REPORT_FILE")"
+  {
+    echo "# Non-QoS Test Results"
+    echo
+    echo "Generated at: \`$generated_at\`"
+    echo
+    echo "## Summary"
+    echo
+    echo "- Script: \`scripts/run_all_tests.sh\`"
+    echo "- Selected groups: $(join_markdown_codes "${SELECTED_GROUPS[@]}")"
+    echo "- Overall status: \`$overall_status\`"
+    echo "- Attempted tasks: \`$attempted\`"
+    echo "- Passed tasks: \`$passed\`"
+    echo "- Failed tasks: \`$failed\`"
+    echo "- Failed groups: $(join_markdown_codes "${FAILED_GROUPS[@]}")"
+    echo
+    echo "## Failed Task Summary"
+    echo
+    if ((${#failed_tasks[@]} == 0)); then
+      echo "- none"
+    else
+      echo "| Task | Group | Duration |"
+      echo "|---|---|---|"
+      for label in "${failed_tasks[@]}"; do
+        group="$(task_group "$label")"
+        duration="${TASK_DURATIONS[$label]:--}"
+        echo "| \`$label\` | \`$group\` | \`$duration\` |"
+      done
+    fi
+    echo
+    echo "## Task Results"
+    echo
+    if ((${#TASK_ORDER[@]} == 0)); then
+      echo "- No tasks were executed."
+    else
+      echo "| Task | Group | Status | Duration |"
+      echo "|---|---|---|---|"
+      for label in "${TASK_ORDER[@]}"; do
+        group="$(task_group "$label")"
+        status="${TASK_RESULTS[$label]:-NOT_RUN}"
+        duration="${TASK_DURATIONS[$label]:--}"
+        echo "| \`$label\` | \`$group\` | \`$status\` | \`$duration\` |"
+      done
+    fi
+  } > "$REPORT_FILE"
+}
+
 require_file() {
   local path="$1"
+  local label="${2:-}"
   [[ -e "$path" ]] || {
     echo "error: required file not found: $path" >&2
-    exit 1
+    if [[ -n "$label" ]]; then
+      record_task_result "$label" "FAIL" "-"
+    fi
+    return 1
+  }
+}
+
+require_command() {
+  local cmd="$1"
+  local label="${2:-}"
+  command -v "$cmd" >/dev/null 2>&1 || {
+    echo "error: required command not found: $cmd" >&2
+    if [[ -n "$label" ]]; then
+      record_task_result "$label" "FAIL" "-"
+    fi
+    return 1
   }
 }
 
@@ -89,13 +220,29 @@ build_targets() {
 run_cmd() {
   local label="$1"
   shift
+  local rc
+  local elapsed
+  local start_time
   echo
   echo "==> $label"
+  start_time=$SECONDS
+  set +e
   "$@"
+  rc=$?
+  set -e
+  elapsed="$((SECONDS - start_time))s"
+  if ((rc == 0)); then
+    echo "<== $label PASS"
+    record_task_result "$label" "PASS" "$elapsed"
+  else
+    echo "<== $label FAIL (rc=$rc)" >&2
+    record_task_result "$label" "FAIL" "$elapsed"
+  fi
+  return "$rc"
 }
 
 run_unit() {
-  require_file "$BUILD_DIR/mediasoup_tests"
+  require_file "$BUILD_DIR/mediasoup_tests" "unit:preflight:mediasoup_tests" || return 1
   run_cmd \
     "unit" \
     "$BUILD_DIR/mediasoup_tests" \
@@ -103,41 +250,51 @@ run_unit() {
 }
 
 run_integration() {
+  local failed=0
   cleanup_test_ports
-  require_file "$BUILD_DIR/mediasoup_integration_tests"
-  require_file "$BUILD_DIR/mediasoup_e2e_tests"
-  require_file "$BUILD_DIR/mediasoup_stability_integration_tests"
-  require_file "$BUILD_DIR/mediasoup_review_fix_tests"
-  run_cmd "integration:mediasoup_integration_tests" "$BUILD_DIR/mediasoup_integration_tests"
+  require_file "$BUILD_DIR/mediasoup_integration_tests" "integration:preflight:mediasoup_integration_tests" || return 1
+  require_file "$BUILD_DIR/mediasoup_e2e_tests" "integration:preflight:mediasoup_e2e_tests" || return 1
+  require_file "$BUILD_DIR/mediasoup_stability_integration_tests" "integration:preflight:mediasoup_stability_integration_tests" || return 1
+  require_file "$BUILD_DIR/mediasoup_review_fix_tests" "integration:preflight:mediasoup_review_fix_tests" || return 1
+  if ! run_cmd "integration:mediasoup_integration_tests" "$BUILD_DIR/mediasoup_integration_tests"; then
+    failed=1
+  fi
   cleanup_test_ports
-  run_cmd "integration:mediasoup_e2e_tests" "$BUILD_DIR/mediasoup_e2e_tests"
+  if ! run_cmd "integration:mediasoup_e2e_tests" "$BUILD_DIR/mediasoup_e2e_tests"; then
+    failed=1
+  fi
   cleanup_test_ports
-  run_cmd "integration:mediasoup_stability_integration_tests" "$BUILD_DIR/mediasoup_stability_integration_tests"
+  if ! run_cmd "integration:mediasoup_stability_integration_tests" "$BUILD_DIR/mediasoup_stability_integration_tests"; then
+    failed=1
+  fi
   cleanup_test_ports
-  run_cmd "integration:mediasoup_review_fix_tests" "$BUILD_DIR/mediasoup_review_fix_tests"
+  require_command redis-server "integration:preflight:redis-server" || return 1
+  if ! run_cmd "integration:mediasoup_review_fix_tests" "$BUILD_DIR/mediasoup_review_fix_tests"; then
+    failed=1
+  fi
+  return "$failed"
 }
 
 run_topology() {
+  local failed=0
   cleanup_test_ports
-  require_file "$BUILD_DIR/mediasoup_topology_tests"
-  require_file "$BUILD_DIR/mediasoup_multinode_tests"
-  if command -v redis-cli >/dev/null 2>&1; then
-    if ! redis-cli -h 127.0.0.1 -p 6379 ping >/dev/null 2>&1; then
-      echo "error: topology group requires Redis on 127.0.0.1:6379" >&2
-      exit 1
-    fi
-  else
-    echo "warning: redis-cli not found; continuing without preflight ping" >&2
+  require_file "$BUILD_DIR/mediasoup_topology_tests" "topology:preflight:mediasoup_topology_tests" || return 1
+  require_file "$BUILD_DIR/mediasoup_multinode_tests" "topology:preflight:mediasoup_multinode_tests" || return 1
+  require_command redis-server "topology:preflight:redis-server" || return 1
+  if ! run_cmd "topology:mediasoup_topology_tests" "$BUILD_DIR/mediasoup_topology_tests"; then
+    failed=1
   fi
-  run_cmd "topology:mediasoup_topology_tests" "$BUILD_DIR/mediasoup_topology_tests"
   cleanup_test_ports
-  run_cmd "topology:mediasoup_multinode_tests" "$BUILD_DIR/mediasoup_multinode_tests"
+  if ! run_cmd "topology:mediasoup_multinode_tests" "$BUILD_DIR/mediasoup_multinode_tests"; then
+    failed=1
+  fi
+  return "$failed"
 }
 
 run_threaded() {
+  require_file "$BUILD_DIR/mediasoup_thread_integration_tests" "threaded:preflight:mediasoup_thread_integration_tests" || return 1
+  require_file "$CLIENT_BUILD_DIR/plain-client" "threaded:preflight:plain-client" || return 1
   cleanup_test_ports
-  require_file "$BUILD_DIR/mediasoup_thread_integration_tests"
-  require_file "$CLIENT_BUILD_DIR/plain-client"
   run_cmd \
     "threaded:mediasoup_thread_integration_tests" \
     env QOS_THREAD_INTEGRATION_PORT=14021 "$BUILD_DIR/mediasoup_thread_integration_tests"
@@ -150,7 +307,7 @@ run_group() {
     integration) run_integration ;;
     topology) run_topology ;;
     threaded) run_threaded ;;
-    *) echo "error: unknown group '$group'" >&2; exit 1 ;;
+    *) echo "error: unknown group '$group'" >&2; return 1 ;;
   esac
 }
 
@@ -175,11 +332,20 @@ main() {
   fi
 
   for group in "${SELECTED_GROUPS[@]}"; do
-    run_group "$group"
+    if ! run_group "$group"; then
+      FAILED_GROUPS+=("$group")
+    fi
   done
 
+  write_report
+
   echo
-  echo "non-QoS test run passed"
+  if ((${#FAILED_GROUPS[@]} == 0)); then
+    echo "non-QoS test run passed"
+  else
+    echo "non-QoS test run completed with failures in group(s): ${FAILED_GROUPS[*]}" >&2
+    exit 1
+  fi
 }
 
 main "$@"

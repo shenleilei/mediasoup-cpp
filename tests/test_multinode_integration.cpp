@@ -1,8 +1,9 @@
-// Multi-node integration tests: /api/resolve, node load, maxRoutersPerWorker, room TTL refresh
+// Multi-node integration tests: /api/resolve, node load, maxRoutersPerWorker, room TTL refresh.
 //
-// Requires: built mediasoup-sfu + mediasoup-worker + Redis on 127.0.0.1:6379
+// Requires: built mediasoup-sfu + mediasoup-worker + redis-server in PATH.
 
 #include <gtest/gtest.h>
+#include "TestRedisServer.h"
 #include "TestWsClient.h"
 #include "TestProcessUtils.h"
 #include <signal.h>
@@ -54,14 +55,17 @@ class MultiNodeResolveTest : public ::testing::Test {
 protected:
 	struct SfuNode { int port; pid_t pid = -1; int maxRouters; };
 	std::vector<SfuNode> nodes_;
+	TestRedisServer redisServer_;
 
-	static pid_t startSfu(int port, int workers = 1, int maxRoutersPerWorker = 0) {
+	static pid_t startSfu(int port, int redisPort, int workers = 1, int maxRoutersPerWorker = 0) {
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(port) +
 			" --workers=" + std::to_string(workers) +
 			" --workerBin=./mediasoup-worker"
 			" --announcedIp=127.0.0.1"
-			" --listenIp=127.0.0.1";
+			" --listenIp=127.0.0.1"
+			" --redisHost=127.0.0.1"
+			" --redisPort=" + std::to_string(redisPort);
 		if (maxRoutersPerWorker > 0)
 			cmd += " --maxRoutersPerWorker=" + std::to_string(maxRoutersPerWorker);
 		cmd += " > /dev/null 2>&1 & echo $!";
@@ -110,7 +114,7 @@ protected:
 	}
 
 	void flushRedis() {
-		auto* ctx = redisConnect("127.0.0.1", 6379);
+		auto* ctx = redisConnect("127.0.0.1", redisServer_.port());
 		if (!ctx || ctx->err) { if (ctx) redisFree(ctx); return; }
 		auto* reply = (redisReply*)redisCommand(ctx, "KEYS sfu:room:*");
 		if (reply && reply->type == REDIS_REPLY_ARRAY)
@@ -130,6 +134,7 @@ protected:
 	void SetUp() override {
 		testPrefix_ = "resolve_" + std::to_string(getpid()) + "_" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+		ASSERT_TRUE(redisServer_.start()) << redisServer_.failureMessage();
 		flushRedis();
 	}
 
@@ -140,7 +145,7 @@ protected:
 
 	void startNodes(std::vector<std::pair<int,int>> portAndMaxRouters) {
 		for (auto& [port, maxR] : portAndMaxRouters) {
-			auto pid = startSfu(port, 1, maxR);
+			auto pid = startSfu(port, redisServer_.port(), 1, maxR);
 			ASSERT_GT(pid, 0);
 			nodes_.push_back({port, pid, maxR});
 		}
@@ -410,7 +415,7 @@ TEST_F(MultiNodeResolveTest, RoomTtlRefresh) {
 	ASSERT_TRUE(resp.value("ok", false));
 
 	// Check Redis TTL — should be refreshed by heartbeat
-	auto* ctx = redisConnect("127.0.0.1", 6379);
+	auto* ctx = redisConnect("127.0.0.1", redisServer_.port());
 	ASSERT_NE(ctx, nullptr);
 	ASSERT_FALSE(ctx->err);
 
