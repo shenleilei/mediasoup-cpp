@@ -368,3 +368,57 @@ If the team has not defined stricter rules yet, use these defaults:
 - Never merge behavior-changing work without tests unless explicitly accepted as debt
 - New or changed business logic should not land without unit tests
 - Boundary-changing work should not land without integration tests
+
+## 11. Refactoring Standard
+
+Refactoring and code modernization work follows these defaults in addition to the rest of this standard.
+
+### Default Intent
+
+- Default to behavior-equivalent changes unless accepted specs explicitly require behavior changes.
+- Treat non-trivial refactors and modernization work as Structured Changes.
+- Optimize for clarity, maintainability, testability, and consistency.
+- Preserve public contracts, data formats, and operational semantics unless the spec changes them.
+- Reuse existing helpers and abstractions before creating new ones.
+- Do not introduce broad exception handling, silent fallbacks, hidden retries, or fake-success returns.
+- Do not overwrite unrelated changes while refactoring.
+
+### Required Inputs
+
+Before starting a non-trivial refactor, capture these in the active change folder or task brief:
+
+- Goal
+- Context
+- Constraints
+- Done when
+
+Use the existing project artifacts:
+
+- `requirements.md` or `bugfix.md` defines why the refactor exists and what behavior must stay stable.
+- `design.md` records module boundaries, invariants, migration order, and parity strategy.
+- `tasks.md` breaks the refactor into independently verifiable steps.
+- `PLANS.md` governs sequencing and execution tracking for larger refactors.
+
+### Refactoring Workflow
+
+- Inventory current call paths, data flow, dependencies, and verification coverage before editing.
+- Make behavior-preservation assumptions explicit in `design.md`.
+- Split large refactors into small, rollback-friendly batches.
+- Separate structural moves, abstraction extraction, and intentional behavior changes when practical.
+- Compare old and new behavior with parity checks, regression tests, or fixture-based validation.
+- Review the final diff for accidental behavioral drift, deleted edge-case handling, and scope creep.
+
+### Code And Verification Rules
+
+- Add or update tests when the refactor touches behavior boundaries, bug-prone logic, or public contracts.
+- Run relevant lint, type-check, build, unit, and integration checks before completion.
+- Cover happy paths, edge cases, and failure paths that define current behavior.
+- Prefer narrow, traceable diffs; avoid mixing opportunistic cleanup into risky refactors.
+- If behavior changes intentionally, document the delta and update `specs/current/`.
+
+### Completion Criteria
+
+- The refactor is backed by explicit verification evidence.
+- Behavior matches prior accepted behavior or documented changes.
+- The resulting structure is simpler to understand, test, and maintain.
+- Remaining risks, deferred cleanup, and follow-up work are recorded honestly.

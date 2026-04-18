@@ -46,7 +46,7 @@
 
 相关文件：
 
-- [RoomService.cpp](../src/RoomService.cpp)
+- [RoomServiceStats.cpp](../src/RoomServiceStats.cpp)
 - [qos-demo.js](../public/qos-demo.js)
 
 ### 3.2 已有下行动作
@@ -293,11 +293,13 @@
 
 ### 需要修改的现有文件
 
-- [SignalingServer.cpp](../src/SignalingServer.cpp)
+- [SignalingServerWs.cpp](../src/SignalingServerWs.cpp)
   增加 `downlinkClientStats` method
 - [RoomService.h](../src/RoomService.h)
-- [RoomService.cpp](../src/RoomService.cpp)
-  存储快照并驱动 subscriber controller
+- [RoomServiceStats.cpp](../src/RoomServiceStats.cpp)
+  存储快照并更新 downlink registry
+- [RoomServiceDownlink.cpp](../src/RoomServiceDownlink.cpp)
+  驱动 subscriber controller 和 room-scoped planner
 - [qos-demo.js](../public/qos-demo.js)
   先作为 downlink QoS 的首个 demo 入口
 

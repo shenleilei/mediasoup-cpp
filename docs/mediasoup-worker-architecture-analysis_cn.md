@@ -703,7 +703,7 @@ worker 仍然**不知道**这些业务语义：
 
 - 通过 [Consumer.cpp](../src/Consumer.cpp) 把 `pause/resume/setPreferredLayers/setPriority` 发给 worker
 - 通过 [Producer.cpp](../src/Producer.cpp) 观测 score 与 stats
-- 通过 [RoomService.cpp](../src/RoomService.cpp) 做 room 级管理与 QoS 聚合
+- 通过 [RoomService.h](../src/RoomService.h) 和 `RoomServiceStats.cpp` / `RoomServiceDownlink.cpp` 做 room 级管理与 QoS 聚合
 
 所以当前架构是：
 

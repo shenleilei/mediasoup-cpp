@@ -47,7 +47,7 @@
 推导前提主要来自：
 
 - 默认策略下发：
-  [RoomService.cpp](../src/RoomService.cpp#L846)
+  [RoomStatsQosHelpers.h](../src/RoomStatsQosHelpers.h)
   `sampleIntervalMs=1000`
   `snapshotIntervalMs=2000`
 - 默认 camera 阈值与 ladder：

@@ -99,6 +99,34 @@ The output should describe the branch impact globally, then list file-level find
 - Are edge cases and failure paths handled?
 - Does the code preserve existing invariants?
 
+### Reuse And Refactoring
+
+- Did the change reuse existing code paths, helpers, utilities, and abstractions where practical?
+- Does the diff introduce avoidable duplication or another parallel implementation of the same behavior?
+- When the change exposed repeated logic or brittle structure, should a small safe refactor have been done as part of the work?
+- If refactoring was deferred, is that an explicit tradeoff rather than accidental duplication debt?
+
+### Simplicity And Scope
+
+- Is the change as small and self-contained as practical for the behavior being changed?
+- Were large refactors, renames, or formatting-only churn separated from behavior changes when practical?
+- Does the implementation solve the current requirement without speculative abstractions or over-engineering?
+- Does the change improve code health or at least avoid making the surrounding area harder to understand and modify?
+
+### Naming, Comments, And Consistency
+
+- Are names explicit, predictable, and consistent across code, tests, configs, and docs?
+- Is the same concept described with one name instead of multiple competing names?
+- Do comments explain why, constraints, invariants, or tradeoffs rather than restating what the code already says?
+- Does the change follow existing local conventions unless there is a clear reason to introduce a better shared pattern?
+
+### Errors And Dependencies
+
+- Are failures and edge cases handled explicitly instead of being silently ignored?
+- If failures are intentionally suppressed, is that decision obvious and justified?
+- Did the change avoid unnecessary new dependencies, hidden coupling, and extra indirection?
+- If a new abstraction or dependency was introduced, is it justified by real repeated need or boundary clarity?
+
 ### Tests
 
 - Were unit tests added or updated for changed logic?
@@ -167,6 +195,9 @@ Before claiming a change is done, the author should ask:
 - What can regress?
 - What still lacks proof?
 - What boundary changed?
+- Did I reuse existing code where practical and reduce duplication instead of adding another parallel path?
+- Did I keep the change as simple and self-contained as practical instead of mixing in avoidable churn?
+- Did I avoid speculative abstractions and keep names, comments, and error handling explicit?
 - What production failure mode have I not considered?
 - What documentation became stale or less precise because of this change, and has it been updated before commit?
 - If this branch is compared against another branch, what global behavior change does the branch introduce?

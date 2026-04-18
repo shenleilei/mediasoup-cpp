@@ -28,7 +28,7 @@ A plan is required to:
 - surface blockers early
 - keep updates honest while the work is in progress
 
-Plans are execution artifacts, not product specs.
+Plans are internal execution artifacts, not product specs or user approval checkpoints.
 
 Do not use a plan as a substitute for `requirements.md`, `bugfix.md`, `design.md`, or `tasks.md`.
 
@@ -159,11 +159,13 @@ Before substantial work:
 
 - state whether a plan is required
 - if required, summarize the execution plan before major edits
+- do not wait for plan approval unless the user explicitly asks to review or approve the plan first
 
 During execution:
 
 - report completed steps and the current in-progress step
 - call out new risks or scope changes immediately
+- continue across step boundaries without turning each step into a user handoff unless blocked
 
 At completion:
 
@@ -218,3 +220,5 @@ Unless the user explicitly asks otherwise, Codex should:
 - prefer execution over prolonged planning
 - revise the plan rather than silently drifting
 - use the plan to drive implementation and verification updates
+- continue from planning to implementation, review, refactor, and verification without waiting for intermediate approval when intent is clear
+- ask for user input only when requirements are missing or conflicting, a destructive or irreversible action is required, external access or secrets are required, or the user explicitly requests intermediate approval

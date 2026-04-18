@@ -66,8 +66,8 @@
 ### 4.2 需要修改的文件
 
 - [RoomService.h](../src/RoomService.h)
-- [RoomService.cpp](../src/RoomService.cpp)
-- [SignalingServer.cpp](../src/SignalingServer.cpp)
+- [RoomServiceMedia.cpp](../src/RoomServiceMedia.cpp)
+- [SignalingServerWs.cpp](../src/SignalingServerWs.cpp)
 - [Consumer.h](../src/Consumer.h)
 - [Consumer.cpp](../src/Consumer.cpp)
 - [test_integration.cpp](../tests/test_integration.cpp)
@@ -253,9 +253,9 @@ node tests/qos_harness/browser_downlink_controls.mjs
 
 ### 6.3 建议修改文件
 
-- [SignalingServer.cpp](../src/SignalingServer.cpp)
+- [SignalingServerWs.cpp](../src/SignalingServerWs.cpp)
 - [RoomService.h](../src/RoomService.h)
-- [RoomService.cpp](../src/RoomService.cpp)
+- [RoomServiceMedia.cpp](../src/RoomServiceMedia.cpp)
 - [CMakeLists.txt](../CMakeLists.txt)
 
 ### 6.4 新 signaling method
@@ -328,7 +328,7 @@ node tests/qos_harness/browser_downlink_controls.mjs
 ### 7.3 建议修改文件
 
 - [RoomService.h](../src/RoomService.h)
-- [RoomService.cpp](../src/RoomService.cpp)
+- [RoomServiceMedia.cpp](../src/RoomServiceMedia.cpp)
 
 ### 7.4 `v1` 只做这 3 条规则
 

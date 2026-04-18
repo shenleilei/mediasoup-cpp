@@ -17,7 +17,7 @@
 当前仓库里 `downlink QoS v2` 已经有这些可直接复用的能力：
 
 - 服务端 `room-scoped` downlink planner 入口
-  - [RoomService.cpp](../src/RoomService.cpp)
+  - [RoomServiceDownlink.cpp](../src/RoomServiceDownlink.cpp)
 - subscriber 显式预算分配
   - [SubscriberBudgetAllocator.cpp](../src/qos/SubscriberBudgetAllocator.cpp)
 - producer demand 聚合
@@ -139,7 +139,7 @@
 ### 5.2 需要修改的文件
 
 - [RoomService.h](../src/RoomService.h)
-- [RoomService.cpp](../src/RoomService.cpp)
+- [RoomServiceDownlink.cpp](../src/RoomServiceDownlink.cpp)
 
 ### 5.3 `RoomService` 新增字段
 
