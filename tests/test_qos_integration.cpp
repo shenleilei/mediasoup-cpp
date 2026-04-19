@@ -9,87 +9,27 @@
 #include <fstream>
 #include <optional>
 
-static const int SFU_PORT = 14011; // different port from main integration tests
 static const std::string HOST = "127.0.0.1";
-
-namespace {
-
-bool waitForPortFree(int port, int polls = 30, int sleepUs = 100000) {
-	for (int i = 0; i < polls; ++i) {
-		int fd = socket(AF_INET, SOCK_STREAM, 0);
-		if (fd < 0) return false;
-		sockaddr_in addr{};
-		addr.sin_family = AF_INET;
-		addr.sin_port = htons(port);
-		addr.sin_addr.s_addr = htonl(INADDR_ANY);
-		int opt = 1;
-		setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-		bool free = (bind(fd, (sockaddr*)&addr, sizeof(addr)) == 0);
-		::close(fd);
-		if (free) return true;
-		usleep(sleepUs);
-	}
-	return false;
-}
-
-bool waitForPortListening(int port, int polls = 70, int sleepUs = 100000) {
-	for (int i = 0; i < polls; ++i) {
-		usleep(sleepUs);
-		int fd = socket(AF_INET, SOCK_STREAM, 0);
-		if (fd < 0) return false;
-		sockaddr_in addr{};
-		addr.sin_family = AF_INET;
-		addr.sin_port = htons(port);
-		inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
-		if (::connect(fd, (sockaddr*)&addr, sizeof(addr)) == 0) {
-			::close(fd);
-			usleep(200000);
-			return true;
-		}
-		::close(fd);
-	}
-	return false;
-}
-
-} // namespace
 
 class QosIntegrationTest : public ::testing::Test {
 protected:
-	pid_t sfuPid_ = -1;
+	TestSfuProcess sfu_;
+	int sfuPort_ = -1;
 	std::string testRoom_;
 
 	void SetUp() override {
-		ASSERT_TRUE(waitForPortFree(SFU_PORT))
-			<< "Port " << SFU_PORT << " still occupied by previous SFU";
+		sfuPort_ = allocateUniqueTestPort();
+		ASSERT_GT(sfuPort_, 0) << "failed to allocate unique QoS integration test port";
 
 		testRoom_ = "qos_" + std::to_string(getpid()) + "_" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
-
-		std::string cmd = "./build/mediasoup-sfu --nodaemon"
-			" --port=" + std::to_string(SFU_PORT) +
-			" --workers=1"
-			" --workerBin=./mediasoup-worker"
-			" --announcedIp=127.0.0.1"
-			" --listenIp=127.0.0.1"
-			" --redisHost=0.0.0.0 --redisPort=1"
-			" > /dev/null 2>&1 & echo $!";
-		FILE* fp = popen(cmd.c_str(), "r");
-		ASSERT_NE(fp, nullptr);
-		char buf[64]{};
-		fgets(buf, sizeof(buf), fp);
-		pclose(fp);
-		sfuPid_ = atoi(buf);
-		ASSERT_GT(sfuPid_, 0);
-
-		ASSERT_TRUE(waitForPortListening(SFU_PORT))
-			<< "SFU did not start within 7 seconds";
+		ASSERT_TRUE(sfu_.start(sfuPort_, {}, makeTestSfuLogPath("sfu_qos_integration", sfuPort_)))
+			<< "failed to start QoS integration SFU on port " << sfuPort_
+			<< ", log: " << sfu_.logPath();
 	}
 
 	void TearDown() override {
-		if (sfuPid_ > 0) {
-			terminateSfuProcess(sfuPid_);
-			(void)waitForPortFree(SFU_PORT, 40, 50000);
-		}
+		EXPECT_TRUE(sfu_.stop()) << "failed to stop SFU or release port " << sfuPort_;
 	}
 
 	struct JoinedClient {
@@ -104,7 +44,7 @@ protected:
 		c.roomId = roomId;
 		c.peerId = peerId;
 		c.ws = std::make_unique<TestWsClient>();
-		EXPECT_TRUE(c.ws->connect(HOST, SFU_PORT));
+		EXPECT_TRUE(c.ws->connect(HOST, sfuPort_));
 
 		json rtpCaps = {
 			{"codecs", {{
@@ -575,54 +515,40 @@ TEST_F(QosIntegrationTest, StatsReportRoomIsolation) {
 
 class QosRecordingTest : public ::testing::Test {
 protected:
-	pid_t sfuPid_ = -1;
+	TestSfuProcess sfu_;
+	int sfuPort_ = -1;
 	std::string testRoom_;
 	std::string recordDir_;
 
 	void SetUp() override {
-		ASSERT_TRUE(waitForPortFree(SFU_PORT))
-			<< "Port " << SFU_PORT << " still occupied by previous SFU";
+		sfuPort_ = allocateUniqueTestPort();
+		ASSERT_GT(sfuPort_, 0) << "failed to allocate unique QoS recording test port";
 
 		testRoom_ = "qosrec_" + std::to_string(getpid()) + "_" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 		recordDir_ = "/tmp/mediasoup_qosrec_" + std::to_string(getpid());
 		system(("rm -rf " + recordDir_).c_str());
 		mkdir(recordDir_.c_str(), 0755);
-
-		std::string cmd = "./build/mediasoup-sfu --nodaemon"
-			" --port=" + std::to_string(SFU_PORT) +
-			" --workers=1 --workerBin=./mediasoup-worker"
-			" --announcedIp=127.0.0.1 --listenIp=127.0.0.1"
-			" --redisHost=0.0.0.0 --redisPort=1"
-			" --recordDir=" + recordDir_ +
-			" > /tmp/sfu_qostest.log 2>&1 & echo $!";
-		FILE* fp = popen(cmd.c_str(), "r");
-		ASSERT_NE(fp, nullptr);
-		char buf[64]{};
-		fgets(buf, sizeof(buf), fp);
-		pclose(fp);
-		sfuPid_ = atoi(buf);
-		ASSERT_GT(sfuPid_, 0);
-
-		ASSERT_TRUE(waitForPortListening(SFU_PORT))
-			<< "SFU did not start within 7 seconds";
+		ASSERT_TRUE(sfu_.start(
+			sfuPort_,
+			{"--recordDir=" + recordDir_},
+			makeTestSfuLogPath("sfu_qos_recording", sfuPort_)))
+			<< "failed to start QoS recording SFU on port " << sfuPort_
+			<< ", log: " << sfu_.logPath();
 	}
 
 	void TearDown() override {
-		if (sfuPid_ > 0) {
-			terminateSfuProcess(sfuPid_);
-			(void)waitForPortFree(SFU_PORT, 40, 50000);
-		}
+		EXPECT_TRUE(sfu_.stop()) << "failed to stop SFU or release port " << sfuPort_;
 		system(("rm -rf " + recordDir_).c_str());
-		}
+	}
 
-		// Simple HTTP GET helper (no WebSocket, just plain HTTP)
-		std::string httpGetRaw(const std::string& path) {
-			int fd = socket(AF_INET, SOCK_STREAM, 0);
-			if (fd < 0) return "";
-			sockaddr_in addr{};
+	// Simple HTTP GET helper (no WebSocket, just plain HTTP)
+	std::string httpGetRaw(const std::string& path) {
+		int fd = socket(AF_INET, SOCK_STREAM, 0);
+		if (fd < 0) return "";
+		sockaddr_in addr{};
 		addr.sin_family = AF_INET;
-		addr.sin_port = htons(SFU_PORT);
+		addr.sin_port = htons(sfuPort_);
 		inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
 		if (::connect(fd, (sockaddr*)&addr, sizeof(addr)) < 0) { ::close(fd); return ""; }
 
@@ -635,17 +561,17 @@ protected:
 			int n = ::recv(fd, buf, sizeof(buf), 0);
 			if (n <= 0) break;
 			response.append(buf, n);
-			}
-			::close(fd);
-
-			return response;
 		}
+		::close(fd);
 
-		std::string httpGet(const std::string& path) {
-			std::string response = httpGetRaw(path);
-			// Extract body (after \r\n\r\n)
-			auto pos = response.find("\r\n\r\n");
-			if (pos == std::string::npos) return "";
+		return response;
+	}
+
+	std::string httpGet(const std::string& path) {
+		std::string response = httpGetRaw(path);
+		// Extract body (after \r\n\r\n)
+		auto pos = response.find("\r\n\r\n");
+		if (pos == std::string::npos) return "";
 		return response.substr(pos + 4);
 	}
 
@@ -656,7 +582,7 @@ protected:
 	JoinedClient joinAndProduce(const std::string& roomId, const std::string& peerId, uint32_t ssrc) {
 		JoinedClient c;
 		c.ws = std::make_unique<TestWsClient>();
-		EXPECT_TRUE(c.ws->connect(HOST, SFU_PORT));
+		EXPECT_TRUE(c.ws->connect(HOST, sfuPort_));
 
 		json rtpCaps = {{"codecs", {{
 			{"mimeType", "audio/opus"}, {"kind", "audio"},
