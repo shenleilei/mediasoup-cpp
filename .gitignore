@@ -2,7 +2,15 @@
 build/
 build_dbg/
 build-*/
-/client/*.o
+
+# Native compile intermediates
+*.o
+*.obj
+*.lo
+*.pch
+*.gch
+*.gcno
+*.gcda
 
 # Generated files (can regenerate from fbs/)
 generated/
