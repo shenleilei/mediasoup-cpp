@@ -654,6 +654,19 @@ failure summary.
 `./scripts/run_all_tests.sh` also rewrites the latest full regression report:
 [docs/full-regression-test-results.md](./docs/full-regression-test-results.md)
 
+For unattended nightly execution, use the repo-local wrapper:
+
+```bash
+cp .nightly-full-regression.env.example .nightly-full-regression.env
+./scripts/nightly_full_regression.py run
+./scripts/install_nightly_full_regression_cron.sh
+```
+
+The nightly wrapper stores a timestamped run directory under
+`artifacts/nightly-full-regression/`, refreshes `/var/log/run_all_tests.log` by default,
+and emails the pass-rate / failed-case summary with selected Markdown report attachments.
+See [docs/nightly-full-regression.md](./docs/nightly-full-regression.md).
+
 When the run includes `qos`, it delegates that slice to `./scripts/run_qos_tests.sh`, so the
 QoS-specific summaries and matrix artifacts owned by that script are refreshed as part of the run.
 

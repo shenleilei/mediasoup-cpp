@@ -229,6 +229,13 @@ cd /path/to/mediasoup-cpp
 # run_all_tests.sh 同时会刷新 docs/full-regression-test-results.md，
 # 记录本次仓库全量回归的选择项和逐任务结果。
 
+# nightly 全量回归包装器：
+#  - 仍然委托 scripts/run_all_tests.sh 做真实执行
+#  - 生成 artifacts/nightly-full-regression/<timestamp>/ 运行目录
+#  - 默认刷新 /var/log/run_all_tests.log
+#  - 可通过 scripts/install_nightly_full_regression_cron.sh 安装 03:00 cron
+#  - 具体配置见 docs/nightly-full-regression.md
+
 # 快速验证：核心 unit + QoS unit
 ./build/mediasoup_tests
 ./build/mediasoup_qos_unit_tests
