@@ -34,6 +34,36 @@ struct PerSocketData {
 static std::atomic<uint64_t> g_nextSessionId{0};
 static std::atomic<uint64_t> g_nextResolveRequestId{1};
 
+struct DownlinkStatsRateLimitState {
+	int64_t pendingSinceMs{0};
+	uint64_t lastAcceptedSeq{0};
+	uint64_t pendingSeq{0};
+	bool hasAcceptedSeq{false};
+	bool pending{false};
+};
+
+bool IsDownlinkSeqWrapOrReset(uint64_t prevSeq, uint64_t nextSeq)
+{
+	static constexpr uint64_t kSeqResetThreshold = 1000u;
+	if (prevSeq >= qos::kDownlinkMaxSeq - kSeqResetThreshold &&
+		nextSeq <= kSeqResetThreshold) {
+		return true;
+	}
+
+	return prevSeq > nextSeq && (prevSeq - nextSeq) > kSeqResetThreshold;
+}
+
+bool IsAdvancingDownlinkSeq(const DownlinkStatsRateLimitState& state, uint64_t seq)
+{
+	if (!state.hasAcceptedSeq) return true;
+	if (seq > state.lastAcceptedSeq) return true;
+	if (seq < state.lastAcceptedSeq &&
+		IsDownlinkSeqWrapOrReset(state.lastAcceptedSeq, seq)) {
+		return true;
+	}
+	return false;
+}
+
 static uint64_t initSessionIdBase() {
 	std::random_device rd;
 	uint64_t base = (static_cast<uint64_t>(rd()) << 32) | rd();
@@ -295,7 +325,7 @@ void SignalingServer::startRegistryWorker() {
 	if (!registry_ || registryThread_.joinable()) return;
 	stopRegistryThread_.store(false, std::memory_order_relaxed);
 	registryThread_ = std::thread([this] {
-		while (!stopRegistryThread_.load(std::memory_order_relaxed)) {
+		for (;;) {
 			std::function<void()> task;
 			{
 				std::unique_lock<std::mutex> lock(registryTaskMutex_);
@@ -396,6 +426,8 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 
 	running_ = true;
 	startRegistryWorker();
+	auto downlinkStatsRateLimit = std::make_shared<
+		std::unordered_map<std::string, DownlinkStatsRateLimitState>>();
 
 	// peerId → ws* mapping for notify/broadcast
 	struct WsMap {
@@ -466,6 +498,16 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 		wt->setTaskPoster([wtRaw](std::function<void()> task) {
 			wtRaw->post(std::move(task));
 		});
+		wt->setDownlinkSnapshotApplied([loop, downlinkStatsRateLimit](
+			const std::string& roomId, const std::string& peerId, uint64_t seq) {
+			const auto mapKey = WsMap::key(roomId, peerId);
+			loop->defer([downlinkStatsRateLimit, mapKey, seq] {
+				auto it = downlinkStatsRateLimit->find(mapKey);
+				if (it == downlinkStatsRateLimit->end()) return;
+				if (it->second.pending && it->second.pendingSeq == seq)
+					it->second.pending = false;
+			});
+		});
 
 		// Start the WorkerThread event loop
 		wt->start();
@@ -507,7 +549,7 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 			d->roomId = "";
 		},
 
-		.message = [this, wsMap, loop](auto* ws, std::string_view message, uWS::OpCode) {
+		.message = [this, wsMap, loop, downlinkStatsRateLimit](auto* ws, std::string_view message, uWS::OpCode) {
 			// Parse on the main thread (cheap) to extract parameters
 			json req;
 			try {
@@ -569,6 +611,74 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 				}
 				wt->post([wt, roomId, peerId, data] {
 					wt->roomService()->setClientStats(roomId, peerId, data);
+				});
+				json resp = {{"response", true}, {"id", id}, {"ok", true}, {"data", json::object()}};
+				ws->send(resp.dump(), uWS::OpCode::TEXT);
+				return;
+			}
+
+			// downlinkClientStats — parse-then-respond, same as clientStats
+			if (method == "downlinkClientStats") {
+				static constexpr int64_t kMinDownlinkStatsIntervalMs = 100;
+				if (roomId.empty() || peerId.empty() || sessionId == kInvalidSessionId) {
+					json resp = {{"response", true}, {"id", id}, {"ok", false},
+						{"error", "downlinkClientStats requires joined session"}};
+					ws->send(resp.dump(), uWS::OpCode::TEXT);
+					return;
+				}
+				{
+					auto mapKey = WsMap::key(roomId, peerId);
+					auto it = wsMap->peers.find(mapKey);
+					bool validSession = (it != wsMap->peers.end() && it->second == ws &&
+						it->second->getUserData()->sessionId == sessionId);
+					if (!validSession) {
+						staleRequestDrops_.fetch_add(1, std::memory_order_relaxed);
+						json resp = {{"response", true}, {"id", id}, {"ok", false},
+							{"error", "stale session"}};
+						ws->send(resp.dump(), uWS::OpCode::TEXT);
+						return;
+					}
+				}
+				auto dlParse = qos::QosValidator::ParseDownlinkSnapshot(data);
+				if (!dlParse.ok) {
+					json resp = {{"response", true}, {"id", id}, {"ok", false},
+						{"error", "invalid downlinkClientStats: " + dlParse.error}};
+					ws->send(resp.dump(), uWS::OpCode::TEXT);
+					return;
+				}
+				{
+					auto mapKey = WsMap::key(roomId, peerId);
+					const auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+						std::chrono::steady_clock::now().time_since_epoch()).count();
+					auto& state = (*downlinkStatsRateLimit)[mapKey];
+					const auto seq = dlParse.value.seq;
+					const bool advancingSeq = IsAdvancingDownlinkSeq(state, seq);
+					if (advancingSeq &&
+						state.pending &&
+						nowMs - state.pendingSinceMs <= kMinDownlinkStatsIntervalMs) {
+						rejectedClientStats_.fetch_add(1, std::memory_order_relaxed);
+						json resp = {{"response", true}, {"id", id}, {"ok", false},
+							{"error", "downlinkClientStats rate limited"}};
+						ws->send(resp.dump(), uWS::OpCode::TEXT);
+						return;
+					}
+					if (advancingSeq) {
+						state.pending = true;
+						state.pendingSinceMs = nowMs;
+						state.pendingSeq = seq;
+						state.lastAcceptedSeq = seq;
+						state.hasAcceptedSeq = true;
+					}
+				}
+				auto* wt = getWorkerThread(roomId, false);
+				if (!wt || !wt->roomService()) {
+					json resp = {{"response", true}, {"id", id}, {"ok", false},
+						{"error", "room not assigned"}};
+					ws->send(resp.dump(), uWS::OpCode::TEXT);
+					return;
+				}
+				wt->post([wt, roomId, peerId, data] {
+					wt->roomService()->setDownlinkClientStats(roomId, peerId, data);
 				});
 				json resp = {{"response", true}, {"id", id}, {"ok", true}, {"data", json::object()}};
 				ws->send(resp.dump(), uWS::OpCode::TEXT);
@@ -720,6 +830,44 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 							peerId,
 							data.value("peerId", peerId),
 							data.at("policy"));
+					} else if (method == "pauseConsumer") {
+						result = rs->pauseConsumer(roomId, peerId,
+							data.at("consumerId").get<std::string>());
+					} else if (method == "resumeConsumer") {
+						result = rs->resumeConsumer(roomId, peerId,
+							data.at("consumerId").get<std::string>());
+					} else if (method == "getConsumerState") {
+						result = rs->getConsumerState(roomId, peerId,
+							data.at("consumerId").get<std::string>());
+					} else if (method == "setConsumerPreferredLayers") {
+						result = rs->setConsumerPreferredLayers(roomId, peerId,
+							data.at("consumerId").get<std::string>(),
+							data.at("spatialLayer").get<uint8_t>(),
+							data.at("temporalLayer").get<uint8_t>());
+					} else if (method == "setConsumerPriority") {
+						result = rs->setConsumerPriority(roomId, peerId,
+							data.at("consumerId").get<std::string>(),
+							data.at("priority").get<uint8_t>());
+					} else if (method == "requestConsumerKeyFrame") {
+						result = rs->requestConsumerKeyFrame(roomId, peerId,
+							data.at("consumerId").get<std::string>());
+					} else if (method == "plainPublish") {
+						std::vector<uint32_t> videoSsrcs;
+						if (data.contains("videoSsrcs") && data.at("videoSsrcs").is_array()) {
+							for (const auto& value : data.at("videoSsrcs")) {
+								videoSsrcs.push_back(value.get<uint32_t>());
+							}
+						}
+						if (videoSsrcs.empty()) {
+							videoSsrcs.push_back(data.value("videoSsrc", 1111u));
+						}
+						result = rs->plainPublish(roomId, peerId,
+							videoSsrcs,
+							data.value("audioSsrc", 2222u));
+					} else if (method == "plainSubscribe") {
+						result = rs->plainSubscribe(roomId, peerId,
+							data.at("recvIp").get<std::string>(),
+							data.at("recvPort").get<uint16_t>());
 					} else {
 						result = {false, {}, "", "unknown method: " + method};
 					}
@@ -807,7 +955,7 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 			});
 		},
 
-		.close = [this, wsMap](auto* ws, int, std::string_view) {
+		.close = [this, wsMap, downlinkStatsRateLimit](auto* ws, int, std::string_view) {
 			auto* sd = ws->getUserData();
 			sd->alive->store(false);
 			if (!sd->peerId.empty()) {
@@ -819,6 +967,7 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 				auto it = wsMap->peers.find(mapKey);
 				if (it != wsMap->peers.end() && it->second == ws) {
 					wsMap->peers.erase(it);
+					downlinkStatsRateLimit->erase(mapKey);
 					auto roomIt = wsMap->roomPeers.find(roomId);
 					if (roomIt != wsMap->roomPeers.end()) {
 						roomIt->second.erase(ws);

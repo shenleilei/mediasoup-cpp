@@ -3,6 +3,7 @@
 #include "RoomManager.h"
 #include "Channel.h"
 #include "Constants.h"
+#include "../client/RtcpHandler.h"
 #include <future>
 #include <chrono>
 #include <unistd.h>
@@ -179,4 +180,72 @@ TEST(ChannelThreadSafetyFixTest, ProcessAvailableDataRejectedInThreadedMode) {
 	::close(producerPipe[1]);
 	::close(consumerPipe[0]);
 	::close(consumerPipe[1]);
+}
+
+TEST(RtcpSuppressionFixTest, SuppressedVideoSkipsPliAndNackRetransmissions) {
+	int sv[2];
+	ASSERT_EQ(::socketpair(AF_UNIX, SOCK_DGRAM, 0, sv), 0);
+
+	RtcpContext rtcp;
+	uint32_t ssrc = 0x12345678;
+	uint16_t seq = 3456;
+	int pliCalls = 0;
+
+	rtcp.registerVideoStream(ssrc, 96, &seq);
+	rtcp.canSendVideoFn = [](uint32_t) { return false; };
+	rtcp.sendH264Fn = [&](int, const uint8_t*, int, uint8_t, uint32_t, uint32_t, uint16_t&) {
+		++pliCalls;
+	};
+
+	uint8_t rtp[16]{};
+	rtp[0] = 0x80;
+	rtp[1] = 96;
+	rtp[2] = static_cast<uint8_t>(seq >> 8);
+	rtp[3] = static_cast<uint8_t>(seq & 0xFF);
+	rtp[4] = 0x00;
+	rtp[5] = 0x01;
+	rtp[6] = 0x5F;
+	rtp[7] = 0x90;
+	rtp[8] = static_cast<uint8_t>(ssrc >> 24);
+	rtp[9] = static_cast<uint8_t>(ssrc >> 16);
+	rtp[10] = static_cast<uint8_t>(ssrc >> 8);
+	rtp[11] = static_cast<uint8_t>(ssrc & 0xFF);
+	rtcp.onVideoRtpSent(rtp, sizeof(rtp));
+	rtcp.cacheKeyframe(ssrc, rtp, sizeof(rtp), 90000);
+
+	uint8_t pli[12]{};
+	pli[0] = 0x81;
+	pli[1] = RTCP_PT_PSFB;
+	pli[2] = 0x00;
+	pli[3] = 0x02;
+	pli[8] = static_cast<uint8_t>(ssrc >> 24);
+	pli[9] = static_cast<uint8_t>(ssrc >> 16);
+	pli[10] = static_cast<uint8_t>(ssrc >> 8);
+	pli[11] = static_cast<uint8_t>(ssrc & 0xFF);
+	ASSERT_EQ(::send(sv[1], pli, sizeof(pli), 0), static_cast<ssize_t>(sizeof(pli)));
+
+	uint8_t nack[16]{};
+	nack[0] = 0x81;
+	nack[1] = RTCP_PT_RTPFB;
+	nack[2] = 0x00;
+	nack[3] = 0x03;
+	nack[8] = static_cast<uint8_t>(ssrc >> 24);
+	nack[9] = static_cast<uint8_t>(ssrc >> 16);
+	nack[10] = static_cast<uint8_t>(ssrc >> 8);
+	nack[11] = static_cast<uint8_t>(ssrc & 0xFF);
+	nack[12] = static_cast<uint8_t>(seq >> 8);
+	nack[13] = static_cast<uint8_t>(seq & 0xFF);
+	ASSERT_EQ(::send(sv[1], nack, sizeof(nack), 0), static_cast<ssize_t>(sizeof(nack)));
+
+	rtcp.processIncomingRtcp(sv[0]);
+
+	EXPECT_EQ(pliCalls, 0);
+	EXPECT_EQ(rtcp.pliResponded, 0);
+	EXPECT_EQ(rtcp.nackRetransmitted, 0);
+
+	uint8_t recvBuf[1500];
+	EXPECT_LT(::recv(sv[1], recvBuf, sizeof(recvBuf), MSG_DONTWAIT), 0);
+
+	::close(sv[0]);
+	::close(sv[1]);
 }

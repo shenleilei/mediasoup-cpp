@@ -283,6 +283,10 @@ function parseQosOverride(payload) {
         throw new TypeError(`qosOverride.schema must be '${constants_1.QOS_OVERRIDE_SCHEMA_V1}', got '${schema}'`);
     }
     const scope = asStringEnum(obj.scope, 'qosOverride.scope', ['peer', 'track']);
+    if (scope === 'track' &&
+        (!('trackId' in obj) || obj.trackId === null || obj.trackId === undefined)) {
+        throw new TypeError('qosOverride.trackId is required when scope is track');
+    }
     let trackId;
     if ('trackId' in obj) {
         if (obj.trackId === null || obj.trackId === undefined) {
@@ -298,6 +302,11 @@ function parseQosOverride(payload) {
     });
     const forceAudioOnly = optionalBoolean(obj, 'forceAudioOnly', 'qosOverride');
     const disableRecovery = optionalBoolean(obj, 'disableRecovery', 'qosOverride');
+    const pauseUpstream = optionalBoolean(obj, 'pauseUpstream', 'qosOverride');
+    const resumeUpstream = optionalBoolean(obj, 'resumeUpstream', 'qosOverride');
+    if (pauseUpstream === true && resumeUpstream === true) {
+        throw new TypeError('qosOverride.pauseUpstream and qosOverride.resumeUpstream are mutually exclusive');
+    }
     const ttlMs = asNonNegativeInt(obj.ttlMs, 'qosOverride.ttlMs');
     const reason = asNonEmptyString(obj.reason, 'qosOverride.reason');
     return {
@@ -307,6 +316,8 @@ function parseQosOverride(payload) {
         maxLevelClamp,
         forceAudioOnly,
         disableRecovery,
+        pauseUpstream,
+        resumeUpstream,
         ttlMs,
         reason,
     };

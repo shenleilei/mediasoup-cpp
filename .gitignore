@@ -22,6 +22,7 @@ compile_commands.json
 node_modules/
 package.json
 package-lock.json
+src/client/.cache/
 
 # Python
 __pycache__/
@@ -35,3 +36,7 @@ log/
 recordings/
 *.pid
 config.json
+
+# Local QoS run artifacts
+/docs/archive/*-qos-runs/20*/
+/run_d1_test.sh

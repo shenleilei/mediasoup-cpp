@@ -27,6 +27,9 @@ public:
 	bool closed() const { return closed_; }
 	bool paused() const { return paused_; }
 	bool producerPaused() const { return producerPaused_; }
+	uint8_t preferredSpatialLayer() const { return preferredSpatialLayer_; }
+	uint8_t preferredTemporalLayer() const { return preferredTemporalLayer_; }
+	uint8_t priority() const { return priority_; }
 	EventEmitter& emitter() { return emitter_; }
 
 	void pause();
@@ -40,7 +43,10 @@ public:
 	json toJson() const {
 		return {{"id", id_}, {"producerId", producerId_}, {"kind", kind_},
 			{"type", type_}, {"paused", paused_}, {"producerPaused", producerPaused_},
-			{"rtpParameters", rtpParameters_}};
+			{"rtpParameters", rtpParameters_},
+			{"preferredSpatialLayer", preferredSpatialLayer_},
+			{"preferredTemporalLayer", preferredTemporalLayer_},
+			{"priority", priority_}};
 	}
 
 	void handleNotification(FBS::Notification::Event event, const FBS::Notification::Notification* notification);
@@ -63,6 +69,9 @@ private:
 	Score score_;
 	EventEmitter emitter_;
 	std::shared_ptr<spdlog::logger> logger_;
+	uint8_t preferredSpatialLayer_ = 0;
+	uint8_t preferredTemporalLayer_ = 0;
+	uint8_t priority_ = 1;
 };
 
 } // namespace mediasoup

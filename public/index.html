@@ -1,262 +1,461 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>mediasoup-cpp 1v1 QoS Demo</title>
+<title>多路视频 QoS 演示</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
+
+:root {
+  --bg-top: #0f172a;
+  --bg-bottom: #111827;
+  --panel: rgba(15, 23, 42, 0.84);
+  --panel-soft: rgba(9, 14, 27, 0.72);
+  --panel-border: #1f2937;
+  --surface: rgba(2, 6, 23, 0.72);
+  --surface-2: rgba(11, 18, 32, 0.9);
+  --text-main: #e5e7eb;
+  --text-muted: #9fb0c9;
+  --text-dim: #94a3b8;
+  --ok: #86efac;
+  --warn: #fcd34d;
+  --err: #fca5a5;
+}
+
 body {
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
-  color: #e5e7eb;
+  background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+  color: var(--text-main);
   min-height: 100vh;
-  padding: 24px;
+  padding: 16px;
 }
+
 .page {
-  max-width: 1360px;
-  margin: 0 auto;
-}
-.hero {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 24px;
-  margin-bottom: 20px;
-}
-.hero-copy h1 {
-  font-size: 28px;
-  line-height: 1.1;
-  margin-bottom: 8px;
-}
-.hero-copy p {
-  color: #9ca3af;
-  max-width: 760px;
-  font-size: 14px;
-}
-.hero-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border: 1px solid #334155;
-  background: rgba(15, 23, 42, 0.7);
-  border-radius: 999px;
-  font-size: 12px;
-  color: #cbd5e1;
-}
-.layout {
+  width: 100%;
   display: grid;
-  grid-template-columns: 360px minmax(0, 1fr);
-  gap: 20px;
+  gap: 16px;
 }
+
 .panel {
-  background: rgba(15, 23, 42, 0.78);
-  border: 1px solid #1f2937;
-  border-radius: 16px;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 20px;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.24);
 }
+
+.panel.soft {
+  background: var(--panel-soft);
+}
+
 .panel-header {
-  padding: 18px 18px 0 18px;
+  padding: 18px 18px 0;
 }
+
 .panel-header h2 {
-  font-size: 15px;
+  font-size: 24px;
   margin-bottom: 6px;
 }
+
 .panel-header p {
-  font-size: 12px;
-  color: #94a3b8;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--text-muted);
 }
+
 .panel-body {
   padding: 18px;
 }
-.status {
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid #334155;
-  font-size: 14px;
-  margin-bottom: 16px;
+
+.topbar .panel-body {
+  display: grid;
+  gap: 14px;
 }
+
+.topbar-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: start;
+}
+
+.toolbar-copy h1 {
+  font-size: 36px;
+  line-height: 1.06;
+  letter-spacing: -0.03em;
+  margin-bottom: 8px;
+}
+
+.toolbar-copy p {
+  max-width: 68ch;
+  font-size: 19px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.toolbar-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  align-items: center;
+}
+
+.status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.status {
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(30, 41, 59, 0.88);
+  border: 1px solid #334155;
+  font-size: 19px;
+}
+
 .status strong {
   color: #f8fafc;
 }
-.status.ok { border-color: #14532d; color: #86efac; }
-.status.warn { border-color: #78350f; color: #fcd34d; }
-.status.err { border-color: #7f1d1d; color: #fca5a5; }
-.control-group {
-  margin-bottom: 14px;
+
+.status.ok { border-color: #14532d; color: var(--ok); }
+.status.warn { border-color: #78350f; color: var(--warn); }
+.status.err { border-color: #7f1d1d; color: var(--err); }
+
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 999px;
+  border: 1px solid #334155;
+  background: rgba(15, 23, 42, 0.7);
+  font-size: 16px;
+  color: var(--text-muted);
 }
-.control-group label {
-  display: block;
-  font-size: 12px;
-  color: #94a3b8;
-  margin-bottom: 6px;
+
+.meta-chip strong {
+  color: var(--text-main);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
-.control-row {
-  display: flex;
-  gap: 10px;
-}
+
 input[type="text"] {
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: 10px;
+  width: min(30vw, 280px);
+  min-width: 190px;
+  padding: 12px 14px;
+  border-radius: 12px;
   border: 1px solid #334155;
   background: #0b1220;
-  color: #e5e7eb;
-  font-size: 14px;
+  color: var(--text-main);
+  font-size: 19px;
 }
+
 button {
   border: none;
-  border-radius: 10px;
-  padding: 10px 14px;
-  font-size: 13px;
-  font-weight: 600;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 18px;
+  font-weight: 700;
   cursor: pointer;
 }
+
 button:disabled {
   opacity: 0.5;
   cursor: default;
 }
+
 .btn-join { background: #2563eb; color: #fff; }
 .btn-publish { background: #0f766e; color: #fff; }
 .btn-stop { background: #7c2d12; color: #fff; }
-.control-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-.meta-list {
+
+.dashboard {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-  margin-top: 8px;
-}
-.meta-item {
-  padding: 10px 12px;
-  background: rgba(2, 6, 23, 0.56);
-  border: 1px solid #1e293b;
-  border-radius: 10px;
-  font-size: 12px;
-}
-.meta-item .label {
-  color: #94a3b8;
-  display: block;
-  margin-bottom: 4px;
-}
-.meta-item .value {
-  color: #f8fafc;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-}
-.video-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 16px;
 }
-.video-card {
-  background: rgba(2, 6, 23, 0.72);
+
+.utility-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  gap: 16px;
+}
+
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+  gap: 16px;
+}
+
+.remote-peer-groups {
+  display: grid;
+  gap: 16px;
+}
+
+.remote-peer-group {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  background: rgba(2, 6, 23, 0.62);
   border: 1px solid #1e293b;
-  border-radius: 16px;
+  border-radius: 18px;
+}
+
+.remote-peer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.remote-peer-title {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.remote-peer-subtitle {
+  margin-top: 4px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.remote-peer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+  gap: 14px;
+}
+
+.video-card {
+  background: var(--surface);
+  border: 1px solid #1e293b;
+  border-radius: 18px;
   overflow: hidden;
 }
-.video-frame {
-  aspect-ratio: 4 / 3;
-  background: #020617;
+
+.video-card.hint-hidden {
+  border-color: #7f1d1d;
 }
+
+.video-card.hint-hidden .video-frame {
+  opacity: 0.45;
+}
+
+.video-card.hint-pinned {
+  border-color: #0f766e;
+}
+
+.video-card.hint-speaker {
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.55);
+}
+
+.video-card.hint-screen {
+  box-shadow: inset 0 0 0 1px rgba(217, 119, 6, 0.55);
+}
+
+.video-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  min-height: 220px;
+  aspect-ratio: 16 / 9;
+  background: #020617;
+  border-bottom: 1px solid #1e293b;
+}
+
 .video-frame video {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
   background: #000;
+  border-radius: 12px;
 }
+
+.video-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 220px;
+  padding: 18px;
+  color: var(--text-dim);
+  font-size: 17px;
+  text-align: center;
+}
+
 .video-meta {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  padding: 12px 14px;
-  border-top: 1px solid #1e293b;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #1e293b;
 }
+
 .video-title {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 700;
 }
+
 .video-subtitle {
-  font-size: 11px;
-  color: #94a3b8;
-  margin-top: 2px;
+  margin-top: 4px;
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--text-dim);
 }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid #334155;
+  background: rgba(15, 23, 42, 0.78);
+  border-radius: 999px;
+  font-size: 14px;
+  color: #cbd5e1;
+}
+
+.video-controls {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  background: var(--surface-2);
+}
+
+.video-summary {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.video-summary strong {
+  color: var(--text-main);
+}
+
+.video-summary.is-alert strong,
+.video-summary.is-alert {
+  color: var(--err);
+}
+
+.video-summary.is-ok strong,
+.video-summary.is-ok {
+  color: var(--ok);
+}
+
 .qos-layout {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 12px;
 }
+
 .qos-section {
   padding: 14px;
   border-radius: 14px;
   background: rgba(2, 6, 23, 0.6);
   border: 1px solid #1e293b;
 }
+
 .qos-section h3 {
-  font-size: 13px;
+  font-size: 22px;
   margin-bottom: 10px;
 }
+
 .qos-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
 }
+
 .qos-item {
-  padding: 9px 10px;
+  padding: 11px 12px;
   background: rgba(15, 23, 42, 0.72);
   border: 1px solid #1f2937;
-  border-radius: 10px;
-  font-size: 12px;
+  border-radius: 12px;
+  font-size: 17px;
 }
+
 .qos-item .label {
-  color: #94a3b8;
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 5px;
+  color: var(--text-dim);
+  font-size: 13px;
 }
+
 .qos-item .value {
   color: #f8fafc;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
-.track-card,
-.peer-card {
-  padding: 12px;
+
+.mini-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.mini-item {
+  padding: 10px 11px;
   background: rgba(15, 23, 42, 0.72);
   border: 1px solid #1f2937;
   border-radius: 12px;
-  margin-bottom: 10px;
+  font-size: 15px;
 }
-.track-header,
-.peer-header {
+
+.mini-item .label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.mini-item .value {
+  color: #f8fafc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  line-height: 1.35;
+}
+
+.peer-row {
+  padding: 12px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid #1f2937;
+  border-radius: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.peer-row-head {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
-  margin-bottom: 8px;
 }
-.track-title,
-.peer-title {
-  font-size: 13px;
-  font-weight: 600;
+
+.peer-row-title {
+  font-size: 18px;
+  font-weight: 700;
 }
+
+.peer-row-subtitle {
+  margin-top: 3px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
 .pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 9px;
+  padding: 6px 10px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 15px;
   font-weight: 700;
 }
+
 .pill.stable { background: rgba(21, 128, 61, 0.18); color: #86efac; }
 .pill.early_warning { background: rgba(180, 83, 9, 0.18); color: #fcd34d; }
 .pill.congested { background: rgba(185, 28, 28, 0.18); color: #fca5a5; }
@@ -265,113 +464,126 @@ button:disabled {
 .pill.quality-poor,
 .pill.quality-lost { background: rgba(185, 28, 28, 0.18); color: #fca5a5; }
 .pill.quality-excellent { background: rgba(30, 64, 175, 0.18); color: #93c5fd; }
+
 .hint {
-  color: #94a3b8;
-  font-size: 12px;
-  line-height: 1.5;
+  color: var(--text-dim);
+  font-size: 17px;
+  line-height: 1.6;
 }
+
 #log {
-  margin-top: 18px;
-  padding: 14px;
-  min-height: 180px;
-  max-height: 260px;
+  padding: 12px;
+  min-height: 220px;
+  max-height: 360px;
   overflow-y: auto;
   border-radius: 14px;
   background: rgba(2, 6, 23, 0.72);
   border: 1px solid #1e293b;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: 16px;
+  line-height: 1.7;
   white-space: pre-wrap;
 }
-@media (max-width: 1100px) {
-  .layout { grid-template-columns: 1fr; }
-  .qos-layout { grid-template-columns: 1fr; }
+
+@media (max-width: 1180px) {
+  .topbar-main {
+    grid-template-columns: 1fr;
+  }
+
+  .toolbar-controls {
+    justify-content: flex-start;
+  }
+
+  .utility-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 980px) {
+  body {
+    padding: 12px;
+  }
+
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+
+  .meta-chip {
+    width: fit-content;
+  }
+
+  input[type="text"] {
+    width: 100%;
+    min-width: 0;
+  }
 }
 </style>
 </head>
 <body>
 <div class="page">
-  <div class="hero">
-    <div class="hero-copy">
-      <h1>mediasoup-cpp 1v1 QoS Demo</h1>
-      <p>
-        This demo keeps the existing 1v1 room flow but replaces the old browser-side
-        manual QoS upload logic with the new client QoS library. The panel shows live
-        controller state, policy/override notifications, browser debug stats, and
-        server-side aggregate snapshots.
-      </p>
-    </div>
-    <div class="hero-badges">
-      <div class="badge">QoS Library: <strong>enabled</strong></div>
-      <div class="badge">Mode: <strong>1v1 demo</strong></div>
-      <div class="badge">Modes: <strong>`?qos=legacy` / `?qos=full`</strong></div>
+  <div class="panel soft topbar">
+    <div class="panel-body">
+      <div class="topbar-main">
+        <div class="toolbar-copy">
+          <h1>多路摄像头 QoS 演示</h1>
+          <p>先看视频，再看对应的 QoS 数据。本地和远端都按视频卡片查看，房间总览和日志放在底部。</p>
+        </div>
+        <div class="toolbar-controls">
+          <input id="roomInput" type="text" value="test-room" placeholder="输入房间号">
+          <button id="joinBtn" class="btn-join">加入房间</button>
+          <button id="publishBtn" class="btn-publish" disabled>发布麦克风和摄像头</button>
+          <button id="stopBtn" class="btn-stop" disabled>停止 QoS</button>
+        </div>
+      </div>
+      <div class="status-row">
+        <div id="status" class="status warn"><strong>状态：</strong> 未连接</div>
+        <div class="meta-chip">房间 <strong id="metaRoom">-</strong></div>
+        <div class="meta-chip">Peer <strong id="metaPeer">-</strong></div>
+        <div class="meta-chip">模式 <strong id="metaQosMode">新库</strong></div>
+      </div>
     </div>
   </div>
 
-  <div class="layout">
+  <div class="dashboard">
     <div class="panel">
       <div class="panel-header">
-        <h2>Session</h2>
-        <p>Join a room, publish local media, then inspect the new QoS pipeline.</p>
+        <h2>本地发布</h2>
+        <p>每路本地视频下方直接显示对应 uplink QoS 和服务端视角。</p>
       </div>
       <div class="panel-body">
-        <div id="status" class="status warn"><strong>Status:</strong> Disconnected</div>
-
-        <div class="control-group">
-          <label for="roomInput">Room ID</label>
-          <input id="roomInput" type="text" value="test-room" placeholder="Enter room id">
-        </div>
-
-        <div class="control-actions">
-          <button id="joinBtn" class="btn-join">Join Room</button>
-          <button id="publishBtn" class="btn-publish" disabled>Publish A/V</button>
-          <button id="stopBtn" class="btn-stop" disabled>Stop QoS</button>
-        </div>
-
-        <div class="meta-list">
-          <div class="meta-item">
-            <span class="label">Current Room</span>
-            <span class="value" id="metaRoom">-</span>
-          </div>
-          <div class="meta-item">
-            <span class="label">Current Peer</span>
-            <span class="value" id="metaPeer">-</span>
-          </div>
-          <div class="meta-item">
-            <span class="label">Active QoS Mode</span>
-            <span class="value" id="metaQosMode">new library</span>
-          </div>
-        </div>
-
-        <div id="log"></div>
+        <div class="video-grid" id="localVideos"></div>
       </div>
     </div>
 
-    <div>
-      <div class="video-grid" id="videos">
-        <div class="video-card">
-          <div class="video-frame">
-            <video id="localVideo" autoplay muted playsinline></video>
-          </div>
-          <div class="video-meta">
-            <div>
-              <div class="video-title">Local Publisher</div>
-              <div class="video-subtitle">Camera or fallback canvas stream</div>
-            </div>
-            <div class="badge" id="localVideoBadge">idle</div>
-          </div>
-        </div>
+    <div class="panel">
+      <div class="panel-header">
+        <h2>远端订阅</h2>
+        <p>按 peer 分组显示所有远端 video track，并在卡片里标出 track 身份和对应的 downlink QoS 数据。</p>
       </div>
+      <div class="panel-body">
+        <div class="remote-peer-groups" id="remoteVideos"></div>
+      </div>
+    </div>
+  </div>
 
-      <div class="panel" style="margin-top:20px;">
-        <div class="panel-header">
-          <h2>QoS Monitor</h2>
-          <p>Controller state, policy/override notifications, local debug stats, and server aggregate view.</p>
-        </div>
-        <div class="panel-body">
-          <div id="qos-content" class="hint">Join a room and publish a video track to activate QoS.</div>
-        </div>
+  <div class="utility-columns">
+    <div class="panel soft">
+      <div class="panel-header">
+        <h2>房间总览</h2>
+        <p>这里只看整体状态和房间级摘要，不放单路问题排查。</p>
+      </div>
+      <div class="panel-body">
+        <div id="qos-content" class="hint">加入房间并发布视频后，这里会显示房间级总览。</div>
+      </div>
+    </div>
+
+    <div class="panel soft">
+      <div class="panel-header">
+        <h2>日志</h2>
+        <p>这里只保留操作和异常日志。</p>
+      </div>
+      <div class="panel-body">
+        <div id="log"></div>
       </div>
     </div>
   </div>

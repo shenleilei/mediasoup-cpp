@@ -8,7 +8,6 @@ namespace qos {
 inline int clampLevel(int level, int maxLevel) { return std::clamp(level, 0, maxLevel); }
 
 inline int resolveTargetLevel(const PlannerInput& input) {
-	if (!input.profile) return 0;
 	int maxLevel = std::max(0, input.profile->levelCount - 1);
 	int cur = clampLevel(input.currentLevel, maxLevel);
 	int target = cur;
@@ -25,7 +24,6 @@ inline int resolveTargetLevel(const PlannerInput& input) {
 }
 
 inline std::vector<PlannedAction> planActionsForLevel(const PlannerInput& input, int targetLevel) {
-	if (!input.profile) return {{ActionType::Noop, 0, {}, {}, "null-profile"}};
 	int maxLevel = std::max(0, input.profile->levelCount - 1);
 	int tgt = clampLevel(targetLevel, maxLevel);
 	const LadderStep* step = nullptr;

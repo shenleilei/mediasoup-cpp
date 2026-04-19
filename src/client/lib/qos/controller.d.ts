@@ -32,6 +32,8 @@ export type PublisherQosCoordinationOverride = {
     maxLevelClamp?: number;
     disableRecovery?: boolean;
     forceAudioOnly?: boolean;
+    pauseUpstream?: boolean;
+    resumeUpstream?: boolean;
 };
 export declare class PublisherQosController {
     private readonly sampler;
@@ -57,6 +59,7 @@ export declare class PublisherQosController {
     private snapshotIntervalMs;
     private allowAudioOnly;
     private allowVideoPause;
+    private activeOverrides?;
     private activeOverride?;
     private coordinationOverride?;
     private probeContext?;

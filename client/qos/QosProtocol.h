@@ -162,15 +162,13 @@ inline const char* qualityLimitationReasonStr(QualityLimitationReason r) {
 inline const char* resolvePeerMode(const std::vector<PeerTrackState>& tracks, bool peerHasAudioTrack) {
 	bool hasVideoTrack = false;
 	bool hasAudioTrack = peerHasAudioTrack;
-	bool allVideoAudioOnly = true;
+	bool audioOnly = tracks.empty();
 	for (const auto& track : tracks) {
-		if (track.kind == TrackKind::Video) {
-			hasVideoTrack = true;
-			if (!track.inAudioOnlyMode) allVideoAudioOnly = false;
-		}
+		hasVideoTrack = hasVideoTrack || track.kind == TrackKind::Video;
 		hasAudioTrack = hasAudioTrack || track.kind == TrackKind::Audio;
+		audioOnly = audioOnly || (track.kind == TrackKind::Video && track.inAudioOnlyMode);
 	}
-	if (!hasVideoTrack || (hasVideoTrack && allVideoAudioOnly)) return "audio-only";
+	if (audioOnly) return "audio-only";
 	if (hasVideoTrack && hasAudioTrack) return "audio-video";
 	if (hasVideoTrack) return "video-only";
 	return "audio-only";

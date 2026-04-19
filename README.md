@@ -85,6 +85,35 @@ mediasoup-worker process
 RTP / SRTP / ICE / DTLS
 ```
 
+## Linux PlainTransport Client
+
+Besides the browser path, this repo also ships a Linux `PlainTransport C++ client` used for
+end-to-end publish / QoS verification and matrix regression.
+
+```text
+MP4
+  -> FFmpeg demux / decode
+  -> per-track x264 re-encode (or H264 copy path)
+  -> RTP packetize
+  -> UDP
+  -> mediasoup PlainTransport
+
+WebSocket control plane
+  -> join / plainPublish / clientStats / getStats
+  -> qosPolicy / qosOverride notifications
+
+RTCP side path
+  -> SR / RR / RTT / jitter
+  -> NACK / PLI / FIR
+  -> per-track retransmission + keyframe cache
+```
+
+Current architecture docs:
+
+- [docs/linux-client-architecture_cn.md](./docs/linux-client-architecture_cn.md)
+- [docs/architecture_cn.md](./docs/architecture_cn.md)
+- [docs/plain-client-qos-parity-checklist.md](./docs/plain-client-qos-parity-checklist.md)
+
 ## Multi-Node Routing Architecture
 
 ```text
@@ -123,38 +152,50 @@ There is also a dedicated Redis subscriber thread that listens for node and room
 
 ## QoS Status
 
-This repo now includes a full uplink QoS path across:
+This repo now includes:
 
-- client-side publisher QoS state machine and ladder control
-- server-side `clientStats` ingestion, validation, aggregation, and automatic override generation
-- browser/node harnesses for publish / stale-seq / policy-update / automatic override / manual clear
-- browser loopback weak-network matrix execution and case-by-case reporting
+- a full uplink QoS path across:
+  - client-side publisher QoS state machine and ladder control
+  - server-side `clientStats` ingestion, validation, aggregation, and automatic override generation
+  - browser/node harnesses for publish / stale-seq / policy-update / automatic override / manual clear
+  - browser loopback weak-network matrix execution and case-by-case reporting
+- a downlink QoS path across:
+  - subscriber-side `downlinkClientStats` ingestion, validation, storage, and controller execution
+  - server-side hidden/pinned/size-based allocation, health-driven degrade/recovery, and priority handling
+  - producer-side zero-demand `pauseUpstream` / `resumeUpstream` coordination for sustained all-hidden cases
+  - browser harnesses for consumer control, downlink auto pause/resume, and priority competition under constrained downlink
 
-### Latest host-run result
+Current downlink scope is subscriber receive control plus zero-demand publisher pause/resume coordination.
+`dynacast` and room-level global bitrate budgeting remain follow-on work.
 
-Latest full host run of the QoS script:
+### Current checked status
 
-- `client-js`: `PASS`
-- `cpp-unit`: `PASS`
-- `cpp-integration`: `PASS`
-- `cpp-accuracy`: `PASS`
-- `cpp-recording`: `PASS`
-- `node-harness`: `PASS`
-- `browser-harness`: `PASS`
-- `matrix`: `41` cases total, `39 PASS`, `1 FAIL`, `1 ERROR`
+Current repo docs and generated artifacts show:
 
-Current matrix exceptions:
+- browser uplink matrix main gate: `43 / 43 PASS` (`2026-04-13`)
+- PlainTransport C++ client matrix: `43 / 43 PASS` (`2026-04-16`)
+- PlainTransport C++ client signaling harness: `PASS`
+- C++ client QoS unit parity: `PASS`
 
-- `R4`: `FAIL` (`impaired=congested/L4`, judged `过强`)
-- `L8`: `ERROR` (`Protocol error (Runtime.callFunctionOn): Target closed`)
+Current scope note:
+
+- uplink QoS main path is closed on both browser and PlainTransport C++ client
+- downlink currently covers subscriber receive control plus zero-demand publisher pause/resume coordination
+- `dynacast` and room-level global bitrate budgeting remain follow-on work
 
 Source-of-truth links:
 
+- QoS overall status: [docs/qos-status.md](./docs/qos-status.md)
 - final summary: [docs/uplink-qos-final-report.md](./docs/uplink-qos-final-report.md)
 - result summary: [docs/uplink-qos-test-results-summary.md](./docs/uplink-qos-test-results-summary.md)
 - per-case final result: [docs/uplink-qos-case-results.md](./docs/uplink-qos-case-results.md)
+- plain-client current status: [docs/plain-client-qos-status.md](./docs/plain-client-qos-status.md)
+- plain-client parity checklist: [docs/plain-client-qos-parity-checklist.md](./docs/plain-client-qos-parity-checklist.md)
+- plain-client matrix result: [docs/plain-client-qos-case-results.md](./docs/plain-client-qos-case-results.md)
+- downlink current status: [docs/downlink-qos-status.md](./docs/downlink-qos-status.md)
+- linux client architecture: [docs/linux-client-architecture_cn.md](./docs/linux-client-architecture_cn.md)
+- test coverage map: [docs/qos-test-coverage_cn.md](./docs/qos-test-coverage_cn.md)
 - generated matrix artifact: [docs/generated/uplink-qos-matrix-report.json](./docs/generated/uplink-qos-matrix-report.json)
-- detailed review notes: [docs/review_qos.md](./docs/review_qos.md)
 
 ## Core Runtime Model
 
@@ -292,6 +333,19 @@ timer -> main thread
       -> merges clientStats
       -> broadcasts statsReport
       -> recorder may append QoS snapshots
+```
+
+### PlainTransport Linux Client
+
+```text
+linux plain-client
+      -> WebSocket join / plainPublish
+      -> UDP RTP to PlainTransport
+      -> RTCP SR / RR / NACK / PLI
+      -> async getStats-assisted sampling
+      -> PublisherQosController per video track
+      -> clientStats snapshots
+      -> qosPolicy / qosOverride notifications
 ```
 
 ### Media
@@ -623,6 +677,10 @@ node tests/qos_harness/run_matrix.mjs --include-extended
 
 # targeted blind-spot rerun
 node tests/qos_harness/run_matrix.mjs --cases=T9,T10,T11
+
+# multi-room capacity ramp:
+# each room has exactly 2 peers: 1 publisher sending 1080p, 1 subscriber receiving it
+node tests/qos_harness/browser_capacity_rooms.mjs --workers=1 --step=5 --max-rooms=50
 ```
 
 Behavior:

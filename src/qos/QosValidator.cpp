@@ -1,7 +1,14 @@
 #include "qos/QosValidator.h"
 #include <algorithm>
+#include <cmath>
+#include <unordered_set>
 
 namespace mediasoup::qos {
+
+namespace {
+constexpr const char* kCanonicalDownlinkSchema = "mediasoup.qos.downlink.client.v1";
+constexpr const char* kLegacyDownlinkSchema = "mediasoup.downlink.v1";
+}
 namespace {
 
 template<typename T>
@@ -27,7 +34,11 @@ bool IsNonEmptyString(const json& value) {
 }
 
 bool IsFiniteNumber(const json& value) {
-	return value.is_number_float() || value.is_number_integer() || value.is_number_unsigned();
+	if (value.is_number_float()) {
+		return std::isfinite(value.get<double>());
+	}
+
+	return value.is_number_integer() || value.is_number_unsigned();
 }
 
 bool IsNonNegativeNumber(const json& value) {
@@ -333,6 +344,10 @@ ParseResult<QosOverride> QosValidator::ParseOverride(const json& payload) {
 	if (!OneOf(scope, { "peer", "track" })) {
 		return MakeError<QosOverride>("invalid scope");
 	}
+	if (scope == "track" &&
+		(!payload.contains("trackId") || payload["trackId"].is_null())) {
+		return MakeError<QosOverride>("track scope requires trackId");
+	}
 
 	QosOverride overrideData;
 	overrideData.schema = payload["schema"].get<std::string>();
@@ -373,8 +388,142 @@ ParseResult<QosOverride> QosValidator::ParseOverride(const json& payload) {
 		overrideData.hasDisableRecovery = true;
 		overrideData.disableRecovery = payload["disableRecovery"].get<bool>();
 	}
+	if (payload.contains("pauseUpstream")) {
+		if (!payload["pauseUpstream"].is_boolean()) {
+			return MakeError<QosOverride>("invalid pauseUpstream");
+		}
+		overrideData.hasPauseUpstream = true;
+		overrideData.pauseUpstream = payload["pauseUpstream"].get<bool>();
+	}
+	if (payload.contains("resumeUpstream")) {
+		if (!payload["resumeUpstream"].is_boolean()) {
+			return MakeError<QosOverride>("invalid resumeUpstream");
+		}
+		overrideData.hasResumeUpstream = true;
+		overrideData.resumeUpstream = payload["resumeUpstream"].get<bool>();
+	}
+	if (overrideData.hasPauseUpstream && overrideData.pauseUpstream &&
+		overrideData.hasResumeUpstream && overrideData.resumeUpstream) {
+		return MakeError<QosOverride>("pauseUpstream and resumeUpstream are mutually exclusive");
+	}
 
 	return MakeSuccess(std::move(overrideData));
+}
+
+ParseResult<DownlinkSnapshot> QosValidator::ParseDownlinkSnapshot(const json& payload) {
+	ParseResult<DownlinkSnapshot> result;
+	try {
+		if (!payload.is_object()) {
+			result.error = "payload must be object";
+			return result;
+		}
+
+		// Guard against oversized payloads to prevent memory/bandwidth amplification.
+		{
+			const auto dumpSize = payload.dump(-1, ' ', false, json::error_handler_t::replace).size();
+			if (dumpSize > kDownlinkMaxRawPayloadBytes) {
+				result.error = "payload too large";
+				return result;
+			}
+		}
+
+		auto& v = result.value;
+		v.schema = payload.value("schema", "");
+		if (v.schema != kCanonicalDownlinkSchema && v.schema != kLegacyDownlinkSchema) {
+			result.error = "unsupported schema: " + v.schema;
+			return result;
+		}
+		if (v.schema == kLegacyDownlinkSchema) {
+			v.schema = kCanonicalDownlinkSchema;
+		}
+		v.seq = payload.value("seq", uint64_t(0));
+		if (v.seq > kDownlinkMaxSeq) {
+			result.error = "seq out of range";
+			return result;
+		}
+		v.tsMs = payload.value("tsMs", int64_t(0));
+		v.subscriberPeerId = payload.value("subscriberPeerId", "");
+		if (v.subscriberPeerId.empty()) {
+			result.error = "subscriberPeerId is required";
+			return result;
+		}
+		if (v.subscriberPeerId.size() > kDownlinkMaxIdLength) {
+			result.error = "subscriberPeerId too long";
+			return result;
+		}
+		if (!payload.contains("subscriptions") || !payload["subscriptions"].is_array()) {
+			result.error = "subscriptions array is required";
+			return result;
+		}
+		auto sanitizeFinite = [](double value, double fallback = 0.0) {
+			return std::isfinite(value) ? value : fallback;
+		};
+		if (payload.contains("transport") && payload["transport"].is_object()) {
+			auto& t = payload["transport"];
+			v.availableIncomingBitrate = sanitizeFinite(
+				t.value("availableIncomingBitrate", 0.0));
+			v.currentRoundTripTime = sanitizeFinite(
+				t.value("currentRoundTripTime", 0.0));
+			// Clamp to sane ranges
+			if (v.availableIncomingBitrate < 0.0) v.availableIncomingBitrate = 0.0;
+			if (v.currentRoundTripTime < 0.0) v.currentRoundTripTime = 0.0;
+			if (v.currentRoundTripTime > 60.0) v.currentRoundTripTime = 60.0;
+		}
+		if (payload["subscriptions"].size() > kDownlinkMaxSubscriptions) {
+			result.error = "too many subscriptions";
+			return result;
+		}
+		std::unordered_set<std::string> seenConsumerIds;
+		seenConsumerIds.reserve(payload["subscriptions"].size());
+		for (auto& s : payload["subscriptions"]) {
+			if (!s.is_object()) {
+				result.error = "subscription entry must be object";
+				return result;
+			}
+			DownlinkSubscription sub;
+			sub.consumerId = s.value("consumerId", "");
+			sub.producerId = s.value("producerId", "");
+			sub.kind = s.value("kind", "video");
+			if (sub.consumerId.empty() || sub.producerId.empty()) {
+				result.error = "subscription consumerId and producerId are required";
+				return result;
+			}
+			if (sub.kind != "audio" && sub.kind != "video") {
+				result.error = "subscription kind must be audio or video";
+				return result;
+			}
+			if (sub.consumerId.size() > kDownlinkMaxIdLength ||
+				sub.producerId.size() > kDownlinkMaxIdLength) {
+				result.error = "subscription id too long";
+				return result;
+			}
+			if (!seenConsumerIds.insert(sub.consumerId).second) {
+				result.error = "duplicate subscription consumerId";
+				return result;
+			}
+			sub.visible = s.value("visible", true);
+			sub.pinned = s.value("pinned", false);
+			sub.activeSpeaker = s.value("activeSpeaker", false);
+			sub.isScreenShare = s.value("isScreenShare", false);
+			sub.targetWidth = s.value("targetWidth", 0u);
+			sub.targetHeight = s.value("targetHeight", 0u);
+			sub.packetsLost = s.value("packetsLost", 0u);
+			sub.jitter = std::max(0.0, sanitizeFinite(s.value("jitter", 0.0)));
+			sub.framesPerSecond = std::max(0.0,
+				sanitizeFinite(s.value("framesPerSecond", 0.0)));
+			sub.frameWidth = s.value("frameWidth", 0u);
+			sub.frameHeight = s.value("frameHeight", 0u);
+			sub.freezeRate = std::clamp(
+				sanitizeFinite(s.value("freezeRate", 0.0)), 0.0, 1.0);
+			v.subscriptions.push_back(std::move(sub));
+		}
+		v.raw = payload;
+		v.raw["schema"] = v.schema;
+		result.ok = true;
+	} catch (const std::exception& e) {
+		result.error = e.what();
+	}
+	return result;
 }
 
 } // namespace mediasoup::qos

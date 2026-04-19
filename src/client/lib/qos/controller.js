@@ -36,7 +36,7 @@ function wasActionApplied(result) {
             return result.applied !== false;
         }
     }
-    return true;
+    return false;
 }
 function isStrongRecoverySignal(signals, profile) {
     const { thresholds } = profile;
@@ -150,6 +150,12 @@ class PublisherQosController {
         if (override.forceAudioOnly === true) {
             normalized.forceAudioOnly = true;
         }
+        if (override.pauseUpstream === true) {
+            normalized.pauseUpstream = true;
+        }
+        if (override.resumeUpstream === true) {
+            normalized.resumeUpstream = true;
+        }
         this.coordinationOverride =
             Object.keys(normalized).length > 0 ? normalized : undefined;
     }
@@ -207,6 +213,14 @@ class PublisherQosController {
                 const reason = override.reason || '';
                 if (reason === 'server_ttl_expired') {
                     this.activeOverrides.clear();
+                } else if (reason.startsWith('downlink_v2_') || reason.startsWith('downlink_v3_')) {
+                    // Server-generated downlink v2/v3 track clears must only remove
+                    // their own coordination overrides, not unrelated app/manual ones.
+                    for (const key of [...this.activeOverrides.keys()]) {
+                        if (key.startsWith('downlink_v2_') || key.startsWith('downlink_v3_')) {
+                            this.activeOverrides.delete(key);
+                        }
+                    }
                 } else if (!reason.startsWith('server_')) {
                     // Manual clear semantics: ttlMs=0 from app/manual control should
                     // clear all non-server overrides, regardless of the exact reason
@@ -256,6 +270,8 @@ class PublisherQosController {
             }
             if (entry.data.forceAudioOnly === true) merged.forceAudioOnly = true;
             if (entry.data.disableRecovery === true) merged.disableRecovery = true;
+            if (entry.data.pauseUpstream === true) merged.pauseUpstream = true;
+            if (entry.data.resumeUpstream === true) merged.resumeUpstream = true;
             merged._expiresAtMs = Math.min(merged._expiresAtMs, entry.expiresAtMs);
         }
         if (!merged) return undefined;
@@ -438,6 +454,32 @@ class PublisherQosController {
             }
             filtered.push(action);
         }
+        // v3: pauseUpstream from server demand aggregation
+        const pauseUpstreamActive = override?.pauseUpstream === true ||
+            this.coordinationOverride?.pauseUpstream === true;
+        const resumeUpstreamActive = override?.resumeUpstream === true ||
+            this.coordinationOverride?.resumeUpstream === true;
+        if (pauseUpstreamActive &&
+            this.inAudioOnlyMode !== true &&
+            this.profile.source === 'camera' &&
+            audioOnlyAllowed) {
+            filtered.unshift({
+                type: 'enterAudioOnly',
+                level: this.currentLevel,
+                reason: 'downlink_v3_zero_demand_pause',
+            });
+        }
+        if (resumeUpstreamActive &&
+            this.inAudioOnlyMode === true &&
+            this.profile.source === 'camera' &&
+            audioOnlyAllowed &&
+            !pauseUpstreamActive) {
+            filtered.unshift({
+                type: 'exitAudioOnly',
+                level: this.currentLevel,
+                reason: 'downlink_v3_demand_resumed',
+            });
+        }
         if (audioOnlyAllowed &&
             override?.forceAudioOnly &&
             this.inAudioOnlyMode !== true) {
@@ -465,6 +507,7 @@ class PublisherQosController {
         if (audioOnlyAllowed &&
             overrideDrivenAudioOnly &&
             !forceAudioOnlyActive &&
+            !pauseUpstreamActive &&
             !filtered.some(action => action.type === 'exitAudioOnly')) {
             filtered.unshift({
                 type: 'exitAudioOnly',
@@ -615,9 +658,11 @@ class PublisherQosController {
         if (!this.signalChannel) {
             return;
         }
+        const nextSeq = this.seq >= constants_1.QOS_MAX_SEQ ? 0 : this.seq + 1;
+        this.seq = nextSeq;
         const payload = {
             schema: constants_1.QOS_CLIENT_SCHEMA_V1,
-            seq: ++this.seq,
+            seq: nextSeq,
             tsMs: nowMs,
             peerState: {
                 mode: resolvePeerMode(this.inAudioOnlyMode, this.kind),

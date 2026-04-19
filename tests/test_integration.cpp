@@ -15,6 +15,21 @@ protected:
 	pid_t sfuPid_ = -1;
 	std::string testRoom_; // unique room per test to avoid Redis conflicts
 
+	json defaultRtpCapabilities() const {
+		return {
+			{"codecs", {{
+				{"mimeType", "audio/opus"}, {"kind", "audio"},
+				{"clockRate", 48000}, {"channels", 2},
+				{"preferredPayloadType", 100}
+			}, {
+				{"mimeType", "video/VP8"}, {"kind", "video"},
+				{"clockRate", 90000},
+				{"preferredPayloadType", 101}
+			}}},
+			{"headerExtensions", json::array()}
+		};
+	}
+
 	void SetUp() override {
 		// Generate unique room name per test
 		testRoom_ = "room_" + std::to_string(getpid()) + "_" +
@@ -87,20 +102,9 @@ protected:
 		c.roomId = roomId;
 		c.peerId = peerId;
 		c.ws = std::make_unique<TestWsClient>();
-		EXPECT_TRUE(c.ws->connect(HOST, 14000));
+		EXPECT_TRUE(c.ws->connect(HOST, SFU_PORT));
 
-		json rtpCaps = {
-			{"codecs", {{
-				{"mimeType", "audio/opus"}, {"kind", "audio"},
-				{"clockRate", 48000}, {"channels", 2},
-				{"preferredPayloadType", 100}
-			}, {
-				{"mimeType", "video/VP8"}, {"kind", "video"},
-				{"clockRate", 90000},
-				{"preferredPayloadType", 101}
-			}}},
-			{"headerExtensions", json::array()}
-		};
+		json rtpCaps = defaultRtpCapabilities();
 
 		auto resp = c.ws->request("join", {
 			{"roomId", roomId}, {"peerId", peerId},
@@ -110,6 +114,40 @@ protected:
 		if (resp.contains("data") && resp["data"].contains("routerRtpCapabilities"))
 			c.routerRtpCapabilities = resp["data"]["routerRtpCapabilities"];
 		return c;
+	}
+
+	bool waitForFreshRoomReady(int timeoutMs = 5000) {
+		const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+		int attempt = 0;
+		while (std::chrono::steady_clock::now() < deadline) {
+			TestWsClient ws;
+			if (!ws.connect(HOST, SFU_PORT)) {
+				usleep(100000);
+				continue;
+			}
+
+			const std::string roomId = testRoom_ + "_respawn_" + std::to_string(++attempt);
+			const std::string peerId = "probe_" + std::to_string(attempt);
+			auto joinResp = ws.request("join", {
+				{"roomId", roomId},
+				{"peerId", peerId},
+				{"displayName", peerId},
+				{"rtpCapabilities", defaultRtpCapabilities()}
+			});
+			if (joinResp.value("ok", false)) {
+				auto transportResp = ws.request("createWebRtcTransport", {
+					{"producing", true},
+					{"consuming", false}
+				});
+				if (transportResp.value("ok", false)) {
+					ws.close();
+					return true;
+				}
+			}
+			ws.close();
+			usleep(100000);
+		}
+		return false;
 	}
 };
 
@@ -233,10 +271,10 @@ TEST_F(IntegrationTest, PauseResumeProducer) {
 TEST_F(IntegrationTest, ParticipantsList) {
 	// Join 4 peers sequentially, each should see all previous peers
 	TestWsClient ws1, ws2, ws3, ws4;
-	ASSERT_TRUE(ws1.connect(HOST, 14000));
-	ASSERT_TRUE(ws2.connect(HOST, 14000));
-	ASSERT_TRUE(ws3.connect(HOST, 14000));
-	ASSERT_TRUE(ws4.connect(HOST, 14000));
+	ASSERT_TRUE(ws1.connect(HOST, SFU_PORT));
+	ASSERT_TRUE(ws2.connect(HOST, SFU_PORT));
+	ASSERT_TRUE(ws3.connect(HOST, SFU_PORT));
+	ASSERT_TRUE(ws4.connect(HOST, SFU_PORT));
 
 	auto r1 = ws1.request("join", {{"roomId", testRoom_}, {"peerId", "p1"}, {"displayName", "p1"}});
 	ASSERT_TRUE(r1.value("ok", false)) << r1.dump();
@@ -962,7 +1000,7 @@ TEST_F(IntegrationTest, WorkerCrashSendsServerRestart) {
 	ASSERT_FALSE(notif.empty()) << "Alice did not receive serverRestart after worker crash";
 	EXPECT_EQ(notif["data"]["roomId"], testRoom_);
 
-	usleep(2000000);
+	ASSERT_TRUE(waitForFreshRoomReady(5000)) << "worker did not become ready after crash";
 	auto alice2 = joinRoom(testRoom_ + "_new", "alice2");
 }
 
@@ -985,8 +1023,7 @@ TEST_F(IntegrationTest, WorkerRespawnAllowsNewRooms) {
 		pclose(fp);
 	}
 
-	// Wait for respawn
-	usleep(4000000); // 4s — enough for respawn + checkRoomHealth
+	ASSERT_TRUE(waitForFreshRoomReady(6000)) << "worker did not respawn in time";
 
 	// New room should work on the respawned worker
 	std::string newRoom = testRoom_ + "_after_crash";
@@ -996,4 +1033,81 @@ TEST_F(IntegrationTest, WorkerRespawnAllowsNewRooms) {
 	});
 	EXPECT_TRUE(sendResp.value("ok", false))
 		<< "createTransport failed after worker respawn: " << sendResp.dump();
+}
+
+// ─── Downlink QoS Phase 1: Consumer control tests ───
+
+TEST_F(IntegrationTest, PauseResumeConsumerControl) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoom(testRoom_, "bob");
+
+	auto bobRecv = bob.ws->request("createWebRtcTransport", {{"producing", false}, {"consuming", true}});
+	ASSERT_TRUE(bobRecv.value("ok", false));
+
+	auto aliceSend = alice.ws->request("createWebRtcTransport", {{"producing", true}, {"consuming", false}});
+	ASSERT_TRUE(aliceSend.value("ok", false));
+
+	json rtpParams = {{"codecs", {{{"mimeType", "audio/opus"}, {"clockRate", 48000}, {"channels", 2}, {"payloadType", 100}}}},
+		{"encodings", {{{"ssrc", 55550001}}}}, {"mid", "0"}};
+	auto prod = alice.ws->request("produce", {{"transportId", aliceSend["data"]["id"]}, {"kind", "audio"}, {"rtpParameters", rtpParams}});
+	ASSERT_TRUE(prod.value("ok", false));
+
+	auto notif = bob.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(notif.empty());
+	std::string consumerId = notif["data"]["id"];
+
+	auto pauseResp = bob.ws->request("pauseConsumer", {{"consumerId", consumerId}});
+	ASSERT_TRUE(pauseResp.value("ok", false)) << pauseResp.dump();
+	EXPECT_TRUE(pauseResp["data"]["paused"].get<bool>());
+
+	auto resumeResp = bob.ws->request("resumeConsumer", {{"consumerId", consumerId}});
+	ASSERT_TRUE(resumeResp.value("ok", false)) << resumeResp.dump();
+	EXPECT_FALSE(resumeResp["data"]["paused"].get<bool>());
+}
+
+TEST_F(IntegrationTest, SetConsumerPriorityControl) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoom(testRoom_, "bob");
+
+	auto bobRecv = bob.ws->request("createWebRtcTransport", {{"producing", false}, {"consuming", true}});
+	ASSERT_TRUE(bobRecv.value("ok", false));
+
+	auto aliceSend = alice.ws->request("createWebRtcTransport", {{"producing", true}, {"consuming", false}});
+	ASSERT_TRUE(aliceSend.value("ok", false));
+
+	json rtpParams = {{"codecs", {{{"mimeType", "audio/opus"}, {"clockRate", 48000}, {"channels", 2}, {"payloadType", 100}}}},
+		{"encodings", {{{"ssrc", 55550002}}}}, {"mid", "0"}};
+	auto prod = alice.ws->request("produce", {{"transportId", aliceSend["data"]["id"]}, {"kind", "audio"}, {"rtpParameters", rtpParams}});
+	ASSERT_TRUE(prod.value("ok", false));
+
+	auto notif = bob.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(notif.empty());
+	std::string consumerId = notif["data"]["id"];
+
+	auto resp = bob.ws->request("setConsumerPriority", {{"consumerId", consumerId}, {"priority", 200}});
+	ASSERT_TRUE(resp.value("ok", false)) << resp.dump();
+	EXPECT_EQ(resp["data"]["priority"].get<uint8_t>(), 200);
+}
+
+TEST_F(IntegrationTest, RequestConsumerKeyFrameControl) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoom(testRoom_, "bob");
+
+	auto bobRecv = bob.ws->request("createWebRtcTransport", {{"producing", false}, {"consuming", true}});
+	ASSERT_TRUE(bobRecv.value("ok", false));
+
+	auto aliceSend = alice.ws->request("createWebRtcTransport", {{"producing", true}, {"consuming", false}});
+	ASSERT_TRUE(aliceSend.value("ok", false));
+
+	json rtpParams = {{"codecs", {{{"mimeType", "video/VP8"}, {"clockRate", 90000}, {"payloadType", 101}}}},
+		{"encodings", {{{"ssrc", 55550003}}}}, {"mid", "0"}};
+	auto prod = alice.ws->request("produce", {{"transportId", aliceSend["data"]["id"]}, {"kind", "video"}, {"rtpParameters", rtpParams}});
+	ASSERT_TRUE(prod.value("ok", false));
+
+	auto notif = bob.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(notif.empty());
+	std::string consumerId = notif["data"]["id"];
+
+	auto resp = bob.ws->request("requestConsumerKeyFrame", {{"consumerId", consumerId}});
+	ASSERT_TRUE(resp.value("ok", false)) << resp.dump();
 }

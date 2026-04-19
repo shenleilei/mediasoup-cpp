@@ -122,7 +122,8 @@ async function runCase(page, caseDefn) {
   );
   const impairedStateForEvaluation = getImpairedStateForEvaluation(
     caseDefn,
-    impairmentSummary
+    impairmentSummary,
+    baselineSummary
   );
   const evaluation = deriveCaseEvaluation(
     caseDefn,
@@ -230,6 +231,7 @@ async function main() {
   } finally {
     await browser.close();
     await new Promise(resolve => server.close(resolve));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 
   console.log(JSON.stringify(results, null, 2));

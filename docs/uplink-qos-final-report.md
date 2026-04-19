@@ -5,6 +5,7 @@
 > **文档性质**
 >
 > 这是当前 QoS 自动化验证的主结论文档。
+> 如果只想先看总口径和各分支入口，先看 [qos-status.md](./qos-status.md)。
 > 若需要说明“底层 WebRTC 自动能力”和“本仓库 uplink QoS 策略能力”的边界，请继续查看 [uplink-qos-boundaries.md](./uplink-qos-boundaries.md)。
 > 若需要逐 case 明细，请继续查看 [uplink-qos-case-results.md](./uplink-qos-case-results.md)。
 

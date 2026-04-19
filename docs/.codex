@@ -1,144 +1,46 @@
-# Pending Codex Follow-Up
+# Codex Handoff
 
-日期：`2026-04-13`
+## 当前文档状态
 
-如果下次重新打开 Codex，要继续 uplink QoS 这条线，先按这里接着做，不要重新做整轮背景调查。
+本轮已经把 Linux `PlainTransport C++ client` 与 plain-client QoS 文档收敛到当前文档体系：
 
-## 当前已确认的状态
+- 主入口：
+  - `README.md`
+  - `docs/README.md`
+- 主架构：
+  - `docs/architecture_cn.md`
+  - `docs/full-architecture-flow_cn.md`
+  - `docs/DEVELOPMENT.md`
+  - `docs/linux-client-architecture_cn.md`
+- 当前 Linux client / plain-client QoS 结果口径：
+  - `docs/plain-client-qos-parity-checklist.md`
+  - `docs/plain-client-qos-case-results.md`
 
-- full matrix artifact 已确认是全量主 gate：
-  - 文件：`docs/generated/uplink-qos-matrix-report.json`
-  - `generatedAt = 2026-04-13T03:34:38.058Z`
-  - `selectedCaseIds = "all"`
-  - `includedCaseIds.length = 43`
-  - `summary.total = 43`
-  - `summary.passed = 43`
+已经删除的过时过程稿：
 
-- 当前仓库已落地的关键修正：
-  - `src/client/lib/qos/adapters/statsProvider.js`
-    - RTT 优先使用 `candidate-pair.currentRoundTripTime`
-    - `remote-inbound-rtp.timestamp` 不推进时，不再把旧 RTT/jitter 当成新样本
-  - `src/client/lib/qos/signals.js`
-    - 缺失新鲜 transport metrics 时，不重复推进 RTT/jitter EWMA
-  - `tests/qos_harness/loopback_runner.mjs`
-    - `netem` 一次性完整下发
-    - loopback harness warmup
-  - `tests/qos_harness/synthetic_sweep_shared.mjs`
-    - `getCaseExpectation()` 已支持 runner-specific expectation
-    - recovery 判定已修正：默认不再把 `bw_sweep` 误判成“恢复失败”
-  - `src/client/lib/qos/stateMachine.js`
-    - 新增 raw-jitter recovery fast-path
-    - `congested -> recovering` 现在支持 `consecutiveFastRecoverySamples`
-  - `src/client/lib/qos/probe.js`
-    - probe 成功/失败 sample 数改为可配置
-  - `src/client/lib/qos/controller.js`
-    - recovery chain 连续成功后，下一次 probe 可启用更快的 `2 sample` 成功门槛
+- `docs/plain-client-qos-migration-plan.md`
+- `docs/plain-client-qos-remaining-work.md`
+- `docs/linux_client_review.md`
+- `docs/plain-client-qos-matrix-overview.md`
+- `docs/plain-client-qos-matrix-implementation-plan.md`
+- `review.md`
 
-- 当前 scenario 策略：
-  - `BW2`
-    - 仍是 `extended`
-    - 仍保留 strict default expectation
-    - 历史 dedicated strict rerun 曾 `FAIL`
-    - latest 组合 targeted regression 已 `PASS`
-    - 当前仍按“historical mixed evidence”处理，不回退进默认 blocking gate
-  - `T1`
-    - 已新增 `expectByRunner.loopback`
-    - 目的是把默认主 gate 中与 `BW2` 同构的转场 case 收到 loopback 波动窗口里
-  - `S4`
-    - 已新增 `expectByRunner.loopback`
-    - 目的是覆盖 burst jitter 在 loopback 下 `early_warning/L1 ~ congested/L2` 的已观测窗口
+## 当前建议阅读顺序
 
-- 当前文档口径：
-  - [docs/uplink-qos-case-results.md](/root/mediasoup-cpp/docs/uplink-qos-case-results.md)
-    - latest full matrix 已重渲染为 `43 / 43 PASS`
-  - [docs/generated/uplink-qos-case-results.targeted.md](/root/mediasoup-cpp/docs/generated/uplink-qos-case-results.targeted.md)
-    - latest 组合 targeted regression 为 `9 / 9 PASS`
-  - [docs/uplink-qos-final-report.md](/root/mediasoup-cpp/docs/uplink-qos-final-report.md)
-    - 已同步到 latest full matrix `43 / 43 PASS` 的口径
+1. `docs/README.md`
+2. `docs/qos-status.md`
+3. `docs/linux-client-architecture_cn.md`
+4. `docs/plain-client-qos-parity-checklist.md`
+5. `docs/plain-client-qos-case-results.md`
+6. `docs/architecture_cn.md`
 
-## 已经做完的判断
+## 如果下一步继续做
 
-- `BW2` 不是静态 `2000kbps` case，而是 `4000 -> 2000 -> 4000` 转场 case
-- synthetic 与 loopback 对 `BW2` 不同构
-- `R4 / J3 / T9` 在最新 full matrix 主 gate 中通过，无需新增 runner-specific expectation
-- `BW6 / BW7` 之前的失败不是产品问题，而是 recovery 判定 bug
-- `T1 / S4` 已经证明存在 loopback runner 波动窗口，适合用最小 `expectByRunner.loopback` 收口
-- latest full matrix rerun 已再次确认主 gate `43 / 43 PASS`
-- `T9` 第二轮 recovery fast-path 已验证有效：
-  - isolated rerun 一度达到 `17.848s / 20.349s / 22.349s`
-  - latest 组合 targeted regression 中为 `20.049s / 22.549s / 24.549s`
-- latest 组合 targeted regression：
-  - `T9,T10,T11,J3,J4,J5,BW2,T1,S4 = 9 / 9 PASS`
-- `J3 / J4 / J5` 当前没有被 recovery fast-path 带弱
-- latest `T10,T11,J3,J4,J5` targeted rerun：
-  - `5 / 5 PASS`
-  - `T10 / T11 = current=stable/L0`
-  - `J3 = early_warning/L1`
-  - `J5 = congested/L4`
-  - `J4` 本轮落在 `early_warning/L1`，仍在 case contract 内，但说明它仍有 loopback 可变性
-- `T10 / T11` 的 tail oscillation 当前更像“曾复现、latest targeted 未复现”的间歇性问题
-- latest `BW2,T9,T10,T11` targeted rerun：
-  - `BW2 = FAIL`
-  - `T9 / T10 / T11 = PASS`
-  - `T10 / T11 = current=stable/L0`
-- 当前 `T11` 的剩余问题更像“整体恢复更慢”，不是“tail 一定会复现”
-- 从 latest diagnostics 看：
-  - `T11.jitter<28ms ≈ 23.181s`
-  - `T11.target>=120kbps ≈ 17.181s`
-  - `T11.firstRecovering ≈ 23.681s`
-  说明它比 `T9 / T10` 更慢，主要像 raw jitter / target 回升本身更晚
+优先看三类事情：
 
-## 下次优先继续做什么
-
-1. 如果重新跑了 full matrix，先再次确认它是全量主 gate
-   - 还是先查：
-     - `selectedCaseIds`
-     - `includedCaseIds`
-     - `summary.total`
-   - 不要在 artifact 不是全量时直接覆盖主文档
-
-2. 如果有新的 full matrix / targeted artifact，先重渲染报告
-   - full：
-     - `node tests/qos_harness/render_case_report.mjs`
-   - targeted：
-     - `node tests/qos_harness/render_case_report.mjs --input=docs/generated/uplink-qos-matrix-report.targeted.json --output=docs/generated/uplink-qos-case-results.targeted.md`
-
-3. 继续盯 `T10 / T11`
-   - tail oscillation latest targeted 未复现
-   - 当前下一步重点改成：
-     - 为什么 `T11` 比 `T9 / T10` 明显更慢
-     - 是 runner 队列、编码器切档，还是 target bitrate 回升策略
-
-4. 继续盯 `BW2`
-   - latest isolated rerun 已再次失败
-   - 当前结论反而更明确：
-     - 不要回退 `extended`
-     - 继续按 mixed-evidence boundary sentinel 处理
-
-5. 如果要继续收 boundary evidence，优先做 targeted
-   - `BW2`
-   - `T9,T10,T11`
-   - 可选补 synthetic 对照：
-     - `node tests/qos_harness/browser_synthetic_sweep.mjs --cases=T9,T10,T11,BW2 --include-extended`
-
-6. 如果重新跑了 full matrix，记得同步文档
-   - `docs/uplink-qos-case-results.md`
-   - `docs/generated/uplink-qos-case-results.targeted.md`
-   - `docs/uplink-qos-final-report.md`
-   - `docs/uplink-qos-test-results-summary.md`
-   - `docs/uplink-qos-loopback-boundary-investigation.md`
-
-## 不要重复做的事
-
-- 不要再回去优先从产品 `controller/stateMachine` 硬调阈值
-- 不要再重复加 raw debug instrumentation 到 `loopback-entry.js`
-- 不要把 `BW2` 直接放回默认 blocking gate 再观察
-- 不要把 `BW6 / BW7` 当成新的产品恢复问题去追
-- 不要因为 `BW2` 在 latest 组合 targeted regression 通过，就立刻把它当成“已稳定收敛”
-
-## 推荐继续阅读
-
-- [docs/uplink-qos-loopback-boundary-investigation.md](/root/mediasoup-cpp/docs/uplink-qos-loopback-boundary-investigation.md)
-- [docs/uplink-qos-case-results.md](/root/mediasoup-cpp/docs/uplink-qos-case-results.md)
-- [docs/generated/uplink-qos-case-results.targeted.md](/root/mediasoup-cpp/docs/generated/uplink-qos-case-results.targeted.md)
-- [.kiro/skills/qos-boundary-analysis.md](/root/mediasoup-cpp/.kiro/skills/qos-boundary-analysis.md)
+1. 文档和代码口径是否继续保持一致
+   - 新增 Linux client / QoS 能力时，优先更新上面 5 份主文档
+2. generated artifact 是否需要补摘要入口
+   - `docs/generated/uplink-qos-cpp-client-*.json|md`
+3. downlink 与 dynacast 后续能力
+   - 不要把它们写回当前 plain-client 已完成口径里

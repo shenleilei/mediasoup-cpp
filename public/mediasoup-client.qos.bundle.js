@@ -15361,6 +15361,8 @@ var mediasoupClient = (() => {
         });
         const forceAudioOnly = optionalBoolean(obj, "forceAudioOnly", "qosOverride");
         const disableRecovery = optionalBoolean(obj, "disableRecovery", "qosOverride");
+        const pauseUpstream = optionalBoolean(obj, "pauseUpstream", "qosOverride");
+        const resumeUpstream = optionalBoolean(obj, "resumeUpstream", "qosOverride");
         const ttlMs = asNonNegativeInt(obj.ttlMs, "qosOverride.ttlMs");
         const reason = asNonEmptyString(obj.reason, "qosOverride.reason");
         return {
@@ -15370,6 +15372,8 @@ var mediasoupClient = (() => {
           maxLevelClamp,
           forceAudioOnly,
           disableRecovery,
+          pauseUpstream,
+          resumeUpstream,
           ttlMs,
           reason
         };
@@ -15516,6 +15520,13 @@ var mediasoupClient = (() => {
         }
         return value;
       }
+      function readString(obj, key) {
+        const value = obj[key];
+        if (typeof value !== "string") {
+          return void 0;
+        }
+        return value;
+      }
       function normalizeTimeToMs(value) {
         if (typeof value !== "number" || !Number.isFinite(value)) {
           return void 0;
@@ -15551,14 +15562,42 @@ var mediasoupClient = (() => {
           timestampMs: Date.now()
         };
       }
+      function roundMetric(sum, count) {
+        return count > 0 ? Math.round(sum / count * 1e3) / 1e3 : void 0;
+      }
+      function isSelectedCandidatePair(entry) {
+        const state = readString(entry, "state");
+        return entry.selected === true || entry.nominated === true && (state === void 0 || state === "succeeded");
+      }
+      function resolveCandidatePair(outbound, transportsById, candidatePairsById, selectedCandidatePairs) {
+        const transportId = readString(outbound, "transportId");
+        if (transportId) {
+          const transport = transportsById.get(transportId);
+          const selectedCandidatePairId = readString(transport ?? {}, "selectedCandidatePairId");
+          if (selectedCandidatePairId) {
+            const candidatePair = candidatePairsById.get(selectedCandidatePairId);
+            if (candidatePair) {
+              return candidatePair;
+            }
+          }
+        }
+        if (selectedCandidatePairs.length === 1) {
+          return selectedCandidatePairs[0];
+        }
+        return void 0;
+      }
       var ProducerSenderStatsProvider = class {
         constructor(adapter) {
           this.adapter = adapter;
+          this.lastRemoteTimestampsMs = /* @__PURE__ */ new Map();
         }
         async getSnapshot() {
           const base = this.adapter.getSnapshotBase();
           const report = await this.adapter.getStatsReport();
           const remoteById = /* @__PURE__ */ new Map();
+          const candidatePairsById = /* @__PURE__ */ new Map();
+          const selectedCandidatePairs = [];
+          const transportsById = /* @__PURE__ */ new Map();
           const outbounds = [];
           report.forEach((entry) => {
             if (!isObject(entry)) {
@@ -15569,6 +15608,23 @@ var mediasoupClient = (() => {
               const id = typeof entry.id === "string" ? entry.id : void 0;
               if (id) {
                 remoteById.set(id, entry);
+              }
+              return;
+            }
+            if (type === "candidate-pair") {
+              const id = readString(entry, "id");
+              if (id) {
+                candidatePairsById.set(id, entry);
+              }
+              if (isSelectedCandidatePair(entry)) {
+                selectedCandidatePairs.push(entry);
+              }
+              return;
+            }
+            if (type === "transport") {
+              const id = readString(entry, "id");
+              if (id) {
+                transportsById.set(id, entry);
               }
               return;
             }
@@ -15594,10 +15650,14 @@ var mediasoupClient = (() => {
           let framesPerSecond = 0;
           let qualityLimitationReason;
           const qualityLimitationDurationsSec = {};
-          let rttSumMs = 0;
-          let rttCount = 0;
+          let transportRttSumMs = 0;
+          let transportRttCount = 0;
+          let fallbackRttSumMs = 0;
+          let fallbackRttCount = 0;
           let jitterSumMs = 0;
           let jitterCount = 0;
+          const nextRemoteTimestampsMs = new Map(this.lastRemoteTimestampsMs);
+          const seenCandidatePairIds = /* @__PURE__ */ new Set();
           for (const outbound of outbounds) {
             const statTimestamp = readNumber(outbound, "timestamp");
             if (typeof statTimestamp === "number" && Number.isFinite(statTimestamp) && statTimestamp > timestampMs) {
@@ -15614,21 +15674,40 @@ var mediasoupClient = (() => {
               qualityLimitationReason = readQualityLimitationReason(outbound.qualityLimitationReason);
             }
             appendQualityDurations(qualityLimitationDurationsSec, outbound.qualityLimitationDurations);
-            const remoteId = typeof outbound.remoteId === "string" ? outbound.remoteId : void 0;
+            const candidatePair = resolveCandidatePair(outbound, transportsById, candidatePairsById, selectedCandidatePairs);
+            const candidatePairId = readString(candidatePair ?? {}, "id");
+            if (!candidatePairId || !seenCandidatePairIds.has(candidatePairId)) {
+              const transportRttMs = normalizeTimeToMs(readNumber(candidatePair ?? {}, "currentRoundTripTime"));
+              if (typeof transportRttMs === "number") {
+                transportRttSumMs += transportRttMs;
+                transportRttCount++;
+              }
+              if (candidatePairId) {
+                seenCandidatePairIds.add(candidatePairId);
+              }
+            }
+            const remoteId = readString(outbound, "remoteId");
             const remote = remoteId ? remoteById.get(remoteId) : void 0;
             const lossFromRemote = remote ? readNumber(remote, "packetsLost") : readNumber(outbound, "packetsLost");
             packetsLost += lossFromRemote ?? 0;
-            const rttMs = normalizeTimeToMs((remote && readNumber(remote, "roundTripTime")) ?? readNumber(outbound, "roundTripTime"));
-            if (typeof rttMs === "number") {
-              rttSumMs += rttMs;
-              rttCount++;
+            const remoteTimestampMs = readNumber(remote ?? {}, "timestamp");
+            const previousRemoteTimestampMs = remoteId ? this.lastRemoteTimestampsMs.get(remoteId) : void 0;
+            const remoteMetricsFresh = Boolean(remote) && (typeof remoteTimestampMs !== "number" || previousRemoteTimestampMs === void 0 || remoteTimestampMs > previousRemoteTimestampMs);
+            if (remoteId && typeof remoteTimestampMs === "number" && remoteMetricsFresh) {
+              nextRemoteTimestampsMs.set(remoteId, remoteTimestampMs);
             }
-            const jitterMs = normalizeTimeToMs((remote && readNumber(remote, "jitter")) ?? readNumber(outbound, "jitter"));
+            const fallbackRttMs = remoteMetricsFresh ? normalizeTimeToMs(readNumber(remote ?? {}, "roundTripTime")) : remote ? void 0 : normalizeTimeToMs(readNumber(outbound, "roundTripTime"));
+            if (typeof fallbackRttMs === "number") {
+              fallbackRttSumMs += fallbackRttMs;
+              fallbackRttCount++;
+            }
+            const jitterMs = remoteMetricsFresh ? normalizeTimeToMs(readNumber(remote ?? {}, "jitter")) : remote ? void 0 : normalizeTimeToMs(readNumber(outbound, "jitter"));
             if (typeof jitterMs === "number") {
               jitterSumMs += jitterMs;
               jitterCount++;
             }
           }
+          this.lastRemoteTimestampsMs = nextRemoteTimestampsMs;
           if (timestampMs <= 0) {
             timestampMs = Date.now();
           }
@@ -15640,8 +15719,8 @@ var mediasoupClient = (() => {
             packetsLost: packetsLost > 0 ? packetsLost : void 0,
             retransmittedPacketsSent: retransmittedPacketsSent > 0 ? retransmittedPacketsSent : void 0,
             targetBitrateBps: targetBitrateBps > 0 ? targetBitrateBps : void 0,
-            roundTripTimeMs: rttCount > 0 ? Math.round(rttSumMs / rttCount * 1e3) / 1e3 : void 0,
-            jitterMs: jitterCount > 0 ? Math.round(jitterSumMs / jitterCount * 1e3) / 1e3 : void 0,
+            roundTripTimeMs: roundMetric(transportRttCount > 0 ? transportRttSumMs : fallbackRttSumMs, transportRttCount > 0 ? transportRttCount : fallbackRttCount),
+            jitterMs: roundMetric(jitterSumMs, jitterCount),
             frameWidth: frameWidth > 0 ? frameWidth : void 0,
             frameHeight: frameHeight > 0 ? frameHeight : void 0,
             framesPerSecond: framesPerSecond > 0 ? framesPerSecond : void 0,
@@ -15868,6 +15947,293 @@ var mediasoupClient = (() => {
     }
   });
 
+  // src/client/lib/qos/downlinkHints.js
+  var require_downlinkHints = __commonJS({
+    "src/client/lib/qos/downlinkHints.js"(exports) {
+      "use strict";
+      Object.defineProperty(exports, "__esModule", { value: true });
+      exports.DownlinkHints = void 0;
+      var DownlinkHints = class {
+        constructor() {
+          this._hints = /* @__PURE__ */ new Map();
+        }
+        /**
+         * Set or replace full hint for a consumer.
+         * @param {string} consumerId
+         * @param {object} hint
+         */
+        set(consumerId, hint) {
+          this._hints.set(consumerId, {
+            producerId: hint.producerId || "",
+            visible: hint.visible !== false,
+            pinned: !!hint.pinned,
+            activeSpeaker: !!hint.activeSpeaker,
+            isScreenShare: !!hint.isScreenShare,
+            targetWidth: hint.targetWidth || 0,
+            targetHeight: hint.targetHeight || 0
+          });
+        }
+        remove(consumerId) {
+          this._hints.delete(consumerId);
+        }
+        setVisible(consumerId, visible) {
+          const h = this._hints.get(consumerId);
+          if (h) h.visible = !!visible;
+        }
+        setPinned(consumerId, pinned) {
+          const h = this._hints.get(consumerId);
+          if (h) h.pinned = !!pinned;
+        }
+        setActiveSpeaker(consumerId, active) {
+          const h = this._hints.get(consumerId);
+          if (h) h.activeSpeaker = !!active;
+        }
+        setTargetSize(consumerId, width, height) {
+          const h = this._hints.get(consumerId);
+          if (h) {
+            h.targetWidth = width || 0;
+            h.targetHeight = height || 0;
+          }
+        }
+        get(consumerId) {
+          return this._hints.get(consumerId) || null;
+        }
+        getAll() {
+          return this._hints;
+        }
+        clear() {
+          this._hints.clear();
+        }
+      };
+      exports.DownlinkHints = DownlinkHints;
+    }
+  });
+
+  // src/client/lib/qos/downlinkProtocol.js
+  var require_downlinkProtocol = __commonJS({
+    "src/client/lib/qos/downlinkProtocol.js"(exports) {
+      "use strict";
+      Object.defineProperty(exports, "__esModule", { value: true });
+      exports.DOWNLINK_SCHEMA_V1 = "mediasoup.qos.downlink.client.v1";
+      exports.DOWNLINK_SCHEMA_V1_LEGACY = "mediasoup.downlink.v1";
+      exports.DOWNLINK_MAX_SUBSCRIPTIONS = 64;
+      exports.serializeDownlinkSnapshot = serializeDownlinkSnapshot;
+      exports.parseDownlinkSnapshot = parseDownlinkSnapshot;
+      function serializeDownlinkSnapshot({ seq, subscriberPeerId, transport, subscriptions }) {
+        return {
+          schema: exports.DOWNLINK_SCHEMA_V1,
+          seq,
+          tsMs: Date.now(),
+          subscriberPeerId,
+          transport: {
+            availableIncomingBitrate: transport.availableIncomingBitrate || 0,
+            currentRoundTripTime: transport.currentRoundTripTime || 0
+          },
+          subscriptions: subscriptions.map((s) => ({
+            consumerId: s.consumerId,
+            producerId: s.producerId,
+            visible: !!s.visible,
+            pinned: !!s.pinned,
+            activeSpeaker: !!s.activeSpeaker,
+            isScreenShare: !!s.isScreenShare,
+            targetWidth: s.targetWidth || 0,
+            targetHeight: s.targetHeight || 0,
+            packetsLost: s.packetsLost || 0,
+            jitter: s.jitter || 0,
+            framesPerSecond: s.framesPerSecond || 0,
+            frameWidth: s.frameWidth || 0,
+            frameHeight: s.frameHeight || 0,
+            freezeRate: s.freezeRate || 0
+          }))
+        };
+      }
+      function parseDownlinkSnapshot(payload) {
+        if (!payload || typeof payload !== "object") {
+          throw new TypeError("downlink snapshot must be an object");
+        }
+        if (payload.schema !== exports.DOWNLINK_SCHEMA_V1 && payload.schema !== exports.DOWNLINK_SCHEMA_V1_LEGACY) {
+          throw new TypeError(`unsupported schema: ${payload.schema}`);
+        }
+        if (typeof payload.seq !== "number" || payload.seq < 0) {
+          throw new TypeError("seq must be a non-negative number");
+        }
+        if (payload.schema === exports.DOWNLINK_SCHEMA_V1_LEGACY) {
+          payload.schema = exports.DOWNLINK_SCHEMA_V1;
+        }
+        return payload;
+      }
+    }
+  });
+
+  // src/client/lib/qos/downlinkReporter.js
+  var require_downlinkReporter = __commonJS({
+    "src/client/lib/qos/downlinkReporter.js"(exports) {
+      "use strict";
+      Object.defineProperty(exports, "__esModule", { value: true });
+      exports.DownlinkReporter = void 0;
+      var downlinkProtocol_1 = require_downlinkProtocol();
+      var DownlinkReporter = class {
+        /**
+         * @param {object} opts
+         * @param {import('./downlinkSampler').DownlinkSampler} opts.sampler
+         * @param {import('./downlinkHints').DownlinkHints} opts.hints
+         * @param {(method: string, data: object) => Promise<any>} opts.send  signaling send function
+         * @param {string} opts.peerId  subscriber peer id
+         * @param {number} [opts.intervalMs=2000]
+         */
+        constructor({ sampler, hints, send, peerId, intervalMs = 2e3 }) {
+          this._sampler = sampler;
+          this._hints = hints;
+          this._send = send;
+          this._peerId = peerId;
+          this._intervalMs = intervalMs;
+          this._seq = 0;
+          this._timerId = null;
+          this._reporting = false;
+        }
+        get running() {
+          return this._timerId !== null;
+        }
+        start() {
+          if (this._timerId !== null) return;
+          this._timerId = setInterval(() => {
+            void this._tick();
+          }, this._intervalMs);
+        }
+        stop() {
+          if (this._timerId !== null) {
+            clearInterval(this._timerId);
+            this._timerId = null;
+          }
+        }
+        async reportNow() {
+          return this._tick();
+        }
+        async _tick() {
+          if (this._reporting) return;
+          this._reporting = true;
+          try {
+            for (const [cid, hint] of this._hints.getAll()) {
+              this._sampler.setHints(cid, hint);
+            }
+            const { transport, subscriptions } = await this._sampler.sample(this._peerId);
+            const snapshot = (0, downlinkProtocol_1.serializeDownlinkSnapshot)({
+              seq: this._seq++,
+              subscriberPeerId: this._peerId,
+              transport,
+              subscriptions
+            });
+            await this._send("downlinkClientStats", snapshot);
+          } catch (e) {
+          } finally {
+            this._reporting = false;
+          }
+        }
+      };
+      exports.DownlinkReporter = DownlinkReporter;
+    }
+  });
+
+  // src/client/lib/qos/downlinkSampler.js
+  var require_downlinkSampler = __commonJS({
+    "src/client/lib/qos/downlinkSampler.js"(exports) {
+      "use strict";
+      Object.defineProperty(exports, "__esModule", { value: true });
+      exports.DownlinkSampler = void 0;
+      var DownlinkSampler = class {
+        constructor(recvTransport) {
+          this._transport = recvTransport;
+          this._hints = /* @__PURE__ */ new Map();
+          this._prevBytesReceived = /* @__PURE__ */ new Map();
+          this._prevTimestamp = /* @__PURE__ */ new Map();
+        }
+        /**
+         * Set UI-level hints for a consumer.
+         * @param {string} consumerId
+         * @param {object} hint  { producerId, visible, pinned, activeSpeaker, isScreenShare, targetWidth, targetHeight }
+         */
+        setHints(consumerId, hint) {
+          this._hints.set(consumerId, hint);
+        }
+        removeHints(consumerId) {
+          this._hints.delete(consumerId);
+          this._prevBytesReceived.delete(consumerId);
+          this._prevTimestamp.delete(consumerId);
+        }
+        /**
+         * Sample current recv transport stats and return a subscriptions array
+         * plus transport-level metrics.
+         * @param {string} subscriberPeerId
+         * @returns {Promise<{transport: object, subscriptions: Array}>}
+         */
+        async sample(subscriberPeerId) {
+          const pc = this._transport?._handler?._pc;
+          if (!pc) {
+            return { transport: { availableIncomingBitrate: 0, currentRoundTripTime: 0 }, subscriptions: [] };
+          }
+          const rawStats = await pc.getStats();
+          const inboundBySSRC = /* @__PURE__ */ new Map();
+          let availableIncomingBitrate = 0;
+          let currentRoundTripTime = 0;
+          for (const report of rawStats.values()) {
+            if (report.type === "inbound-rtp" && report.kind === "video") {
+              inboundBySSRC.set(report.ssrc, report);
+            }
+            if (report.type === "candidate-pair" && report.nominated) {
+              availableIncomingBitrate = report.availableIncomingBitrate || 0;
+              currentRoundTripTime = report.currentRoundTripTime || 0;
+            }
+          }
+          const subscriptions = [];
+          for (const [consumerId, hint] of this._hints) {
+            let stats = null;
+            for (const report of inboundBySSRC.values()) {
+              if (!report._matched) {
+                stats = report;
+                report._matched = true;
+                break;
+              }
+            }
+            subscriptions.push({
+              consumerId,
+              producerId: hint.producerId || "",
+              visible: !!hint.visible,
+              pinned: !!hint.pinned,
+              activeSpeaker: !!hint.activeSpeaker,
+              isScreenShare: !!hint.isScreenShare,
+              targetWidth: hint.targetWidth || 0,
+              targetHeight: hint.targetHeight || 0,
+              packetsLost: stats?.packetsLost || 0,
+              jitter: stats?.jitter || 0,
+              framesPerSecond: stats?.framesPerSecond || 0,
+              frameWidth: stats?.frameWidth || 0,
+              frameHeight: stats?.frameHeight || 0,
+              freezeRate: computeFreezeRate(stats)
+            });
+          }
+          for (const report of inboundBySSRC.values()) {
+            delete report._matched;
+          }
+          return {
+            transport: { availableIncomingBitrate, currentRoundTripTime },
+            subscriptions
+          };
+        }
+      };
+      function computeFreezeRate(stats) {
+        if (!stats) return 0;
+        const totalFrames = stats.framesDecoded || 0;
+        const freezeCount = stats.freezeCount || 0;
+        if (totalFrames === 0) return 0;
+        if (typeof stats.totalFreezesDuration === "number" && typeof stats.totalPlaybackDuration === "number" && stats.totalPlaybackDuration > 0) {
+          return stats.totalFreezesDuration / stats.totalPlaybackDuration;
+        }
+        return freezeCount > 0 ? freezeCount / totalFrames : 0;
+      }
+      exports.DownlinkSampler = DownlinkSampler;
+    }
+  });
+
   // src/client/lib/qos/planner.js
   var require_planner = __commonJS({
     "src/client/lib/qos/planner.js"(exports) {
@@ -16025,13 +16391,13 @@ var mediasoupClient = (() => {
       exports.evaluateProbe = evaluateProbe;
       function isProbeHealthy(signals, profile) {
         const { thresholds } = profile;
-        return signals.bitrateUtilization >= thresholds.stableBitrateUtilization && signals.lossEwma < thresholds.stableLossRate && signals.rttEwma < thresholds.stableRttMs && !signals.bandwidthLimited && !signals.cpuLimited;
+        return signals.lossEwma < thresholds.stableLossRate && signals.rttEwma < thresholds.stableRttMs && !signals.bandwidthLimited && !signals.cpuLimited;
       }
       function isProbeBad(signals, profile) {
         const { thresholds } = profile;
-        return signals.bitrateUtilization < thresholds.congestedBitrateUtilization || signals.lossEwma >= thresholds.congestedLossRate || signals.rttEwma >= thresholds.congestedRttMs || signals.bandwidthLimited || signals.cpuLimited;
+        return signals.bandwidthLimited || signals.lossEwma >= thresholds.congestedLossRate || signals.rttEwma >= thresholds.congestedRttMs || signals.cpuLimited;
       }
-      function beginProbe(previousLevel, targetLevel, startedAtMs, previousAudioOnlyMode, targetAudioOnlyMode) {
+      function beginProbe(previousLevel, targetLevel, startedAtMs, previousAudioOnlyMode, targetAudioOnlyMode, options = {}) {
         return {
           active: true,
           startedAtMs,
@@ -16040,7 +16406,9 @@ var mediasoupClient = (() => {
           previousAudioOnlyMode,
           targetAudioOnlyMode,
           healthySamples: 0,
-          badSamples: 0
+          badSamples: 0,
+          requiredHealthySamples: Math.max(1, Math.floor(options.requiredHealthySamples ?? 3)),
+          requiredBadSamples: Math.max(1, Math.floor(options.requiredBadSamples ?? 2))
         };
       }
       function evaluateProbe(context, signals, profile) {
@@ -16061,13 +16429,15 @@ var mediasoupClient = (() => {
             badSamples: nextContext.badSamples + 1
           };
         }
-        if (nextContext.badSamples >= 2) {
+        const requiredBadSamples = Math.max(1, Math.floor(nextContext.requiredBadSamples ?? 2));
+        const requiredHealthySamples = Math.max(1, Math.floor(nextContext.requiredHealthySamples ?? 3));
+        if (nextContext.badSamples >= requiredBadSamples) {
           return {
             context: nextContext,
             result: "failed"
           };
         }
-        if (nextContext.healthySamples >= 3) {
+        if (nextContext.healthySamples >= requiredHealthySamples) {
           return {
             context: nextContext,
             result: "successful"
@@ -16184,10 +16554,13 @@ var mediasoupClient = (() => {
       var DEFAULT_EWMA_ALPHA = 0.35;
       var DEFAULT_NETWORK_WARN_LOSS_RATE = 0.04;
       var DEFAULT_NETWORK_WARN_RTT_MS = 220;
-      var DEFAULT_NETWORK_WARN_UTILIZATION = 0.85;
+      var DEFAULT_NETWORK_CONGESTED_UTILIZATION = 0.65;
       var DEFAULT_CPU_REASON_MIN_SAMPLES = 2;
       function asFiniteOrZero(value) {
         return typeof value === "number" && Number.isFinite(value) ? value : 0;
+      }
+      function asFiniteOrUndefined(value) {
+        return typeof value === "number" && Number.isFinite(value) ? value : void 0;
       }
       function clampToUnitRange(value) {
         if (value < 0) {
@@ -16256,7 +16629,7 @@ var mediasoupClient = (() => {
         if (signals.cpuLimited && cpuSampleCount >= DEFAULT_CPU_REASON_MIN_SAMPLES) {
           return "cpu";
         }
-        const networkLikely = signals.bandwidthLimited || signals.bitrateUtilization < DEFAULT_NETWORK_WARN_UTILIZATION || signals.lossEwma >= DEFAULT_NETWORK_WARN_LOSS_RATE || signals.rttEwma >= DEFAULT_NETWORK_WARN_RTT_MS;
+        const networkLikely = signals.bandwidthLimited || signals.lossEwma >= DEFAULT_NETWORK_WARN_LOSS_RATE || signals.rttEwma >= DEFAULT_NETWORK_WARN_RTT_MS;
         if (networkLikely) {
           return "network";
         }
@@ -16271,13 +16644,15 @@ var mediasoupClient = (() => {
         const bitrateUtilization = computeBitrateUtilization(sendBitrateBps, targetBitrateBps, current.configuredBitrateBps);
         const lossRate = computeLossRate(packetsSentDelta, packetsLostDelta);
         const lossEwma = computeEwma(lossRate, previousSignals?.lossEwma, options.ewmaAlpha);
-        const rttMs = Math.max(0, asFiniteOrZero(current.roundTripTimeMs));
-        const rttEwma = computeEwma(rttMs, previousSignals?.rttEwma, options.ewmaAlpha);
-        const jitterMs = Math.max(0, asFiniteOrZero(current.jitterMs));
-        const jitterEwma = computeEwma(jitterMs, previousSignals?.jitterEwma, options.ewmaAlpha);
+        const currentRttMs = asFiniteOrUndefined(current.roundTripTimeMs);
+        const rttMs = typeof currentRttMs === "number" ? Math.max(0, currentRttMs) : Math.max(0, asFiniteOrZero(previousSignals?.rttMs));
+        const rttEwma = typeof currentRttMs === "number" ? computeEwma(rttMs, previousSignals?.rttEwma, options.ewmaAlpha) : asFiniteOrZero(previousSignals?.rttEwma);
+        const currentJitterMs = asFiniteOrUndefined(current.jitterMs);
+        const jitterMs = typeof currentJitterMs === "number" ? Math.max(0, currentJitterMs) : Math.max(0, asFiniteOrZero(previousSignals?.jitterMs));
+        const jitterEwma = typeof currentJitterMs === "number" ? computeEwma(jitterMs, previousSignals?.jitterEwma, options.ewmaAlpha) : asFiniteOrZero(previousSignals?.jitterEwma);
         const qualityReason = current.qualityLimitationReason ?? "unknown";
         const cpuLimited = qualityReason === "cpu";
-        const bandwidthLimited = qualityReason === "bandwidth" && bitrateUtilization < 0.85;
+        const bandwidthLimited = qualityReason === "bandwidth" && bitrateUtilization < DEFAULT_NETWORK_CONGESTED_UTILIZATION;
         const reason = classifyReason({
           bandwidthLimited,
           cpuLimited,
@@ -16317,17 +16692,34 @@ var mediasoupClient = (() => {
       function isWarning(signals, profile) {
         const { thresholds } = profile;
         const warnJitterMs = Number.isFinite(thresholds.warnJitterMs) ? thresholds.warnJitterMs : Infinity;
-        return signals.bitrateUtilization < thresholds.warnBitrateUtilization || signals.lossEwma >= thresholds.warnLossRate || signals.rttEwma >= thresholds.warnRttMs || signals.jitterEwma >= warnJitterMs || signals.bandwidthLimited || signals.cpuLimited;
+        return signals.lossEwma >= thresholds.warnLossRate || signals.rttEwma >= thresholds.warnRttMs || signals.jitterEwma >= warnJitterMs || signals.bandwidthLimited || signals.cpuLimited;
       }
       function isCongested(signals, profile) {
         const { thresholds } = profile;
         const congestedJitterMs = Number.isFinite(thresholds.congestedJitterMs) ? thresholds.congestedJitterMs : Infinity;
-        return signals.bitrateUtilization < thresholds.congestedBitrateUtilization || signals.lossEwma >= thresholds.congestedLossRate || signals.rttEwma >= thresholds.congestedRttMs || signals.jitterEwma >= congestedJitterMs;
+        return signals.bandwidthLimited || signals.lossEwma >= thresholds.congestedLossRate || signals.rttEwma >= thresholds.congestedRttMs || signals.jitterEwma >= congestedJitterMs;
       }
       function isHealthy(signals, profile) {
         const { thresholds } = profile;
         const stableJitterMs = Number.isFinite(thresholds.stableJitterMs) ? thresholds.stableJitterMs : Infinity;
-        return signals.bitrateUtilization >= thresholds.stableBitrateUtilization && signals.lossEwma < thresholds.stableLossRate && signals.rttEwma < thresholds.stableRttMs && signals.jitterEwma < stableJitterMs && !signals.bandwidthLimited && !signals.cpuLimited;
+        return signals.lossEwma < thresholds.stableLossRate && signals.rttEwma < thresholds.stableRttMs && signals.jitterEwma < stableJitterMs && !signals.bandwidthLimited && !signals.cpuLimited;
+      }
+      function isRecoveryHealthy(signals, profile) {
+        const { thresholds } = profile;
+        const stableJitterMs = Number.isFinite(thresholds.stableJitterMs) ? thresholds.stableJitterMs : Infinity;
+        const warnJitterMs = Number.isFinite(thresholds.warnJitterMs) ? thresholds.warnJitterMs : stableJitterMs;
+        const recoveryJitterMs = Math.max(stableJitterMs, warnJitterMs);
+        return signals.lossEwma < thresholds.stableLossRate && signals.rttEwma < thresholds.stableRttMs && signals.jitterEwma < recoveryJitterMs && !signals.bandwidthLimited && !signals.cpuLimited;
+      }
+      function isFastRecoveryHealthy(signals, profile) {
+        const { thresholds } = profile;
+        const stableJitterMs = Number.isFinite(thresholds.stableJitterMs) ? thresholds.stableJitterMs : Infinity;
+        const warnJitterMs = Number.isFinite(thresholds.warnJitterMs) ? thresholds.warnJitterMs : stableJitterMs;
+        const recoveryJitterMs = Math.max(stableJitterMs, warnJitterMs);
+        const rawJitterMs = Number.isFinite(signals.jitterMs) ? Math.max(0, signals.jitterMs) : Number.POSITIVE_INFINITY;
+        const targetBitrateBps = Math.max(0, signals.targetBitrateBps ?? 0);
+        const sendReady = targetBitrateBps <= 0 || signals.sendBitrateBps >= targetBitrateBps * 0.85;
+        return signals.lossEwma < thresholds.stableLossRate && signals.rttEwma < thresholds.stableRttMs && rawJitterMs < recoveryJitterMs && sendReady && !signals.bandwidthLimited && !signals.cpuLimited;
       }
       function nextCounter(current, matched) {
         return matched ? current + 1 : 0;
@@ -16337,6 +16729,8 @@ var mediasoupClient = (() => {
           state: "stable",
           enteredAtMs: nowMs,
           consecutiveHealthySamples: 0,
+          consecutiveRecoverySamples: 0,
+          consecutiveFastRecoverySamples: 0,
           consecutiveWarningSamples: 0,
           consecutiveCongestedSamples: 0
         };
@@ -16362,11 +16756,15 @@ var mediasoupClient = (() => {
       }
       function evaluateStateTransition(context, signals, profile, nowMs) {
         const healthy = isHealthy(signals, profile);
+        const recoveryHealthy = isRecoveryHealthy(signals, profile);
+        const fastRecoveryHealthy = !recoveryHealthy && isFastRecoveryHealthy(signals, profile);
         const warning = isWarning(signals, profile);
         const congested = isCongested(signals, profile);
         let nextContext = {
           ...context,
           consecutiveHealthySamples: nextCounter(context.consecutiveHealthySamples, healthy),
+          consecutiveRecoverySamples: nextCounter(context.consecutiveRecoverySamples ?? 0, recoveryHealthy),
+          consecutiveFastRecoverySamples: nextCounter(context.consecutiveFastRecoverySamples ?? 0, fastRecoveryHealthy),
           consecutiveWarningSamples: nextCounter(context.consecutiveWarningSamples, warning),
           consecutiveCongestedSamples: nextCounter(context.consecutiveCongestedSamples, congested)
         };
@@ -16390,7 +16788,9 @@ var mediasoupClient = (() => {
           case "congested": {
             const congestedSinceMs = context.lastCongestedAtMs ?? context.enteredAtMs;
             const cooldownElapsed = nowMs - congestedSinceMs >= profile.recoveryCooldownMs;
-            if (cooldownElapsed && nextContext.consecutiveHealthySamples >= 5) {
+            const regularRecoveryReady = nextContext.consecutiveRecoverySamples >= 5;
+            const fastRecoveryReady = nextContext.consecutiveFastRecoverySamples >= 2;
+            if (cooldownElapsed && (regularRecoveryReady || fastRecoveryReady)) {
               nextState = "recovering";
             }
             break;
@@ -16475,6 +16875,276 @@ var mediasoupClient = (() => {
     }
   });
 
+  // src/client/lib/qos/profiles.js
+  var require_profiles = __commonJS({
+    "src/client/lib/qos/profiles.js"(exports) {
+      "use strict";
+      Object.defineProperty(exports, "__esModule", { value: true });
+      exports.getDefaultCameraProfile = getDefaultCameraProfile;
+      exports.getDefaultScreenShareProfile = getDefaultScreenShareProfile;
+      exports.getDefaultAudioProfile = getDefaultAudioProfile;
+      exports.resolveProfile = resolveProfile;
+      var constants_1 = require_constants();
+      var DEFAULT_THRESHOLDS = {
+        warnLossRate: 0.04,
+        congestedLossRate: 0.08,
+        warnRttMs: 220,
+        congestedRttMs: 320,
+        warnJitterMs: 30,
+        congestedJitterMs: 60,
+        warnBitrateUtilization: 0.85,
+        congestedBitrateUtilization: 0.65,
+        stableLossRate: 0.03,
+        stableRttMs: 180,
+        stableJitterMs: 20,
+        stableBitrateUtilization: 0.92
+      };
+      var DEFAULT_CAMERA_PROFILE = {
+        name: "default-camera",
+        source: "camera",
+        levelCount: 5,
+        sampleIntervalMs: constants_1.DEFAULT_SAMPLE_INTERVAL_MS,
+        snapshotIntervalMs: constants_1.DEFAULT_SNAPSHOT_INTERVAL_MS,
+        recoveryCooldownMs: constants_1.DEFAULT_RECOVERY_COOLDOWN_MS,
+        thresholds: DEFAULT_THRESHOLDS,
+        ladder: [
+          {
+            level: 0,
+            description: "Use publish initial encoding settings.",
+            encodingParameters: {
+              maxBitrateBps: 9e5,
+              maxFramerate: 30,
+              scaleResolutionDownBy: 1
+            }
+          },
+          {
+            level: 1,
+            description: "Reduce bitrate and frame rate slightly.",
+            encodingParameters: {
+              maxBitrateBps: 85e4,
+              maxFramerate: 24,
+              scaleResolutionDownBy: 1
+            }
+          },
+          {
+            level: 2,
+            description: "Further reduce bitrate/frame rate and start downscaling resolution.",
+            encodingParameters: {
+              maxBitrateBps: 7e5,
+              maxFramerate: 20,
+              scaleResolutionDownBy: 1.5
+            }
+          },
+          {
+            level: 3,
+            description: "Aggressive bitrate and fps reduction, force lowest spatial layer if available.",
+            encodingParameters: {
+              maxBitrateBps: 45e4,
+              maxFramerate: 12,
+              scaleResolutionDownBy: 2
+            },
+            spatialLayer: 0
+          },
+          {
+            level: 4,
+            description: "Enter audio-only mode and pause video upstream.",
+            enterAudioOnly: true
+          }
+        ]
+      };
+      var DEFAULT_SCREENSHARE_PROFILE = {
+        name: "default-screenshare",
+        source: "screenShare",
+        levelCount: 5,
+        sampleIntervalMs: constants_1.DEFAULT_SAMPLE_INTERVAL_MS,
+        snapshotIntervalMs: constants_1.DEFAULT_SNAPSHOT_INTERVAL_MS,
+        recoveryCooldownMs: 1e4,
+        thresholds: DEFAULT_THRESHOLDS,
+        ladder: [
+          {
+            level: 0,
+            description: "Use publish initial encoding settings.",
+            encodingParameters: {
+              maxBitrateBps: 18e5,
+              maxFramerate: 15,
+              scaleResolutionDownBy: 1
+            }
+          },
+          {
+            level: 1,
+            description: "Lower capture/send framerate to 10.",
+            encodingParameters: {
+              maxBitrateBps: 18e5,
+              maxFramerate: 10,
+              scaleResolutionDownBy: 1
+            }
+          },
+          {
+            level: 2,
+            description: "Lower framerate to 5 while prioritizing text readability.",
+            encodingParameters: {
+              maxBitrateBps: 135e4,
+              maxFramerate: 5,
+              scaleResolutionDownBy: 1
+            }
+          },
+          {
+            level: 3,
+            description: "Further limit bitrate and framerate before resolution downgrade.",
+            encodingParameters: {
+              maxBitrateBps: 99e4,
+              maxFramerate: 3,
+              scaleResolutionDownBy: 1.25
+            },
+            resumeUpstream: true
+          },
+          {
+            level: 4,
+            description: "Pause screen share and rely on coordinator decision.",
+            pauseUpstream: true
+          }
+        ]
+      };
+      var DEFAULT_AUDIO_PROFILE = {
+        name: "default-audio",
+        source: "audio",
+        levelCount: 5,
+        sampleIntervalMs: constants_1.DEFAULT_SAMPLE_INTERVAL_MS,
+        snapshotIntervalMs: constants_1.DEFAULT_SNAPSHOT_INTERVAL_MS,
+        recoveryCooldownMs: constants_1.DEFAULT_RECOVERY_COOLDOWN_MS,
+        thresholds: DEFAULT_THRESHOLDS,
+        ladder: [
+          {
+            level: 0,
+            description: "Use publish initial encoding settings.",
+            encodingParameters: {
+              maxBitrateBps: 51e4
+            }
+          },
+          {
+            level: 1,
+            description: "Reduce max bitrate to around 32kbps, enable adaptive ptime if available.",
+            encodingParameters: {
+              maxBitrateBps: 32e3,
+              adaptivePtime: true
+            }
+          },
+          {
+            level: 2,
+            description: "Reduce max bitrate to around 24kbps.",
+            encodingParameters: {
+              maxBitrateBps: 24e3
+            }
+          },
+          {
+            level: 3,
+            description: "Reduce max bitrate to around 16kbps.",
+            encodingParameters: {
+              maxBitrateBps: 16e3
+            }
+          },
+          {
+            level: 4,
+            description: "Keep audio alive at minimum quality, avoid auto-mute.",
+            encodingParameters: {
+              maxBitrateBps: 16e3,
+              adaptivePtime: true
+            }
+          }
+        ]
+      };
+      function cloneProfile(profile) {
+        return {
+          ...profile,
+          thresholds: { ...profile.thresholds },
+          ladder: profile.ladder.map((step) => ({ ...step }))
+        };
+      }
+      var CONSERVATIVE_THRESHOLDS = {
+        ...DEFAULT_THRESHOLDS,
+        warnLossRate: 0.03,
+        congestedLossRate: 0.06,
+        warnRttMs: 180,
+        congestedRttMs: 260
+      };
+      var CONSERVATIVE_CAMERA_PROFILE = {
+        ...DEFAULT_CAMERA_PROFILE,
+        name: "conservative",
+        recoveryCooldownMs: 12e3,
+        thresholds: CONSERVATIVE_THRESHOLDS,
+        ladder: [
+          DEFAULT_CAMERA_PROFILE.ladder[0],
+          DEFAULT_CAMERA_PROFILE.ladder[1],
+          { ...DEFAULT_CAMERA_PROFILE.ladder[2], encodingParameters: { maxBitrateBps: 55e4, maxFramerate: 15, scaleResolutionDownBy: 1.5 } },
+          DEFAULT_CAMERA_PROFILE.ladder[3],
+          DEFAULT_CAMERA_PROFILE.ladder[4]
+        ]
+      };
+      var PROFILE_REGISTRY = {
+        camera: {
+          "default": DEFAULT_CAMERA_PROFILE,
+          "conservative": CONSERVATIVE_CAMERA_PROFILE
+        },
+        screenShare: {
+          "default": DEFAULT_SCREENSHARE_PROFILE,
+          "clarity-first": DEFAULT_SCREENSHARE_PROFILE
+        },
+        audio: {
+          "default": DEFAULT_AUDIO_PROFILE,
+          "speech-first": DEFAULT_AUDIO_PROFILE
+        }
+      };
+      function resolveProfileByName(source, name) {
+        const sourceProfiles = PROFILE_REGISTRY[source];
+        if (!sourceProfiles) return void 0;
+        const profile = sourceProfiles[name];
+        return profile ? cloneProfile(profile) : void 0;
+      }
+      exports.resolveProfileByName = resolveProfileByName;
+      function getDefaultCameraProfile() {
+        return cloneProfile(DEFAULT_CAMERA_PROFILE);
+      }
+      function getDefaultScreenShareProfile() {
+        return cloneProfile(DEFAULT_SCREENSHARE_PROFILE);
+      }
+      function getDefaultAudioProfile() {
+        return cloneProfile(DEFAULT_AUDIO_PROFILE);
+      }
+      function resolveProfile(source, override) {
+        let base;
+        switch (source) {
+          case "camera": {
+            base = getDefaultCameraProfile();
+            break;
+          }
+          case "screenShare": {
+            base = getDefaultScreenShareProfile();
+            break;
+          }
+          case "audio": {
+            base = getDefaultAudioProfile();
+            break;
+          }
+          default: {
+            base = getDefaultCameraProfile();
+          }
+        }
+        if (!override) {
+          return base;
+        }
+        return {
+          ...base,
+          ...override,
+          thresholds: {
+            ...base.thresholds,
+            ...override.thresholds ?? {}
+          },
+          ladder: override.ladder ? override.ladder.map((step) => ({ ...step })) : base.ladder
+        };
+      }
+    }
+  });
+
   // src/client/lib/qos/controller.js
   var require_controller = __commonJS({
     "src/client/lib/qos/controller.js"(exports) {
@@ -16518,11 +17188,23 @@ var mediasoupClient = (() => {
         }
         return true;
       }
+      function isStrongRecoverySignal(signals, profile) {
+        const { thresholds } = profile;
+        const stableJitterMs = Number.isFinite(thresholds.stableJitterMs) ? thresholds.stableJitterMs : Infinity;
+        const warnJitterMs = Number.isFinite(thresholds.warnJitterMs) ? thresholds.warnJitterMs : stableJitterMs;
+        const recoveryJitterMs = Math.max(stableJitterMs, warnJitterMs);
+        const rawJitterMs = Number.isFinite(signals.jitterMs) ? Math.max(0, signals.jitterMs) : Number.POSITIVE_INFINITY;
+        const targetBitrateBps = Math.max(0, signals.targetBitrateBps ?? 0);
+        const sendReady = targetBitrateBps <= 0 || signals.sendBitrateBps >= targetBitrateBps * 0.85;
+        return signals.lossEwma < thresholds.stableLossRate && signals.rttEwma < thresholds.stableRttMs && rawJitterMs < recoveryJitterMs && sendReady && !signals.bandwidthLimited && !signals.cpuLimited;
+      }
       var PublisherQosController = class {
         constructor(options) {
           this.seq = 0;
           this.running = false;
           this.cpuSampleCount = 0;
+          this.recoveryProbeSuccessStreak = 0;
+          this.recoveryProbeGraceUntilMs = void 0;
           this.clock = options.clock;
           this.profile = options.profile;
           this.statsProvider = options.statsProvider;
@@ -16600,6 +17282,12 @@ var mediasoupClient = (() => {
           if (override.forceAudioOnly === true) {
             normalized.forceAudioOnly = true;
           }
+          if (override.pauseUpstream === true) {
+            normalized.pauseUpstream = true;
+          }
+          if (override.resumeUpstream === true) {
+            normalized.resumeUpstream = true;
+          }
           this.coordinationOverride = Object.keys(normalized).length > 0 ? normalized : void 0;
         }
         start() {
@@ -16630,6 +17318,15 @@ var mediasoupClient = (() => {
           this.allowAudioOnly = policy.allowAudioOnly;
           this.allowVideoPause = policy.allowVideoPause;
           this.sampler.updateIntervalMs(policy.sampleIntervalMs);
+          if (policy.profiles) {
+            const profileName = policy.profiles[this.profile.source];
+            if (profileName && profileName !== this.profile.name) {
+              const resolved = require_profiles().resolveProfileByName(this.profile.source, profileName);
+              if (resolved) {
+                this.profile = resolved;
+              }
+            }
+          }
         }
         handleOverride(override) {
           if (override.scope === "track" && override.trackId !== this.trackId) {
@@ -16637,12 +17334,71 @@ var mediasoupClient = (() => {
           }
           const nowMs = this.clock.nowMs();
           const ttlMs = Math.max(0, Math.floor(override.ttlMs));
-          this.activeOverride = {
-            data: override,
-            expiresAtMs: nowMs + ttlMs
-          };
+          if (ttlMs === 0) {
+            if (this.activeOverrides) {
+              const reason = override.reason || "";
+              if (reason === "server_ttl_expired") {
+                this.activeOverrides.clear();
+              } else if (reason.startsWith("downlink_v2_") || reason.startsWith("downlink_v3_")) {
+                for (const key of [...this.activeOverrides.keys()]) {
+                  if (key.startsWith("downlink_v2_") || key.startsWith("downlink_v3_")) {
+                    this.activeOverrides.delete(key);
+                  }
+                }
+              } else if (!reason.startsWith("server_")) {
+                for (const key of [...this.activeOverrides.keys()]) {
+                  if (!key.startsWith("server_")) {
+                    this.activeOverrides.delete(key);
+                  }
+                }
+              } else {
+                const prefix = reason.replace(/_clear$/, "").replace(/_expired$/, "");
+                for (const key of [...this.activeOverrides.keys()]) {
+                  if (key.startsWith(prefix)) {
+                    this.activeOverrides.delete(key);
+                  }
+                }
+              }
+            }
+          } else {
+            const key = override.reason || "_default";
+            if (!this.activeOverrides) this.activeOverrides = /* @__PURE__ */ new Map();
+            this.activeOverrides.set(key, {
+              data: override,
+              expiresAtMs: nowMs + ttlMs
+            });
+          }
+          this.activeOverride = this._mergeOverrides(nowMs);
+        }
+        _mergeOverrides(nowMs) {
+          if (!this.activeOverrides || this.activeOverrides.size === 0) return void 0;
+          let merged;
+          for (const [key, entry] of this.activeOverrides) {
+            if (nowMs >= entry.expiresAtMs) {
+              this.activeOverrides.delete(key);
+              continue;
+            }
+            if (!merged) {
+              merged = { ...entry.data };
+              merged._expiresAtMs = entry.expiresAtMs;
+              continue;
+            }
+            if (typeof entry.data.maxLevelClamp === "number") {
+              merged.maxLevelClamp = typeof merged.maxLevelClamp === "number" ? Math.min(merged.maxLevelClamp, entry.data.maxLevelClamp) : entry.data.maxLevelClamp;
+            }
+            if (entry.data.forceAudioOnly === true) merged.forceAudioOnly = true;
+            if (entry.data.disableRecovery === true) merged.disableRecovery = true;
+            if (entry.data.pauseUpstream === true) merged.pauseUpstream = true;
+            if (entry.data.resumeUpstream === true) merged.resumeUpstream = true;
+            merged._expiresAtMs = Math.min(merged._expiresAtMs, entry.expiresAtMs);
+          }
+          if (!merged) return void 0;
+          const expiresAtMs = merged._expiresAtMs;
+          delete merged._expiresAtMs;
+          return { data: merged, expiresAtMs };
         }
         getActiveOverride(nowMs) {
+          this.activeOverride = this._mergeOverrides(nowMs);
           if (!this.activeOverride) {
             return void 0;
           }
@@ -16652,23 +17408,31 @@ var mediasoupClient = (() => {
           }
           return this.activeOverride.data;
         }
-        getTransitionSignals(signals, override) {
+        getTransitionSignals(signals, override, nowMs) {
+          const { thresholds } = this.profile;
+          const stableJitterMs = Number.isFinite(thresholds.stableJitterMs) ? thresholds.stableJitterMs : void 0;
+          const networkRecovered = signals.lossEwma < thresholds.stableLossRate && signals.rttEwma < thresholds.stableRttMs && !signals.bandwidthLimited && !signals.cpuLimited;
+          let transitionSignals = signals;
+          const recoveryProbeGraceActive = typeof this.recoveryProbeGraceUntilMs === "number" && nowMs < this.recoveryProbeGraceUntilMs;
+          if ((this.probeContext?.active === true || recoveryProbeGraceActive) && networkRecovered) {
+            transitionSignals = {
+              ...transitionSignals,
+              jitterEwma: typeof stableJitterMs === "number" ? Math.min(transitionSignals.jitterEwma, Math.max(0, stableJitterMs - 1e-3)) : transitionSignals.jitterEwma
+            };
+          }
           if (!this.inAudioOnlyMode || this.stateContext.state !== "congested") {
-            return signals;
+            return transitionSignals;
           }
           if (override?.forceAudioOnly === true || this.coordinationOverride?.forceAudioOnly === true) {
-            return signals;
+            return transitionSignals;
           }
-          const { thresholds } = this.profile;
-          const networkRecovered = signals.lossEwma < thresholds.stableLossRate && signals.rttEwma < thresholds.stableRttMs && !signals.bandwidthLimited && !signals.cpuLimited;
           if (!networkRecovered) {
-            return signals;
+            return transitionSignals;
           }
-          const stableJitterMs = Number.isFinite(thresholds.stableJitterMs) ? thresholds.stableJitterMs : void 0;
           return {
-            ...signals,
-            bitrateUtilization: Math.max(signals.bitrateUtilization, thresholds.stableBitrateUtilization),
-            jitterEwma: typeof stableJitterMs === "number" ? Math.min(signals.jitterEwma, Math.max(0, stableJitterMs - 1e-3)) : signals.jitterEwma
+            ...transitionSignals,
+            bitrateUtilization: Math.max(transitionSignals.bitrateUtilization, thresholds.stableBitrateUtilization),
+            jitterEwma: typeof stableJitterMs === "number" ? Math.min(transitionSignals.jitterEwma, Math.max(0, stableJitterMs - 1e-3)) : transitionSignals.jitterEwma
           };
         }
         async processSample(snapshot) {
@@ -16694,7 +17458,7 @@ var mediasoupClient = (() => {
               cpuSampleCount: this.cpuSampleCount
             }
           });
-          const transitionSignals = this.getTransitionSignals(signals, override);
+          const transitionSignals = this.getTransitionSignals(signals, override, nowMs);
           const transition = (0, stateMachine_1.evaluateStateTransition)(this.stateContext, transitionSignals, this.profile, nowMs);
           this.stateContext = transition.context;
           if (this.probeContext) {
@@ -16702,16 +17466,31 @@ var mediasoupClient = (() => {
             if (probeEvaluation.result === "failed") {
               await this.rollbackProbe(signals, nowMs, stateBefore);
               this.probeContext = void 0;
+              this.recoveryProbeSuccessStreak = 0;
+              this.recoveryProbeGraceUntilMs = void 0;
               this.recoverySuppressedUntilMs = nowMs + this.profile.recoveryCooldownMs;
               return;
             }
             if (probeEvaluation.result === "successful") {
+              const strongRecoveryProbe = isStrongRecoverySignal(signals, this.profile) && (probeEvaluation.context?.badSamples ?? 0) === 0 && (stateBefore === "recovering" || this.stateContext.state === "recovering" || this.recoveryProbeSuccessStreak > 0) && this.currentLevel > 0;
+              this.recoveryProbeSuccessStreak = strongRecoveryProbe ? this.recoveryProbeSuccessStreak + 1 : 0;
+              this.recoveryProbeGraceUntilMs = strongRecoveryProbe ? nowMs + this.sampleIntervalMs * 3 : void 0;
               this.probeContext = void 0;
             } else {
               this.probeContext = probeEvaluation.context;
             }
           }
-          const plannedActions = this.stateContext.state === "recovering" && !disableRecovery ? (0, planner_1.planRecovery)({
+          if (this.probeContext?.active !== true && (this.stateContext.state === "congested" || this.currentLevel === 0)) {
+            this.recoveryProbeSuccessStreak = 0;
+          }
+          const probeInProgress = this.probeContext?.active === true;
+          const plannedActions = probeInProgress ? [
+            {
+              type: "noop",
+              level: this.currentLevel,
+              reason: "probe-in-progress"
+            }
+          ] : this.stateContext.state === "recovering" && !disableRecovery ? (0, planner_1.planRecovery)({
             source: this.profile.source,
             profile: this.profile,
             state: this.stateContext.state,
@@ -16740,12 +17519,21 @@ var mediasoupClient = (() => {
         }
         filterActions(actions, override) {
           const audioOnlyAllowed = this.allowAudioOnly && this.allowVideoPause;
+          const maxLevel = Math.max(0, this.profile.levelCount - 1);
           const filtered = [];
           for (const action of actions) {
             if ((action.type === "enterAudioOnly" || action.type === "exitAudioOnly") && !audioOnlyAllowed) {
               continue;
             }
             filtered.push(action);
+          }
+          const pauseUpstreamActive = override?.pauseUpstream === true || this.coordinationOverride?.pauseUpstream === true;
+          const resumeUpstreamActive = override?.resumeUpstream === true || this.coordinationOverride?.resumeUpstream === true;
+          if (pauseUpstreamActive && this.inAudioOnlyMode !== true && this.profile.source === "camera" && audioOnlyAllowed) {
+            filtered.unshift({ type: "enterAudioOnly", level: this.currentLevel, reason: "downlink_v3_zero_demand_pause" });
+          }
+          if (resumeUpstreamActive && this.inAudioOnlyMode === true && this.profile.source === "camera" && audioOnlyAllowed && !pauseUpstreamActive) {
+            filtered.unshift({ type: "exitAudioOnly", level: this.currentLevel, reason: "downlink_v3_demand_resumed" });
           }
           if (audioOnlyAllowed && override?.forceAudioOnly && this.inAudioOnlyMode !== true) {
             if (this.profile.source === "camera") {
@@ -16758,6 +17546,14 @@ var mediasoupClient = (() => {
           if (audioOnlyAllowed && this.coordinationOverride?.forceAudioOnly === true && this.inAudioOnlyMode !== true && this.profile.source === "camera") {
             filtered.unshift({
               type: "enterAudioOnly",
+              level: this.currentLevel
+            });
+          }
+          const forceAudioOnlyActive = override?.forceAudioOnly === true || this.coordinationOverride?.forceAudioOnly === true;
+          const overrideDrivenAudioOnly = this.profile.source === "camera" && this.inAudioOnlyMode === true && this.currentLevel < maxLevel;
+          if (audioOnlyAllowed && overrideDrivenAudioOnly && !forceAudioOnlyActive && !pauseUpstreamActive && !filtered.some((action) => action.type === "exitAudioOnly")) {
+            filtered.unshift({
+              type: "exitAudioOnly",
               level: this.currentLevel
             });
           }
@@ -16824,8 +17620,11 @@ var mediasoupClient = (() => {
               } : void 0
             });
           }
-          if (stateAfter === "recovering" && actions.some((action) => action.type !== "noop") && (this.currentLevel < levelBeforeActions || audioOnlyBeforeActions && !this.inAudioOnlyMode)) {
-            this.probeContext = (0, probe_1.beginProbe)(levelBeforeActions, this.currentLevel, nowMs, audioOnlyBeforeActions, this.inAudioOnlyMode);
+          if (actions.some((action) => action.type !== "noop") && (this.currentLevel < levelBeforeActions || audioOnlyBeforeActions && !this.inAudioOnlyMode)) {
+            const requiredHealthySamples = this.recoveryProbeSuccessStreak > 0 && isStrongRecoverySignal(signals, this.profile) ? 2 : 3;
+            this.probeContext = (0, probe_1.beginProbe)(levelBeforeActions, this.currentLevel, nowMs, audioOnlyBeforeActions, this.inAudioOnlyMode, {
+              requiredHealthySamples
+            });
           }
         }
         async rollbackProbe(signals, nowMs, stateBefore) {
@@ -17045,235 +17844,6 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/qos/profiles.js
-  var require_profiles = __commonJS({
-    "src/client/lib/qos/profiles.js"(exports) {
-      "use strict";
-      Object.defineProperty(exports, "__esModule", { value: true });
-      exports.getDefaultCameraProfile = getDefaultCameraProfile;
-      exports.getDefaultScreenShareProfile = getDefaultScreenShareProfile;
-      exports.getDefaultAudioProfile = getDefaultAudioProfile;
-      exports.resolveProfile = resolveProfile;
-      var constants_1 = require_constants();
-      var DEFAULT_THRESHOLDS = {
-        warnLossRate: 0.04,
-        congestedLossRate: 0.08,
-        warnRttMs: 220,
-        congestedRttMs: 320,
-        warnJitterMs: 30,
-        congestedJitterMs: 60,
-        warnBitrateUtilization: 0.85,
-        congestedBitrateUtilization: 0.65,
-        stableLossRate: 0.03,
-        stableRttMs: 180,
-        stableJitterMs: 20,
-        stableBitrateUtilization: 0.92
-      };
-      var DEFAULT_CAMERA_PROFILE = {
-        name: "default-camera",
-        source: "camera",
-        levelCount: 5,
-        sampleIntervalMs: constants_1.DEFAULT_SAMPLE_INTERVAL_MS,
-        snapshotIntervalMs: constants_1.DEFAULT_SNAPSHOT_INTERVAL_MS,
-        recoveryCooldownMs: constants_1.DEFAULT_RECOVERY_COOLDOWN_MS,
-        thresholds: DEFAULT_THRESHOLDS,
-        ladder: [
-          {
-            level: 0,
-            description: "Use publish initial encoding settings.",
-            encodingParameters: {
-              maxBitrateBps: 9e5,
-              maxFramerate: 30,
-              scaleResolutionDownBy: 1
-            }
-          },
-          {
-            level: 1,
-            description: "Reduce bitrate and frame rate slightly.",
-            encodingParameters: {
-              maxBitrateBps: 85e4,
-              maxFramerate: 24,
-              scaleResolutionDownBy: 1
-            }
-          },
-          {
-            level: 2,
-            description: "Further reduce bitrate/frame rate and start downscaling resolution.",
-            encodingParameters: {
-              maxBitrateBps: 7e5,
-              maxFramerate: 20,
-              scaleResolutionDownBy: 1.5
-            }
-          },
-          {
-            level: 3,
-            description: "Aggressive bitrate and fps reduction, force lowest spatial layer if available.",
-            encodingParameters: {
-              maxBitrateBps: 45e4,
-              maxFramerate: 12,
-              scaleResolutionDownBy: 2
-            },
-            spatialLayer: 0
-          },
-          {
-            level: 4,
-            description: "Enter audio-only mode and pause video upstream.",
-            enterAudioOnly: true
-          }
-        ]
-      };
-      var DEFAULT_SCREENSHARE_PROFILE = {
-        name: "default-screenshare",
-        source: "screenShare",
-        levelCount: 5,
-        sampleIntervalMs: constants_1.DEFAULT_SAMPLE_INTERVAL_MS,
-        snapshotIntervalMs: constants_1.DEFAULT_SNAPSHOT_INTERVAL_MS,
-        recoveryCooldownMs: 1e4,
-        thresholds: DEFAULT_THRESHOLDS,
-        ladder: [
-          {
-            level: 0,
-            description: "Use publish initial encoding settings.",
-            encodingParameters: {
-              maxBitrateBps: 18e5,
-              maxFramerate: 15,
-              scaleResolutionDownBy: 1
-            }
-          },
-          {
-            level: 1,
-            description: "Lower capture/send framerate to 10.",
-            encodingParameters: {
-              maxBitrateBps: 18e5,
-              maxFramerate: 10,
-              scaleResolutionDownBy: 1
-            }
-          },
-          {
-            level: 2,
-            description: "Lower framerate to 5 while prioritizing text readability.",
-            encodingParameters: {
-              maxBitrateBps: 135e4,
-              maxFramerate: 5,
-              scaleResolutionDownBy: 1
-            }
-          },
-          {
-            level: 3,
-            description: "Further limit bitrate and framerate before resolution downgrade.",
-            encodingParameters: {
-              maxBitrateBps: 99e4,
-              maxFramerate: 3,
-              scaleResolutionDownBy: 1.25
-            },
-            resumeUpstream: true
-          },
-          {
-            level: 4,
-            description: "Pause screen share and rely on coordinator decision.",
-            pauseUpstream: true
-          }
-        ]
-      };
-      var DEFAULT_AUDIO_PROFILE = {
-        name: "default-audio",
-        source: "audio",
-        levelCount: 5,
-        sampleIntervalMs: constants_1.DEFAULT_SAMPLE_INTERVAL_MS,
-        snapshotIntervalMs: constants_1.DEFAULT_SNAPSHOT_INTERVAL_MS,
-        recoveryCooldownMs: constants_1.DEFAULT_RECOVERY_COOLDOWN_MS,
-        thresholds: DEFAULT_THRESHOLDS,
-        ladder: [
-          {
-            level: 0,
-            description: "Use publish initial encoding settings.",
-            encodingParameters: {
-              maxBitrateBps: 51e4
-            }
-          },
-          {
-            level: 1,
-            description: "Reduce max bitrate to around 32kbps, enable adaptive ptime if available.",
-            encodingParameters: {
-              maxBitrateBps: 32e3,
-              adaptivePtime: true
-            }
-          },
-          {
-            level: 2,
-            description: "Reduce max bitrate to around 24kbps.",
-            encodingParameters: {
-              maxBitrateBps: 24e3
-            }
-          },
-          {
-            level: 3,
-            description: "Reduce max bitrate to around 16kbps.",
-            encodingParameters: {
-              maxBitrateBps: 16e3
-            }
-          },
-          {
-            level: 4,
-            description: "Keep audio alive at minimum quality, avoid auto-mute.",
-            encodingParameters: {
-              maxBitrateBps: 16e3,
-              adaptivePtime: true
-            }
-          }
-        ]
-      };
-      function cloneProfile(profile) {
-        return {
-          ...profile,
-          thresholds: { ...profile.thresholds },
-          ladder: profile.ladder.map((step) => ({ ...step }))
-        };
-      }
-      function getDefaultCameraProfile() {
-        return cloneProfile(DEFAULT_CAMERA_PROFILE);
-      }
-      function getDefaultScreenShareProfile() {
-        return cloneProfile(DEFAULT_SCREENSHARE_PROFILE);
-      }
-      function getDefaultAudioProfile() {
-        return cloneProfile(DEFAULT_AUDIO_PROFILE);
-      }
-      function resolveProfile(source, override) {
-        let base;
-        switch (source) {
-          case "camera": {
-            base = getDefaultCameraProfile();
-            break;
-          }
-          case "screenShare": {
-            base = getDefaultScreenShareProfile();
-            break;
-          }
-          case "audio": {
-            base = getDefaultAudioProfile();
-            break;
-          }
-          default: {
-            base = getDefaultCameraProfile();
-          }
-        }
-        if (!override) {
-          return base;
-        }
-        return {
-          ...base,
-          ...override,
-          thresholds: {
-            ...base.thresholds,
-            ...override.thresholds ?? {}
-          },
-          ladder: override.ladder ? override.ladder.map((step) => ({ ...step })) : base.ladder
-        };
-      }
-    }
-  });
-
   // src/client/lib/qos/factory.js
   var require_factory = __commonJS({
     "src/client/lib/qos/factory.js"(exports) {
@@ -17465,6 +18035,10 @@ var mediasoupClient = (() => {
       __exportStar(require_clock(), exports);
       __exportStar(require_constants(), exports);
       __exportStar(require_coordinator(), exports);
+      __exportStar(require_downlinkHints(), exports);
+      __exportStar(require_downlinkProtocol(), exports);
+      __exportStar(require_downlinkReporter(), exports);
+      __exportStar(require_downlinkSampler(), exports);
       __exportStar(require_controller(), exports);
       __exportStar(require_executor(), exports);
       __exportStar(require_factory(), exports);

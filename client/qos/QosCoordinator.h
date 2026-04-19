@@ -1,6 +1,5 @@
 #pragma once
 #include "QosTypes.h"
-#include "QosProfiles.h"
 #include <cmath>
 #include <vector>
 #include <map>
@@ -227,12 +226,8 @@ inline std::map<std::string, CoordinationOverride> buildCoordinationOverrides(
 			override.forceAudioOnly = true;
 		if (track.source == Source::ScreenShare && allocatedBitrateBps == 0)
 			override.pauseUpstream = true;
-		if (track.source == Source::ScreenShare && allocatedBitrateBps > 0) {
-			const auto& screenProfile = getProfile(Source::ScreenShare);
-			int maxScreenLevel = std::max(0, screenProfile.levelCount - 1);
-			if (track.level >= maxScreenLevel)
-				override.resumeUpstream = true;
-		}
+		if (track.source == Source::ScreenShare && allocatedBitrateBps > 0 && track.level >= 4)
+			override.resumeUpstream = true;
 
 		if (override.maxLevelClamp.has_value() || override.disableRecovery.has_value()
 			|| override.forceAudioOnly.has_value() || override.pauseUpstream.has_value()

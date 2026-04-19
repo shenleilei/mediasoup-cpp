@@ -1,5 +1,10 @@
 # 上行 QoS 逐 Case 最终结果
 
+> 当前状态说明
+>
+> 这是 browser uplink full matrix 的逐 case 展开页。
+> 如果只想先看当前总口径和入口，先看 [qos-status.md](./qos-status.md)。
+
 生成时间：`2026-04-13T03:34:38.058Z`
 
 ## 1. 汇总

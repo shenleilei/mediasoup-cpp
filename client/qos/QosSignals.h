@@ -20,8 +20,8 @@ inline double computeBitrateBps(uint64_t curBytes, uint64_t prevBytes, int64_t c
 }
 
 inline double computeLossRate(uint64_t sentDelta, uint64_t lostDelta) {
-	if (sentDelta > 0) return clampUnit((double)lostDelta / (double)sentDelta);
-	return lostDelta > 0 ? 1.0 : 0.0;
+	auto total = sentDelta + lostDelta;
+	return total > 0 ? clampUnit((double)lostDelta / (double)total) : 0;
 }
 
 inline double computeEwma(double cur, double prev, double alpha = EWMA_ALPHA) {

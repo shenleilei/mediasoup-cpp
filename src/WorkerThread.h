@@ -29,6 +29,20 @@ namespace mediasoup {
 ///   All Room/Router/Transport operations happen within the WorkerThread (single-threaded, no locks needed).
 ///
 class WorkerThread {
+private:
+	struct DelayedTask {
+		std::chrono::steady_clock::time_point dueAt;
+		uint64_t id{ 0 };
+		std::function<void()> fn;
+	};
+
+	struct DelayedTaskCompare {
+		bool operator()(const DelayedTask& lhs, const DelayedTask& rhs) const {
+			if (lhs.dueAt != rhs.dueAt) return lhs.dueAt > rhs.dueAt;
+			return lhs.id > rhs.id;
+		}
+	};
+
 public:
 	/// Construct a WorkerThread.
 	/// @param id                Thread index (0, 1, 2, ...)
@@ -58,6 +72,16 @@ public:
 		, logger_(Logger::Get("WorkerThread"))
 	{
 		try {
+			auto addEpollFd = [this](int fd, uint32_t events) {
+				struct epoll_event ev{};
+				ev.events = events;
+				ev.data.fd = fd;
+				if (::epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd, &ev) != 0) {
+					throw std::runtime_error("epoll_ctl ADD failed for fd " +
+						std::to_string(fd) + ": " + std::string(strerror(errno)));
+				}
+			};
+
 			epollFd_ = ::epoll_create1(0);
 			if (epollFd_ < 0)
 				throw std::runtime_error("epoll_create1 failed: " + std::string(strerror(errno)));
@@ -67,10 +91,13 @@ public:
 				throw std::runtime_error("eventfd failed: " + std::string(strerror(errno)));
 
 			// Register eventfd in epoll (for task queue wakeup)
-			struct epoll_event ev{};
-			ev.events = EPOLLIN;
-			ev.data.fd = eventFd_;
-			::epoll_ctl(epollFd_, EPOLL_CTL_ADD, eventFd_, &ev);
+			addEpollFd(eventFd_, EPOLLIN);
+
+			// Create delayed task timer (timerfd)
+			delayedTimerFd_ = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+			if (delayedTimerFd_ >= 0) {
+				addEpollFd(delayedTimerFd_, EPOLLIN);
+			}
 
 			// Create health check timer (timerfd)
 			healthTimerFd_ = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
@@ -79,12 +106,11 @@ public:
 				its.it_interval.tv_sec = kHealthCheckIntervalMs / 1000;
 				its.it_interval.tv_nsec = (kHealthCheckIntervalMs % 1000) * 1000000L;
 				its.it_value = its.it_interval;
-				::timerfd_settime(healthTimerFd_, 0, &its, nullptr);
+				if (::timerfd_settime(healthTimerFd_, 0, &its, nullptr) != 0)
+					throw std::runtime_error("timerfd_settime failed for health timer: " +
+						std::string(strerror(errno)));
 
-				struct epoll_event tev{};
-				tev.events = EPOLLIN;
-				tev.data.fd = healthTimerFd_;
-				::epoll_ctl(epollFd_, EPOLL_CTL_ADD, healthTimerFd_, &tev);
+				addEpollFd(healthTimerFd_, EPOLLIN);
 			}
 
 			// Create GC timer (idle room cleanup)
@@ -94,14 +120,14 @@ public:
 				its.it_interval.tv_sec = kGcIntervalMs / 1000;
 				its.it_interval.tv_nsec = (kGcIntervalMs % 1000) * 1000000L;
 				its.it_value = its.it_interval;
-				::timerfd_settime(gcTimerFd_, 0, &its, nullptr);
+				if (::timerfd_settime(gcTimerFd_, 0, &its, nullptr) != 0)
+					throw std::runtime_error("timerfd_settime failed for gc timer: " +
+						std::string(strerror(errno)));
 
-				struct epoll_event tev{};
-				tev.events = EPOLLIN;
-				tev.data.fd = gcTimerFd_;
-				::epoll_ctl(epollFd_, EPOLL_CTL_ADD, gcTimerFd_, &tev);
+				addEpollFd(gcTimerFd_, EPOLLIN);
 			}
 		} catch (...) {
+			if (delayedTimerFd_ >= 0) { ::close(delayedTimerFd_); delayedTimerFd_ = -1; }
 			if (healthTimerFd_ >= 0) { ::close(healthTimerFd_); healthTimerFd_ = -1; }
 			if (gcTimerFd_ >= 0) { ::close(gcTimerFd_); gcTimerFd_ = -1; }
 			if (eventFd_ >= 0) { ::close(eventFd_); eventFd_ = -1; }
@@ -112,6 +138,7 @@ public:
 
 	~WorkerThread() {
 		stop();
+		if (delayedTimerFd_ >= 0) ::close(delayedTimerFd_);
 		if (healthTimerFd_ >= 0) ::close(healthTimerFd_);
 		if (gcTimerFd_ >= 0) ::close(gcTimerFd_);
 		if (eventFd_ >= 0) ::close(eventFd_);
@@ -184,6 +211,24 @@ public:
 		::write(eventFd_, &val, sizeof(val));
 	}
 
+	/// Thread-safe: post a task to this WorkerThread after a delay.
+	void postDelayed(std::function<void()> task, uint64_t delayMs) {
+		if (delayMs == 0 || delayedTimerFd_ < 0) {
+			post(std::move(task));
+			return;
+		}
+
+		{
+			std::lock_guard<std::mutex> lock(delayedQueueMutex_);
+			delayedTasks_.push(DelayedTask{
+				std::chrono::steady_clock::now() + std::chrono::milliseconds(delayMs),
+				nextDelayedTaskId_++,
+				std::move(task)
+			});
+			armDelayedTimerLocked();
+		}
+	}
+
 	/// Thread-safe: get the number of rooms managed by this thread.
 	size_t roomCount() const {
 		return roomCount_.load(std::memory_order_relaxed);
@@ -211,6 +256,9 @@ public:
 	void setRoomLifecycle(RoomService::RoomLifecycleFn fn) { roomLifecycleFn_ = std::move(fn); }
 	void setRegistryTask(RoomService::RegistryTaskFn fn) { registryTaskFn_ = std::move(fn); }
 	void setTaskPoster(RoomService::TaskPosterFn fn) { taskPosterFn_ = std::move(fn); }
+	void setDownlinkSnapshotApplied(RoomService::DownlinkSnapshotAppliedFn fn) {
+		downlinkSnapshotAppliedFn_ = std::move(fn);
+	}
 
 	/// Called by RoomService to update room count (from within WorkerThread).
 	void updateRoomCount() {
@@ -285,6 +333,11 @@ private:
 		if (roomLifecycleFn_) roomService_->setRoomLifecycle(roomLifecycleFn_);
 		if (registryTaskFn_) roomService_->setRegistryTask(registryTaskFn_);
 		if (taskPosterFn_) roomService_->setTaskPoster(taskPosterFn_);
+		if (downlinkSnapshotAppliedFn_)
+			roomService_->setDownlinkSnapshotApplied(downlinkSnapshotAppliedFn_);
+		roomService_->setDelayedTaskPoster([this](std::function<void()> task, uint32_t delayMs) {
+			postDelayed(std::move(task), delayMs);
+		});
 	}
 
 	void loop() {
@@ -315,6 +368,11 @@ private:
 					uint64_t expirations;
 					(void)::read(gcTimerFd_, &expirations, sizeof(expirations));
 					onGcTimer();
+				} else if (fd == delayedTimerFd_) {
+					// Delayed task timer fired
+					uint64_t expirations;
+					(void)::read(delayedTimerFd_, &expirations, sizeof(expirations));
+					processDelayedTasks();
 				} else {
 					// Channel data from a Worker process
 					auto it = fdToWorker_.find(fd);
@@ -360,6 +418,46 @@ private:
 			queueDepth_.fetch_sub(1, std::memory_order_relaxed);
 		}
 		updateRoomCount();
+	}
+
+	void processDelayedTasks() {
+		std::vector<std::function<void()>> readyTasks;
+		{
+			std::lock_guard<std::mutex> lock(delayedQueueMutex_);
+			const auto now = std::chrono::steady_clock::now();
+			while (!delayedTasks_.empty() && delayedTasks_.top().dueAt <= now) {
+				readyTasks.push_back(std::move(delayedTasks_.top().fn));
+				delayedTasks_.pop();
+			}
+			armDelayedTimerLocked();
+		}
+
+		for (auto& task : readyTasks) {
+			try {
+				task();
+			} catch (const std::exception& e) {
+				MS_ERROR(logger_, "WorkerThread {} delayed task exception: {}", id_, e.what());
+			} catch (...) {
+				MS_ERROR(logger_, "WorkerThread {} delayed task unknown exception", id_);
+			}
+		}
+		updateRoomCount();
+	}
+
+	void armDelayedTimerLocked() {
+		if (delayedTimerFd_ < 0) return;
+
+		struct itimerspec its{};
+		if (!delayedTasks_.empty()) {
+			const auto now = std::chrono::steady_clock::now();
+			auto delay = delayedTasks_.top().dueAt - now;
+			if (delay <= std::chrono::steady_clock::duration::zero())
+				delay = std::chrono::nanoseconds(1);
+			const auto delayNs = std::chrono::duration_cast<std::chrono::nanoseconds>(delay);
+			its.it_value.tv_sec = static_cast<time_t>(delayNs.count() / 1000000000LL);
+			its.it_value.tv_nsec = static_cast<long>(delayNs.count() % 1000000000LL);
+		}
+		::timerfd_settime(delayedTimerFd_, 0, &its, nullptr);
 	}
 
 	void onHealthCheck() {
@@ -442,6 +540,7 @@ private:
 	// Event loop resources
 	int epollFd_ = -1;
 	int eventFd_ = -1;
+	int delayedTimerFd_ = -1;
 	int healthTimerFd_ = -1;
 	int gcTimerFd_ = -1;
 	std::thread thread_;
@@ -457,6 +556,9 @@ private:
 	};
 	std::mutex queueMutex_;
 	std::queue<QueuedTask> taskQueue_;
+	std::mutex delayedQueueMutex_;
+	std::priority_queue<DelayedTask, std::vector<DelayedTask>, DelayedTaskCompare> delayedTasks_;
+	uint64_t nextDelayedTaskId_{ 1 };
 
 	// Owned resources (only accessed from WorkerThread)
 	std::vector<std::shared_ptr<Worker>> workers_;
@@ -480,6 +582,7 @@ private:
 	RoomService::RoomLifecycleFn roomLifecycleFn_;
 	RoomService::RegistryTaskFn registryTaskFn_;
 	RoomService::TaskPosterFn taskPosterFn_;
+	RoomService::DownlinkSnapshotAppliedFn downlinkSnapshotAppliedFn_;
 
 	std::shared_ptr<spdlog::logger> logger_;
 };

@@ -70,16 +70,17 @@ public:
 		if (reader_.joinable()) reader_.join();
 	}
 
-	// Send a JSON request and wait for matching response
-	json request(const std::string& method, const json& data = {}, int timeoutMs = 5000) {
+	uint64_t sendRequest(const std::string& method, const json& data = {}) {
 		uint64_t id = nextId_++;
 		json msg = {{"request", true}, {"id", id}, {"method", method}, {"data", data}};
 		sendText(msg.dump());
+		return id;
+	}
 
+	json waitResponse(uint64_t id, int timeoutMs = 5000) {
 		auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
 		std::unique_lock<std::mutex> lock(mu_);
 		while (true) {
-			// Check if response already arrived
 			for (auto it = responses_.begin(); it != responses_.end(); ++it) {
 				if (it->value("id", 0) == id) {
 					json resp = std::move(*it);
@@ -90,6 +91,11 @@ public:
 			if (cv_.wait_until(lock, deadline) == std::cv_status::timeout)
 				return {{"ok", false}, {"error", "timeout"}};
 		}
+	}
+
+	// Send a JSON request and wait for matching response
+	json request(const std::string& method, const json& data = {}, int timeoutMs = 5000) {
+		return waitResponse(sendRequest(method, data), timeoutMs);
 	}
 
 	// Drain notifications received so far
