@@ -196,6 +196,8 @@ The output should describe the branch impact globally, then list file-level find
 - Were regression tests added for bugfixes?
 - Were integration or contract checks added for cross-boundary changes?
 - Were required repo commands actually run?
+- If the change adds, renames, moves, splits, or otherwise rehomes a test case, test suite, or test binary, did the review verify that `scripts/run_all_tests.sh` still covers it directly or through its delegated entrypoints?
+- Do not assume a new case is covered just because it compiles or passes when run manually; explicitly check for stale filters, missing group wiring, or renamed binaries/scripts that would leave `scripts/run_all_tests.sh` incomplete.
 - For stateful resources, do tests cover repeated call, reconnect, retry, replacement, and cleanup paths?
 - For protocol-heavy changes, do tests cover field encoding/decoding, signedness, unit conversion, and timestamp semantics?
 - For metrics or state machines, do tests cover source switching, counter resets, and fallback transitions?
