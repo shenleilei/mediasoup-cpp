@@ -219,13 +219,138 @@
 
 ---
 
+---
+
+## Supplementary Findings (2026-04-19 Deep Dive)
+
+> Additional P0/P1 issues discovered in areas not fully covered by the initial review.
+
+### P0-10: Uncaught `json::type_error` in WebSocket handler crashes the entire server
+- **File**: `src/SignalingServer.cpp:558`
+- **Issue**: `req["request"].get<bool>()` is called outside any `try-catch`. If a client sends `{"request": 1}` or `{"request": "true"}` or `{"request": null}`, `get<bool>()` throws `json::type_error`. uWS does not wrap the callback in try-catch — the exception propagates to `std::terminate()`. **Any unauthenticated WebSocket client can crash the server with a single malformed message.**
+- **Fix**: Change to `req.value("request", false)` or wrap the entire message handler in try-catch.
+
+### P0-11: Invalid `std::sort` comparator violates strict weak ordering — UB / crash
+- **File**: `src/RoomRegistry.h:776–780`
+- **Issue**: The no-geo comparator returns `true` when `a.address == self` regardless of `b`, violating irreflexivity (`comp(x, x)` must return `false`). If the current node is a candidate, `comp(self, self)` returns `true`. This is UB for `std::sort` and can cause crashes, infinite loops, or out-of-bounds access in libstdc++/libc++ partitioning.
+- **Fix**: Restructure comparator with proper tiebreaking:
+  ```cpp
+  if (a.rooms != b.rooms) return a.rooms < b.rooms;
+  bool aIsSelf = (a.address == self);
+  bool bIsSelf = (b.address == self);
+  if (aIsSelf != bIsSelf) return aIsSelf;
+  return a.address < b.address;
+  ```
+
+### P0-12: Null dereference in `Recorder::initMuxer` if `avformat_new_stream` fails
+- **File**: `src/Recorder.h:160–161, 177–178`
+- **Issue**: `avformat_new_stream()` can return `nullptr` (memory pressure). The return value is immediately dereferenced (`audioStream_->id = 0`), causing a guaranteed crash.
+- **Fix**: Add null checks after each `avformat_new_stream()` call.
+
+### P1-15: Out-of-bounds read in `Recorder::setH264Extradata` with malformed SPS
+- **File**: `src/Recorder.h:211`
+- **Issue**: `h264Sps_[1]`, `[2]`, `[3]` are accessed after only checking `h264Sps_.empty()`. A malformed RTP stream could deliver an SPS with 1–3 bytes → heap buffer over-read from network input.
+- **Fix**: Check `if (h264Sps_.size() < 4) return false;`
+
+### P1-16: Data race on `Recorder::sock_` between `stop()` and `recvLoop()`
+- **File**: `src/Recorder.h:110, 260`
+- **Issue**: `stop()` writes `sock_ = -1` on calling thread while `recvLoop()` reads it on recv thread. Plain `int` with no synchronization → data race (UB). If fd is recycled before thread exits, `poll()`/`recv()` operates on wrong fd.
+- **Fix**: Make `sock_` `std::atomic<int>` or use a shutdown pipe.
+
+### P1-17: Data race on `Recorder::outputPath_` in `appendQosSnapshot()`
+- **File**: `src/Recorder.h:131, 123`
+- **Issue**: `appendQosSnapshot()` reads `outputPath_.empty()` without holding `qosMutex_` while `stop()` clears it under `qosMutex_`. Concurrent read/write of `std::string` is UB.
+- **Fix**: Move check inside `qosMutex_` scope.
+
+### P1-18: `Peer::close()` is not thread-safe — double-close of transports
+- **File**: `src/Peer.h:29–43`
+- **Issue**: `closed` is plain `bool` checked/set without synchronization. `Room::replacePeer()` and `Room::close()` can race, both passing the guard, leading to double-close of WebRTC transports → worker crash.
+- **Fix**: Make `closed` `std::atomic<bool>` and use `exchange(true)`.
+
+### P1-19: Data race in `RoomRegistry` — reading cache sizes after releasing mutex
+- **File**: `src/RoomRegistry.h:737`
+- **Issue**: `syncAllUnlocked()` accesses `nodeCache_.size()` after the `cacheMutex_` scope ends. Subscriber thread can concurrently modify maps via `handlePubSubMessage()` → data race.
+- **Fix**: Capture sizes inside the mutex scope.
+
+### P1-20: `produce()` auto-subscribe skips plain-transport subscribers
+- **File**: `src/RoomService.cpp:651–655`
+- **Issue**: `produce()` only checks `other->recvTransport` (WebRTC) when auto-subscribing. Peers with only `plainRecvTransport` are silently skipped and permanently miss the new stream. `plainPublish()` correctly checks both.
+- **Fix**: Check both `recvTransport` and `plainRecvTransport`.
+
+### P1-21: No duplicate consumer guard — unbounded resource consumption
+- **File**: `src/RoomService.cpp:687–713`
+- **Issue**: `consume()` creates consumers unconditionally for any `producerId`, even if the peer already has one. Client can call `consume()` in a loop to amplify server load per producer.
+- **Fix**: Check if peer already has a consumer for the same producerId before creating.
+
+### P1-22: `setClientStats()` can resurrect QoS state for departed peers
+- **File**: `src/RoomService.cpp:1031–1053`
+- **Issue**: Late-arriving stats after `leave()` re-insert entries into `qosRegistry_`. These zombie entries accumulate, leaking memory proportional to churn rate. `setDownlinkClientStats()` correctly validates room/peer existence first.
+- **Fix**: Validate room/peer existence before upserting.
+
+### P1-23: Deferred task lambdas capture raw `this` → use-after-free on early destruction
+- **File**: `src/RoomService.cpp:1546, 1693–1698`
+- **Issue**: `continueBroadcastStats()` and `scheduleDownlinkPlanning()` post lambdas capturing bare `this`. If RoomService is destroyed while tasks are queued, callbacks dereference freed memory.
+- **Fix**: Use `std::weak_ptr` or a shared alive-flag pattern.
+
+### P1-24: No rate limiting on WebSocket connections/messages — DoS
+- **File**: `src/SignalingServer.cpp:541–556`
+- **Issue**: No limits on concurrent connections, message rate, or resource-creating methods. A single client can flood `join`/`produce`/`consume` to exhaust worker resources.
+- **Fix**: Add per-IP connection limits, per-connection message rate limiting, and cap total connections.
+
+### P1-25: Unbounded registry task queue — memory exhaustion + heartbeat starvation
+- **File**: `src/SignalingServer.cpp:378–413`
+- **Issue**: `enqueueRegistryTask()` has no queue size limit. Flooding `/api/resolve` requests grows the queue without bound, causing OOM and starving Redis heartbeat tasks → node marked dead.
+- **Fix**: Cap queue depth; return HTTP 503 when full.
+
+### P1-26: Missing cross-peer authorization — any peer can modify another's QoS
+- **File**: `src/SignalingServer.cpp:819–832`
+- **Issue**: `getStats`, `setQosOverride`, `setQosPolicy` accept a target `peerId` from the caller with no authorization check. Any peer in a room can degrade another peer's quality or read their connection stats.
+- **Fix**: Restrict cross-peer operations to admin/moderator role.
+
+### P1-27: `statsTimer` and `redisTimer` not closed on shutdown — event loop hangs
+- **File**: `src/SignalingServer.cpp:1194–1243, 1250–1257`
+- **Issue**: Shutdown timer closes listen socket and itself, but `statsTimer` and `redisTimer` are never closed. Active timers keep the uWS event loop alive → `run()` never returns.
+- **Fix**: Close all timers in the shutdown callback.
+
+### P1-28: Signed integer overflow (UB) in `DownlinkQosRegistry::Upsert`
+- **File**: `src/qos/DownlinkQosRegistry.cpp:39`
+- **Issue**: `snapshot.tsMs + kTsBackwardToleranceMs` performs signed `int64_t` addition on client-controlled value. Near `INT64_MAX`, this is signed overflow → UB.
+- **Fix**: Rewrite as equivalent subtraction or clamp input.
+
+### P1-29: Integer truncation in `QosValidator` — `sampleIntervalMs` can become 0
+- **File**: `src/qos/QosValidator.cpp:317–318`
+- **Issue**: `static_cast<uint32_t>(x.get<uint64_t>())` without upper-bound check. Value `4294967296` (2³²) truncates to **0**, causing tight polling loop (CPU DoS).
+- **Fix**: Reject values exceeding `UINT32_MAX`.
+
+### P1-30: `std::getenv` called in hot allocation loop — thread-safety UB
+- **File**: `src/qos/SubscriberBudgetAllocator.cpp:28–45, 77`
+- **Issue**: `estimateLayerBitrateBps` calls `std::getenv()` on every invocation (O(N × layers) per allocation). `std::getenv` is not thread-safe if any thread calls `setenv`/`putenv` (POSIX UB).
+- **Fix**: Cache env var value at startup with `std::call_once`.
+
+---
+
+## Updated Summary
+
+| Severity | Previous Count | New Findings | Total |
+|----------|---------------|-------------|-------|
+| **P0** | 9 | 3 | **12** |
+| **P1** | 14 | 16 | **30** |
+| **P2** | 12 | 0 | **12** |
+
+---
+
 ## Priority Fix Order
 
-1. **P0-4, P0-5, P0-6, P0-7**: Thread safety fixes (data races = UB)
-2. **P0-1, P0-2, P0-3**: Resource leak fixes (worker-side leaks accumulate)
-3. **P0-8**: Channel IPC corruption fix
-4. **P0-9**: QoS formula fix
-5. **P1-3**: x264 runtime bitrate (core feature broken)
-6. **P1-2**: SSRF validation
-7. **P1-7, P1-9, P1-12, P1-13**: Remaining thread safety issues
-8. Everything else
+1. **P0-10**: Server crash from single malformed WebSocket message (easiest P0 to exploit)
+2. **P0-11**: `std::sort` UB / crash in RoomRegistry
+3. **P0-4, P0-5, P0-6, P0-7**: Thread safety fixes (data races = UB)
+4. **P0-1, P0-2, P0-3**: Resource leak fixes (worker-side leaks accumulate)
+5. **P0-8**: Channel IPC corruption fix
+6. **P0-9**: QoS formula fix
+7. **P0-12**: Recorder null dereference
+8. **P1-24, P1-25**: DoS prevention (rate limiting)
+9. **P1-26**: Cross-peer authorization
+10. **P1-3**: x264 runtime bitrate (core feature broken)
+11. **P1-2**: SSRF validation
+12. **P1-7, P1-9, P1-12, P1-13, P1-16–P1-19**: Remaining thread safety issues
+13. Everything else
