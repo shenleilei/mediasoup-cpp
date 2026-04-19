@@ -1,6 +1,6 @@
 # PlainTransport C++ Client QoS Matrix 逐 Case 结果
 
-生成时间：`2026-04-19T06:12:41.709Z`
+生成时间：`2026-04-19T13:57:28.283Z`
 
 ## 1. 汇总
 
@@ -37,11 +37,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=stable/L0, current=stable/L0)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | 无非 noop 动作 |
-| impairment timing | t_detect_stable=972ms |
-| recovery timing | t_detect_stable=961ms |
+| impairment timing | t_detect_stable=151ms |
+| recovery timing | t_detect_stable=333ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_stable=972ms |
-| raw recovery timing | t_detect_stable=961ms |
+| raw impairment timing | t_detect_stable=151ms |
+| raw recovery timing | t_detect_stable=333ms |
 
 ### B2
 
@@ -56,11 +56,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=stable/L0, current=stable/L0)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | 无非 noop 动作 |
-| impairment timing | t_detect_stable=75ms |
-| recovery timing | t_detect_stable=102ms |
+| impairment timing | t_detect_stable=1ms |
+| recovery timing | t_detect_stable=269ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_stable=75ms |
-| raw recovery timing | t_detect_stable=102ms |
+| raw impairment timing | t_detect_stable=1ms |
+| raw recovery timing | t_detect_stable=269ms |
 
 ### B3
 
@@ -75,11 +75,11 @@
 | 实际 QoS | baseline(current=early_warning/L1)；impairment(peak=early_warning/L1, current=early_warning/L1)；recovery(best=early_warning/L1, current=early_warning/L1) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters（共 1 次非 noop） |
-| impairment timing | t_detect_warning=395ms |
-| recovery timing | t_detect_warning=143ms |
+| impairment timing | t_detect_warning=445ms |
+| recovery timing | t_detect_warning=110ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=395ms |
-| raw recovery timing | t_detect_warning=143ms |
+| raw impairment timing | t_detect_warning=445ms |
+| raw recovery timing | t_detect_warning=110ms |
 
 ### BW1
 
@@ -94,11 +94,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=stable/L0, current=stable/L0)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | 无非 noop 动作 |
-| impairment timing | t_detect_stable=958ms |
-| recovery timing | t_detect_stable=947ms |
+| impairment timing | t_detect_stable=26ms |
+| recovery timing | t_detect_stable=448ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_stable=958ms |
-| raw recovery timing | t_detect_stable=947ms |
+| raw impairment timing | t_detect_stable=26ms |
+| raw recovery timing | t_detect_stable=448ms |
 
 ### BW3
 
@@ -113,11 +113,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=congested/L4, current=congested/L4)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters, enterAudioOnly, exitAudioOnly（共 12 次非 noop） |
-| impairment timing | t_detect_warning=1157ms；t_detect_recovering=10351ms；t_detect_stable=112ms；t_detect_congested=2196ms；t_first_action=1157ms；t_level_1=1157ms；t_level_2=2196ms；t_level_3=3236ms；t_level_4=4272ms；t_audio_only=4272ms |
-| recovery timing | t_detect_recovering=3540ms；t_detect_stable=4540ms；t_detect_congested=540ms；t_first_action=3540ms；t_level_0=12746ms；t_level_1=9625ms；t_level_2=6584ms；t_level_3=3540ms |
+| impairment timing | t_detect_warning=1168ms；t_detect_recovering=10320ms；t_detect_stable=162ms；t_detect_congested=2206ms；t_first_action=1168ms；t_level_1=1168ms；t_level_2=2206ms；t_level_3=3246ms；t_level_4=4281ms；t_audio_only=4281ms |
+| recovery timing | t_detect_recovering=3464ms；t_detect_stable=4505ms；t_detect_congested=463ms；t_first_action=3464ms；t_level_0=12755ms；t_level_1=9669ms；t_level_2=6549ms；t_level_3=3464ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=1157ms；t_detect_recovering=10351ms；t_detect_stable=112ms；t_detect_congested=2196ms；t_first_action=1157ms；t_level_1=1157ms；t_level_2=2196ms；t_level_3=3236ms；t_level_4=4272ms；t_audio_only=4272ms |
-| raw recovery timing | t_detect_recovering=3540ms；t_detect_stable=4540ms；t_detect_congested=540ms；t_first_action=3540ms；t_level_0=12746ms；t_level_1=9625ms；t_level_2=6584ms；t_level_3=3540ms |
+| raw impairment timing | t_detect_warning=1168ms；t_detect_recovering=10320ms；t_detect_stable=162ms；t_detect_congested=2206ms；t_first_action=1168ms；t_level_1=1168ms；t_level_2=2206ms；t_level_3=3246ms；t_level_4=4281ms；t_audio_only=4281ms |
+| raw recovery timing | t_detect_recovering=3464ms；t_detect_stable=4505ms；t_detect_congested=463ms；t_first_action=3464ms；t_level_0=12755ms；t_level_1=9669ms；t_level_2=6549ms；t_level_3=3464ms |
 
 ### BW4
 
@@ -132,11 +132,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=congested/L4, current=congested/L4)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters, enterAudioOnly, exitAudioOnly（共 12 次非 noop） |
-| impairment timing | t_detect_warning=959ms；t_detect_recovering=10113ms；t_detect_stable=11113ms；t_detect_congested=1998ms；t_first_action=959ms；t_level_1=959ms；t_level_2=1998ms；t_level_3=3040ms；t_level_4=4074ms；t_audio_only=4074ms |
-| recovery timing | t_detect_recovering=3220ms；t_detect_stable=4220ms；t_detect_congested=220ms；t_first_action=3220ms；t_level_0=12425ms；t_level_1=9305ms；t_level_2=6264ms；t_level_3=3220ms |
+| impairment timing | t_detect_warning=1315ms；t_detect_recovering=10468ms；t_detect_stable=273ms；t_detect_congested=2355ms；t_first_action=1315ms；t_level_1=1315ms；t_level_2=2355ms；t_level_3=3400ms；t_level_4=4429ms；t_audio_only=4429ms |
+| recovery timing | t_detect_recovering=3570ms；t_detect_stable=4570ms；t_detect_congested=570ms；t_first_action=3570ms；t_level_0=12782ms；t_level_1=9658ms；t_level_2=6614ms；t_level_3=3570ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=959ms；t_detect_recovering=10113ms；t_detect_stable=11113ms；t_detect_congested=1998ms；t_first_action=959ms；t_level_1=959ms；t_level_2=1998ms；t_level_3=3040ms；t_level_4=4074ms；t_audio_only=4074ms |
-| raw recovery timing | t_detect_recovering=3220ms；t_detect_stable=4220ms；t_detect_congested=220ms；t_first_action=3220ms；t_level_0=12425ms；t_level_1=9305ms；t_level_2=6264ms；t_level_3=3220ms |
+| raw impairment timing | t_detect_warning=1315ms；t_detect_recovering=10468ms；t_detect_stable=273ms；t_detect_congested=2355ms；t_first_action=1315ms；t_level_1=1315ms；t_level_2=2355ms；t_level_3=3400ms；t_level_4=4429ms；t_audio_only=4429ms |
+| raw recovery timing | t_detect_recovering=3570ms；t_detect_stable=4570ms；t_detect_congested=570ms；t_first_action=3570ms；t_level_0=12782ms；t_level_1=9658ms；t_level_2=6614ms；t_level_3=3570ms |
 
 ### BW5
 
@@ -151,11 +151,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=congested/L4, current=congested/L4)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters, enterAudioOnly, exitAudioOnly（共 8 次非 noop） |
-| impairment timing | t_detect_warning=957ms；t_detect_congested=1997ms；t_first_action=957ms；t_level_1=957ms；t_level_2=1997ms；t_level_3=3037ms；t_level_4=4073ms；t_audio_only=4073ms |
-| recovery timing | t_detect_recovering=4100ms；t_detect_stable=5100ms；t_detect_congested=100ms；t_first_action=4100ms；t_level_0=13305ms；t_level_1=10185ms；t_level_2=7144ms；t_level_3=4100ms |
+| impairment timing | t_detect_warning=1089ms；t_detect_stable=83ms；t_detect_congested=2127ms；t_first_action=1089ms；t_level_1=1089ms；t_level_2=2127ms；t_level_3=3131ms；t_level_4=4163ms；t_audio_only=4163ms |
+| recovery timing | t_detect_recovering=4507ms；t_detect_stable=5505ms；t_detect_congested=386ms；t_first_action=4507ms；t_level_0=13751ms；t_level_1=10633ms；t_level_2=7517ms；t_level_3=4507ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=957ms；t_detect_congested=1997ms；t_first_action=957ms；t_level_1=957ms；t_level_2=1997ms；t_level_3=3037ms；t_level_4=4073ms；t_audio_only=4073ms |
-| raw recovery timing | t_detect_recovering=4100ms；t_detect_stable=5100ms；t_detect_congested=100ms；t_first_action=4100ms；t_level_0=13305ms；t_level_1=10185ms；t_level_2=7144ms；t_level_3=4100ms |
+| raw impairment timing | t_detect_warning=1089ms；t_detect_stable=83ms；t_detect_congested=2127ms；t_first_action=1089ms；t_level_1=1089ms；t_level_2=2127ms；t_level_3=3131ms；t_level_4=4163ms；t_audio_only=4163ms |
+| raw recovery timing | t_detect_recovering=4507ms；t_detect_stable=5505ms；t_detect_congested=386ms；t_first_action=4507ms；t_level_0=13751ms；t_level_1=10633ms；t_level_2=7517ms；t_level_3=4507ms |
 
 ### BW6
 
@@ -170,11 +170,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=congested/L4, current=congested/L4)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters, enterAudioOnly, exitAudioOnly（共 8 次非 noop） |
-| impairment timing | t_detect_warning=959ms；t_detect_congested=1998ms；t_first_action=959ms；t_level_1=959ms；t_level_2=1998ms；t_level_3=3038ms；t_level_4=4074ms；t_audio_only=4074ms |
-| recovery timing | t_detect_recovering=4101ms；t_detect_stable=5101ms；t_detect_congested=101ms；t_first_action=4101ms；t_level_0=13306ms；t_level_1=10186ms；t_level_2=7145ms；t_level_3=4101ms |
+| impairment timing | t_detect_warning=1242ms；t_detect_stable=187ms；t_detect_congested=2270ms；t_first_action=1242ms；t_level_1=1242ms；t_level_2=2270ms；t_level_3=3310ms；t_level_4=4345ms；t_audio_only=4345ms |
+| recovery timing | t_detect_recovering=4372ms；t_detect_stable=5411ms；t_detect_congested=370ms；t_first_action=4372ms；t_level_0=13698ms；t_level_1=10577ms；t_level_2=7455ms；t_level_3=4372ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=959ms；t_detect_congested=1998ms；t_first_action=959ms；t_level_1=959ms；t_level_2=1998ms；t_level_3=3038ms；t_level_4=4074ms；t_audio_only=4074ms |
-| raw recovery timing | t_detect_recovering=4101ms；t_detect_stable=5101ms；t_detect_congested=101ms；t_first_action=4101ms；t_level_0=13306ms；t_level_1=10186ms；t_level_2=7145ms；t_level_3=4101ms |
+| raw impairment timing | t_detect_warning=1242ms；t_detect_stable=187ms；t_detect_congested=2270ms；t_first_action=1242ms；t_level_1=1242ms；t_level_2=2270ms；t_level_3=3310ms；t_level_4=4345ms；t_audio_only=4345ms |
+| raw recovery timing | t_detect_recovering=4372ms；t_detect_stable=5411ms；t_detect_congested=370ms；t_first_action=4372ms；t_level_0=13698ms；t_level_1=10577ms；t_level_2=7455ms；t_level_3=4372ms |
 
 ### BW7
 
@@ -189,11 +189,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=congested/L4, current=congested/L4)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters, enterAudioOnly, exitAudioOnly（共 8 次非 noop） |
-| impairment timing | t_detect_warning=1118ms；t_detect_stable=114ms；t_detect_congested=2157ms；t_first_action=1118ms；t_level_1=1118ms；t_level_2=2157ms；t_level_3=3197ms；t_level_4=4233ms；t_audio_only=4233ms |
-| recovery timing | t_detect_recovering=4300ms；t_detect_stable=5300ms；t_detect_congested=300ms；t_first_action=4300ms；t_level_0=13505ms；t_level_1=10385ms；t_level_2=7344ms；t_level_3=4300ms |
+| impairment timing | t_detect_warning=1013ms；t_detect_stable=6ms；t_detect_congested=2050ms；t_first_action=1013ms；t_level_1=1013ms；t_level_2=2050ms；t_level_3=3094ms；t_level_4=4126ms；t_audio_only=4126ms |
+| recovery timing | t_detect_recovering=4390ms；t_detect_stable=5428ms；t_detect_congested=348ms；t_first_action=4390ms；t_level_0=13714ms；t_level_1=10600ms；t_level_2=7474ms；t_level_3=4390ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=1118ms；t_detect_stable=114ms；t_detect_congested=2157ms；t_first_action=1118ms；t_level_1=1118ms；t_level_2=2157ms；t_level_3=3197ms；t_level_4=4233ms；t_audio_only=4233ms |
-| raw recovery timing | t_detect_recovering=4300ms；t_detect_stable=5300ms；t_detect_congested=300ms；t_first_action=4300ms；t_level_0=13505ms；t_level_1=10385ms；t_level_2=7344ms；t_level_3=4300ms |
+| raw impairment timing | t_detect_warning=1013ms；t_detect_stable=6ms；t_detect_congested=2050ms；t_first_action=1013ms；t_level_1=1013ms；t_level_2=2050ms；t_level_3=3094ms；t_level_4=4126ms；t_audio_only=4126ms |
+| raw recovery timing | t_detect_recovering=4390ms；t_detect_stable=5428ms；t_detect_congested=348ms；t_first_action=4390ms；t_level_0=13714ms；t_level_1=10600ms；t_level_2=7474ms；t_level_3=4390ms |
 
 ### L1
 
@@ -208,11 +208,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=stable/L0, current=stable/L0)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | 无非 noop 动作 |
-| impairment timing | t_detect_stable=987ms |
-| recovery timing | t_detect_stable=976ms |
+| impairment timing | t_detect_stable=77ms |
+| recovery timing | t_detect_stable=141ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_stable=987ms |
-| raw recovery timing | t_detect_stable=976ms |
+| raw impairment timing | t_detect_stable=77ms |
+| raw recovery timing | t_detect_stable=141ms |
 
 ### L2
 
@@ -227,11 +227,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=stable/L0, current=stable/L0)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | 无非 noop 动作 |
-| impairment timing | t_detect_stable=954ms |
-| recovery timing | t_detect_stable=982ms |
+| impairment timing | t_detect_stable=950ms |
+| recovery timing | t_detect_stable=976ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_stable=954ms |
-| raw recovery timing | t_detect_stable=982ms |
+| raw impairment timing | t_detect_stable=950ms |
+| raw recovery timing | t_detect_stable=976ms |
 
 ### L3
 
@@ -246,11 +246,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=stable/L0, current=stable/L0)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | 无非 noop 动作 |
-| impairment timing | t_detect_stable=957ms |
-| recovery timing | t_detect_stable=986ms |
+| impairment timing | t_detect_stable=249ms |
+| recovery timing | t_detect_stable=513ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_stable=957ms |
-| raw recovery timing | t_detect_stable=986ms |
+| raw impairment timing | t_detect_stable=249ms |
+| raw recovery timing | t_detect_stable=513ms |
 
 ### L4
 
@@ -265,11 +265,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=early_warning/L1, current=early_warning/L1)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters（共 2 次非 noop） |
-| impairment timing | t_detect_warning=3996ms；t_detect_stable=992ms；t_first_action=3996ms；t_level_1=3996ms |
-| recovery timing | t_detect_warning=620ms；t_detect_stable=3744ms；t_first_action=3744ms；t_level_0=3744ms |
+| impairment timing | t_detect_warning=4262ms；t_detect_stable=212ms；t_first_action=4262ms；t_level_1=4262ms |
+| recovery timing | t_detect_warning=876ms；t_detect_stable=2960ms；t_first_action=2960ms；t_level_0=2960ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=3996ms；t_detect_stable=992ms；t_first_action=3996ms；t_level_1=3996ms |
-| raw recovery timing | t_detect_warning=620ms；t_detect_stable=3744ms；t_first_action=3744ms；t_level_0=3744ms |
+| raw impairment timing | t_detect_warning=4262ms；t_detect_stable=212ms；t_first_action=4262ms；t_level_1=4262ms |
+| raw recovery timing | t_detect_warning=876ms；t_detect_stable=2960ms；t_first_action=2960ms；t_level_0=2960ms |
 
 ### L5
 
@@ -281,14 +281,14 @@
 | impairment 网络 | 4000kbps / RTT 25ms / loss 10% / jitter 5ms |
 | recovery 网络 | 4000kbps / RTT 25ms / loss 0.1% / jitter 5ms |
 | 预期 QoS | 期望状态=congested；maxLevel=4 |
-| 实际 QoS | baseline(current=stable/L0)；impairment(peak=congested/L4, current=stable/L3)；recovery(best=stable/L0, current=stable/L0) |
+| 实际 QoS | baseline(current=stable/L0)；impairment(peak=congested/L4, current=early_warning/L3)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters, enterAudioOnly, exitAudioOnly（共 8 次非 noop） |
-| impairment timing | t_detect_warning=1957ms；t_detect_recovering=16111ms；t_detect_stable=952ms；t_detect_congested=4035ms；t_first_action=1957ms；t_level_1=1957ms；t_level_2=4035ms；t_level_3=5075ms；t_level_4=6111ms；t_audio_only=6111ms |
-| recovery timing | t_detect_warning=99ms；t_detect_stable=3102ms；t_first_action=3102ms；t_level_0=9264ms；t_level_1=6143ms；t_level_2=3102ms |
+| impairment timing | t_detect_warning=2124ms；t_detect_recovering=14316ms；t_detect_stable=118ms；t_detect_congested=4203ms；t_first_action=2124ms；t_level_1=2124ms；t_level_2=4203ms；t_level_3=5242ms；t_level_4=6237ms；t_audio_only=6237ms |
+| recovery timing | t_detect_warning=382ms；t_detect_stable=4467ms；t_first_action=4467ms；t_level_0=10638ms；t_level_1=7508ms；t_level_2=4467ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=1957ms；t_detect_recovering=16111ms；t_detect_stable=952ms；t_detect_congested=4035ms；t_first_action=1957ms；t_level_1=1957ms；t_level_2=4035ms；t_level_3=5075ms；t_level_4=6111ms；t_audio_only=6111ms |
-| raw recovery timing | t_detect_warning=99ms；t_detect_stable=3102ms；t_first_action=3102ms；t_level_0=9264ms；t_level_1=6143ms；t_level_2=3102ms |
+| raw impairment timing | t_detect_warning=2124ms；t_detect_recovering=14316ms；t_detect_stable=118ms；t_detect_congested=4203ms；t_first_action=2124ms；t_level_1=2124ms；t_level_2=4203ms；t_level_3=5242ms；t_level_4=6237ms；t_audio_only=6237ms |
+| raw recovery timing | t_detect_warning=382ms；t_detect_stable=4467ms；t_first_action=4467ms；t_level_0=10638ms；t_level_1=7508ms；t_level_2=4467ms |
 
 ### L6
 
@@ -303,11 +303,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=congested/L4, current=congested/L4)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters, enterAudioOnly, exitAudioOnly（共 10 次非 noop） |
-| impairment timing | t_detect_warning=957ms；t_detect_recovering=14072ms；t_detect_stable=15072ms；t_detect_congested=1996ms；t_first_action=957ms；t_level_1=957ms；t_level_2=1996ms；t_level_3=3036ms；t_level_4=4072ms；t_audio_only=4072ms |
-| recovery timing | t_detect_recovering=7061ms；t_detect_stable=8061ms；t_detect_congested=61ms；t_first_action=7061ms；t_level_0=16266ms；t_level_1=13145ms；t_level_2=10117ms；t_level_3=7061ms |
+| impairment timing | t_detect_warning=1270ms；t_detect_recovering=15463ms；t_detect_stable=264ms；t_detect_congested=2309ms；t_first_action=1270ms；t_level_1=1270ms；t_level_2=2309ms；t_level_3=3349ms；t_level_4=4384ms；t_audio_only=4384ms |
+| recovery timing | t_detect_recovering=7529ms；t_detect_stable=8528ms；t_detect_congested=529ms；t_first_action=7529ms；t_level_0=16735ms；t_level_1=13616ms；t_level_2=10573ms；t_level_3=7529ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=957ms；t_detect_recovering=14072ms；t_detect_stable=15072ms；t_detect_congested=1996ms；t_first_action=957ms；t_level_1=957ms；t_level_2=1996ms；t_level_3=3036ms；t_level_4=4072ms；t_audio_only=4072ms |
-| raw recovery timing | t_detect_recovering=7061ms；t_detect_stable=8061ms；t_detect_congested=61ms；t_first_action=7061ms；t_level_0=16266ms；t_level_1=13145ms；t_level_2=10117ms；t_level_3=7061ms |
+| raw impairment timing | t_detect_warning=1270ms；t_detect_recovering=15463ms；t_detect_stable=264ms；t_detect_congested=2309ms；t_first_action=1270ms；t_level_1=1270ms；t_level_2=2309ms；t_level_3=3349ms；t_level_4=4384ms；t_audio_only=4384ms |
+| raw recovery timing | t_detect_recovering=7529ms；t_detect_stable=8528ms；t_detect_congested=529ms；t_first_action=7529ms；t_level_0=16735ms；t_level_1=13616ms；t_level_2=10573ms；t_level_3=7529ms |
 
 ### L7
 
@@ -322,11 +322,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=congested/L4, current=congested/L4)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters, enterAudioOnly, exitAudioOnly（共 8 次非 noop） |
-| impairment timing | t_detect_warning=1036ms；t_detect_stable=32ms；t_detect_congested=2075ms；t_first_action=1036ms；t_level_1=1036ms；t_level_2=2075ms；t_level_3=3115ms；t_level_4=4151ms；t_audio_only=4151ms |
-| recovery timing | t_detect_recovering=4179ms；t_detect_stable=5179ms；t_detect_congested=179ms；t_first_action=4179ms；t_level_0=13384ms；t_level_1=10264ms；t_level_2=7223ms；t_level_3=4179ms |
+| impairment timing | t_detect_warning=1165ms；t_detect_stable=120ms；t_detect_congested=2176ms；t_first_action=1165ms；t_level_1=1165ms；t_level_2=2176ms；t_level_3=3203ms；t_level_4=4239ms；t_audio_only=4239ms |
+| recovery timing | t_detect_recovering=4261ms；t_detect_stable=5261ms；t_detect_congested=261ms；t_first_action=4261ms；t_level_0=13467ms；t_level_1=10347ms；t_level_2=7307ms；t_level_3=4261ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=1036ms；t_detect_stable=32ms；t_detect_congested=2075ms；t_first_action=1036ms；t_level_1=1036ms；t_level_2=2075ms；t_level_3=3115ms；t_level_4=4151ms；t_audio_only=4151ms |
-| raw recovery timing | t_detect_recovering=4179ms；t_detect_stable=5179ms；t_detect_congested=179ms；t_first_action=4179ms；t_level_0=13384ms；t_level_1=10264ms；t_level_2=7223ms；t_level_3=4179ms |
+| raw impairment timing | t_detect_warning=1165ms；t_detect_stable=120ms；t_detect_congested=2176ms；t_first_action=1165ms；t_level_1=1165ms；t_level_2=2176ms；t_level_3=3203ms；t_level_4=4239ms；t_audio_only=4239ms |
+| raw recovery timing | t_detect_recovering=4261ms；t_detect_stable=5261ms；t_detect_congested=261ms；t_first_action=4261ms；t_level_0=13467ms；t_level_1=10347ms；t_level_2=7307ms；t_level_3=4261ms |
 
 ### L8
 
@@ -341,11 +341,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=congested/L4, current=congested/L4)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters, enterAudioOnly, exitAudioOnly（共 8 次非 noop） |
-| impairment timing | t_detect_warning=957ms；t_detect_congested=1996ms；t_first_action=957ms；t_level_1=957ms；t_level_2=1996ms；t_level_3=3035ms；t_level_4=4072ms；t_audio_only=4072ms |
-| recovery timing | t_detect_recovering=4099ms；t_detect_stable=5099ms；t_detect_congested=99ms；t_first_action=4099ms；t_level_0=13304ms；t_level_1=10184ms；t_level_2=7143ms；t_level_3=4099ms |
+| impairment timing | t_detect_warning=1196ms；t_detect_stable=191ms；t_detect_congested=2246ms；t_first_action=1196ms；t_level_1=1196ms；t_level_2=2246ms；t_level_3=3276ms；t_level_4=4311ms；t_audio_only=4311ms |
+| recovery timing | t_detect_recovering=4412ms；t_detect_stable=5412ms；t_detect_congested=333ms；t_first_action=4412ms；t_level_0=13618ms；t_level_1=10497ms；t_level_2=7458ms；t_level_3=4412ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=957ms；t_detect_congested=1996ms；t_first_action=957ms；t_level_1=957ms；t_level_2=1996ms；t_level_3=3035ms；t_level_4=4072ms；t_audio_only=4072ms |
-| raw recovery timing | t_detect_recovering=4099ms；t_detect_stable=5099ms；t_detect_congested=99ms；t_first_action=4099ms；t_level_0=13304ms；t_level_1=10184ms；t_level_2=7143ms；t_level_3=4099ms |
+| raw impairment timing | t_detect_warning=1196ms；t_detect_stable=191ms；t_detect_congested=2246ms；t_first_action=1196ms；t_level_1=1196ms；t_level_2=2246ms；t_level_3=3276ms；t_level_4=4311ms；t_audio_only=4311ms |
+| raw recovery timing | t_detect_recovering=4412ms；t_detect_stable=5412ms；t_detect_congested=333ms；t_first_action=4412ms；t_level_0=13618ms；t_level_1=10497ms；t_level_2=7458ms；t_level_3=4412ms |
 
 ### R1
 
@@ -360,11 +360,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=stable/L0, current=stable/L0)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | 无非 noop 动作 |
-| impairment timing | t_detect_stable=1032ms |
-| recovery timing | t_detect_stable=20ms |
+| impairment timing | t_detect_stable=155ms |
+| recovery timing | t_detect_stable=581ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_stable=1032ms |
-| raw recovery timing | t_detect_stable=20ms |
+| raw impairment timing | t_detect_stable=155ms |
+| raw recovery timing | t_detect_stable=581ms |
 
 ### R2
 
@@ -379,11 +379,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=stable/L0, current=stable/L0)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | 无非 noop 动作 |
-| impairment timing | t_detect_stable=952ms |
-| recovery timing | t_detect_stable=941ms |
+| impairment timing | t_detect_stable=146ms |
+| recovery timing | t_detect_stable=290ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_stable=952ms |
-| raw recovery timing | t_detect_stable=941ms |
+| raw impairment timing | t_detect_stable=146ms |
+| raw recovery timing | t_detect_stable=290ms |
 
 ### R3
 
@@ -398,11 +398,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=stable/L0, current=stable/L0)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | 无非 noop 动作 |
-| impairment timing | t_detect_stable=72ms |
-| recovery timing | t_detect_stable=60ms |
+| impairment timing | t_detect_stable=10ms |
+| recovery timing | t_detect_stable=193ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_stable=72ms |
-| raw recovery timing | t_detect_stable=60ms |
+| raw impairment timing | t_detect_stable=10ms |
+| raw recovery timing | t_detect_stable=193ms |
 
 ### R4
 
@@ -417,11 +417,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=early_warning/L1, current=early_warning/L1)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters（共 2 次非 noop） |
-| impairment timing | t_detect_warning=3955ms；t_detect_stable=951ms；t_first_action=3955ms；t_level_1=3955ms |
-| recovery timing | t_detect_warning=580ms；t_detect_stable=3704ms；t_first_action=3704ms；t_level_0=3704ms |
+| impairment timing | t_detect_warning=4176ms；t_detect_stable=131ms；t_first_action=4176ms；t_level_1=4176ms |
+| recovery timing | t_detect_warning=791ms；t_detect_stable=2875ms；t_first_action=2875ms；t_level_0=2875ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=3955ms；t_detect_stable=951ms；t_first_action=3955ms；t_level_1=3955ms |
-| raw recovery timing | t_detect_warning=580ms；t_detect_stable=3704ms；t_first_action=3704ms；t_level_0=3704ms |
+| raw impairment timing | t_detect_warning=4176ms；t_detect_stable=131ms；t_first_action=4176ms；t_level_1=4176ms |
+| raw recovery timing | t_detect_warning=791ms；t_detect_stable=2875ms；t_first_action=2875ms；t_level_0=2875ms |
 
 ### R5
 
@@ -436,11 +436,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=congested/L4, current=congested/L4)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters, enterAudioOnly, exitAudioOnly（共 8 次非 noop） |
-| impairment timing | t_detect_warning=2039ms；t_detect_stable=1034ms；t_detect_congested=6198ms；t_first_action=2039ms；t_level_1=2039ms；t_level_2=6198ms；t_level_3=7238ms；t_level_4=8274ms；t_audio_only=8274ms |
-| recovery timing | t_detect_recovering=5302ms；t_detect_stable=6302ms；t_detect_congested=302ms；t_first_action=5302ms；t_level_0=14514ms；t_level_1=11387ms；t_level_2=8346ms；t_level_3=5302ms |
+| impairment timing | t_detect_warning=2243ms；t_detect_stable=161ms；t_detect_congested=6402ms；t_first_action=2243ms；t_level_1=2243ms；t_level_2=6402ms；t_level_3=7442ms；t_level_4=8479ms；t_audio_only=8479ms |
+| recovery timing | t_detect_recovering=5704ms；t_detect_stable=6704ms；t_detect_congested=623ms；t_first_action=5704ms；t_level_0=14910ms；t_level_1=11791ms；t_level_2=8748ms；t_level_3=5704ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=2039ms；t_detect_stable=1034ms；t_detect_congested=6198ms；t_first_action=2039ms；t_level_1=2039ms；t_level_2=6198ms；t_level_3=7238ms；t_level_4=8274ms；t_audio_only=8274ms |
-| raw recovery timing | t_detect_recovering=5302ms；t_detect_stable=6302ms；t_detect_congested=302ms；t_first_action=5302ms；t_level_0=14514ms；t_level_1=11387ms；t_level_2=8346ms；t_level_3=5302ms |
+| raw impairment timing | t_detect_warning=2243ms；t_detect_stable=161ms；t_detect_congested=6402ms；t_first_action=2243ms；t_level_1=2243ms；t_level_2=6402ms；t_level_3=7442ms；t_level_4=8479ms；t_audio_only=8479ms |
+| raw recovery timing | t_detect_recovering=5704ms；t_detect_stable=6704ms；t_detect_congested=623ms；t_first_action=5704ms；t_level_0=14910ms；t_level_1=11791ms；t_level_2=8748ms；t_level_3=5704ms |
 
 ### R6
 
@@ -455,11 +455,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=congested/L4, current=congested/L4)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters, enterAudioOnly, exitAudioOnly（共 8 次非 noop） |
-| impairment timing | t_detect_warning=1958ms；t_detect_stable=954ms；t_detect_congested=2998ms；t_first_action=1958ms；t_level_1=1958ms；t_level_2=2998ms；t_level_3=4037ms；t_level_4=5074ms；t_audio_only=5074ms |
-| recovery timing | t_detect_recovering=6102ms；t_detect_stable=7102ms；t_detect_congested=102ms；t_first_action=6102ms；t_level_0=15307ms；t_level_1=12187ms；t_level_2=9146ms；t_level_3=6102ms |
+| impairment timing | t_detect_warning=2204ms；t_detect_stable=160ms；t_detect_congested=3246ms；t_first_action=2204ms；t_level_1=2204ms；t_level_2=3246ms；t_level_3=4285ms；t_level_4=5319ms；t_audio_only=5319ms |
+| recovery timing | t_detect_recovering=6343ms；t_detect_stable=7343ms；t_detect_congested=343ms；t_first_action=6343ms；t_level_0=15550ms；t_level_1=12428ms；t_level_2=9389ms；t_level_3=6343ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=1958ms；t_detect_stable=954ms；t_detect_congested=2998ms；t_first_action=1958ms；t_level_1=1958ms；t_level_2=2998ms；t_level_3=4037ms；t_level_4=5074ms；t_audio_only=5074ms |
-| raw recovery timing | t_detect_recovering=6102ms；t_detect_stable=7102ms；t_detect_congested=102ms；t_first_action=6102ms；t_level_0=15307ms；t_level_1=12187ms；t_level_2=9146ms；t_level_3=6102ms |
+| raw impairment timing | t_detect_warning=2204ms；t_detect_stable=160ms；t_detect_congested=3246ms；t_first_action=2204ms；t_level_1=2204ms；t_level_2=3246ms；t_level_3=4285ms；t_level_4=5319ms；t_audio_only=5319ms |
+| raw recovery timing | t_detect_recovering=6343ms；t_detect_stable=7343ms；t_detect_congested=343ms；t_first_action=6343ms；t_level_0=15550ms；t_level_1=12428ms；t_level_2=9389ms；t_level_3=6343ms |
 
 ### J1
 
@@ -474,11 +474,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=stable/L0, current=stable/L0)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | 无非 noop 动作 |
-| impairment timing | t_detect_stable=953ms |
-| recovery timing | t_detect_stable=942ms |
+| impairment timing | t_detect_stable=1000ms |
+| recovery timing | t_detect_stable=106ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_stable=953ms |
-| raw recovery timing | t_detect_stable=942ms |
+| raw impairment timing | t_detect_stable=1000ms |
+| raw recovery timing | t_detect_stable=106ms |
 
 ### J2
 
@@ -493,11 +493,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=stable/L0, current=stable/L0)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | 无非 noop 动作 |
-| impairment timing | t_detect_stable=191ms |
-| recovery timing | t_detect_stable=258ms |
+| impairment timing | t_detect_stable=115ms |
+| recovery timing | t_detect_stable=342ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_stable=191ms |
-| raw recovery timing | t_detect_stable=258ms |
+| raw impairment timing | t_detect_stable=115ms |
+| raw recovery timing | t_detect_stable=342ms |
 
 ### J3
 
@@ -512,11 +512,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=early_warning/L1, current=early_warning/L1)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters（共 2 次非 noop） |
-| impairment timing | t_detect_warning=2958ms；t_detect_stable=953ms；t_first_action=2958ms；t_level_1=2958ms |
-| recovery timing | t_detect_warning=622ms；t_detect_stable=3746ms；t_first_action=3746ms；t_level_0=3746ms |
+| impairment timing | t_detect_warning=3200ms；t_detect_stable=155ms；t_first_action=3200ms；t_level_1=3200ms |
+| recovery timing | t_detect_warning=858ms；t_detect_stable=2947ms；t_first_action=2947ms；t_level_0=2947ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=2958ms；t_detect_stable=953ms；t_first_action=2958ms；t_level_1=2958ms |
-| raw recovery timing | t_detect_warning=622ms；t_detect_stable=3746ms；t_first_action=3746ms；t_level_0=3746ms |
+| raw impairment timing | t_detect_warning=3200ms；t_detect_stable=155ms；t_first_action=3200ms；t_level_1=3200ms |
+| raw recovery timing | t_detect_warning=858ms；t_detect_stable=2947ms；t_first_action=2947ms；t_level_0=2947ms |
 
 ### J4
 
@@ -531,11 +531,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=early_warning/L1, current=early_warning/L1)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters（共 2 次非 noop） |
-| impairment timing | t_detect_warning=1961ms；t_detect_stable=957ms；t_first_action=1961ms；t_level_1=1961ms |
-| recovery timing | t_detect_warning=665ms；t_detect_stable=5868ms；t_first_action=5868ms；t_level_0=5868ms |
+| impairment timing | t_detect_warning=2114ms；t_detect_stable=70ms；t_first_action=2114ms；t_level_1=2114ms |
+| recovery timing | t_detect_warning=733ms；t_detect_stable=4896ms；t_first_action=4896ms；t_level_0=4896ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=1961ms；t_detect_stable=957ms；t_first_action=1961ms；t_level_1=1961ms |
-| raw recovery timing | t_detect_warning=665ms；t_detect_stable=5868ms；t_first_action=5868ms；t_level_0=5868ms |
+| raw impairment timing | t_detect_warning=2114ms；t_detect_stable=70ms；t_first_action=2114ms；t_level_1=2114ms |
+| raw recovery timing | t_detect_warning=733ms；t_detect_stable=4896ms；t_first_action=4896ms；t_level_0=4896ms |
 
 ### J5
 
@@ -550,11 +550,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=congested/L4, current=stable/L0)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters, enterAudioOnly, exitAudioOnly（共 8 次非 noop） |
-| impairment timing | t_detect_warning=1076ms；t_detect_recovering=10230ms；t_detect_stable=72ms；t_detect_congested=2115ms；t_first_action=1076ms；t_level_0=19515ms；t_level_1=1076ms；t_level_2=2115ms；t_level_3=3155ms；t_level_4=4191ms；t_audio_only=4191ms |
-| recovery timing | t_detect_stable=499ms |
+| impairment timing | t_detect_warning=1156ms；t_detect_recovering=10386ms；t_detect_stable=110ms；t_detect_congested=2197ms；t_first_action=1156ms；t_level_0=19592ms；t_level_1=1156ms；t_level_2=2197ms；t_level_3=3234ms；t_level_4=4268ms；t_audio_only=4268ms |
+| recovery timing | t_detect_stable=573ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=1076ms；t_detect_recovering=10230ms；t_detect_stable=72ms；t_detect_congested=2115ms；t_first_action=1076ms；t_level_0=19515ms；t_level_1=1076ms；t_level_2=2115ms；t_level_3=3155ms；t_level_4=4191ms；t_audio_only=4191ms |
-| raw recovery timing | t_detect_stable=499ms |
+| raw impairment timing | t_detect_warning=1156ms；t_detect_recovering=10386ms；t_detect_stable=110ms；t_detect_congested=2197ms；t_first_action=1156ms；t_level_0=19592ms；t_level_1=1156ms；t_level_2=2197ms；t_level_3=3234ms；t_level_4=4268ms；t_audio_only=4268ms |
+| raw recovery timing | t_detect_stable=573ms |
 
 ### T1
 
@@ -569,11 +569,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=stable/L0, current=stable/L0)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | 无非 noop 动作 |
-| impairment timing | t_detect_stable=954ms |
-| recovery timing | t_detect_stable=943ms |
+| impairment timing | t_detect_stable=69ms |
+| recovery timing | t_detect_stable=294ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_stable=954ms |
-| raw recovery timing | t_detect_stable=943ms |
+| raw impairment timing | t_detect_stable=69ms |
+| raw recovery timing | t_detect_stable=294ms |
 
 ### T2
 
@@ -588,11 +588,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=congested/L4, current=congested/L4)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters, enterAudioOnly, exitAudioOnly（共 12 次非 noop） |
-| impairment timing | t_detect_warning=1037ms；t_detect_recovering=10192ms；t_detect_stable=11192ms；t_detect_congested=2077ms；t_first_action=1037ms；t_level_1=1037ms；t_level_2=2077ms；t_level_3=3116ms；t_level_4=4152ms；t_audio_only=4152ms |
-| recovery timing | t_detect_recovering=3301ms；t_detect_stable=4301ms；t_detect_congested=301ms；t_first_action=3301ms；t_level_0=12506ms；t_level_1=9386ms；t_level_2=6344ms；t_level_3=3301ms |
+| impairment timing | t_detect_warning=1324ms；t_detect_recovering=10475ms；t_detect_stable=316ms；t_detect_congested=2360ms；t_first_action=1324ms；t_level_1=1324ms；t_level_2=2360ms；t_level_3=3400ms；t_level_4=4435ms；t_audio_only=4435ms |
+| recovery timing | t_detect_recovering=3649ms；t_detect_stable=4649ms；t_detect_congested=609ms；t_first_action=3649ms；t_level_0=12857ms；t_level_1=9816ms；t_level_2=6699ms；t_level_3=3649ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=1037ms；t_detect_recovering=10192ms；t_detect_stable=11192ms；t_detect_congested=2077ms；t_first_action=1037ms；t_level_1=1037ms；t_level_2=2077ms；t_level_3=3116ms；t_level_4=4152ms；t_audio_only=4152ms |
-| raw recovery timing | t_detect_recovering=3301ms；t_detect_stable=4301ms；t_detect_congested=301ms；t_first_action=3301ms；t_level_0=12506ms；t_level_1=9386ms；t_level_2=6344ms；t_level_3=3301ms |
+| raw impairment timing | t_detect_warning=1324ms；t_detect_recovering=10475ms；t_detect_stable=316ms；t_detect_congested=2360ms；t_first_action=1324ms；t_level_1=1324ms；t_level_2=2360ms；t_level_3=3400ms；t_level_4=4435ms；t_audio_only=4435ms |
+| raw recovery timing | t_detect_recovering=3649ms；t_detect_stable=4649ms；t_detect_congested=609ms；t_first_action=3649ms；t_level_0=12857ms；t_level_1=9816ms；t_level_2=6699ms；t_level_3=3649ms |
 
 ### T3
 
@@ -607,11 +607,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=congested/L4, current=congested/L4)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters, enterAudioOnly, exitAudioOnly（共 8 次非 noop） |
-| impairment timing | t_detect_warning=967ms；t_detect_congested=2006ms；t_first_action=967ms；t_level_1=967ms；t_level_2=2006ms；t_level_3=3046ms；t_level_4=4082ms；t_audio_only=4082ms |
-| recovery timing | t_detect_recovering=4110ms；t_detect_stable=5110ms；t_detect_congested=110ms；t_first_action=4110ms；t_level_0=13315ms；t_level_1=10195ms；t_level_2=7154ms；t_level_3=4110ms |
+| impairment timing | t_detect_warning=1215ms；t_detect_stable=206ms；t_detect_congested=2250ms；t_first_action=1215ms；t_level_1=1215ms；t_level_2=2250ms；t_level_3=3288ms；t_level_4=4324ms；t_audio_only=4324ms |
+| recovery timing | t_detect_recovering=4512ms；t_detect_stable=5554ms；t_detect_congested=510ms；t_first_action=4512ms；t_level_0=13837ms；t_level_1=10715ms；t_level_2=7595ms；t_level_3=4512ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=967ms；t_detect_congested=2006ms；t_first_action=967ms；t_level_1=967ms；t_level_2=2006ms；t_level_3=3046ms；t_level_4=4082ms；t_audio_only=4082ms |
-| raw recovery timing | t_detect_recovering=4110ms；t_detect_stable=5110ms；t_detect_congested=110ms；t_first_action=4110ms；t_level_0=13315ms；t_level_1=10195ms；t_level_2=7154ms；t_level_3=4110ms |
+| raw impairment timing | t_detect_warning=1215ms；t_detect_stable=206ms；t_detect_congested=2250ms；t_first_action=1215ms；t_level_1=1215ms；t_level_2=2250ms；t_level_3=3288ms；t_level_4=4324ms；t_audio_only=4324ms |
+| raw recovery timing | t_detect_recovering=4512ms；t_detect_stable=5554ms；t_detect_congested=510ms；t_first_action=4512ms；t_level_0=13837ms；t_level_1=10715ms；t_level_2=7595ms；t_level_3=4512ms |
 
 ### T4
 
@@ -626,11 +626,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=early_warning/L1, current=early_warning/L1)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters（共 2 次非 noop） |
-| impairment timing | t_detect_warning=3957ms；t_detect_stable=953ms；t_first_action=3957ms；t_level_1=3957ms |
-| recovery timing | t_detect_warning=582ms；t_detect_stable=3706ms；t_first_action=3706ms；t_level_0=3706ms |
+| impairment timing | t_detect_warning=4235ms；t_detect_stable=189ms；t_first_action=4235ms；t_level_1=4235ms |
+| recovery timing | t_detect_warning=854ms；t_detect_stable=2939ms；t_first_action=2939ms；t_level_0=2939ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=3957ms；t_detect_stable=953ms；t_first_action=3957ms；t_level_1=3957ms |
-| raw recovery timing | t_detect_warning=582ms；t_detect_stable=3706ms；t_first_action=3706ms；t_level_0=3706ms |
+| raw impairment timing | t_detect_warning=4235ms；t_detect_stable=189ms；t_first_action=4235ms；t_level_1=4235ms |
+| raw recovery timing | t_detect_warning=854ms；t_detect_stable=2939ms；t_first_action=2939ms；t_level_0=2939ms |
 
 ### T5
 
@@ -645,11 +645,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=congested/L4, current=congested/L4)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters, enterAudioOnly, exitAudioOnly（共 10 次非 noop） |
-| impairment timing | t_detect_warning=1076ms；t_detect_recovering=15270ms；t_detect_stable=72ms；t_detect_congested=2115ms；t_first_action=1076ms；t_level_1=1076ms；t_level_2=2115ms；t_level_3=3155ms；t_level_4=4191ms；t_audio_only=4191ms |
-| recovery timing | t_detect_recovering=7418ms；t_detect_stable=8418ms；t_detect_congested=338ms；t_first_action=7418ms；t_level_0=16623ms；t_level_1=13503ms；t_level_2=10462ms；t_level_3=7418ms |
+| impairment timing | t_detect_warning=1136ms；t_detect_recovering=15360ms；t_detect_stable=120ms；t_detect_congested=2170ms；t_first_action=1136ms；t_level_1=1136ms；t_level_2=2170ms；t_level_3=3203ms；t_level_4=4241ms；t_audio_only=4241ms |
+| recovery timing | t_detect_recovering=7501ms；t_detect_stable=8502ms；t_detect_congested=461ms；t_first_action=7501ms；t_level_0=16788ms；t_level_1=13667ms；t_level_2=10553ms；t_level_3=7501ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=1076ms；t_detect_recovering=15270ms；t_detect_stable=72ms；t_detect_congested=2115ms；t_first_action=1076ms；t_level_1=1076ms；t_level_2=2115ms；t_level_3=3155ms；t_level_4=4191ms；t_audio_only=4191ms |
-| raw recovery timing | t_detect_recovering=7418ms；t_detect_stable=8418ms；t_detect_congested=338ms；t_first_action=7418ms；t_level_0=16623ms；t_level_1=13503ms；t_level_2=10462ms；t_level_3=7418ms |
+| raw impairment timing | t_detect_warning=1136ms；t_detect_recovering=15360ms；t_detect_stable=120ms；t_detect_congested=2170ms；t_first_action=1136ms；t_level_1=1136ms；t_level_2=2170ms；t_level_3=3203ms；t_level_4=4241ms；t_audio_only=4241ms |
+| raw recovery timing | t_detect_recovering=7501ms；t_detect_stable=8502ms；t_detect_congested=461ms；t_first_action=7501ms；t_level_0=16788ms；t_level_1=13667ms；t_level_2=10553ms；t_level_3=7501ms |
 
 ### T6
 
@@ -664,11 +664,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=early_warning/L1, current=early_warning/L1)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters（共 2 次非 noop） |
-| impairment timing | t_detect_warning=3956ms；t_detect_stable=951ms；t_first_action=3956ms；t_level_1=3956ms |
-| recovery timing | t_detect_warning=581ms；t_detect_stable=3705ms；t_first_action=3705ms；t_level_0=3705ms |
+| impairment timing | t_detect_warning=4167ms；t_detect_stable=124ms；t_first_action=4167ms；t_level_1=4167ms |
+| recovery timing | t_detect_warning=784ms；t_detect_stable=2877ms；t_first_action=2877ms；t_level_0=2877ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=3956ms；t_detect_stable=951ms；t_first_action=3956ms；t_level_1=3956ms |
-| raw recovery timing | t_detect_warning=581ms；t_detect_stable=3705ms；t_first_action=3705ms；t_level_0=3705ms |
+| raw impairment timing | t_detect_warning=4167ms；t_detect_stable=124ms；t_first_action=4167ms；t_level_1=4167ms |
+| raw recovery timing | t_detect_warning=784ms；t_detect_stable=2877ms；t_first_action=2877ms；t_level_0=2877ms |
 
 ### T7
 
@@ -683,11 +683,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=early_warning/L1, current=early_warning/L1)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters（共 2 次非 noop） |
-| impairment timing | t_detect_warning=3078ms；t_detect_stable=33ms；t_first_action=3078ms；t_level_1=3078ms |
-| recovery timing | t_detect_warning=742ms；t_detect_stable=2827ms；t_first_action=2827ms；t_level_0=2827ms |
+| impairment timing | t_detect_warning=3376ms；t_detect_stable=329ms；t_first_action=3376ms；t_level_1=3376ms |
+| recovery timing | t_detect_warning=1032ms；t_detect_stable=3123ms；t_first_action=3123ms；t_level_0=3123ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=3078ms；t_detect_stable=33ms；t_first_action=3078ms；t_level_1=3078ms |
-| raw recovery timing | t_detect_warning=742ms；t_detect_stable=2827ms；t_first_action=2827ms；t_level_0=2827ms |
+| raw impairment timing | t_detect_warning=3376ms；t_detect_stable=329ms；t_first_action=3376ms；t_level_1=3376ms |
+| raw recovery timing | t_detect_warning=1032ms；t_detect_stable=3123ms；t_first_action=3123ms；t_level_0=3123ms |
 
 ### T8
 
@@ -702,10 +702,10 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=congested/L4, current=congested/L4)；recovery(best=congested/L4, current=congested/L4) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters, enterAudioOnly（共 4 次非 noop） |
-| impairment timing | t_detect_warning=956ms；t_detect_congested=1995ms；t_first_action=956ms；t_level_1=956ms；t_level_2=1995ms；t_level_3=3034ms；t_level_4=4071ms；t_audio_only=4071ms |
+| impairment timing | t_detect_warning=1127ms；t_detect_stable=121ms；t_detect_congested=2166ms；t_first_action=1127ms；t_level_1=1127ms；t_level_2=2166ms；t_level_3=3205ms；t_level_4=4241ms；t_audio_only=4241ms |
 | recovery timing | - |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=956ms；t_detect_congested=1995ms；t_first_action=956ms；t_level_1=956ms；t_level_2=1995ms；t_level_3=3034ms；t_level_4=4071ms；t_audio_only=4071ms |
+| raw impairment timing | t_detect_warning=1127ms；t_detect_stable=121ms；t_detect_congested=2166ms；t_first_action=1127ms；t_level_1=1127ms；t_level_2=2166ms；t_level_3=3205ms；t_level_4=4241ms；t_audio_only=4241ms |
 | raw recovery timing | - |
 
 ### T9
@@ -721,11 +721,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=congested/L4, current=congested/L4)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters, enterAudioOnly, exitAudioOnly（共 8 次非 noop） |
-| impairment timing | t_detect_warning=959ms；t_detect_congested=1999ms；t_first_action=959ms；t_level_1=959ms；t_level_2=1999ms；t_level_3=3038ms；t_level_4=4074ms；t_audio_only=4074ms |
-| recovery timing | t_detect_recovering=7102ms；t_detect_stable=8102ms；t_detect_congested=102ms；t_first_action=7102ms；t_level_0=16307ms；t_level_1=13187ms；t_level_2=10146ms；t_level_3=7102ms |
+| impairment timing | t_detect_warning=1155ms；t_detect_stable=109ms；t_detect_congested=2194ms；t_first_action=1155ms；t_level_1=1155ms；t_level_2=2194ms；t_level_3=3231ms；t_level_4=4226ms；t_audio_only=4226ms |
+| recovery timing | t_detect_recovering=7529ms；t_detect_stable=8529ms；t_detect_congested=489ms；t_first_action=7529ms；t_level_0=16695ms；t_level_1=13654ms；t_level_2=10574ms；t_level_3=7529ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=959ms；t_detect_congested=1999ms；t_first_action=959ms；t_level_1=959ms；t_level_2=1999ms；t_level_3=3038ms；t_level_4=4074ms；t_audio_only=4074ms |
-| raw recovery timing | t_detect_recovering=7102ms；t_detect_stable=8102ms；t_detect_congested=102ms；t_first_action=7102ms；t_level_0=16307ms；t_level_1=13187ms；t_level_2=10146ms；t_level_3=7102ms |
+| raw impairment timing | t_detect_warning=1155ms；t_detect_stable=109ms；t_detect_congested=2194ms；t_first_action=1155ms；t_level_1=1155ms；t_level_2=2194ms；t_level_3=3231ms；t_level_4=4226ms；t_audio_only=4226ms |
+| raw recovery timing | t_detect_recovering=7529ms；t_detect_stable=8529ms；t_detect_congested=489ms；t_first_action=7529ms；t_level_0=16695ms；t_level_1=13654ms；t_level_2=10574ms；t_level_3=7529ms |
 
 ### T10
 
@@ -740,11 +740,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=congested/L4, current=congested/L4)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters, enterAudioOnly, exitAudioOnly（共 8 次非 noop） |
-| impairment timing | t_detect_warning=958ms；t_detect_congested=1998ms；t_first_action=958ms；t_level_1=958ms；t_level_2=1998ms；t_level_3=3038ms；t_level_4=4073ms；t_audio_only=4073ms |
-| recovery timing | t_detect_recovering=7102ms；t_detect_stable=8102ms；t_detect_congested=102ms；t_first_action=7102ms；t_level_0=16307ms；t_level_1=13187ms；t_level_2=10146ms；t_level_3=7102ms |
+| impairment timing | t_detect_warning=1096ms；t_detect_stable=82ms；t_detect_congested=2127ms；t_first_action=1096ms；t_level_1=1096ms；t_level_2=2127ms；t_level_3=3166ms；t_level_4=4201ms；t_audio_only=4201ms |
+| recovery timing | t_detect_recovering=7387ms；t_detect_stable=8387ms；t_detect_congested=387ms；t_first_action=7387ms；t_level_0=16602ms；t_level_1=13477ms；t_level_2=10435ms；t_level_3=7387ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=958ms；t_detect_congested=1998ms；t_first_action=958ms；t_level_1=958ms；t_level_2=1998ms；t_level_3=3038ms；t_level_4=4073ms；t_audio_only=4073ms |
-| raw recovery timing | t_detect_recovering=7102ms；t_detect_stable=8102ms；t_detect_congested=102ms；t_first_action=7102ms；t_level_0=16307ms；t_level_1=13187ms；t_level_2=10146ms；t_level_3=7102ms |
+| raw impairment timing | t_detect_warning=1096ms；t_detect_stable=82ms；t_detect_congested=2127ms；t_first_action=1096ms；t_level_1=1096ms；t_level_2=2127ms；t_level_3=3166ms；t_level_4=4201ms；t_audio_only=4201ms |
+| raw recovery timing | t_detect_recovering=7387ms；t_detect_stable=8387ms；t_detect_congested=387ms；t_first_action=7387ms；t_level_0=16602ms；t_level_1=13477ms；t_level_2=10435ms；t_level_3=7387ms |
 
 ### T11
 
@@ -759,11 +759,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=congested/L4, current=congested/L4)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters, enterAudioOnly, exitAudioOnly（共 8 次非 noop） |
-| impairment timing | t_detect_warning=958ms；t_detect_congested=1997ms；t_first_action=958ms；t_level_1=958ms；t_level_2=1997ms；t_level_3=3037ms；t_level_4=4073ms；t_audio_only=4073ms |
-| recovery timing | t_detect_recovering=6261ms；t_detect_stable=7261ms；t_detect_congested=261ms；t_first_action=6261ms；t_level_0=15467ms；t_level_1=12346ms；t_level_2=9305ms；t_level_3=6261ms |
+| impairment timing | t_detect_warning=1163ms；t_detect_stable=146ms；t_detect_congested=2199ms；t_first_action=1163ms；t_level_1=1163ms；t_level_2=2199ms；t_level_3=3243ms；t_level_4=4264ms；t_audio_only=4264ms |
+| recovery timing | t_detect_recovering=6607ms；t_detect_stable=7607ms；t_detect_congested=607ms；t_first_action=6607ms；t_level_0=15813ms；t_level_1=12693ms；t_level_2=9653ms；t_level_3=6607ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=958ms；t_detect_congested=1997ms；t_first_action=958ms；t_level_1=958ms；t_level_2=1997ms；t_level_3=3037ms；t_level_4=4073ms；t_audio_only=4073ms |
-| raw recovery timing | t_detect_recovering=6261ms；t_detect_stable=7261ms；t_detect_congested=261ms；t_first_action=6261ms；t_level_0=15467ms；t_level_1=12346ms；t_level_2=9305ms；t_level_3=6261ms |
+| raw impairment timing | t_detect_warning=1163ms；t_detect_stable=146ms；t_detect_congested=2199ms；t_first_action=1163ms；t_level_1=1163ms；t_level_2=2199ms；t_level_3=3243ms；t_level_4=4264ms；t_audio_only=4264ms |
+| raw recovery timing | t_detect_recovering=6607ms；t_detect_stable=7607ms；t_detect_congested=607ms；t_first_action=6607ms；t_level_0=15813ms；t_level_1=12693ms；t_level_2=9653ms；t_level_3=6607ms |
 
 ### S1
 
@@ -778,11 +778,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=congested/L2, current=congested/L2)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters, enterAudioOnly, exitAudioOnly（共 8 次非 noop） |
-| impairment timing | t_detect_warning=1959ms；t_detect_stable=955ms；t_detect_congested=4038ms；t_first_action=1959ms；t_level_1=1959ms；t_level_2=4038ms |
-| recovery timing | t_detect_recovering=7102ms；t_detect_stable=8102ms；t_detect_congested=66ms；t_first_action=66ms；t_level_0=16267ms；t_level_1=13146ms；t_level_2=10105ms；t_level_3=66ms；t_level_4=1102ms；t_audio_only=1102ms |
+| impairment timing | t_detect_warning=2043ms；t_detect_stable=37ms；t_detect_congested=4121ms；t_first_action=2043ms；t_level_1=2043ms；t_level_2=4121ms |
+| recovery timing | t_detect_recovering=7182ms；t_detect_stable=8182ms；t_detect_congested=149ms；t_first_action=149ms；t_level_0=16347ms；t_level_1=13230ms；t_level_2=10188ms；t_level_3=149ms；t_level_4=1182ms；t_audio_only=1182ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=1959ms；t_detect_stable=955ms；t_detect_congested=4038ms；t_first_action=1959ms；t_level_1=1959ms；t_level_2=4038ms |
-| raw recovery timing | t_detect_recovering=7102ms；t_detect_stable=8102ms；t_detect_congested=66ms；t_first_action=66ms；t_level_0=16267ms；t_level_1=13146ms；t_level_2=10105ms；t_level_3=66ms；t_level_4=1102ms；t_audio_only=1102ms |
+| raw impairment timing | t_detect_warning=2043ms；t_detect_stable=37ms；t_detect_congested=4121ms；t_first_action=2043ms；t_level_1=2043ms；t_level_2=4121ms |
+| raw recovery timing | t_detect_recovering=7182ms；t_detect_stable=8182ms；t_detect_congested=149ms；t_first_action=149ms；t_level_0=16347ms；t_level_1=13230ms；t_level_2=10188ms；t_level_3=149ms；t_level_4=1182ms；t_audio_only=1182ms |
 
 ### S2
 
@@ -797,11 +797,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=congested/L4, current=congested/L4)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters, enterAudioOnly, exitAudioOnly（共 8 次非 noop） |
-| impairment timing | t_detect_warning=959ms；t_detect_congested=1999ms；t_first_action=959ms；t_level_1=959ms；t_level_2=1999ms；t_level_3=3039ms；t_level_4=4075ms；t_audio_only=4075ms |
-| recovery timing | t_detect_recovering=4102ms；t_detect_stable=5102ms；t_detect_congested=102ms；t_first_action=4102ms；t_level_0=13307ms；t_level_1=10187ms；t_level_2=7146ms；t_level_3=4102ms |
+| impairment timing | t_detect_warning=1321ms；t_detect_stable=315ms；t_detect_congested=2358ms；t_first_action=1321ms；t_level_1=1321ms；t_level_2=2358ms；t_level_3=3360ms；t_level_4=4394ms；t_audio_only=4394ms |
+| recovery timing | t_detect_recovering=4410ms；t_detect_stable=5410ms；t_detect_congested=410ms；t_first_action=4410ms；t_level_0=13616ms；t_level_1=10496ms；t_level_2=7455ms；t_level_3=4410ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=959ms；t_detect_congested=1999ms；t_first_action=959ms；t_level_1=959ms；t_level_2=1999ms；t_level_3=3039ms；t_level_4=4075ms；t_audio_only=4075ms |
-| raw recovery timing | t_detect_recovering=4102ms；t_detect_stable=5102ms；t_detect_congested=102ms；t_first_action=4102ms；t_level_0=13307ms；t_level_1=10187ms；t_level_2=7146ms；t_level_3=4102ms |
+| raw impairment timing | t_detect_warning=1321ms；t_detect_stable=315ms；t_detect_congested=2358ms；t_first_action=1321ms；t_level_1=1321ms；t_level_2=2358ms；t_level_3=3360ms；t_level_4=4394ms；t_audio_only=4394ms |
+| raw recovery timing | t_detect_recovering=4410ms；t_detect_stable=5410ms；t_detect_congested=410ms；t_first_action=4410ms；t_level_0=13616ms；t_level_1=10496ms；t_level_2=7455ms；t_level_3=4410ms |
 
 ### S3
 
@@ -816,11 +816,11 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=early_warning/L1, current=early_warning/L1)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters（共 2 次非 noop） |
-| impairment timing | t_detect_warning=3037ms；t_detect_stable=1032ms；t_first_action=3037ms；t_level_1=3037ms |
-| recovery timing | t_detect_warning=101ms；t_detect_stable=3225ms；t_first_action=3225ms；t_level_0=3225ms |
+| impairment timing | t_detect_warning=3059ms；t_detect_stable=53ms；t_first_action=3059ms；t_level_1=3059ms |
+| recovery timing | t_detect_warning=119ms；t_detect_stable=3245ms；t_first_action=3245ms；t_level_0=3245ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=3037ms；t_detect_stable=1032ms；t_first_action=3037ms；t_level_1=3037ms |
-| raw recovery timing | t_detect_warning=101ms；t_detect_stable=3225ms；t_first_action=3225ms；t_level_0=3225ms |
+| raw impairment timing | t_detect_warning=3059ms；t_detect_stable=53ms；t_first_action=3059ms；t_level_1=3059ms |
+| raw recovery timing | t_detect_warning=119ms；t_detect_stable=3245ms；t_first_action=3245ms；t_level_0=3245ms |
 
 ### S4
 
@@ -835,9 +835,9 @@
 | 实际 QoS | baseline(current=stable/L0)；impairment(peak=early_warning/L1, current=early_warning/L1)；recovery(best=stable/L0, current=stable/L0) |
 | 结果 | PASS（符合） |
 | 动作摘要 | setEncodingParameters（共 2 次非 noop） |
-| impairment timing | t_detect_warning=1957ms；t_detect_stable=952ms；t_first_action=1957ms；t_level_1=1957ms |
-| recovery timing | t_detect_warning=61ms；t_detect_stable=4225ms；t_first_action=4225ms；t_level_0=4225ms |
+| impairment timing | t_detect_warning=2261ms；t_detect_stable=215ms；t_first_action=2261ms；t_level_1=2261ms |
+| recovery timing | t_detect_warning=359ms；t_detect_stable=4446ms；t_first_action=4446ms；t_level_0=4446ms |
 | 诊断 | - |
-| raw impairment timing | t_detect_warning=1957ms；t_detect_stable=952ms；t_first_action=1957ms；t_level_1=1957ms |
-| raw recovery timing | t_detect_warning=61ms；t_detect_stable=4225ms；t_first_action=4225ms；t_level_0=4225ms |
+| raw impairment timing | t_detect_warning=2261ms；t_detect_stable=215ms；t_first_action=2261ms；t_level_1=2261ms |
+| raw recovery timing | t_detect_warning=359ms；t_detect_stable=4446ms；t_first_action=4446ms；t_level_0=4446ms |
 
