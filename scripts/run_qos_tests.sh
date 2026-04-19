@@ -289,8 +289,30 @@ run_cmd() {
     TASK_DURATIONS["$label"]="${elapsed}s"
     echo "<== [$label] FAIL (${elapsed}s, rc=$rc)" >&2
     record_failed_task "$label"
+    log_system_snapshot "after-fail:$label"
   fi
   return "$rc"
+}
+
+log_system_snapshot() {
+  local label="$1"
+  echo
+  echo "==> [system:$label]"
+  echo "timestamp_utc=$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  awk '
+    /MemTotal:|MemAvailable:|SwapTotal:|SwapFree:/ {
+      printf "%s=%s%s ", $1, $2, $3
+    }
+    END { print "" }
+  ' /proc/meminfo 2>/dev/null || true
+  if command -v ps >/dev/null 2>&1; then
+    echo "top_rss_processes:"
+    ps -eo pid,ppid,rss,stat,comm,args --sort=-rss | head -n 12 || true
+    echo "browser_and_runner_processes:"
+    ps -eo pid,ppid,rss,stat,comm,args | awk '
+      NR == 1 || /headless_shell|esbuild|cc1plus|mediasoup-sfu|run_matrix\.mjs|run_qos_tests\.sh|browser_downlink|browser_loopback/
+    ' || true
+  fi
 }
 
 join_targets_for_markdown() {
@@ -772,6 +794,7 @@ run_browser_harness() {
   prepare_test_port 14015 "Downlink priority harness SFU port 14015"
   prepare_test_port 14016 "Downlink v2 harness SFU port 14016"
   prepare_test_port 14017 "Downlink v3 harness SFU port 14017"
+  log_system_snapshot "pre-browser-harness"
   local failed=0
   if ! run_cmd \
     "browser-harness:server-signal" \
@@ -833,6 +856,7 @@ run_matrix() {
   if [[ -n "$MATRIX_CASES" ]]; then
     matrix_args+=("--cases=$MATRIX_CASES")
   fi
+  log_system_snapshot "pre-matrix"
   run_cmd \
     "matrix" \
     --cwd "$ROOT_DIR" \
@@ -845,6 +869,7 @@ run_downlink_matrix() {
   if [[ -n "$MATRIX_CASES" ]]; then
     dl_args+=("--cases=$MATRIX_CASES")
   fi
+  log_system_snapshot "pre-downlink-matrix"
   run_cmd \
     "downlink-matrix" \
     --cwd "$ROOT_DIR" \

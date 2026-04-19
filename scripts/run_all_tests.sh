@@ -224,6 +224,27 @@ require_command() {
   }
 }
 
+log_system_snapshot() {
+  local label="$1"
+  echo
+  echo "==> system:$label"
+  echo "timestamp_utc=$(date -u '+%Y-%m-%dT%H:%M:%SZ') jobs=$JOBS"
+  awk '
+    /MemTotal:|MemAvailable:|SwapTotal:|SwapFree:/ {
+      printf "%s=%s%s ", $1, $2, $3
+    }
+    END { print "" }
+  ' /proc/meminfo 2>/dev/null || true
+  if command -v ps >/dev/null 2>&1; then
+    echo "top_rss_processes:"
+    ps -eo pid,ppid,rss,stat,comm,args --sort=-rss | head -n 12 || true
+    echo "browser_and_build_processes:"
+    ps -eo pid,ppid,rss,stat,comm,args | awk '
+      NR == 1 || /headless_shell|esbuild|cc1plus|mediasoup-sfu|run_matrix\.mjs|run_qos_tests\.sh|cmake|gmake/
+    ' || true
+  fi
+}
+
 cleanup_test_ports() {
   local ports=(14000 14002 14003 14004 14005 14006 14010 14011 14012 14021)
   for port in "${ports[@]}"; do
@@ -240,6 +261,7 @@ cleanup_test_ports() {
 }
 
 build_targets() {
+  log_system_snapshot "pre-build"
   echo "==> building full regression test targets"
   cmake --build "$BUILD_DIR" -j"$JOBS" --target \
     mediasoup-sfu \
@@ -256,6 +278,7 @@ build_targets() {
     mediasoup_qos_recording_accuracy_tests \
     mediasoup_thread_integration_tests
   cmake --build "$CLIENT_BUILD_DIR" -j"$JOBS" --target plain-client
+  log_system_snapshot "post-build"
 }
 
 run_cmd() {
@@ -278,6 +301,7 @@ run_cmd() {
   else
     echo "<== $label FAIL (rc=$rc)" >&2
     record_task_result "$label" "FAIL" "$elapsed"
+    log_system_snapshot "after-fail:$label"
   fi
   return "$rc"
 }
@@ -318,6 +342,7 @@ run_integration() {
 run_qos() {
   require_file "$ROOT_DIR/scripts/run_qos_tests.sh" "qos:preflight:run_qos_tests.sh" || return 1
   cleanup_test_ports
+  log_system_snapshot "pre-qos"
   run_cmd \
     "qos:qos-regression" \
     "$ROOT_DIR/scripts/run_qos_tests.sh" all
