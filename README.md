@@ -624,7 +624,7 @@ If Redis multi-node routing is enabled, every node must publish a `ws://` addres
 All tests must be run from the project root directory.
 
 ```bash
-# full C++ regression
+# full repository regression
 ./scripts/run_all_tests.sh
 
 # QoS JS / harness / matrix regression
@@ -651,8 +651,11 @@ start an isolated `redis-server` automatically. They require the `redis-server` 
 selected test groups after a test failure and return non-zero only after printing a final
 failure summary.
 
-`./scripts/run_all_tests.sh` also rewrites the latest full C++ regression report:
-[docs/full-cpp-test-results.md](./docs/full-cpp-test-results.md)
+`./scripts/run_all_tests.sh` also rewrites the latest full regression report:
+[docs/full-regression-test-results.md](./docs/full-regression-test-results.md)
+
+When the run includes `qos`, it delegates that slice to `./scripts/run_qos_tests.sh`, so the
+QoS-specific summaries and matrix artifacts owned by that script are refreshed as part of the run.
 
 The regression-heavy suites currently cover:
 
@@ -676,7 +679,7 @@ For local verification before review:
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
 
-# full C++ regression
+# full repository regression
 ./scripts/run_all_tests.sh
 
 # fast baseline (core unit)

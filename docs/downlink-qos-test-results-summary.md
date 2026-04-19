@@ -1,16 +1,16 @@
 # 下行 QoS 测试结果汇总
 
-生成时间：`2026-04-18T15:05:41.944Z`
+生成时间：`2026-04-19T04:44:24.598Z`
 
 ## 1. 汇总
 
 - 总任务：`8`
-- 已执行：`1`
-- 通过：`1`
+- 已执行：`0`
+- 通过：`0`
 - 失败：`0`
-- 未执行：`7`
+- 未执行：`8`
 - 执行脚本：`scripts/run_qos_tests.sh`
-- 本次选择目标：`cpp-unit`
+- 本次选择目标：`cpp-threaded`
 
 ### 1.1 失败任务
 
@@ -31,8 +31,8 @@
 | 任务 ID | `cpp-unit` |
 | 类别 | `server` |
 | 说明 | 服务端 downlink QoS 相关单测（allocator / planner / aggregator / publisher supply） |
-| 状态 | `PASS` |
-| 耗时 | `0s` |
+| 状态 | `NOT_RUN` |
+| 耗时 | `-` |
 | 对应命令 | `./build/mediasoup_qos_unit_tests` |
 
 ### cpp-integration

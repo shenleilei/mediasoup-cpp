@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build"
 CLIENT_BUILD_DIR="$ROOT_DIR/client/build"
-REPORT_FILE="$ROOT_DIR/docs/full-cpp-test-results.md"
+REPORT_FILE="$ROOT_DIR/docs/full-regression-test-results.md"
 JOBS="${JOBS:-$(nproc)}"
 
 ALL_GROUPS=(
@@ -37,15 +37,15 @@ Options:
 Groups:
   unit         core unit suites inside mediasoup_tests
   integration  integration / e2e / stability / review-fix binaries
-  qos          qos unit / integration / accuracy / recording binaries
+  qos          full QoS regression delegated to scripts/run_qos_tests.sh
   topology     topology + multinode binaries
-  threaded     threaded plain-client integration binary
+  threaded     compatibility alias for threaded QoS regression only
 
 Notes:
-  - This script is the full C++ gtest regression entry.
+  - This script is the full repository regression entry.
   - Selected groups keep running after a test failure; the script exits non-zero at the end if any group failed.
-  - It covers all C++ gtest targets defined in CMakeLists.txt.
-  - QoS JS tests, harnesses, and browser / matrix runs remain under scripts/run_qos_tests.sh.
+  - It covers the native groups here and delegates the full QoS regression surface to scripts/run_qos_tests.sh.
+  - If qos is selected, threaded is skipped automatically because qos already includes the threaded QoS slice.
   - threaded tests require client/build/plain-client.
   - mediasoup_review_fix_tests, mediasoup_multinode_tests, and mediasoup_topology_tests
     start an isolated Redis and require redis-server in PATH.
@@ -54,6 +54,42 @@ EOF
 
 list_groups() {
   printf '%s\n' "${ALL_GROUPS[@]}"
+}
+
+normalize_selected_groups() {
+  local group
+  local has_qos=0
+  local -a normalized=()
+
+  for group in "${SELECTED_GROUPS[@]}"; do
+    case " ${ALL_GROUPS[*]} " in
+      *" $group "*) ;;
+      *)
+        echo "error: unknown group '$group'" >&2
+        return 1
+        ;;
+    esac
+
+    case " ${normalized[*]} " in
+      *" $group "*) continue ;;
+    esac
+
+    normalized+=("$group")
+    if [[ "$group" == "qos" ]]; then
+      has_qos=1
+    fi
+  done
+
+  if ((has_qos)); then
+    local -a filtered=()
+    for group in "${normalized[@]}"; do
+      [[ "$group" == "threaded" ]] && continue
+      filtered+=("$group")
+    done
+    normalized=("${filtered[@]}")
+  fi
+
+  SELECTED_GROUPS=("${normalized[@]}")
 }
 
 record_task_result() {
@@ -119,7 +155,7 @@ write_report() {
 
   mkdir -p "$(dirname "$REPORT_FILE")"
   {
-    echo "# Full C++ Test Results"
+    echo "# Full Regression Test Results"
     echo
     echo "Generated at: \`$generated_at\`"
     echo
@@ -204,8 +240,9 @@ cleanup_test_ports() {
 }
 
 build_targets() {
-  echo "==> building full C++ test targets"
+  echo "==> building full regression test targets"
   cmake --build "$BUILD_DIR" -j"$JOBS" --target \
+    mediasoup-sfu \
     mediasoup_tests \
     mediasoup_qos_unit_tests \
     mediasoup_integration_tests \
@@ -279,27 +316,11 @@ run_integration() {
 }
 
 run_qos() {
-  local failed=0
+  require_file "$ROOT_DIR/scripts/run_qos_tests.sh" "qos:preflight:run_qos_tests.sh" || return 1
   cleanup_test_ports
-  require_file "$BUILD_DIR/mediasoup_qos_unit_tests" "qos:preflight:mediasoup_qos_unit_tests" || return 1
-  require_file "$BUILD_DIR/mediasoup_qos_integration_tests" "qos:preflight:mediasoup_qos_integration_tests" || return 1
-  require_file "$BUILD_DIR/mediasoup_qos_accuracy_tests" "qos:preflight:mediasoup_qos_accuracy_tests" || return 1
-  require_file "$BUILD_DIR/mediasoup_qos_recording_accuracy_tests" "qos:preflight:mediasoup_qos_recording_accuracy_tests" || return 1
-  if ! run_cmd "qos:mediasoup_qos_unit_tests" "$BUILD_DIR/mediasoup_qos_unit_tests"; then
-    failed=1
-  fi
-  cleanup_test_ports
-  if ! run_cmd "qos:mediasoup_qos_integration_tests" "$BUILD_DIR/mediasoup_qos_integration_tests"; then
-    failed=1
-  fi
-  cleanup_test_ports
-  if ! run_cmd "qos:mediasoup_qos_accuracy_tests" "$BUILD_DIR/mediasoup_qos_accuracy_tests"; then
-    failed=1
-  fi
-  if ! run_cmd "qos:mediasoup_qos_recording_accuracy_tests" "$BUILD_DIR/mediasoup_qos_recording_accuracy_tests"; then
-    failed=1
-  fi
-  return "$failed"
+  run_cmd \
+    "qos:qos-regression" \
+    "$ROOT_DIR/scripts/run_qos_tests.sh" all
 }
 
 run_topology() {
@@ -319,12 +340,11 @@ run_topology() {
 }
 
 run_threaded() {
-  require_file "$BUILD_DIR/mediasoup_thread_integration_tests" "threaded:preflight:mediasoup_thread_integration_tests" || return 1
-  require_file "$CLIENT_BUILD_DIR/plain-client" "threaded:preflight:plain-client" || return 1
+  require_file "$ROOT_DIR/scripts/run_qos_tests.sh" "threaded:preflight:run_qos_tests.sh" || return 1
   cleanup_test_ports
   run_cmd \
-    "threaded:mediasoup_thread_integration_tests" \
-    env QOS_THREAD_INTEGRATION_PORT=14021 "$BUILD_DIR/mediasoup_thread_integration_tests"
+    "threaded:qos-threaded-regression" \
+    "$ROOT_DIR/scripts/run_qos_tests.sh" cpp-threaded
 }
 
 run_group() {
@@ -355,6 +375,8 @@ main() {
     SELECTED_GROUPS=("${ALL_GROUPS[@]}")
   fi
 
+  normalize_selected_groups
+
   if ((SKIP_BUILD == 0)); then
     build_targets
   fi
@@ -369,9 +391,9 @@ main() {
 
   echo
   if ((${#FAILED_GROUPS[@]} == 0)); then
-    echo "full C++ test run passed"
+    echo "full regression test run passed"
   else
-    echo "full C++ test run completed with failures in group(s): ${FAILED_GROUPS[*]}" >&2
+    echo "full regression test run completed with failures in group(s): ${FAILED_GROUPS[*]}" >&2
     exit 1
   fi
 }
