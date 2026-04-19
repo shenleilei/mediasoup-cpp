@@ -6,7 +6,9 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
+#include <chrono>
 #include <fstream>
+#include <functional>
 #include <optional>
 
 static const std::string HOST = "127.0.0.1";
@@ -195,7 +197,28 @@ protected:
 			}}}
 		};
 	}
-};
+
+	json waitForPeerStats(
+		JoinedClient& requester,
+		const std::string& peerId,
+		const std::function<bool(const json&)>& predicate,
+		int timeoutMs = 3000)
+	{
+		const auto deadline = std::chrono::steady_clock::now() +
+			std::chrono::milliseconds(timeoutMs);
+		json lastResp;
+
+		while (std::chrono::steady_clock::now() < deadline) {
+			lastResp = requester.ws->request("getStats", {{"peerId", peerId}});
+			if (lastResp.value("ok", false) && predicate(lastResp["data"])) {
+				return lastResp;
+			}
+			usleep(100000);
+		}
+
+		return lastResp;
+	}
+	};
 
 // ─── Test 1: getStats returns valid structure after produce ───
 TEST_F(QosIntegrationTest, GetStatsAfterProduce) {
@@ -1608,31 +1631,42 @@ TEST_F(QosIntegrationTest, SeqResetThresholdWithoutReconnect) {
 
 TEST_F(QosIntegrationTest, DownlinkClientStatsStored) {
 	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoom(testRoom_, "bob");
 
-	json payload = {
-		{"schema", "mediasoup.qos.downlink.client.v1"},
-		{"seq", 1},
-		{"tsMs", 1700000000000},
-		{"subscriberPeerId", "alice"},
-		{"transport", {{"availableIncomingBitrate", 2000000.0}, {"currentRoundTripTime", 0.05}}},
-		{"subscriptions", {{
-			{"consumerId", "c1"}, {"producerId", "p1"}, {"visible", true},
-			{"pinned", false}, {"activeSpeaker", false}, {"isScreenShare", false},
-			{"targetWidth", 640}, {"targetHeight", 360},
-			{"packetsLost", 0}, {"jitter", 0.001},
-			{"framesPerSecond", 30.0}, {"frameWidth", 640}, {"frameHeight", 360},
-			{"freezeRate", 0.0}
-		}}}
-	};
-	auto resp = alice.ws->request("downlinkClientStats", payload);
+	auto bobRecv = bob.ws->request("createWebRtcTransport", {
+		{"producing", false}, {"consuming", true}
+	});
+	ASSERT_TRUE(bobRecv.value("ok", false)) << bobRecv.dump();
+
+	const std::string producerId = produceVideo(alice, 70000101);
+	auto consumerNotif = bob.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(consumerNotif.empty()) << "Bob did not get newConsumer";
+	const std::string consumerId = consumerNotif["data"]["id"];
+
+	auto payload = makeDownlinkSnapshot(
+		1, "bob", consumerId, producerId, 2'000'000.0, true, false, 640, 360);
+	auto resp = bob.ws->request("downlinkClientStats", payload);
 	ASSERT_TRUE(resp.value("ok", false)) << resp.dump();
 
-	auto statsResp = alice.ws->request("getStats", {{"peerId", "alice"}});
+	auto statsResp = waitForPeerStats(
+		bob,
+		"bob",
+		[&](const json& data) {
+			if (!data.contains("downlinkClientStats")) return false;
+			if (!data["downlinkClientStats"].contains("subscriptions")) return false;
+			const auto& subscriptions = data["downlinkClientStats"]["subscriptions"];
+			if (!subscriptions.is_array() || subscriptions.empty()) return false;
+			return data.contains("downlinkQos");
+		});
 	ASSERT_TRUE(statsResp.value("ok", false)) << statsResp.dump();
 	ASSERT_TRUE(statsResp["data"].contains("downlinkClientStats")) << statsResp.dump();
 	EXPECT_EQ(
 		statsResp["data"]["downlinkClientStats"]["schema"].get<std::string>(),
 		"mediasoup.qos.downlink.client.v1");
+	ASSERT_FALSE(statsResp["data"]["downlinkClientStats"]["subscriptions"].empty()) << statsResp.dump();
+	EXPECT_EQ(
+		statsResp["data"]["downlinkClientStats"]["subscriptions"][0]["consumerId"].get<std::string>(),
+		consumerId);
 	ASSERT_TRUE(statsResp["data"].contains("downlinkQos")) << statsResp.dump();
 	EXPECT_EQ(statsResp["data"]["downlinkQos"]["health"].get<std::string>(), "stable");
 }

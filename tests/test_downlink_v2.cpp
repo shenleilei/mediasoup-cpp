@@ -136,6 +136,35 @@ TEST(SubscriberBudgetAllocatorTest, ScreenShareDominatesGridUnderBudget) {
 	EXPECT_GE(ssSpatial, gridSpatial);
 }
 
+TEST(SubscriberBudgetAllocatorTest, ScreenSharePreemptsGridWhenOnlyOneBaseLayerFits) {
+	SubscriberBudgetAllocator alloc;
+	auto snap = MakeSnapshot("sub1", 60'000.0, {
+		MakeSub("screen", "p1", true, false, true),
+		MakeSub("grid", "p2", true, false, false),
+	});
+	auto plan = alloc.Allocate(snap, 0);
+
+	bool screenResumed = false;
+	bool gridPaused = false;
+	uint8_t screenPriority = 0;
+	uint8_t gridPriority = 0;
+
+	for (const auto& action : plan.actions) {
+		if (action.consumerId == "screen" && action.type == DownlinkAction::Type::kResume)
+			screenResumed = true;
+		if (action.consumerId == "grid" && action.type == DownlinkAction::Type::kPause)
+			gridPaused = true;
+		if (action.consumerId == "screen" && action.type == DownlinkAction::Type::kSetPriority)
+			screenPriority = action.priority;
+		if (action.consumerId == "grid" && action.type == DownlinkAction::Type::kSetPriority)
+			gridPriority = action.priority;
+	}
+
+	EXPECT_TRUE(screenResumed);
+	EXPECT_TRUE(gridPaused);
+	EXPECT_GT(screenPriority, gridPriority);
+}
+
 TEST(SubscriberBudgetAllocatorTest, DegradeLevelStillCapsBudgetAllocator) {
 	SubscriberBudgetAllocator alloc;
 	auto snap = MakeSnapshot("sub1", 5'000'000.0, {

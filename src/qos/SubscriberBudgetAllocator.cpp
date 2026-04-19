@@ -11,7 +11,7 @@ namespace {
 // S0 = base, S1 ~ 3x, S2 ~ 9x.  Temporal layers scale linearly within.
 constexpr double kSpatialMultiplier[] = { 1.0, 3.0, 9.0 };
 constexpr double kBaseBitrateBps = 100'000.0; // 100 kbps assumed base
-constexpr double kScreenShareBaseBps = 300'000.0;
+constexpr double kScreenShareBaseBps = 100'000.0;
 constexpr int kMaxSpatial = 2;
 constexpr int kMaxTemporal = 2;
 
