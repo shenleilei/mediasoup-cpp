@@ -41,8 +41,10 @@
     latestRoomState: null,
     latestStatsReport: null,
     localDebugStats: null,
+    debugInboundCounters: createEmptyDebugCounterState(),
     debugStatsTimer: null,
     legacyStatsTimer: null,
+    legacyDebugModeActive: false,
     usingFallbackStream: false,
   };
 
@@ -105,6 +107,57 @@
     return `${(value * scale).toFixed(0)} ms`;
   }
 
+  function asFiniteNumber(value) {
+    return Number.isFinite(Number(value)) ? Number(value) : undefined;
+  }
+
+  function asFiniteOrZero(value) {
+    return asFiniteNumber(value) ?? 0;
+  }
+
+  function createCounterMap() {
+    return Object.create(null);
+  }
+
+  function createEmptyDebugCounterState() {
+    return {
+      video: createCounterMap(),
+      audio: createCounterMap(),
+    };
+  }
+
+  function makeInboundCounterKey(report, fallbackIndex) {
+    if (report && typeof report.id === 'string' && report.id) {
+      return report.id;
+    }
+    if (report && typeof report.mid === 'string' && report.mid) {
+      return `mid:${report.mid}`;
+    }
+    if (Number.isFinite(asFiniteNumber(report?.ssrc))) {
+      return `ssrc:${Number(report.ssrc)}`;
+    }
+    return `fallback:${fallbackIndex}`;
+  }
+
+  function computeCounterDelta(current, previous) {
+    if (!Number.isFinite(current) || !Number.isFinite(previous)) {
+      return 0;
+    }
+    return current >= previous ? current - previous : 0;
+  }
+
+  function fmtConcealRate(concealedSamples, totalSamplesReceived) {
+    if (!Number.isFinite(concealedSamples) || !Number.isFinite(totalSamplesReceived) || totalSamplesReceived <= 0) {
+      return '-';
+    }
+    return `${((concealedSamples / totalSamplesReceived) * 100).toFixed(1)}%`;
+  }
+
+  function fmtPercentValue(value, digits = 1) {
+    const n = asFiniteNumber(value);
+    return n === undefined ? '-' : `${n.toFixed(digits)}%`;
+  }
+
   function fmtBool(value) {
     if (value === undefined || value === null) {
       return '-';
@@ -147,7 +200,7 @@
 
   function updateControls() {
     els.publishBtn.disabled = !state.device || hasActiveLocalPublish();
-    els.stopBtn.disabled = !state.qosSession && !state.legacyStatsTimer;
+    els.stopBtn.disabled = !state.qosSession && !state.legacyDebugModeActive;
   }
 
   function createVideoCard({ title, subtitle, badgeText, stream, muted = false }) {
@@ -543,9 +596,13 @@
       qosItem('渲染尺寸', fmtDimensions(serverSub.frameWidth, serverSub.frameHeight)),
       qosItem('RTT', fmtMs(recvRttMs, 1000)),
       qosItem('帧率', fmtValue(serverSub.framesPerSecond)),
-      qosItem('丢包', fmtValue(serverSub.packetsLost)),
+      qosItem('丢包', fmtPercentValue(serverSub.packetsLost)),
       qosItem('抖动', fmtMs(serverSub.jitter, 1000)),
-      qosItem('卡顿率', fmtValue(serverSub.freezeRate)),
+      qosItem('卡顿率', fmtPercentValue(asFiniteNumber(serverSub.freezeRate) * 100)),
+      qosItem('Freeze Count', fmtValue(serverSub.freezeCount)),
+      qosItem('Frames Dropped', fmtValue(serverSub.framesDropped)),
+      qosItem('JB Delay', fmtMs(serverSub.jitterBufferDelayMs)),
+      qosItem('Audio Conceal', fmtConcealRate(serverSub.concealedSamples, serverSub.totalSamplesReceived)),
     ].join('');
   }
 
@@ -721,6 +778,7 @@
     state.localCaptureStreams = [];
     state.localVideoEntries = [];
     state.localAudioActive = false;
+    state.debugInboundCounters.audio = createCounterMap();
     renderLocalPreviewCards([]);
     updateControls();
   }
@@ -738,6 +796,7 @@
     }
 
     state.pendingConsumers = [];
+    state.debugInboundCounters.video = createCounterMap();
     clearRemoteVideoCards();
   }
 
@@ -758,6 +817,7 @@
     state.latestRoomState = null;
     state.latestStatsReport = null;
     state.localDebugStats = null;
+    state.debugInboundCounters = createEmptyDebugCounterState();
   }
 
   function supportsDownlinkQos() {
@@ -1157,6 +1217,7 @@
   }
 
   function stopLegacyClientStatsReporting() {
+    state.legacyDebugModeActive = false;
     if (state.legacyStatsTimer) {
       clearInterval(state.legacyStatsTimer);
       state.legacyStatsTimer = null;
@@ -1214,6 +1275,8 @@
 
     return {
       producerId: entry.producerId,
+      kind: entry.consumer?.kind,
+      mid: entry.consumer?.rtpParameters?.mid,
       visible: hintVisible,
       pinned: false,
       activeSpeaker: false,
@@ -1312,8 +1375,8 @@
   async function collectLocalDebugStats() {
     const debug = {};
 
-    if (state.sendTransport && state.sendTransport._handler && state.sendTransport._handler._pc) {
-      const stats = await state.sendTransport._handler._pc.getStats();
+    if (state.sendTransport && typeof state.sendTransport.getStats === 'function') {
+      const stats = await state.sendTransport.getStats();
       stats.forEach(report => {
         if (report.type === 'candidate-pair' && report.nominated) {
           debug.send = {
@@ -1326,10 +1389,38 @@
       });
     }
 
-    if (state.recvTransport && state.recvTransport._handler && state.recvTransport._handler._pc) {
-      const stats = await state.recvTransport._handler._pc.getStats();
-      const inboundVideo = {};
-      const inboundAudio = {};
+    if (state.recvTransport && typeof state.recvTransport.getStats === 'function') {
+      const stats = await state.recvTransport.getStats();
+      const inboundVideo = {
+        jitter: 0,
+        packetsLost: 0,
+        packetsReceived: 0,
+        packetsLostDelta: 0,
+        framesPerSecond: 0,
+        frameWidth: 0,
+        frameHeight: 0,
+      };
+      const inboundAudio = {
+        jitter: 0,
+        packetsLost: 0,
+        packetsReceived: 0,
+        packetsLostDelta: 0,
+        concealedSamples: 0,
+        totalSamplesReceived: 0,
+      };
+      const videoFreeze = {
+        freezeCount: 0,
+        totalFreezesDuration: 0,
+        framesDropped: 0,
+        jitterBufferDelayMs: undefined,
+      };
+      const nextVideoCounters = createCounterMap();
+      const nextAudioCounters = createCounterMap();
+      let sawVideo = false;
+      let sawAudio = false;
+      let totalVideoJitterBufferDelay = 0;
+      let totalVideoJitterBufferCount = 0;
+      let inboundReportIndex = 0;
 
       stats.forEach(report => {
         if (report.type === 'candidate-pair' && report.nominated) {
@@ -1340,23 +1431,72 @@
           };
         }
         if (report.type === 'inbound-rtp' && report.kind === 'video') {
-          inboundVideo.jitter = report.jitter || 0;
-          inboundVideo.packetsLost = report.packetsLost || 0;
-          inboundVideo.framesPerSecond = report.framesPerSecond || 0;
-          inboundVideo.frameWidth = report.frameWidth || 0;
-          inboundVideo.frameHeight = report.frameHeight || 0;
+          sawVideo = true;
+          const currentLost = asFiniteOrZero(report.packetsLost);
+          const currentReceived = asFiniteOrZero(report.packetsReceived);
+          const counterKey = makeInboundCounterKey(report, inboundReportIndex++);
+          const previous = state.debugInboundCounters.video?.[counterKey];
+          nextVideoCounters[counterKey] = {
+            packetsLost: currentLost,
+            packetsReceived: currentReceived,
+          };
+          inboundVideo.jitter = Math.max(inboundVideo.jitter, asFiniteOrZero(report.jitter));
+          inboundVideo.packetsLost += currentLost;
+          inboundVideo.packetsReceived += currentReceived;
+          inboundVideo.packetsLostDelta += computeCounterDelta(currentLost, previous?.packetsLost);
+          inboundVideo.framesPerSecond = Math.max(inboundVideo.framesPerSecond, asFiniteOrZero(report.framesPerSecond));
+          inboundVideo.frameWidth = Math.max(inboundVideo.frameWidth, asFiniteOrZero(report.frameWidth));
+          inboundVideo.frameHeight = Math.max(inboundVideo.frameHeight, asFiniteOrZero(report.frameHeight));
+          videoFreeze.freezeCount += asFiniteOrZero(report.freezeCount);
+          videoFreeze.totalFreezesDuration += asFiniteOrZero(report.totalFreezesDuration);
+          videoFreeze.framesDropped += asFiniteOrZero(report.framesDropped);
+          totalVideoJitterBufferDelay += asFiniteOrZero(report.jitterBufferDelay);
+          totalVideoJitterBufferCount += asFiniteOrZero(report.jitterBufferEmittedCount);
         }
         if (report.type === 'inbound-rtp' && report.kind === 'audio') {
-          inboundAudio.jitter = report.jitter || 0;
-          inboundAudio.packetsLost = report.packetsLost || 0;
+          sawAudio = true;
+          const currentLost = asFiniteOrZero(report.packetsLost);
+          const currentReceived = asFiniteOrZero(report.packetsReceived);
+          const counterKey = makeInboundCounterKey(report, inboundReportIndex++);
+          const previous = state.debugInboundCounters.audio?.[counterKey];
+          nextAudioCounters[counterKey] = {
+            packetsLost: currentLost,
+            packetsReceived: currentReceived,
+          };
+          inboundAudio.jitter = Math.max(inboundAudio.jitter, asFiniteOrZero(report.jitter));
+          inboundAudio.packetsLost += currentLost;
+          inboundAudio.packetsReceived += currentReceived;
+          inboundAudio.packetsLostDelta += computeCounterDelta(currentLost, previous?.packetsLost);
+          inboundAudio.concealedSamples += asFiniteOrZero(report.concealedSamples);
+          inboundAudio.totalSamplesReceived += asFiniteOrZero(report.totalSamplesReceived);
         }
       });
 
-      if (Object.keys(inboundVideo).length) {
+      if (sawVideo) {
         debug.inboundVideo = inboundVideo;
+        state.debugInboundCounters.video = nextVideoCounters;
+        if (totalVideoJitterBufferCount > 0) {
+          videoFreeze.jitterBufferDelayMs =
+            (totalVideoJitterBufferDelay / totalVideoJitterBufferCount) * 1000;
+        } else if (totalVideoJitterBufferDelay > 0) {
+          videoFreeze.jitterBufferDelayMs = totalVideoJitterBufferDelay * 1000;
+        }
+        if (
+          videoFreeze.freezeCount > 0 ||
+          videoFreeze.totalFreezesDuration > 0 ||
+          videoFreeze.framesDropped > 0 ||
+          videoFreeze.jitterBufferDelayMs !== undefined
+        ) {
+          debug.videoFreeze = videoFreeze;
+        }
+      } else {
+        state.debugInboundCounters.video = createCounterMap();
       }
-      if (Object.keys(inboundAudio).length) {
+      if (sawAudio) {
         debug.inboundAudio = inboundAudio;
+        state.debugInboundCounters.audio = nextAudioCounters;
+      } else {
+        state.debugInboundCounters.audio = createCounterMap();
       }
     }
 
@@ -1379,39 +1519,13 @@
   }
 
   function startLegacyClientStatsReporting() {
-    if (state.legacyStatsTimer) {
+    if (state.legacyDebugModeActive) {
       return;
     }
-
-    state.legacyStatsTimer = setInterval(async () => {
-      if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
-        return;
-      }
-
-      try {
-        await collectLocalDebugStats();
-        const report = {};
-
-        if (state.localDebugStats.send) {
-          report.send = state.localDebugStats.send;
-        }
-        if (state.localDebugStats.recv) {
-          report.recv = state.localDebugStats.recv;
-        }
-        if (state.localDebugStats.inboundVideo) {
-          report.inboundVideo = state.localDebugStats.inboundVideo;
-        }
-        if (state.localDebugStats.inboundAudio) {
-          report.inboundAudio = state.localDebugStats.inboundAudio;
-        }
-
-        if (Object.keys(report).length > 0) {
-          await wsRequest('clientStats', report);
-        }
-      } catch {
-        // Ignore legacy stats upload errors in demo mode.
-      }
-    }, 2000);
+    state.legacyDebugModeActive = true;
+    state.legacyStatsTimer = null;
+    log('Legacy QoS mode keeps local browser debug only; server-side clientStats upload is disabled because mediasoup.qos.client.v1 is required.');
+    updateControls();
   }
 
   function createSingleProducerQosSession(producer) {
@@ -1514,7 +1628,7 @@
 
     const session = createLocalQosSession(videoProducers);
     if (!session) {
-      log('QoS library is not available in browser bundle, falling back to legacy stats uploader');
+      log('QoS library is not available in browser bundle, falling back to legacy local debug mode');
       startLegacyClientStatsReporting();
       updateControls();
       return;
@@ -1817,12 +1931,14 @@
     const recv = state.localDebugStats.recv || {};
     const inboundVideo = state.localDebugStats.inboundVideo || {};
     const inboundAudio = state.localDebugStats.inboundAudio || {};
+    const videoFreeze = state.localDebugStats.videoFreeze || {};
 
     return (
       '<div class="qos-section">' +
       '<h3>Transport Debug</h3>' +
       '<div class="mini-grid">' +
       summaryItem('Downlink Reporter', state.downlinkBundle ? 'running' : 'off') +
+      summaryItem('Legacy Upload', state.legacyDebugModeActive ? 'disabled' : 'n/a') +
       summaryItem('Remote Hints', String(state.remoteVideoConsumers.size)) +
       summaryItem('Avail Out', fmtBitrate(send.availableOutgoingBitrate)) +
       summaryItem('Send RTT', fmtMs(send.currentRoundTripTime, 1000)) +
@@ -1835,10 +1951,17 @@
           : '-'
       ) +
       summaryItem('Inbound FPS', fmtValue(inboundVideo.framesPerSecond)) +
-      summaryItem('Video Loss', fmtValue(inboundVideo.packetsLost)) +
+      summaryItem('Video Loss Δ', fmtValue(inboundVideo.packetsLostDelta)) +
       summaryItem('Video Jitter', fmtMs(inboundVideo.jitter, 1000)) +
-      summaryItem('Audio Loss', fmtValue(inboundAudio.packetsLost)) +
+      summaryItem('Audio Loss Δ', fmtValue(inboundAudio.packetsLostDelta)) +
       summaryItem('Audio Jitter', fmtMs(inboundAudio.jitter, 1000)) +
+      summaryItem(
+        'Audio Conceal',
+        fmtConcealRate(inboundAudio.concealedSamples, inboundAudio.totalSamplesReceived)
+      ) +
+      summaryItem('Freeze Count', fmtValue(videoFreeze.freezeCount)) +
+      summaryItem('Frames Dropped', fmtValue(videoFreeze.framesDropped)) +
+      summaryItem('JB Delay', fmtMs(videoFreeze.jitterBufferDelayMs)) +
       '</div>' +
       '</div>'
     );

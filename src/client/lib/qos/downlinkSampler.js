@@ -55,7 +55,8 @@ class DownlinkSampler {
         let currentRoundTripTime = 0;
 
         for (const report of rawStats.values()) {
-            if (report.type === 'inbound-rtp' && report.kind === 'video') {
+            if (report.type === 'inbound-rtp' &&
+                (report.kind === 'video' || report.kind === 'audio')) {
                 inboundReports.push(report);
             }
             if (report.type === 'candidate-pair' && report.nominated) {
@@ -94,6 +95,12 @@ class DownlinkSampler {
                 frameWidth: stats?.frameWidth || 0,
                 frameHeight: stats?.frameHeight || 0,
                 freezeRate: computeFreezeRate(stats),
+                concealedSamples: readOptionalNumber(stats, 'concealedSamples'),
+                totalSamplesReceived: readOptionalNumber(stats, 'totalSamplesReceived'),
+                freezeCount: readOptionalNumber(stats, 'freezeCount'),
+                totalFreezesDuration: readOptionalNumber(stats, 'totalFreezesDuration'),
+                framesDropped: readOptionalNumber(stats, 'framesDropped'),
+                jitterBufferDelayMs: computeJitterBufferDelayMs(stats),
             });
         }
 
@@ -117,6 +124,24 @@ function computeFreezeRate(stats) {
     return freezeCount > 0 ? freezeCount / totalFrames : 0;
 }
 
+function computeJitterBufferDelayMs(stats) {
+    if (!stats) return undefined;
+    const totalDelay = readOptionalNumber(stats, 'jitterBufferDelay');
+    if (typeof totalDelay !== 'number') {
+        return undefined;
+    }
+    const emittedCount = readOptionalNumber(stats, 'jitterBufferEmittedCount');
+    if (typeof emittedCount === 'number' && emittedCount > 0) {
+        return (totalDelay / emittedCount) * 1000;
+    }
+    return totalDelay * 1000;
+}
+
+function readOptionalNumber(stats, key) {
+    const value = Number(stats?.[key]);
+    return Number.isFinite(value) ? value : undefined;
+}
+
 function selectInboundReport(reports, hint, matchedReports) {
     const explicitMatches = reports.filter(report => matchesHint(report, hint));
     for (const report of explicitMatches) {
@@ -124,6 +149,15 @@ function selectInboundReport(reports, hint, matchedReports) {
             matchedReports.add(report);
             return report;
         }
+    }
+    for (const report of reports) {
+        if (!matchedReports.has(report) && matchesHintKind(report, hint)) {
+            matchedReports.add(report);
+            return report;
+        }
+    }
+    if (hint?.kind === 'audio' || hint?.kind === 'video') {
+        return null;
     }
     for (const report of reports) {
         if (!matchedReports.has(report)) {
@@ -136,6 +170,9 @@ function selectInboundReport(reports, hint, matchedReports) {
 
 function matchesHint(report, hint = {}) {
     if (!report || !hint) return false;
+    if (!matchesHintKind(report, hint)) {
+        return false;
+    }
     if (Number.isFinite(hint.ssrc) && Number(report.ssrc) === Number(hint.ssrc)) {
         return true;
     }
@@ -148,6 +185,16 @@ function matchesHint(report, hint = {}) {
         return true;
     }
     return false;
+}
+
+function matchesHintKind(report, hint = {}) {
+    if (!report || !hint) return false;
+    if (hint.kind === 'audio' || hint.kind === 'video') {
+        if (report.kind !== hint.kind) {
+            return false;
+        }
+    }
+    return true;
 }
 
 function computeLossPercent(stats, previousLost, previousReceived) {

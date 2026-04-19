@@ -5,9 +5,9 @@ var mediasoupClient = (() => {
     return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
   };
 
-  // src/client/node_modules/ms/index.js
+  // node_modules/ms/index.js
   var require_ms = __commonJS({
-    "src/client/node_modules/ms/index.js"(exports, module) {
+    "node_modules/ms/index.js"(exports, module) {
       var s = 1e3;
       var m = s * 60;
       var h = m * 60;
@@ -121,9 +121,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/node_modules/debug/src/common.js
+  // node_modules/debug/src/common.js
   var require_common = __commonJS({
-    "src/client/node_modules/debug/src/common.js"(exports, module) {
+    "node_modules/debug/src/common.js"(exports, module) {
       function setup(env) {
         createDebug.debug = createDebug;
         createDebug.default = createDebug;
@@ -284,9 +284,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/node_modules/debug/src/browser.js
+  // node_modules/debug/src/browser.js
   var require_browser = __commonJS({
-    "src/client/node_modules/debug/src/browser.js"(exports, module) {
+    "node_modules/debug/src/browser.js"(exports, module) {
       exports.formatArgs = formatArgs;
       exports.save = save;
       exports.load = load;
@@ -454,9 +454,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/node_modules/ua-parser-js/src/ua-parser.js
+  // node_modules/ua-parser-js/src/ua-parser.js
   var require_ua_parser = __commonJS({
-    "src/client/node_modules/ua-parser-js/src/ua-parser.js"(exports, module) {
+    "node_modules/ua-parser-js/src/ua-parser.js"(exports, module) {
       (function(window2, undefined2) {
         "use strict";
         var LIBVERSION = "1.0.39", EMPTY = "", UNKNOWN = "?", FUNC_TYPE = "function", UNDEF_TYPE = "undefined", OBJ_TYPE = "object", STR_TYPE = "string", MAJOR = "major", MODEL = "model", NAME = "name", TYPE = "type", VENDOR = "vendor", VERSION = "version", ARCHITECTURE = "architecture", CONSOLE = "console", MOBILE = "mobile", TABLET = "tablet", SMARTTV = "smarttv", WEARABLE = "wearable", EMBEDDED = "embedded", UA_MAX_LENGTH = 500;
@@ -1787,9 +1787,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/Logger.js
+  // lib/Logger.js
   var require_Logger = __commonJS({
-    "src/client/lib/Logger.js"(exports) {
+    "lib/Logger.js"(exports) {
       "use strict";
       var __importDefault = exports && exports.__importDefault || function(mod) {
         return mod && mod.__esModule ? mod : { "default": mod };
@@ -1827,9 +1827,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/node_modules/npm-events-package/events.js
+  // node_modules/npm-events-package/events.js
   var require_events = __commonJS({
-    "src/client/node_modules/npm-events-package/events.js"(exports, module) {
+    "node_modules/npm-events-package/events.js"(exports, module) {
       "use strict";
       var R = typeof Reflect === "object" ? Reflect : null;
       var ReflectApply = R && typeof R.apply === "function" ? R.apply : function ReflectApply2(target, receiver, args) {
@@ -2196,9 +2196,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/enhancedEvents.js
+  // lib/enhancedEvents.js
   var require_enhancedEvents = __commonJS({
-    "src/client/lib/enhancedEvents.js"(exports) {
+    "lib/enhancedEvents.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.EnhancedEventEmitter = void 0;
@@ -2274,9 +2274,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/errors.js
+  // lib/errors.js
   var require_errors = __commonJS({
-    "src/client/lib/errors.js"(exports) {
+    "lib/errors.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.InvalidStateError = exports.UnsupportedError = void 0;
@@ -2307,9 +2307,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/utils.js
+  // lib/utils.js
   var require_utils = __commonJS({
-    "src/client/lib/utils.js"(exports) {
+    "lib/utils.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.clone = clone;
@@ -2342,9 +2342,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/node_modules/h264-profile-level-id/lib/Logger.js
+  // node_modules/h264-profile-level-id/lib/Logger.js
   var require_Logger2 = __commonJS({
-    "src/client/node_modules/h264-profile-level-id/lib/Logger.js"(exports) {
+    "node_modules/h264-profile-level-id/lib/Logger.js"(exports) {
       "use strict";
       var __importDefault = exports && exports.__importDefault || function(mod) {
         return mod && mod.__esModule ? mod : { "default": mod };
@@ -2382,9 +2382,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/node_modules/h264-profile-level-id/lib/index.js
+  // node_modules/h264-profile-level-id/lib/index.js
   var require_lib = __commonJS({
-    "src/client/node_modules/h264-profile-level-id/lib/index.js"(exports) {
+    "node_modules/h264-profile-level-id/lib/index.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.generateProfileLevelIdStringForAnswer = exports.isSameProfile = exports.parseSdpProfileLevelId = exports.levelToString = exports.profileToString = exports.profileLevelIdToString = exports.parseProfileLevelId = exports.ProfileLevelId = exports.Level = exports.Profile = void 0;
@@ -2707,9 +2707,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/ortc.js
+  // lib/ortc.js
   var require_ortc = __commonJS({
-    "src/client/lib/ortc.js"(exports) {
+    "lib/ortc.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -3425,9 +3425,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/node_modules/awaitqueue/lib/Logger.js
+  // node_modules/awaitqueue/lib/Logger.js
   var require_Logger3 = __commonJS({
-    "src/client/node_modules/awaitqueue/lib/Logger.js"(exports) {
+    "node_modules/awaitqueue/lib/Logger.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.Logger = void 0;
@@ -3462,9 +3462,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/node_modules/awaitqueue/lib/index.js
+  // node_modules/awaitqueue/lib/index.js
   var require_lib2 = __commonJS({
-    "src/client/node_modules/awaitqueue/lib/index.js"(exports) {
+    "node_modules/awaitqueue/lib/index.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.AwaitQueue = exports.AwaitQueueRemovedTaskError = exports.AwaitQueueStoppedError = void 0;
@@ -3601,9 +3601,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/node_modules/queue-microtask/index.js
+  // node_modules/queue-microtask/index.js
   var require_queue_microtask = __commonJS({
-    "src/client/node_modules/queue-microtask/index.js"(exports, module) {
+    "node_modules/queue-microtask/index.js"(exports, module) {
       var promise;
       module.exports = typeof queueMicrotask === "function" ? queueMicrotask.bind(typeof window !== "undefined" ? window : global) : (cb) => (promise || (promise = Promise.resolve())).then(cb).catch((err) => setTimeout(() => {
         throw err;
@@ -3611,9 +3611,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/Producer.js
+  // lib/Producer.js
   var require_Producer = __commonJS({
-    "src/client/lib/Producer.js"(exports) {
+    "lib/Producer.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.Producer = void 0;
@@ -3884,9 +3884,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/Consumer.js
+  // lib/Consumer.js
   var require_Consumer = __commonJS({
-    "src/client/lib/Consumer.js"(exports) {
+    "lib/Consumer.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.Consumer = void 0;
@@ -4073,9 +4073,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/DataProducer.js
+  // lib/DataProducer.js
   var require_DataProducer = __commonJS({
-    "src/client/lib/DataProducer.js"(exports) {
+    "lib/DataProducer.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.DataProducer = void 0;
@@ -4253,9 +4253,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/DataConsumer.js
+  // lib/DataConsumer.js
   var require_DataConsumer = __commonJS({
-    "src/client/lib/DataConsumer.js"(exports) {
+    "lib/DataConsumer.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.DataConsumer = void 0;
@@ -4415,9 +4415,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/Transport.js
+  // lib/Transport.js
   var require_Transport = __commonJS({
-    "src/client/lib/Transport.js"(exports) {
+    "lib/Transport.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -5146,9 +5146,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/node_modules/sdp-transform/lib/grammar.js
+  // node_modules/sdp-transform/lib/grammar.js
   var require_grammar = __commonJS({
-    "src/client/node_modules/sdp-transform/lib/grammar.js"(exports, module) {
+    "node_modules/sdp-transform/lib/grammar.js"(exports, module) {
       var grammar = module.exports = {
         v: [{
           name: "version",
@@ -5614,9 +5614,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/node_modules/sdp-transform/lib/parser.js
+  // node_modules/sdp-transform/lib/parser.js
   var require_parser = __commonJS({
-    "src/client/node_modules/sdp-transform/lib/parser.js"(exports) {
+    "node_modules/sdp-transform/lib/parser.js"(exports) {
       var toIntIfInt = function(v) {
         return String(Number(v)) === v ? Number(v) : v;
       };
@@ -5721,9 +5721,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/node_modules/sdp-transform/lib/writer.js
+  // node_modules/sdp-transform/lib/writer.js
   var require_writer = __commonJS({
-    "src/client/node_modules/sdp-transform/lib/writer.js"(exports, module) {
+    "node_modules/sdp-transform/lib/writer.js"(exports, module) {
       var grammar = require_grammar();
       var formatRegExp = /%[sdv%]/g;
       var format = function(formatStr) {
@@ -5827,9 +5827,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/node_modules/sdp-transform/lib/index.js
+  // node_modules/sdp-transform/lib/index.js
   var require_lib3 = __commonJS({
-    "src/client/node_modules/sdp-transform/lib/index.js"(exports) {
+    "node_modules/sdp-transform/lib/index.js"(exports) {
       var parser = require_parser();
       var writer = require_writer();
       exports.write = writer;
@@ -5843,9 +5843,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/handlers/sdp/commonUtils.js
+  // lib/handlers/sdp/commonUtils.js
   var require_commonUtils = __commonJS({
-    "src/client/lib/handlers/sdp/commonUtils.js"(exports) {
+    "lib/handlers/sdp/commonUtils.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -6055,9 +6055,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/handlers/sdp/unifiedPlanUtils.js
+  // lib/handlers/sdp/unifiedPlanUtils.js
   var require_unifiedPlanUtils = __commonJS({
-    "src/client/lib/handlers/sdp/unifiedPlanUtils.js"(exports) {
+    "lib/handlers/sdp/unifiedPlanUtils.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.getRtpEncodings = getRtpEncodings;
@@ -6174,9 +6174,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/handlers/ortc/utils.js
+  // lib/handlers/ortc/utils.js
   var require_utils2 = __commonJS({
-    "src/client/lib/handlers/ortc/utils.js"(exports) {
+    "lib/handlers/ortc/utils.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.addNackSuppportForOpus = addNackSuppportForOpus;
@@ -6193,9 +6193,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/handlers/HandlerInterface.js
+  // lib/handlers/HandlerInterface.js
   var require_HandlerInterface = __commonJS({
-    "src/client/lib/handlers/HandlerInterface.js"(exports) {
+    "lib/handlers/HandlerInterface.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.HandlerInterface = void 0;
@@ -6209,9 +6209,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/handlers/sdp/MediaSection.js
+  // lib/handlers/sdp/MediaSection.js
   var require_MediaSection = __commonJS({
-    "src/client/lib/handlers/sdp/MediaSection.js"(exports) {
+    "lib/handlers/sdp/MediaSection.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -6753,9 +6753,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/handlers/sdp/RemoteSdp.js
+  // lib/handlers/sdp/RemoteSdp.js
   var require_RemoteSdp = __commonJS({
-    "src/client/lib/handlers/sdp/RemoteSdp.js"(exports) {
+    "lib/handlers/sdp/RemoteSdp.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -7026,9 +7026,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/scalabilityModes.js
+  // lib/scalabilityModes.js
   var require_scalabilityModes = __commonJS({
-    "src/client/lib/scalabilityModes.js"(exports) {
+    "lib/scalabilityModes.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.parse = parse;
@@ -7050,9 +7050,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/handlers/Chrome111.js
+  // lib/handlers/Chrome111.js
   var require_Chrome111 = __commonJS({
-    "src/client/lib/handlers/Chrome111.js"(exports) {
+    "lib/handlers/Chrome111.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -7720,9 +7720,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/handlers/Chrome74.js
+  // lib/handlers/Chrome74.js
   var require_Chrome74 = __commonJS({
-    "src/client/lib/handlers/Chrome74.js"(exports) {
+    "lib/handlers/Chrome74.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -8393,9 +8393,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/handlers/Chrome70.js
+  // lib/handlers/Chrome70.js
   var require_Chrome70 = __commonJS({
-    "src/client/lib/handlers/Chrome70.js"(exports) {
+    "lib/handlers/Chrome70.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -8985,9 +8985,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/handlers/sdp/planBUtils.js
+  // lib/handlers/sdp/planBUtils.js
   var require_planBUtils = __commonJS({
-    "src/client/lib/handlers/sdp/planBUtils.js"(exports) {
+    "lib/handlers/sdp/planBUtils.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.getRtpEncodings = getRtpEncodings;
@@ -9126,9 +9126,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/handlers/Chrome67.js
+  // lib/handlers/Chrome67.js
   var require_Chrome67 = __commonJS({
-    "src/client/lib/handlers/Chrome67.js"(exports) {
+    "lib/handlers/Chrome67.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -9694,9 +9694,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/handlers/Chrome55.js
+  // lib/handlers/Chrome55.js
   var require_Chrome55 = __commonJS({
-    "src/client/lib/handlers/Chrome55.js"(exports) {
+    "lib/handlers/Chrome55.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -10205,9 +10205,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/handlers/Firefox120.js
+  // lib/handlers/Firefox120.js
   var require_Firefox120 = __commonJS({
-    "src/client/lib/handlers/Firefox120.js"(exports) {
+    "lib/handlers/Firefox120.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -10872,9 +10872,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/handlers/Firefox60.js
+  // lib/handlers/Firefox60.js
   var require_Firefox60 = __commonJS({
-    "src/client/lib/handlers/Firefox60.js"(exports) {
+    "lib/handlers/Firefox60.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -11535,9 +11535,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/handlers/Safari12.js
+  // lib/handlers/Safari12.js
   var require_Safari12 = __commonJS({
-    "src/client/lib/handlers/Safari12.js"(exports) {
+    "lib/handlers/Safari12.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -12205,9 +12205,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/handlers/Safari11.js
+  // lib/handlers/Safari11.js
   var require_Safari11 = __commonJS({
-    "src/client/lib/handlers/Safari11.js"(exports) {
+    "lib/handlers/Safari11.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -12766,9 +12766,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/handlers/ortc/edgeUtils.js
+  // lib/handlers/ortc/edgeUtils.js
   var require_edgeUtils = __commonJS({
-    "src/client/lib/handlers/ortc/edgeUtils.js"(exports) {
+    "lib/handlers/ortc/edgeUtils.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -12846,9 +12846,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/handlers/Edge11.js
+  // lib/handlers/Edge11.js
   var require_Edge11 = __commonJS({
-    "src/client/lib/handlers/Edge11.js"(exports) {
+    "lib/handlers/Edge11.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -13265,9 +13265,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/handlers/ReactNativeUnifiedPlan.js
+  // lib/handlers/ReactNativeUnifiedPlan.js
   var require_ReactNativeUnifiedPlan = __commonJS({
-    "src/client/lib/handlers/ReactNativeUnifiedPlan.js"(exports) {
+    "lib/handlers/ReactNativeUnifiedPlan.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -13964,9 +13964,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/handlers/ReactNative.js
+  // lib/handlers/ReactNative.js
   var require_ReactNative = __commonJS({
-    "src/client/lib/handlers/ReactNative.js"(exports) {
+    "lib/handlers/ReactNative.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -14484,9 +14484,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/Device.js
+  // lib/Device.js
   var require_Device = __commonJS({
-    "src/client/lib/Device.js"(exports) {
+    "lib/Device.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -14891,25 +14891,25 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/RtpParameters.js
+  // lib/RtpParameters.js
   var require_RtpParameters = __commonJS({
-    "src/client/lib/RtpParameters.js"(exports) {
+    "lib/RtpParameters.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
     }
   });
 
-  // src/client/lib/SctpParameters.js
+  // lib/SctpParameters.js
   var require_SctpParameters = __commonJS({
-    "src/client/lib/SctpParameters.js"(exports) {
+    "lib/SctpParameters.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
     }
   });
 
-  // src/client/lib/types.js
+  // lib/types.js
   var require_types = __commonJS({
-    "src/client/lib/types.js"(exports) {
+    "lib/types.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -14941,9 +14941,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/qos/adapters/producerAdapter.js
+  // lib/qos/adapters/producerAdapter.js
   var require_producerAdapter = __commonJS({
-    "src/client/lib/qos/adapters/producerAdapter.js"(exports) {
+    "lib/qos/adapters/producerAdapter.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.MediasoupProducerAdapter = void 0;
@@ -15044,9 +15044,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/qos/constants.js
+  // lib/qos/constants.js
   var require_constants = __commonJS({
-    "src/client/lib/qos/constants.js"(exports) {
+    "lib/qos/constants.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.QOS_MAX_TRACKS_PER_SNAPSHOT = exports.QOS_MAX_SEQ = exports.DEFAULT_TRACE_BUFFER_SIZE = exports.DEFAULT_RECOVERY_COOLDOWN_MS = exports.DEFAULT_SNAPSHOT_INTERVAL_MS = exports.DEFAULT_SAMPLE_INTERVAL_MS = exports.QOS_OVERRIDE_SCHEMA_V1 = exports.QOS_POLICY_SCHEMA_V1 = exports.QOS_CLIENT_SCHEMA_V1 = void 0;
@@ -15062,9 +15062,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/qos/protocol.js
+  // lib/qos/protocol.js
   var require_protocol = __commonJS({
-    "src/client/lib/qos/protocol.js"(exports) {
+    "lib/qos/protocol.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.parseClientQosSnapshot = parseClientQosSnapshot;
@@ -15347,6 +15347,9 @@ var mediasoupClient = (() => {
           throw new TypeError(`qosOverride.schema must be '${constants_1.QOS_OVERRIDE_SCHEMA_V1}', got '${schema}'`);
         }
         const scope = asStringEnum(obj.scope, "qosOverride.scope", ["peer", "track"]);
+        if (scope === "track" && (!("trackId" in obj) || obj.trackId === null || obj.trackId === void 0)) {
+          throw new TypeError("qosOverride.trackId is required when scope is track");
+        }
         let trackId;
         if ("trackId" in obj) {
           if (obj.trackId === null || obj.trackId === void 0) {
@@ -15363,6 +15366,9 @@ var mediasoupClient = (() => {
         const disableRecovery = optionalBoolean(obj, "disableRecovery", "qosOverride");
         const pauseUpstream = optionalBoolean(obj, "pauseUpstream", "qosOverride");
         const resumeUpstream = optionalBoolean(obj, "resumeUpstream", "qosOverride");
+        if (pauseUpstream === true && resumeUpstream === true) {
+          throw new TypeError("qosOverride.pauseUpstream and qosOverride.resumeUpstream are mutually exclusive");
+        }
         const ttlMs = asNonNegativeInt(obj.ttlMs, "qosOverride.ttlMs");
         const reason = asNonEmptyString(obj.reason, "qosOverride.reason");
         return {
@@ -15408,9 +15414,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/qos/adapters/signalChannel.js
+  // lib/qos/adapters/signalChannel.js
   var require_signalChannel = __commonJS({
-    "src/client/lib/qos/adapters/signalChannel.js"(exports) {
+    "lib/qos/adapters/signalChannel.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.QosSignalChannel = void 0;
@@ -15504,9 +15510,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/qos/adapters/statsProvider.js
+  // lib/qos/adapters/statsProvider.js
   var require_statsProvider = __commonJS({
-    "src/client/lib/qos/adapters/statsProvider.js"(exports) {
+    "lib/qos/adapters/statsProvider.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.ProducerSenderStatsProvider = void 0;
@@ -15733,9 +15739,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/qos/adapters/index.js
+  // lib/qos/adapters/index.js
   var require_adapters = __commonJS({
-    "src/client/lib/qos/adapters/index.js"(exports) {
+    "lib/qos/adapters/index.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -15760,9 +15766,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/qos/clock.js
+  // lib/qos/clock.js
   var require_clock = __commonJS({
-    "src/client/lib/qos/clock.js"(exports) {
+    "lib/qos/clock.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.ManualQosClock = exports.SystemQosClock = void 0;
@@ -15848,9 +15854,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/qos/coordinator.js
+  // lib/qos/coordinator.js
   var require_coordinator = __commonJS({
-    "src/client/lib/qos/coordinator.js"(exports) {
+    "lib/qos/coordinator.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.PeerQosCoordinator = void 0;
@@ -15947,9 +15953,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/qos/downlinkHints.js
+  // lib/qos/downlinkHints.js
   var require_downlinkHints = __commonJS({
-    "src/client/lib/qos/downlinkHints.js"(exports) {
+    "lib/qos/downlinkHints.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.DownlinkHints = void 0;
@@ -15965,6 +15971,10 @@ var mediasoupClient = (() => {
         set(consumerId, hint) {
           this._hints.set(consumerId, {
             producerId: hint.producerId || "",
+            kind: hint.kind === "audio" ? "audio" : "video",
+            ssrc: Number.isFinite(hint.ssrc) ? hint.ssrc : void 0,
+            mid: typeof hint.mid === "string" ? hint.mid : void 0,
+            trackIdentifier: typeof hint.trackIdentifier === "string" ? hint.trackIdentifier : void 0,
             visible: hint.visible !== false,
             pinned: !!hint.pinned,
             activeSpeaker: !!hint.activeSpeaker,
@@ -15979,21 +15989,24 @@ var mediasoupClient = (() => {
         setVisible(consumerId, visible) {
           const h = this._hints.get(consumerId);
           if (h) h.visible = !!visible;
+          else console.warn(`[DownlinkHints] setVisible ignored for unknown consumerId=${consumerId}`);
         }
         setPinned(consumerId, pinned) {
           const h = this._hints.get(consumerId);
           if (h) h.pinned = !!pinned;
+          else console.warn(`[DownlinkHints] setPinned ignored for unknown consumerId=${consumerId}`);
         }
         setActiveSpeaker(consumerId, active) {
           const h = this._hints.get(consumerId);
           if (h) h.activeSpeaker = !!active;
+          else console.warn(`[DownlinkHints] setActiveSpeaker ignored for unknown consumerId=${consumerId}`);
         }
         setTargetSize(consumerId, width, height) {
           const h = this._hints.get(consumerId);
           if (h) {
             h.targetWidth = width || 0;
             h.targetHeight = height || 0;
-          }
+          } else console.warn(`[DownlinkHints] setTargetSize ignored for unknown consumerId=${consumerId}`);
         }
         get(consumerId) {
           return this._hints.get(consumerId) || null;
@@ -16009,17 +16022,24 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/qos/downlinkProtocol.js
+  // lib/qos/downlinkProtocol.js
   var require_downlinkProtocol = __commonJS({
-    "src/client/lib/qos/downlinkProtocol.js"(exports) {
+    "lib/qos/downlinkProtocol.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.DOWNLINK_SCHEMA_V1 = "mediasoup.qos.downlink.client.v1";
       exports.DOWNLINK_SCHEMA_V1_LEGACY = "mediasoup.downlink.v1";
+      exports.DOWNLINK_MAX_SEQ = Number.MAX_SAFE_INTEGER;
       exports.DOWNLINK_MAX_SUBSCRIPTIONS = 64;
       exports.serializeDownlinkSnapshot = serializeDownlinkSnapshot;
       exports.parseDownlinkSnapshot = parseDownlinkSnapshot;
       function serializeDownlinkSnapshot({ seq, subscriberPeerId, transport, subscriptions }) {
+        const capped = subscriptions.length > exports.DOWNLINK_MAX_SUBSCRIPTIONS ? subscriptions.slice(0, exports.DOWNLINK_MAX_SUBSCRIPTIONS) : subscriptions;
+        if (capped !== subscriptions) {
+          console.warn(
+            `[downlinkProtocol] Truncated ${subscriptions.length} subscriptions to ${exports.DOWNLINK_MAX_SUBSCRIPTIONS}`
+          );
+        }
         return {
           schema: exports.DOWNLINK_SCHEMA_V1,
           seq,
@@ -16029,23 +16049,39 @@ var mediasoupClient = (() => {
             availableIncomingBitrate: transport.availableIncomingBitrate || 0,
             currentRoundTripTime: transport.currentRoundTripTime || 0
           },
-          subscriptions: subscriptions.map((s) => ({
-            consumerId: s.consumerId,
-            producerId: s.producerId,
-            visible: !!s.visible,
-            pinned: !!s.pinned,
-            activeSpeaker: !!s.activeSpeaker,
-            isScreenShare: !!s.isScreenShare,
-            targetWidth: s.targetWidth || 0,
-            targetHeight: s.targetHeight || 0,
-            packetsLost: s.packetsLost || 0,
-            jitter: s.jitter || 0,
-            framesPerSecond: s.framesPerSecond || 0,
-            frameWidth: s.frameWidth || 0,
-            frameHeight: s.frameHeight || 0,
-            freezeRate: s.freezeRate || 0
-          }))
+          subscriptions: capped.map((s) => {
+            const entry = {
+              consumerId: s.consumerId,
+              producerId: s.producerId,
+              kind: s.kind === "audio" ? "audio" : "video",
+              visible: !!s.visible,
+              pinned: !!s.pinned,
+              activeSpeaker: !!s.activeSpeaker,
+              isScreenShare: !!s.isScreenShare,
+              targetWidth: s.targetWidth || 0,
+              targetHeight: s.targetHeight || 0,
+              packetsLost: s.packetsLost || 0,
+              jitter: s.jitter || 0,
+              framesPerSecond: s.framesPerSecond || 0,
+              frameWidth: s.frameWidth || 0,
+              frameHeight: s.frameHeight || 0,
+              freezeRate: s.freezeRate || 0
+            };
+            copyOptionalNumber(s, entry, "concealedSamples");
+            copyOptionalNumber(s, entry, "totalSamplesReceived");
+            copyOptionalNumber(s, entry, "freezeCount");
+            copyOptionalNumber(s, entry, "totalFreezesDuration");
+            copyOptionalNumber(s, entry, "framesDropped");
+            copyOptionalNumber(s, entry, "jitterBufferDelayMs");
+            return entry;
+          })
         };
+      }
+      function copyOptionalNumber(source, target, key) {
+        const value = source?.[key];
+        if (typeof value === "number" && Number.isFinite(value)) {
+          target[key] = value;
+        }
       }
       function parseDownlinkSnapshot(payload) {
         if (!payload || typeof payload !== "object") {
@@ -16054,20 +16090,24 @@ var mediasoupClient = (() => {
         if (payload.schema !== exports.DOWNLINK_SCHEMA_V1 && payload.schema !== exports.DOWNLINK_SCHEMA_V1_LEGACY) {
           throw new TypeError(`unsupported schema: ${payload.schema}`);
         }
-        if (typeof payload.seq !== "number" || payload.seq < 0) {
-          throw new TypeError("seq must be a non-negative number");
+        if (!Number.isSafeInteger(payload.seq) || payload.seq < 0) {
+          throw new TypeError(`seq must be a non-negative safe integer <= ${exports.DOWNLINK_MAX_SEQ}`);
         }
-        if (payload.schema === exports.DOWNLINK_SCHEMA_V1_LEGACY) {
-          payload.schema = exports.DOWNLINK_SCHEMA_V1;
-        }
-        return payload;
+        return {
+          ...payload,
+          schema: payload.schema === exports.DOWNLINK_SCHEMA_V1_LEGACY ? exports.DOWNLINK_SCHEMA_V1 : payload.schema,
+          subscriptions: Array.isArray(payload.subscriptions) ? payload.subscriptions.map((s) => ({
+            ...s,
+            kind: s?.kind === "audio" ? "audio" : "video"
+          })) : payload.subscriptions
+        };
       }
     }
   });
 
-  // src/client/lib/qos/downlinkReporter.js
+  // lib/qos/downlinkReporter.js
   var require_downlinkReporter = __commonJS({
-    "src/client/lib/qos/downlinkReporter.js"(exports) {
+    "lib/qos/downlinkReporter.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.DownlinkReporter = void 0;
@@ -16081,7 +16121,7 @@ var mediasoupClient = (() => {
          * @param {string} opts.peerId  subscriber peer id
          * @param {number} [opts.intervalMs=2000]
          */
-        constructor({ sampler, hints, send, peerId, intervalMs = 2e3 }) {
+        constructor({ sampler, hints, send, peerId, intervalMs = 2e3, logger = console }) {
           this._sampler = sampler;
           this._hints = hints;
           this._send = send;
@@ -16090,6 +16130,8 @@ var mediasoupClient = (() => {
           this._seq = 0;
           this._timerId = null;
           this._reporting = false;
+          this._logger = logger;
+          this._consecutiveErrors = 0;
         }
         get running() {
           return this._timerId !== null;
@@ -16116,15 +16158,24 @@ var mediasoupClient = (() => {
             for (const [cid, hint] of this._hints.getAll()) {
               this._sampler.setHints(cid, hint);
             }
+            const nextSeq = this._seq >= downlinkProtocol_1.DOWNLINK_MAX_SEQ ? 0 : this._seq + 1;
+            this._seq = nextSeq;
             const { transport, subscriptions } = await this._sampler.sample(this._peerId);
             const snapshot = (0, downlinkProtocol_1.serializeDownlinkSnapshot)({
-              seq: this._seq++,
+              seq: nextSeq,
               subscriberPeerId: this._peerId,
               transport,
               subscriptions
             });
             await this._send("downlinkClientStats", snapshot);
+            this._consecutiveErrors = 0;
           } catch (e) {
+            this._consecutiveErrors++;
+            if (this._consecutiveErrors <= 3 || this._consecutiveErrors % 10 === 0) {
+              this._logger.warn(
+                `[DownlinkReporter] tick failed (count=${this._consecutiveErrors}): ${e.message || e}`
+              );
+            }
           } finally {
             this._reporting = false;
           }
@@ -16134,18 +16185,19 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/qos/downlinkSampler.js
+  // lib/qos/downlinkSampler.js
   var require_downlinkSampler = __commonJS({
-    "src/client/lib/qos/downlinkSampler.js"(exports) {
+    "lib/qos/downlinkSampler.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.DownlinkSampler = void 0;
       var DownlinkSampler = class {
-        constructor(recvTransport) {
+        constructor(recvTransport, options = {}) {
           this._transport = recvTransport;
           this._hints = /* @__PURE__ */ new Map();
-          this._prevBytesReceived = /* @__PURE__ */ new Map();
-          this._prevTimestamp = /* @__PURE__ */ new Map();
+          this._prevPacketsLost = /* @__PURE__ */ new Map();
+          this._prevPacketsReceived = /* @__PURE__ */ new Map();
+          this._statsProvider = typeof options.statsProvider === "function" ? options.statsProvider : async () => this._transport?.getStats?.();
         }
         /**
          * Set UI-level hints for a consumer.
@@ -16157,8 +16209,8 @@ var mediasoupClient = (() => {
         }
         removeHints(consumerId) {
           this._hints.delete(consumerId);
-          this._prevBytesReceived.delete(consumerId);
-          this._prevTimestamp.delete(consumerId);
+          this._prevPacketsLost.delete(consumerId);
+          this._prevPacketsReceived.delete(consumerId);
         }
         /**
          * Sample current recv transport stats and return a subscriptions array
@@ -16167,17 +16219,16 @@ var mediasoupClient = (() => {
          * @returns {Promise<{transport: object, subscriptions: Array}>}
          */
         async sample(subscriberPeerId) {
-          const pc = this._transport?._handler?._pc;
-          if (!pc) {
+          const rawStats = await this._statsProvider();
+          if (!rawStats || typeof rawStats.values !== "function") {
             return { transport: { availableIncomingBitrate: 0, currentRoundTripTime: 0 }, subscriptions: [] };
           }
-          const rawStats = await pc.getStats();
-          const inboundBySSRC = /* @__PURE__ */ new Map();
+          const inboundReports = [];
           let availableIncomingBitrate = 0;
           let currentRoundTripTime = 0;
           for (const report of rawStats.values()) {
-            if (report.type === "inbound-rtp" && report.kind === "video") {
-              inboundBySSRC.set(report.ssrc, report);
+            if (report.type === "inbound-rtp" && (report.kind === "video" || report.kind === "audio")) {
+              inboundReports.push(report);
             }
             if (report.type === "candidate-pair" && report.nominated) {
               availableIncomingBitrate = report.availableIncomingBitrate || 0;
@@ -16185,34 +16236,41 @@ var mediasoupClient = (() => {
             }
           }
           const subscriptions = [];
+          const matchedReports = /* @__PURE__ */ new Set();
           for (const [consumerId, hint] of this._hints) {
-            let stats = null;
-            for (const report of inboundBySSRC.values()) {
-              if (!report._matched) {
-                stats = report;
-                report._matched = true;
-                break;
-              }
+            const stats = selectInboundReport(inboundReports, hint, matchedReports);
+            const lossPercent = computeLossPercent(
+              stats,
+              this._prevPacketsLost.get(consumerId),
+              this._prevPacketsReceived.get(consumerId)
+            );
+            if (stats) {
+              this._prevPacketsLost.set(consumerId, Number(stats.packetsLost) || 0);
+              this._prevPacketsReceived.set(consumerId, Number(stats.packetsReceived) || 0);
             }
             subscriptions.push({
               consumerId,
               producerId: hint.producerId || "",
+              kind: hint.kind === "audio" ? "audio" : "video",
               visible: !!hint.visible,
               pinned: !!hint.pinned,
               activeSpeaker: !!hint.activeSpeaker,
               isScreenShare: !!hint.isScreenShare,
               targetWidth: hint.targetWidth || 0,
               targetHeight: hint.targetHeight || 0,
-              packetsLost: stats?.packetsLost || 0,
+              packetsLost: lossPercent,
               jitter: stats?.jitter || 0,
               framesPerSecond: stats?.framesPerSecond || 0,
               frameWidth: stats?.frameWidth || 0,
               frameHeight: stats?.frameHeight || 0,
-              freezeRate: computeFreezeRate(stats)
+              freezeRate: computeFreezeRate(stats),
+              concealedSamples: readOptionalNumber(stats, "concealedSamples"),
+              totalSamplesReceived: readOptionalNumber(stats, "totalSamplesReceived"),
+              freezeCount: readOptionalNumber(stats, "freezeCount"),
+              totalFreezesDuration: readOptionalNumber(stats, "totalFreezesDuration"),
+              framesDropped: readOptionalNumber(stats, "framesDropped"),
+              jitterBufferDelayMs: computeJitterBufferDelayMs(stats)
             });
-          }
-          for (const report of inboundBySSRC.values()) {
-            delete report._matched;
           }
           return {
             transport: { availableIncomingBitrate, currentRoundTripTime },
@@ -16230,13 +16288,100 @@ var mediasoupClient = (() => {
         }
         return freezeCount > 0 ? freezeCount / totalFrames : 0;
       }
+      function computeJitterBufferDelayMs(stats) {
+        if (!stats) return void 0;
+        const totalDelay = readOptionalNumber(stats, "jitterBufferDelay");
+        if (typeof totalDelay !== "number") {
+          return void 0;
+        }
+        const emittedCount = readOptionalNumber(stats, "jitterBufferEmittedCount");
+        if (typeof emittedCount === "number" && emittedCount > 0) {
+          return totalDelay / emittedCount * 1e3;
+        }
+        return totalDelay * 1e3;
+      }
+      function readOptionalNumber(stats, key) {
+        const value = Number(stats?.[key]);
+        return Number.isFinite(value) ? value : void 0;
+      }
+      function selectInboundReport(reports, hint, matchedReports) {
+        const explicitMatches = reports.filter((report) => matchesHint(report, hint));
+        for (const report of explicitMatches) {
+          if (!matchedReports.has(report)) {
+            matchedReports.add(report);
+            return report;
+          }
+        }
+        for (const report of reports) {
+          if (!matchedReports.has(report) && matchesHintKind(report, hint)) {
+            matchedReports.add(report);
+            return report;
+          }
+        }
+        if (hint?.kind === "audio" || hint?.kind === "video") {
+          return null;
+        }
+        for (const report of reports) {
+          if (!matchedReports.has(report)) {
+            matchedReports.add(report);
+            return report;
+          }
+        }
+        return null;
+      }
+      function matchesHint(report, hint = {}) {
+        if (!report || !hint) return false;
+        if (!matchesHintKind(report, hint)) {
+          return false;
+        }
+        if (Number.isFinite(hint.ssrc) && Number(report.ssrc) === Number(hint.ssrc)) {
+          return true;
+        }
+        if (typeof hint.mid === "string" && hint.mid && report.mid === hint.mid) {
+          return true;
+        }
+        if (typeof hint.trackIdentifier === "string" && hint.trackIdentifier && report.trackIdentifier === hint.trackIdentifier) {
+          return true;
+        }
+        return false;
+      }
+      function matchesHintKind(report, hint = {}) {
+        if (!report || !hint) return false;
+        if (hint.kind === "audio" || hint.kind === "video") {
+          if (report.kind !== hint.kind) {
+            return false;
+          }
+        }
+        return true;
+      }
+      function computeLossPercent(stats, previousLost, previousReceived) {
+        if (!stats) return 0;
+        const currentLost = Number(stats.packetsLost);
+        const currentReceived = Number(stats.packetsReceived);
+        if (!Number.isFinite(currentLost) || !Number.isFinite(currentReceived)) {
+          return 0;
+        }
+        if (!Number.isFinite(previousLost) || !Number.isFinite(previousReceived)) {
+          return 0;
+        }
+        const deltaLost = currentLost - previousLost;
+        const deltaReceived = currentReceived - previousReceived;
+        if (deltaLost < 0 || deltaReceived < 0) {
+          return 0;
+        }
+        const total = deltaLost + deltaReceived;
+        if (total <= 0) {
+          return 0;
+        }
+        return Math.max(0, Math.min(100, Math.round(deltaLost / total * 100)));
+      }
       exports.DownlinkSampler = DownlinkSampler;
     }
   });
 
-  // src/client/lib/qos/planner.js
+  // lib/qos/planner.js
   var require_planner = __commonJS({
-    "src/client/lib/qos/planner.js"(exports) {
+    "lib/qos/planner.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.planActionsForLevel = planActionsForLevel;
@@ -16382,9 +16527,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/qos/probe.js
+  // lib/qos/probe.js
   var require_probe = __commonJS({
-    "src/client/lib/qos/probe.js"(exports) {
+    "lib/qos/probe.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.beginProbe = beginProbe;
@@ -16451,9 +16596,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/qos/sampler.js
+  // lib/qos/sampler.js
   var require_sampler = __commonJS({
-    "src/client/lib/qos/sampler.js"(exports) {
+    "lib/qos/sampler.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.IntervalQosSampler = void 0;
@@ -16539,9 +16684,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/qos/signals.js
+  // lib/qos/signals.js
   var require_signals = __commonJS({
-    "src/client/lib/qos/signals.js"(exports) {
+    "lib/qos/signals.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.computeCounterDelta = computeCounterDelta;
@@ -16681,9 +16826,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/qos/stateMachine.js
+  // lib/qos/stateMachine.js
   var require_stateMachine = __commonJS({
-    "src/client/lib/qos/stateMachine.js"(exports) {
+    "lib/qos/stateMachine.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.createInitialQosStateMachineContext = createInitialQosStateMachineContext;
@@ -16827,9 +16972,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/qos/trace.js
+  // lib/qos/trace.js
   var require_trace = __commonJS({
-    "src/client/lib/qos/trace.js"(exports) {
+    "lib/qos/trace.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.QosTraceBuffer = void 0;
@@ -16875,9 +17020,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/qos/profiles.js
+  // lib/qos/profiles.js
   var require_profiles = __commonJS({
-    "src/client/lib/qos/profiles.js"(exports) {
+    "lib/qos/profiles.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.getDefaultCameraProfile = getDefaultCameraProfile;
@@ -17145,9 +17290,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/qos/controller.js
+  // lib/qos/controller.js
   var require_controller = __commonJS({
-    "src/client/lib/qos/controller.js"(exports) {
+    "lib/qos/controller.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.PublisherQosController = void 0;
@@ -17186,7 +17331,7 @@ var mediasoupClient = (() => {
             return result.applied !== false;
           }
         }
-        return true;
+        return false;
       }
       function isStrongRecoverySignal(signals, profile) {
         const { thresholds } = profile;
@@ -17530,10 +17675,18 @@ var mediasoupClient = (() => {
           const pauseUpstreamActive = override?.pauseUpstream === true || this.coordinationOverride?.pauseUpstream === true;
           const resumeUpstreamActive = override?.resumeUpstream === true || this.coordinationOverride?.resumeUpstream === true;
           if (pauseUpstreamActive && this.inAudioOnlyMode !== true && this.profile.source === "camera" && audioOnlyAllowed) {
-            filtered.unshift({ type: "enterAudioOnly", level: this.currentLevel, reason: "downlink_v3_zero_demand_pause" });
+            filtered.unshift({
+              type: "enterAudioOnly",
+              level: this.currentLevel,
+              reason: "downlink_v3_zero_demand_pause"
+            });
           }
           if (resumeUpstreamActive && this.inAudioOnlyMode === true && this.profile.source === "camera" && audioOnlyAllowed && !pauseUpstreamActive) {
-            filtered.unshift({ type: "exitAudioOnly", level: this.currentLevel, reason: "downlink_v3_demand_resumed" });
+            filtered.unshift({
+              type: "exitAudioOnly",
+              level: this.currentLevel,
+              reason: "downlink_v3_demand_resumed"
+            });
           }
           if (audioOnlyAllowed && override?.forceAudioOnly && this.inAudioOnlyMode !== true) {
             if (this.profile.source === "camera") {
@@ -17690,9 +17843,11 @@ var mediasoupClient = (() => {
           if (!this.signalChannel) {
             return;
           }
+          const nextSeq = this.seq >= constants_1.QOS_MAX_SEQ ? 0 : this.seq + 1;
+          this.seq = nextSeq;
           const payload = {
             schema: constants_1.QOS_CLIENT_SCHEMA_V1,
-            seq: ++this.seq,
+            seq: nextSeq,
             tsMs: nowMs,
             peerState: {
               mode: resolvePeerMode(this.inAudioOnlyMode, this.kind),
@@ -17735,9 +17890,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/qos/executor.js
+  // lib/qos/executor.js
   var require_executor = __commonJS({
-    "src/client/lib/qos/executor.js"(exports) {
+    "lib/qos/executor.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.QosActionExecutor = void 0;
@@ -17844,9 +17999,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/qos/factory.js
+  // lib/qos/factory.js
   var require_factory = __commonJS({
-    "src/client/lib/qos/factory.js"(exports) {
+    "lib/qos/factory.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.createMediasoupProducerQosController = createMediasoupProducerQosController;
@@ -18002,17 +18157,17 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/qos/types.js
+  // lib/qos/types.js
   var require_types2 = __commonJS({
-    "src/client/lib/qos/types.js"(exports) {
+    "lib/qos/types.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
     }
   });
 
-  // src/client/lib/qos/index.js
+  // lib/qos/index.js
   var require_qos = __commonJS({
-    "src/client/lib/qos/index.js"(exports) {
+    "lib/qos/index.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -18054,9 +18209,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // src/client/lib/index.js
+  // lib/index.js
   var require_index = __commonJS({
-    "src/client/lib/index.js"(exports) {
+    "lib/index.js"(exports) {
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
         var desc = Object.getOwnPropertyDescriptor(m, k);
