@@ -47,6 +47,8 @@ log/
 recordings/
 *.pid
 config.json
+/.nightly-full-regression.env
+/artifacts/nightly-full-regression/
 
 # Local QoS run artifacts
 /docs/archive/*-qos-runs/20*/
