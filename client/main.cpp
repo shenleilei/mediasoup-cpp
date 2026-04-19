@@ -523,6 +523,12 @@ struct CachedServerStatsResponse {
 	bool requestInFlight = false;
 };
 
+enum class LossCounterSource {
+	None,
+	LocalRtcp,
+	ServerStats
+};
+
 struct VideoTrackRuntime {
 	size_t index = 0;
 	std::string trackId;
@@ -533,6 +539,7 @@ struct VideoTrackRuntime {
 	double weight = 1.0;
 	bool lossBaseInitialized = false;
 	uint64_t lossBase = 0;
+	LossCounterSource lossCounterSource = LossCounterSource::None;
 	bool videoSuppressed = false;
 	bool forceNextVideoKeyframe = false;
 	double nextVideoEncodePtsSec = -1.0;
@@ -1120,6 +1127,26 @@ int main(int argc, char* argv[]) {
 					}
 					return true;
 				};
+				rtcp.requestKeyframeFn = [&](uint32_t ssrc) {
+					for (auto& track : videoTracks) {
+						if (track.ssrc != ssrc || track.videoSuppressed) continue;
+
+						if (track.encoder) {
+							track.forceNextVideoKeyframe = true;
+							track.nextVideoEncodePtsSec = -1.0;
+							return;
+						}
+
+						const auto* stream = rtcp.getVideoStream(ssrc);
+						if (stream && !stream->lastKeyframe.empty() && stream->seqPtr) {
+							const uint32_t resendTs =
+								stream->lastRtpTs != 0 ? stream->lastRtpTs : stream->lastKeyframeTs;
+							sendH264(udp, stream->lastKeyframe.data(), stream->lastKeyframe.size(),
+								stream->payloadType, resendTs, stream->ssrc, *stream->seqPtr);
+						}
+						return;
+					}
+				};
 				g_rtcp = &rtcp;
 
 			auto videoTracksJson = pub.value("videoTracks", json::array());
@@ -1633,6 +1660,7 @@ int main(int argc, char* argv[]) {
 							qSnap.kind = qos::TrackKind::Video;
 							qSnap.targetBitrateBps = track.encBitrate;
 							qSnap.configuredBitrateBps = track.encBitrate;
+							LossCounterSource lossCounterSource = LossCounterSource::None;
 
 							// Fill from network thread stats (only if fresh)
 							bool statsFresh = trackStats[ti].hasData
@@ -1660,6 +1688,7 @@ int main(int argc, char* argv[]) {
 								qSnap.packetsLost = ns.rrCumulativeLost;
 								qSnap.roundTripTimeMs = ns.rrRttMs;
 								qSnap.jitterMs = ns.rrJitterMs;
+								lossCounterSource = LossCounterSource::LocalRtcp;
 							}
 
 							// Server stats overlay
@@ -1680,6 +1709,7 @@ int main(int argc, char* argv[]) {
 								if (parsed.roundTripTimeMs >= 0) qSnap.roundTripTimeMs = parsed.roundTripTimeMs;
 								if (parsed.jitterMs >= 0) qSnap.jitterMs = parsed.jitterMs;
 								observedBitrateBps = parsed.bitrateBps;
+								lossCounterSource = LossCounterSource::ServerStats;
 							}
 							if (matrixTestProfile.has_value() && track.index == 0) {
 								if (auto syntheticSendBps = applyMatrixTestProfile(
@@ -1702,6 +1732,14 @@ int main(int argc, char* argv[]) {
 								&& observedBitrateBps < qSnap.targetBitrateBps * qos::NETWORK_CONGESTED_UTILIZATION) {
 								qSnap.qualityLimitationReason = qos::QualityLimitationReason::Bandwidth;
 							}
+
+							if (track.lossCounterSource != LossCounterSource::None
+								&& lossCounterSource != LossCounterSource::None
+								&& track.lossCounterSource != lossCounterSource) {
+								track.qosCtrl->primeSnapshotBaseline(qSnap);
+							}
+							if (lossCounterSource != LossCounterSource::None)
+								track.lossCounterSource = lossCounterSource;
 
 							track.qosCtrl->onSample(qSnap);
 							printf("[QOS_TRACE] tsMs=%lld track=%s state=%s level=%d mode=%s sample=%s bitrateBps=%d sendBps=%.0f packetsLost=%llu rttMs=%.1f jitterMs=%.1f width=%d height=%d fps=%d suppressed=%d\n",
@@ -2016,6 +2054,7 @@ int main(int argc, char* argv[]) {
 								snap.kind = qos::TrackKind::Video;
 								snap.targetBitrateBps = track.encBitrate;
 								snap.configuredBitrateBps = track.encBitrate;
+								LossCounterSource lossCounterSource = LossCounterSource::None;
 
 								if (const auto* rtcpStream = rtcp.getVideoStream(track.ssrc)) {
 									snap.bytesSent = rtcpStream->octetCount;
@@ -2023,6 +2062,7 @@ int main(int argc, char* argv[]) {
 									snap.packetsLost = rtcpStream->rrCumulativeLost;
 									snap.roundTripTimeMs = rtcpStream->rrRttMs;
 									snap.jitterMs = rtcpStream->rrJitterMs;
+									lossCounterSource = LossCounterSource::LocalRtcp;
 								}
 
 								bool usingServerStats = false;
@@ -2049,6 +2089,7 @@ int main(int argc, char* argv[]) {
 										if (parsed->roundTripTimeMs >= 0) snap.roundTripTimeMs = parsed->roundTripTimeMs;
 										if (parsed->jitterMs >= 0) snap.jitterMs = parsed->jitterMs;
 										observedBitrateBps = parsed->bitrateBps;
+										lossCounterSource = LossCounterSource::ServerStats;
 									}
 								}
 								if (matrixTestProfile.has_value() && track.index == 0) {
@@ -2073,6 +2114,14 @@ int main(int argc, char* argv[]) {
 									snap.qualityLimitationReason = qos::QualityLimitationReason::Bandwidth;
 									anyBandwidthLimited = true;
 								}
+
+								if (track.lossCounterSource != LossCounterSource::None
+									&& lossCounterSource != LossCounterSource::None
+									&& track.lossCounterSource != lossCounterSource) {
+									track.qosCtrl->primeSnapshotBaseline(snap);
+								}
+								if (lossCounterSource != LossCounterSource::None)
+									track.lossCounterSource = lossCounterSource;
 
 								track.qosCtrl->onSample(snap);
 								peerTrackStates.push_back(track.qosCtrl->getTrackState());

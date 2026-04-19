@@ -77,18 +77,20 @@ public:
 	~PeerRecorder() { stop(); }
 
 	int createSocket() {
-		sock_ = socket(AF_INET, SOCK_DGRAM, 0);
-		if (sock_ < 0) return -1;
+		int sock = socket(AF_INET, SOCK_DGRAM, 0);
+		if (sock < 0) return -1;
 		sockaddr_in addr{};
 		addr.sin_family = AF_INET;
 		addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 		addr.sin_port = 0;
-		if (bind(sock_, (sockaddr*)&addr, sizeof(addr)) < 0) {
-			::close(sock_); sock_ = -1; return -1;
+		if (bind(sock, (sockaddr*)&addr, sizeof(addr)) < 0) {
+			::close(sock);
+			return -1;
 		}
 		socklen_t alen = sizeof(addr);
-		getsockname(sock_, (sockaddr*)&addr, &alen);
+		getsockname(sock, (sockaddr*)&addr, &alen);
 		port_ = ntohs(addr.sin_port);
+		sock_.store(sock, std::memory_order_release);
 		return port_;
 	}
 
@@ -97,7 +99,7 @@ public:
 	// Target: 1-2 RecorderWorker threads using epoll to multiplex all recorder UDP sockets.
 	// This reduces thread count from N_peers to 2 when recording at scale (100+ peers).
 	bool start() {
-		if (sock_ < 0) return false;
+		if (sock_.load(std::memory_order_acquire) < 0) return false;
 		if (!initMuxer()) return false;
 		startTime_ = std::chrono::steady_clock::now();
 		running_ = true;
@@ -107,7 +109,8 @@ public:
 
 	void stop() {
 		running_ = false;
-		if (sock_ >= 0) { ::close(sock_); sock_ = -1; }
+		int sock = sock_.exchange(-1, std::memory_order_acq_rel);
+		if (sock >= 0) { ::close(sock); }
 		if (thread_.joinable()) thread_.join();
 		finalizeMuxer();
 		{
@@ -128,8 +131,9 @@ public:
 	const std::string& outputPath() const { return outputPath_; }
 
 	void appendQosSnapshot(const json& stats) {
-		if (!running_ || outputPath_.empty()) return;
 		std::lock_guard<std::mutex> lock(qosMutex_);
+		if (!running_) return;
+		if (outputPath_.empty()) return;
 		if (!qosFile_.is_open()) {
 			std::string qosPath = outputPath_.substr(0, outputPath_.rfind('.')) + ".qos.json";
 			qosFile_.open(qosPath, std::ios::out | std::ios::trunc);
@@ -158,6 +162,11 @@ private:
 
 		// Audio: Opus
 		audioStream_ = avformat_new_stream(fmtCtx_, nullptr);
+		if (!audioStream_) {
+			avformat_free_context(fmtCtx_);
+			fmtCtx_ = nullptr;
+			return false;
+		}
 		audioStream_->id = 0;
 		audioStream_->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
 		audioStream_->codecpar->codec_id = AV_CODEC_ID_OPUS;
@@ -175,6 +184,11 @@ private:
 
 		// Video
 		videoStream_ = avformat_new_stream(fmtCtx_, nullptr);
+		if (!videoStream_) {
+			avformat_free_context(fmtCtx_);
+			fmtCtx_ = nullptr;
+			return false;
+		}
 		videoStream_->id = 1;
 		videoStream_->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
 		videoStream_->codecpar->codec_id = (videoCodec_ == VideoCodec::H264)
@@ -204,9 +218,11 @@ private:
 	// Build AVCC extradata from cached SPS/PPS
 	bool setH264Extradata() {
 		if (h264Sps_.empty() || h264Pps_.empty()) return false;
+		if (h264Sps_.size() < 4 || !videoStream_ || !videoStream_->codecpar) return false;
 		int spsLen = h264Sps_.size(), ppsLen = h264Pps_.size();
 		int edSize = 6 + 2 + spsLen + 1 + 2 + ppsLen;
 		uint8_t* ed = (uint8_t*)av_mallocz(edSize + AV_INPUT_BUFFER_PADDING_SIZE);
+		if (!ed) return false;
 		ed[0] = 1;
 		ed[1] = h264Sps_[1]; ed[2] = h264Sps_[2]; ed[3] = h264Sps_[3];
 		ed[4] = 0xFF; ed[5] = 0xE1;
@@ -257,10 +273,12 @@ private:
 		uint8_t buf[65536];
 		int pktCount = 0;
 		while (running_) {
-			struct pollfd pfd = {sock_, POLLIN, 0};
+			const int sock = sock_.load(std::memory_order_acquire);
+			if (sock < 0) break;
+			struct pollfd pfd = {sock, POLLIN, 0};
 			int ret = poll(&pfd, 1, 200);
 			if (ret <= 0) continue;
-			int n = recv(sock_, buf, sizeof(buf), 0);
+			int n = recv(sock, buf, sizeof(buf), 0);
 			if (n <= 0) continue;
 			pktCount++;
 			RtpHeader rtp;
@@ -494,7 +512,7 @@ private:
 	uint8_t audioPT_, videoPT_;
 	uint32_t audioClockRate_, videoClockRate_;
 	VideoCodec videoCodec_;
-	int sock_ = -1;
+	std::atomic<int> sock_{-1};
 	int port_ = 0;
 	std::atomic<bool> running_{false};
 	std::thread thread_;

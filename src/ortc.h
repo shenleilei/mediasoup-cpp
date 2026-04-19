@@ -276,43 +276,58 @@ inline RtpParameters getConsumerRtpParameters(
 		return consumer;
 	}
 
-	// Match codecs with remote capabilities
+	// Match codecs with remote capabilities.
 	for (auto& codec : consumableParams.codecs) {
-		if (isRtxCodec(codec)) continue;
+		auto it = std::find_if(remoteRtpCapabilities.codecs.begin(), remoteRtpCapabilities.codecs.end(),
+			[&](const RtpCodecCapability& remoteCodec) {
+				return matchCodecs(codec, remoteCodec, {true, false});
+			});
 
-		bool matched = false;
-		for (auto& remoteCodec : remoteRtpCapabilities.codecs) {
-			if (isRtxCodec(remoteCodec)) continue;
-			if (toLower(codec.mimeType) == toLower(remoteCodec.mimeType) &&
-				codec.clockRate == remoteCodec.clockRate)
-			{
-				consumer.codecs.push_back(codec);
-				matched = true;
-				break;
-			}
+		if (it == remoteRtpCapabilities.codecs.end())
+			continue;
+
+		auto matchedCodec = codec;
+		std::vector<RtcpFeedback> matchedFeedback;
+		for (const auto& fb : codec.rtcpFeedback) {
+			auto fbIt = std::find_if(it->rtcpFeedback.begin(), it->rtcpFeedback.end(),
+				[&](const RtcpFeedback& remoteFb) {
+					return remoteFb.type == fb.type && remoteFb.parameter == fb.parameter;
+				});
+			if (fbIt != it->rtcpFeedback.end())
+				matchedFeedback.push_back(fb);
 		}
-		if (!matched) {
-			// Fallback: add codec anyway since it's from our own router
-			consumer.codecs.push_back(codec);
+		matchedCodec.rtcpFeedback = std::move(matchedFeedback);
+		consumer.codecs.push_back(std::move(matchedCodec));
+	}
+
+	// Remove RTX codecs that do not have an associated matched media codec.
+	bool hasRtx = false;
+	for (auto it = consumer.codecs.begin(); it != consumer.codecs.end(); ) {
+		if (!isRtxCodec(*it)) {
+			++it;
+			continue;
 		}
 
-		// Find matching RTX
-		for (auto& rtxCodec : consumableParams.codecs) {
-			if (!isRtxCodec(rtxCodec)) continue;
-			if (rtxCodec.parameters.value("apt", 0) == codec.payloadType) {
-				consumer.codecs.push_back(rtxCodec);
-				break;
-			}
+		uint8_t apt = it->parameters.value("apt", 0);
+		auto mediaIt = std::find_if(consumer.codecs.begin(), consumer.codecs.end(),
+			[apt](const RtpCodecParameters& codec) {
+				return !isRtxCodec(codec) && codec.payloadType == apt;
+			});
+		if (mediaIt == consumer.codecs.end()) {
+			it = consumer.codecs.erase(it);
+		} else {
+			hasRtx = true;
+			++it;
 		}
 	}
 
-	if (consumer.codecs.empty())
+	if (consumer.codecs.empty() || isRtxCodec(consumer.codecs.front()))
 		throw std::runtime_error("no compatible codecs");
 
-	// Header extensions - match with remote
+	// Header extensions - match by URI and negotiated id.
 	for (auto& ext : consumableParams.headerExtensions) {
 		for (auto& remoteExt : remoteRtpCapabilities.headerExtensions) {
-			if (ext.uri == remoteExt.uri) {
+			if (ext.uri == remoteExt.uri && ext.id == remoteExt.preferredId) {
 				consumer.headerExtensions.push_back(ext);
 				break;
 			}
@@ -326,9 +341,6 @@ inline RtpParameters getConsumerRtpParameters(
 	RtpEncodingParameters enc;
 	enc.ssrc = dist(rng);
 
-	// Add RTX SSRC if RTX codec present
-	bool hasRtx = std::any_of(consumer.codecs.begin(), consumer.codecs.end(),
-		[](const RtpCodecParameters& c) { return isRtxCodec(c); });
 	if (hasRtx) enc.rtxSsrc = dist(rng);
 
 	consumer.encodings.push_back(enc);

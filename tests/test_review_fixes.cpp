@@ -3,6 +3,7 @@
 #include "RoomManager.h"
 #include "Channel.h"
 #include "Constants.h"
+#include "RoomRegistrySelection.h"
 #include "../client/RtcpHandler.h"
 #include <future>
 #include <chrono>
@@ -158,6 +159,15 @@ TEST(WorkerCountTest, NoCoresUnderflow) {
 	EXPECT_EQ(calc(2), 1);
 	EXPECT_EQ(calc(4), 2);
 	EXPECT_EQ(calc(8), 6);
+}
+
+TEST(RoomRegistrySelectionTest, NoGeoComparatorPreservesStrictWeakOrderingForSelf) {
+	mediasoup::roomregistry::LoadCandidate self{"ws://self", 3, 0};
+	mediasoup::roomregistry::LoadCandidate peer{"ws://peer", 3, 0};
+
+	EXPECT_FALSE(mediasoup::roomregistry::CompareNoGeoCandidates(self, self, "ws://self"));
+	EXPECT_TRUE(mediasoup::roomregistry::CompareNoGeoCandidates(self, peer, "ws://self"));
+	EXPECT_FALSE(mediasoup::roomregistry::CompareNoGeoCandidates(peer, self, "ws://self"));
 }
 
 TEST(ChannelThreadSafetyFixTest, ProcessAvailableDataRejectedInThreadedMode) {

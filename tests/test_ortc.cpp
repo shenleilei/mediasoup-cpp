@@ -238,7 +238,7 @@ TEST(OrtcTest, ConsumableRtpParametersMapsCodecsAndDefaultsScalability) {
 	EXPECT_TRUE(consumable.rtcp.reducedSize);
 }
 
-TEST(OrtcTest, ConsumerRtpParametersMatchesRemoteAndAddsRtx) {
+TEST(OrtcTest, ConsumerRtpParametersMatchesRemoteCodecWithoutUnnegotiatedRtx) {
 	RtpParameters consumable;
 	consumable.codecs.push_back({"video/VP8", 120, 90000, 0, {}, {}});
 	consumable.codecs.push_back({"video/rtx", 121, 90000, 0, {{"apt", 120}}, {}});
@@ -252,18 +252,35 @@ TEST(OrtcTest, ConsumerRtpParametersMatchesRemoteAndAddsRtx) {
 	remote.headerExtensions.push_back({"video", "urn:ietf:params:rtp-hdrext:sdes:mid", 1, false, "sendrecv"});
 
 	auto consumer = ortc::getConsumerRtpParameters(consumable, remote, false);
-	EXPECT_EQ(consumer.codecs.size(), 2u);
+	EXPECT_EQ(consumer.codecs.size(), 1u);
 	EXPECT_EQ(consumer.codecs[0].mimeType, "video/VP8");
-	EXPECT_EQ(consumer.codecs[1].mimeType, "video/rtx");
 	ASSERT_EQ(consumer.headerExtensions.size(), 1u);
 	EXPECT_EQ(consumer.headerExtensions[0].uri, "urn:ietf:params:rtp-hdrext:sdes:mid");
 	ASSERT_EQ(consumer.encodings.size(), 1u);
 	EXPECT_TRUE(consumer.encodings[0].ssrc.has_value());
-	EXPECT_TRUE(consumer.encodings[0].rtxSsrc.has_value());
+	EXPECT_FALSE(consumer.encodings[0].rtxSsrc.has_value());
 	EXPECT_TRUE(consumer.rtcp.reducedSize);
 }
 
-TEST(OrtcTest, ConsumerRtpParametersFallbackWhenRemoteHasNoMatchingCodec) {
+TEST(OrtcTest, ConsumerRtpParametersAddsRtxWhenRemoteNegotiatesIt) {
+	RtpParameters consumable;
+	consumable.codecs.push_back({"video/VP8", 120, 90000, 0, {}, {}});
+	consumable.codecs.push_back({"video/rtx", 121, 90000, 0, {{"apt", 120}}, {}});
+	consumable.encodings.push_back(RtpEncodingParameters{5555u, "", std::nullopt, std::nullopt, false, "", std::nullopt});
+
+	RtpCapabilities remote;
+	remote.codecs.push_back({"video", "video/VP8", 96, 90000, 0, {}, {}});
+	remote.codecs.push_back({"video", "video/rtx", 97, 90000, 0, {{"apt", 96}}, {}});
+
+	auto consumer = ortc::getConsumerRtpParameters(consumable, remote, false);
+	ASSERT_EQ(consumer.codecs.size(), 2u);
+	EXPECT_EQ(consumer.codecs[0].mimeType, "video/VP8");
+	EXPECT_EQ(consumer.codecs[1].mimeType, "video/rtx");
+	ASSERT_EQ(consumer.encodings.size(), 1u);
+	EXPECT_TRUE(consumer.encodings[0].rtxSsrc.has_value());
+}
+
+TEST(OrtcTest, ConsumerRtpParametersRejectsWhenRemoteHasNoMatchingCodec) {
 	RtpParameters consumable;
 	consumable.codecs.push_back({"audio/opus", 111, 48000, 2, {}, {}});
 	consumable.encodings.push_back(RtpEncodingParameters{9999u, "", std::nullopt, std::nullopt, false, "", std::nullopt});
@@ -271,9 +288,20 @@ TEST(OrtcTest, ConsumerRtpParametersFallbackWhenRemoteHasNoMatchingCodec) {
 	RtpCapabilities remote;
 	remote.codecs.push_back({"video", "video/VP8", 96, 90000, 0, {}, {}});
 
-	auto consumer = ortc::getConsumerRtpParameters(consumable, remote, false);
-	ASSERT_EQ(consumer.codecs.size(), 1u);
-	EXPECT_EQ(consumer.codecs[0].mimeType, "audio/opus");
+	EXPECT_THROW(ortc::getConsumerRtpParameters(consumable, remote, false), std::runtime_error);
+}
+
+TEST(OrtcTest, ConsumerRtpParametersRejectsH264ProfileMismatch) {
+	RtpParameters consumable;
+	consumable.codecs.push_back({"video/H264", 120, 90000, 0,
+		{{"profile-level-id", "42e01f"}, {"packetization-mode", 1}}, {}});
+	consumable.encodings.push_back(RtpEncodingParameters{9999u, "", std::nullopt, std::nullopt, false, "", std::nullopt});
+
+	RtpCapabilities remote;
+	remote.codecs.push_back({"video", "video/H264", 96, 90000, 0,
+		{{"profile-level-id", "4d0032"}, {"packetization-mode", 1}}, {}});
+
+	EXPECT_THROW(ortc::getConsumerRtpParameters(consumable, remote, false), std::runtime_error);
 }
 
 TEST(OrtcTest, ConsumerRtpParametersRejectsEmptyConsumableCodecs) {

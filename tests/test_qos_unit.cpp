@@ -282,6 +282,14 @@ public:
 	static void annexBToAvcc(const std::vector<uint8_t>& annexB, std::vector<uint8_t>& avcc) {
 		PeerRecorder::annexBToAvcc(annexB, avcc);
 	}
+	static bool setH264Extradata(
+		PeerRecorder& recorder,
+		const std::vector<uint8_t>& sps,
+		const std::vector<uint8_t>& pps) {
+		recorder.h264Sps_ = sps;
+		recorder.h264Pps_ = pps;
+		return recorder.setH264Extradata();
+	}
 };
 } // namespace mediasoup
 using mediasoup::PeerRecorderTestAccess;
@@ -382,4 +390,18 @@ TEST_F(RecorderQosTest, H264DeferredHeaderNoCrash) {
 	std::string qosPath = tmpDir_ + "/h264_deferred.qos.json";
 	std::ifstream f(qosPath);
 	EXPECT_TRUE(f.is_open());
+}
+
+TEST_F(RecorderQosTest, H264ExtradataRejectsShortSps) {
+	std::string path = tmpDir_ + "/h264_short_sps.webm";
+	PeerRecorder rec("alice", path, 100, 107, 48000, 90000, VideoCodec::H264);
+	ASSERT_GT(rec.createSocket(), 0);
+	ASSERT_TRUE(rec.start());
+
+	EXPECT_FALSE(PeerRecorderTestAccess::setH264Extradata(
+		rec,
+		{0x67, 0x42, 0x00},
+		{0x68, 0xCE, 0x3C, 0x80}));
+
+	rec.stop();
 }

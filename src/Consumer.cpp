@@ -105,7 +105,13 @@ void Consumer::handleNotification(
 			emitter_.emit("producerresume");
 			break;
 		case FBS::Notification::Event::CONSUMER_PRODUCER_CLOSE:
+			if (closed_) break;
+			closed_ = true;
 			producerPaused_ = true;
+			if (channel_) {
+				channel_->emitter().off(id_);
+			}
+			emitter_.emit("@close");
 			emitter_.emit("producerclose");
 			break;
 		case FBS::Notification::Event::CONSUMER_LAYERS_CHANGE:

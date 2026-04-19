@@ -11,6 +11,44 @@ namespace mediasoup::roommedia {
 
 using NotifyFn = std::function<void(const std::string&, const std::string&, const json&)>;
 
+inline void TrackPeerProducer(
+	const std::shared_ptr<Peer>& peer,
+	const std::shared_ptr<Producer>& producer)
+{
+	if (!peer || !producer) {
+		return;
+	}
+
+	peer->producers[producer->id()] = producer;
+
+	std::weak_ptr<Peer> weakPeer = peer;
+	const std::string producerId = producer->id();
+	producer->emitter().once("@close", [weakPeer, producerId](const std::vector<std::any>&) {
+		if (auto lockedPeer = weakPeer.lock()) {
+			lockedPeer->producers.erase(producerId);
+		}
+	});
+}
+
+inline void TrackPeerConsumer(
+	const std::shared_ptr<Peer>& peer,
+	const std::shared_ptr<Consumer>& consumer)
+{
+	if (!peer || !consumer) {
+		return;
+	}
+
+	peer->consumers[consumer->id()] = consumer;
+
+	std::weak_ptr<Peer> weakPeer = peer;
+	const std::string consumerId = consumer->id();
+	consumer->emitter().once("@close", [weakPeer, consumerId](const std::vector<std::any>&) {
+		if (auto lockedPeer = weakPeer.lock()) {
+			lockedPeer->consumers.erase(consumerId);
+		}
+	});
+}
+
 inline json BuildConsumerData(
 	const std::string& peerId,
 	const std::shared_ptr<Producer>& producer,
@@ -55,7 +93,7 @@ inline json ConsumeExistingProducers(
 					{"consumableRtpParameters", producer->consumableRtpParameters()}
 				};
 				auto consumer = transport->consume(consumeOpts);
-				peer->consumers[consumer->id()] = consumer;
+				TrackPeerConsumer(peer, consumer);
 				consumers.push_back(BuildConsumerData(
 					other->id,
 					producer,
@@ -119,7 +157,7 @@ inline void AutoSubscribeProducerToOtherPeers(
 				{"consumableRtpParameters", producer->consumableRtpParameters()}
 			};
 			auto consumer = recvTransport->consume(consumeOpts);
-			other->consumers[consumer->id()] = consumer;
+			TrackPeerConsumer(other, consumer);
 
 			if (notify) {
 				notify(roomId, other->id, {

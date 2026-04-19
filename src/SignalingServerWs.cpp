@@ -123,11 +123,10 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 		},
 
 		.message = [&server, wsMap, loop, downlinkStatsRateLimit](auto* ws, std::string_view message, uWS::OpCode) {
-			json req;
 			try {
-				req = json::parse(message);
-			} catch (...) { return; }
-			if (!req.contains("request") || !req["request"].get<bool>()) return;
+				auto req = json::parse(message);
+				auto requestIt = req.find("request");
+				if (requestIt == req.end() || !requestIt->is_boolean() || !requestIt->get<bool>()) return;
 
 			auto* sd = ws->getUserData();
 			if (!sd->alive->load()) return;
@@ -385,6 +384,13 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 					}
 				});
 			});
+			} catch (const json::exception& e) {
+				spdlog::warn("dropping malformed websocket message: {}", e.what());
+			} catch (const std::exception& e) {
+				spdlog::error("websocket message handler failed: {}", e.what());
+			} catch (...) {
+				spdlog::error("websocket message handler failed: unknown error");
+			}
 		},
 
 		.close = [&server, wsMap, downlinkStatsRateLimit](auto* ws, int, std::string_view) {

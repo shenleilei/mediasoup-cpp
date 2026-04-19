@@ -104,6 +104,8 @@ void Channel::close() {
 					pid_,
 					waitMs);
 			}
+		} else {
+			readThread_.detach();
 		}
 	}
 

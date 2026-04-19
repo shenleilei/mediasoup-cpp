@@ -4,6 +4,7 @@
 
 #include <arpa/inet.h>
 #include <sys/time.h>
+#include <algorithm>
 #include <cstring>
 #include <cstdint>
 #include <chrono>
@@ -140,6 +141,26 @@ inline int handleNack(const uint8_t* rtcpData, size_t rtcpLen,
 	return retransmitted;
 }
 
+inline int32_t parseSignedRtcpTotalLost(const uint8_t* data)
+{
+	uint32_t value = ((uint32_t)data[0] << 16) |
+		((uint32_t)data[1] << 8) |
+		(uint32_t)data[2];
+
+	if (((value >> 23) & 1u) == 0u)
+		return static_cast<int32_t>(value);
+
+	if (value != 0x0800000u)
+		value &= ~(1u << 23);
+
+	return -static_cast<int32_t>(value);
+}
+
+inline uint32_t parseClampedRtcpTotalLost(const uint8_t* data)
+{
+	return static_cast<uint32_t>(std::max<int32_t>(0, parseSignedRtcpTotalLost(data)));
+}
+
 // ═══════════════════════════════════════════════════════════
 // Unified RTCP receiver: handles PLI, FIR, NACK from Worker
 // ═══════════════════════════════════════════════════════════
@@ -182,6 +203,8 @@ struct RtcpContext {
 	using SendH264Fn = std::function<void(int fd, const uint8_t* data, int size,
 		uint8_t pt, uint32_t ts, uint32_t ssrc, uint16_t& seq)>;
 	SendH264Fn sendH264Fn;
+	using RequestKeyframeFn = std::function<void(uint32_t ssrc)>;
+	RequestKeyframeFn requestKeyframeFn;
 	using CanSendVideoFn = std::function<bool(uint32_t ssrc)>;
 	CanSendVideoFn canSendVideoFn;
 
@@ -303,11 +326,19 @@ struct RtcpContext {
 						offset += pktLen;
 						continue;
 					}
-					if ((fmt == 1 || fmt == 4) && stream && !stream->lastKeyframe.empty() && sendH264Fn && stream->seqPtr) {
-						sendH264Fn(udpFd, stream->lastKeyframe.data(), stream->lastKeyframe.size(),
-							stream->payloadType, stream->lastKeyframeTs, stream->ssrc, *stream->seqPtr);
-						pliResponded++;
-						stream->pliResponded++;
+					if ((fmt == 1 || fmt == 4) && stream) {
+						if (requestKeyframeFn) {
+							requestKeyframeFn(stream->ssrc);
+							pliResponded++;
+							stream->pliResponded++;
+						} else if (!stream->lastKeyframe.empty() && sendH264Fn && stream->seqPtr) {
+							const uint32_t resendTs =
+								stream->lastRtpTs != 0 ? stream->lastRtpTs : stream->lastKeyframeTs;
+							sendH264Fn(udpFd, stream->lastKeyframe.data(), stream->lastKeyframe.size(),
+								stream->payloadType, resendTs, stream->ssrc, *stream->seqPtr);
+							pliResponded++;
+							stream->pliResponded++;
+						}
 					}
 				} else if (pt == RTCP_PT_RTPFB && fmt == 1) {
 					auto* stream = mediaSsrc != 0 ? getVideoStream(mediaSsrc) : getFirstVideoStream();
@@ -332,7 +363,7 @@ struct RtcpContext {
 						}
 
 						uint8_t lossFrac = buf[rbOff + 4];
-						uint32_t cumLost = ((uint32_t)buf[rbOff + 5] << 16) | ((uint32_t)buf[rbOff + 6] << 8) | buf[rbOff + 7];
+						uint32_t cumLost = parseClampedRtcpTotalLost(buf + rbOff + 5);
 						uint32_t jitter = ((uint32_t)buf[rbOff + 12] << 24) | ((uint32_t)buf[rbOff + 13] << 16)
 							| ((uint32_t)buf[rbOff + 14] << 8) | buf[rbOff + 15];
 						uint32_t lsr = ((uint32_t)buf[rbOff + 16] << 24) | ((uint32_t)buf[rbOff + 17] << 16)

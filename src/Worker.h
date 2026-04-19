@@ -5,9 +5,11 @@
 #include <nlohmann/json.hpp>
 #include <string>
 #include <memory>
+#include <mutex>
 #include <vector>
 #include <functional>
 #include <set>
+#include <atomic>
 
 namespace mediasoup {
 
@@ -32,10 +34,13 @@ public:
 	~Worker();
 
 	int pid() const { return pid_; }
-	bool closed() const { return closed_; }
+	bool closed() const { return closed_.load(std::memory_order_acquire); }
 	Channel& channel() { return *channel_; }
 	EventEmitter& emitter() { return emitter_; }
-	size_t routerCount() const { return routers_.size(); }
+	size_t routerCount() const {
+		std::lock_guard<std::mutex> lock(routersMutex_);
+		return routers_.size();
+	}
 	bool isThreaded() const { return threaded_; }
 
 	std::shared_ptr<Router> createRouter(
@@ -61,9 +66,10 @@ private:
 	void workerDied(const std::string& reason);
 
 	int pid_ = -1;
-	bool closed_ = false;
+	std::atomic<bool> closed_{false};
 	bool threaded_ = true;
 	std::unique_ptr<Channel> channel_;
+	mutable std::mutex routersMutex_;
 	std::set<std::shared_ptr<Router>> routers_;
 	EventEmitter emitter_;
 	std::thread waitThread_;

@@ -288,19 +288,14 @@ private:
 						continue;
 					}
 					auto* stream = targetSsrc != 0 ? rtcp_.getVideoStream(targetSsrc) : rtcp_.getFirstVideoStream();
-					if (stream && (fmt == 1 || fmt == 4) && !stream->lastKeyframe.empty()) {
-						// Resend cached keyframe immediately
-						sendH264(stream->lastKeyframe.data(), stream->lastKeyframe.size(),
-							stream->payloadType, stream->lastKeyframeTs, stream->ssrc, *stream->seqPtr);
-						rtcp_.pliResponded++;
-						stream->pliResponded++;
-					}
-					// Forward ForceKeyframe to source worker (with debounce §12.2)
-					if (track) {
+					if ((fmt == 1 || fmt == 4) && track && stream) {
+						// Forward ForceKeyframe to source worker (with debounce §12.2).
 						int64_t now = steadyNowMs();
 						if (now - track->lastPliForwardedMs >= TrackNetState::kPliDebounceMs) {
 							track->lastPliForwardedMs = now;
 							dispatchForceKeyframe(track->trackIndex);
+							rtcp_.pliResponded++;
+							stream->pliResponded++;
 						}
 					}
 				} else if (pt == RTCP_PT_RTPFB && fmt == 1) {
@@ -335,7 +330,7 @@ private:
 			if (!stream) { rbOff += 24; continue; }
 
 			stream->rrLossFraction = buf[rbOff + 4] / 256.0;
-			stream->rrCumulativeLost = ((uint32_t)buf[rbOff+5] << 16) | ((uint32_t)buf[rbOff+6] << 8) | buf[rbOff+7];
+			stream->rrCumulativeLost = parseClampedRtcpTotalLost(buf + rbOff + 5);
 			uint32_t jitter = ((uint32_t)buf[rbOff+12] << 24) | ((uint32_t)buf[rbOff+13] << 16)
 				| ((uint32_t)buf[rbOff+14] << 8) | buf[rbOff+15];
 			uint32_t lsr = ((uint32_t)buf[rbOff+16] << 24) | ((uint32_t)buf[rbOff+17] << 16)
