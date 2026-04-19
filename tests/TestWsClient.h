@@ -77,6 +77,10 @@ public:
 		return id;
 	}
 
+	void sendRawText(const std::string& text) {
+		sendText(text);
+	}
+
 	json waitResponse(uint64_t id, int timeoutMs = 5000) {
 		auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
 		std::unique_lock<std::mutex> lock(mu_);

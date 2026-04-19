@@ -1513,6 +1513,38 @@ TEST(ClientQosControllerTest, SnapshotUsesVideoOnlyModeWhenPeerHasNoAudioTrack) 
 	EXPECT_EQ(snapshots.back()["peerState"]["mode"], "video-only");
 }
 
+TEST(ClientQosControllerTest, PrimeSnapshotBaselineResetsLossDeltaAcrossSourceSwitch) {
+	PublisherQosController::Options options;
+	options.warmupSamples = 0;
+	options.actionSink = [](const PlannedAction&) {
+		return true;
+	};
+
+	PublisherQosController controller(options);
+
+	controller.onSample(MakeSnapshot(1000, 10000, 1000, 10));
+	controller.onSample(MakeSnapshot(2000, 20000, 2000, 20));
+
+	auto beforeSwitch = controller.lastSignals();
+	ASSERT_TRUE(beforeSwitch.has_value());
+	EXPECT_EQ(beforeSwitch->packetsLostDelta, 10u);
+
+	auto switchedSnapshot = MakeSnapshot(3000, 30000, 3000, 580);
+	controller.primeSnapshotBaseline(switchedSnapshot);
+	controller.onSample(switchedSnapshot);
+
+	auto switchedSignals = controller.lastSignals();
+	ASSERT_TRUE(switchedSignals.has_value());
+	EXPECT_EQ(switchedSignals->packetsLostDelta, 0u);
+	EXPECT_DOUBLE_EQ(switchedSignals->lossRate, 0.0);
+
+	controller.onSample(MakeSnapshot(4000, 40000, 4000, 585));
+
+	auto afterSwitch = controller.lastSignals();
+	ASSERT_TRUE(afterSwitch.has_value());
+	EXPECT_EQ(afterSwitch->packetsLostDelta, 5u);
+}
+
 TEST(ClientQosControllerTest, OverrideClearRemovesMatchingOverridesByReasonPrefix) {
 	int64_t monotonicNowMs = 1000;
 	PublisherQosController::Options options;

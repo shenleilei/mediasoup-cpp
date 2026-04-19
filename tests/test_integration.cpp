@@ -193,6 +193,137 @@ TEST_F(IntegrationTest, CreateTransports) {
 	EXPECT_NE(recvResp["data"]["id"], sendResp["data"]["id"]);
 }
 
+TEST_F(IntegrationTest, CreateTransportRejectsAmbiguousDirection) {
+	auto alice = joinRoom(testRoom_, "alice");
+
+	auto resp = alice.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", true}
+	});
+	EXPECT_FALSE(resp.value("ok", false)) << resp.dump();
+
+	resp = alice.ws->request("createWebRtcTransport", {
+		{"producing", false}, {"consuming", false}
+	});
+	EXPECT_FALSE(resp.value("ok", false)) << resp.dump();
+}
+
+TEST_F(IntegrationTest, MalformedWebSocketRequestDoesNotCrashServer) {
+	TestWsClient ws;
+	ASSERT_TRUE(ws.connect(HOST, SFU_PORT));
+
+	ws.sendRawText(R"({"request":1,"id":7,"method":"join","data":{}})");
+	usleep(200000);
+
+	EXPECT_TRUE(isSfuProcessAlive(sfuPid_)) << "SFU crashed after malformed request";
+
+	auto joinResp = ws.request("join", {
+		{"roomId", testRoom_},
+		{"peerId", "alice"},
+		{"displayName", "alice"},
+		{"rtpCapabilities", defaultRtpCapabilities()}
+	});
+	ASSERT_TRUE(joinResp.value("ok", false)) << joinResp.dump();
+}
+
+TEST_F(IntegrationTest, ReplacingSendTransportClosesOldProducers) {
+	auto alice = joinRoom(testRoom_, "alice");
+
+	auto firstSend = alice.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(firstSend.value("ok", false)) << firstSend.dump();
+
+	json audioRtpParams = {
+		{"codecs", {{
+			{"mimeType", "audio/opus"}, {"clockRate", 48000}, {"channels", 2},
+			{"payloadType", 100}
+		}}},
+		{"encodings", {{{"ssrc", 11111111}}}},
+		{"mid", "0"}
+	};
+	auto firstProduce = alice.ws->request("produce", {
+		{"transportId", firstSend["data"]["id"]},
+		{"kind", "audio"},
+		{"rtpParameters", audioRtpParams}
+	});
+	ASSERT_TRUE(firstProduce.value("ok", false)) << firstProduce.dump();
+
+	auto secondSend = alice.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(secondSend.value("ok", false)) << secondSend.dump();
+	EXPECT_NE(secondSend["data"]["id"], firstSend["data"]["id"]);
+
+	audioRtpParams["encodings"] = {{{"ssrc", 22222222}}};
+	auto secondProduce = alice.ws->request("produce", {
+		{"transportId", secondSend["data"]["id"]},
+		{"kind", "audio"},
+		{"rtpParameters", audioRtpParams}
+	});
+	ASSERT_TRUE(secondProduce.value("ok", false)) << secondProduce.dump();
+
+	auto stats = alice.ws->request("getStats", {{"peerId", "alice"}});
+	ASSERT_TRUE(stats.value("ok", false)) << stats.dump();
+	ASSERT_TRUE(stats["data"].contains("producers"));
+	EXPECT_EQ(stats["data"]["producers"].size(), 1u);
+}
+
+TEST_F(IntegrationTest, ReplacingRecvTransportDoesNotDuplicateConsumersAndProducerCloseCleansThemUp) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoom(testRoom_, "bob");
+
+	auto aliceSend = alice.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(aliceSend.value("ok", false)) << aliceSend.dump();
+
+	json audioRtpParams = {
+		{"codecs", {{
+			{"mimeType", "audio/opus"}, {"clockRate", 48000}, {"channels", 2},
+			{"payloadType", 100}
+		}}},
+		{"encodings", {{{"ssrc", 33333333}}}},
+		{"mid", "0"}
+	};
+	auto produceResp = alice.ws->request("produce", {
+		{"transportId", aliceSend["data"]["id"]},
+		{"kind", "audio"},
+		{"rtpParameters", audioRtpParams}
+	});
+	ASSERT_TRUE(produceResp.value("ok", false)) << produceResp.dump();
+
+	auto firstRecv = bob.ws->request("createWebRtcTransport", {
+		{"producing", false}, {"consuming", true}
+	});
+	ASSERT_TRUE(firstRecv.value("ok", false)) << firstRecv.dump();
+	ASSERT_TRUE(firstRecv["data"].contains("consumers"));
+	EXPECT_EQ(firstRecv["data"]["consumers"].size(), 1u);
+
+	auto secondRecv = bob.ws->request("createWebRtcTransport", {
+		{"producing", false}, {"consuming", true}
+	});
+	ASSERT_TRUE(secondRecv.value("ok", false)) << secondRecv.dump();
+	ASSERT_TRUE(secondRecv["data"].contains("consumers"));
+	EXPECT_EQ(secondRecv["data"]["consumers"].size(), 1u);
+	EXPECT_NE(secondRecv["data"]["id"], firstRecv["data"]["id"]);
+
+	auto bobStats = bob.ws->request("getStats", {{"peerId", "bob"}});
+	ASSERT_TRUE(bobStats.value("ok", false)) << bobStats.dump();
+	ASSERT_TRUE(bobStats["data"].contains("consumers"));
+	EXPECT_EQ(bobStats["data"]["consumers"].size(), 1u);
+
+	alice.ws->close();
+	auto leftNotif = bob.ws->waitNotification("peerLeft", 3000);
+	ASSERT_FALSE(leftNotif.empty()) << "Bob did not receive peerLeft";
+	EXPECT_EQ(leftNotif["data"]["peerId"], "alice");
+	usleep(200000);
+
+	bobStats = bob.ws->request("getStats", {{"peerId", "bob"}});
+	ASSERT_TRUE(bobStats.value("ok", false)) << bobStats.dump();
+	ASSERT_TRUE(bobStats["data"].contains("consumers"));
+	EXPECT_EQ(bobStats["data"]["consumers"].size(), 0u);
+}
+
 // ─── Test 3: Produce → auto-subscribe notification ───
 TEST_F(IntegrationTest, ProduceAndAutoSubscribe) {
 	auto alice = joinRoom(testRoom_, "alice");

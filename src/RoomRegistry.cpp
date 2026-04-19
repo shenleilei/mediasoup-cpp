@@ -2,6 +2,7 @@
 
 #include "GeoRouter.h"
 #include "Logger.h"
+#include "RoomRegistrySelection.h"
 
 #include <algorithm>
 #include <chrono>
@@ -698,20 +699,23 @@ void RoomRegistry::syncAllUnlocked()
 		if (mr) freeReplyObject(mr);
 	}
 
+	size_t syncedNodeCount = 0;
+	size_t syncedRoomCount = 0;
 	{
 		std::lock_guard<std::mutex> cl(cacheMutex_);
 		nodeCache_ = std::move(tmpNodes);
 		roomCache_ = std::move(tmpRooms);
+		syncedNodeCount = nodeCache_.size();
+		syncedRoomCount = roomCache_.size();
 	}
-	MS_DEBUG(logger_, "Synced {} nodes, {} rooms", nodeCache_.size(), roomCache_.size());
+	MS_DEBUG(logger_, "Synced {} nodes, {} rooms", syncedNodeCount, syncedRoomCount);
 }
 
 std::string RoomRegistry::findBestNodeCached(const std::string& clientIp)
 {
 	std::lock_guard<std::mutex> cl(cacheMutex_);
 
-	struct Candidate { std::string address; size_t rooms; double score; };
-	std::vector<Candidate> candidates;
+	std::vector<roomregistry::LoadCandidate> candidates;
 
 	GeoInfo clientGeo;
 	if (geo_ && !clientIp.empty()) clientGeo = geo_->lookup(clientIp);
@@ -734,18 +738,13 @@ std::string RoomRegistry::findBestNodeCached(const std::string& clientIp)
 	if (candidates.empty()) return "";
 
 	if (clientGeo.valid) {
-		std::sort(candidates.begin(), candidates.end(), [](auto& a, auto& b) {
-			if (std::abs(a.score - b.score) > 100.0) return a.score < b.score;
-			return a.rooms < b.rooms;
-		});
+		std::sort(candidates.begin(), candidates.end(), roomregistry::CompareGeoCandidates);
 	} else {
 		auto self = nodeAddress_;
-		std::sort(candidates.begin(), candidates.end(), [&self](auto& a, auto& b) {
-			if (a.rooms != b.rooms) return a.rooms < b.rooms;
-			if (a.address == self) return true;
-			if (b.address == self) return false;
-			return a.address < b.address;
-		});
+		std::sort(candidates.begin(), candidates.end(),
+			[&self](const auto& a, const auto& b) {
+				return roomregistry::CompareNoGeoCandidates(a, b, self);
+			});
 	}
 
 	return candidates.front().address;

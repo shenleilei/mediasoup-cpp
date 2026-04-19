@@ -310,6 +310,10 @@ public:
 	void setOverrideClampLevel(int level) { overrideClampLevel_ = level; }
 	void clearOverride() { overrideClampLevel_ = -1; }
 	void resetExecutor() { executor_.reset(); }
+	void primeSnapshotBaseline(const RawSenderSnapshot& snapshot) {
+		prevSnapshot_ = snapshot;
+		hasPrev_ = true;
+	}
 
 	// For async command model: confirm that a previously queued action was applied by the worker.
 	// This advances controller state that was NOT advanced at queue time (because sink returned false).

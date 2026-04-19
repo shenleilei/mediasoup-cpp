@@ -51,11 +51,26 @@ Review the change in the context of:
 - test coverage
 - rollout and backward compatibility
 
+For stateful, retry-prone, or protocol-heavy changes, review MUST explicitly trace:
+
+- first-time setup or happy-path execution
+- repeated call, retry, reconnect, or replacement of the same resource
+- teardown, close, unregister, or cleanup behavior
+- partial failure and rollback behavior
+- counterpart interpretation of emitted protocol, codec, or wire-level values
+
 Review MUST be performed against the documented design standard and implementation plan.
 
 Do not review against an imagined design that exists only in the reviewer's head.
 
 If the implementation diverges from the documented design standard or implementation plan, call that out explicitly as a finding unless the docs were updated and the deviation was intentionally approved.
+
+### Anti-Anchoring Rule
+
+- Do not anchor the review only on the currently reported bug cluster, active change narrative, or the files already suspected in chat or docs.
+- For non-trivial changes and branch-wide reviews, perform at least one deliberate pass over shared infrastructure or foundational modules that could invalidate the change indirectly.
+- Do not assume untouched base-layer code is safe just because the current diff did not edit it.
+- If review coverage is intentionally limited, state that limit explicitly instead of silently treating uninspected areas as safe.
 
 ## 3. Review Priorities
 
@@ -89,6 +104,12 @@ Check all of the following:
 
 The output should describe the branch impact globally, then list file-level findings.
 
+### Required Coverage Beyond The Diff
+
+- Branch comparison review MUST include targeted inspection of foundational modules, shared helpers, or base-layer interfaces affected indirectly by the branch behavior, even when those files are not the most visible part of the diff.
+- When branch scope is broad or risk-heavy, the review output MUST state what areas were inspected and what areas were not inspected deeply.
+- If a likely-risk area was not inspected deeply enough, report that as a verification gap instead of treating it as safe by omission.
+
 ## 5. What To Check
 
 ### Correctness
@@ -98,6 +119,48 @@ The output should describe the branch impact globally, then list file-level find
 - If it differs from the documented design or plan, was that change made explicit and updated in the docs?
 - Are edge cases and failure paths handled?
 - Does the code preserve existing invariants?
+
+### Failure Paths And Defensive Checks
+
+- If the code depends on a library, syscall, parser, allocator, or external API, are failure returns, null results, short reads/writes, timeout paths, and thrown exceptions handled explicitly?
+- For multi-step initialization, what happens if step N fails after steps 1 through N-1 already allocated, registered, opened, or started resources?
+- For shutdown or teardown, is cleanup ordering still correct when only part of the system started successfully or when an earlier cleanup step already failed?
+- Did the review explicitly check for null dereference, stale handles, use-after-close, partially initialized state, and dropped-ownership patterns instead of assuming the happy path?
+
+### Lifecycle, Re-entry, And Replacement
+
+- If the same API or workflow is invoked twice, what happens on the second call?
+- If a client retries, reconnects, or replaces an existing resource, is the old runtime resource explicitly closed and unregistered?
+- If an owning pointer, handle, or registry entry is overwritten, does that trigger the required cleanup, or does it merely drop local ownership?
+- Are caches, reverse indexes, observer lists, and ownership maps updated when resources are replaced or closed?
+- Is cleanup behavior verified for both success and partial-failure paths?
+
+### Wire And Protocol Semantics
+
+- For protocol, RTCP/RTP, codec, or schema changes, does the declared contract match the actual emitted and consumed runtime behavior end to end?
+- Are field width, signedness, units, timebase, and timestamp semantics checked against the RFC/spec and the counterpart implementation?
+- If multiple codec variants exist, is the selected advertised variant the same one the runtime actually produces or expects?
+- Did the review follow the contract across all affected layers instead of stopping at a single file that "looks right" locally?
+
+### Serialization, Buffer, And Lifetime Semantics
+
+- If buffers, builders, offsets, views, spans, or pointers are constructed in one context and consumed in another, are their ownership and lifetime rules still valid at the point of use?
+- Does any clear, reset, move, resize, or reallocation invalidate data that is later reused?
+- Are callback captures, observer registrations, and deferred lambdas holding objects safely, or can they outlive the owning state?
+- For schema, IPC, or message-building code, is the body built under the same lock, builder, ownership, and lifetime assumptions as the enclosing message?
+
+### Concurrency And Thread Boundaries
+
+- What shared state is touched from callbacks, worker threads, event loops, timers, signal handlers, or teardown paths?
+- Are close or shutdown flags, once-only transitions, and lifecycle guards synchronized correctly across threads?
+- Could a callback race with destruction, close, unregister, pointer reset, or resource replacement?
+- Does the code rely on thread-affinity assumptions that are implicit rather than enforced or documented?
+
+### Metrics, Fallbacks, And Baselines
+
+- If the same metric can come from multiple sources, do those sources share the same units, counter semantics, reset behavior, and baseline?
+- When the implementation falls back from one stats source to another, are delta calculations still valid across the transition?
+- Are stale-data, unavailable-data, and recovered-data transitions reviewed explicitly rather than assumed safe?
 
 ### Reuse And Refactoring
 
@@ -133,6 +196,10 @@ The output should describe the branch impact globally, then list file-level find
 - Were regression tests added for bugfixes?
 - Were integration or contract checks added for cross-boundary changes?
 - Were required repo commands actually run?
+- For stateful resources, do tests cover repeated call, reconnect, retry, replacement, and cleanup paths?
+- For protocol-heavy changes, do tests cover field encoding/decoding, signedness, unit conversion, and timestamp semantics?
+- For metrics or state machines, do tests cover source switching, counter resets, and fallback transitions?
+- Do not use total test count or broad coverage claims as a proxy for risk coverage; map tests to the specific failure modes introduced by the change.
 
 ### Contracts
 
@@ -168,6 +235,8 @@ For AI reviews, respond in this order:
 - Include file references.
 - Explain the impact and why it matters.
 - For branch comparison, start from the overall branch impact, then list concrete findings.
+- Separate confirmed defects from candidate issues when the evidence level differs.
+- If the input includes prior review notes, broad branch audit notes, or another AI review, mark items that are already fixed or superseded instead of restating them as current defects.
 
 ### Open Questions
 
@@ -195,11 +264,23 @@ Before claiming a change is done, the author should ask:
 - What can regress?
 - What still lacks proof?
 - What boundary changed?
+- Am I anchoring only on the currently reported bug cluster, active change narrative, or the files already named in the review prompt?
+- What shared infrastructure or foundational code could still invalidate this change even if the edited files look correct?
+- What happens on the second call, retry, reconnect, or replacement of the same resource?
+- If an object reference or handle is overwritten, what explicitly closes and unregisters the previous runtime object?
+- What failure path did I inspect explicitly instead of assuming safe?
+- Does the declared wire contract exactly match what the runtime emits and what the counterpart expects?
+- If I parsed or generated protocol fields, did I verify signedness, units, timebase, and timestamp semantics against the spec and counterpart implementation?
+- If buffers, builders, offsets, pointers, views, or callback captures cross scopes, resets, or threads, did I verify their lifetime rules explicitly?
+- What thread boundary, callback path, timer path, or teardown race did I inspect explicitly?
+- If a metric can come from different sources, are baseline, reset, and fallback transitions safe?
 - Did I reuse existing code where practical and reduce duplication instead of adding another parallel path?
 - Did I keep the change as simple and self-contained as practical instead of mixing in avoidable churn?
 - Did I avoid speculative abstractions and keep names, comments, and error handling explicit?
 - What production failure mode have I not considered?
+- Am I letting test count, report size, or a large test suite substitute for verifying the risky scenarios that actually changed?
 - What documentation became stale or less precise because of this change, and has it been updated before commit?
 - If this branch is compared against another branch, what global behavior change does the branch introduce?
+- Which findings are proven, which are only suspected, and what evidence separates them?
 
 If those answers are unclear, the work is not ready to close.

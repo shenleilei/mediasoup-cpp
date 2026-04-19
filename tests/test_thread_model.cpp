@@ -594,6 +594,129 @@ TEST(RtcpHandler, NackRetransmitsStoredPackets) {
 	close(sv[0]); close(sv[1]);
 }
 
+TEST(RtcpHandler, PliRequestsFreshKeyframeCallbackWhenAvailable) {
+	int sv[2];
+	ASSERT_EQ(socketpair(AF_UNIX, SOCK_DGRAM, 0, sv), 0);
+
+	RtcpContext rtcp;
+	uint32_t ssrc = 0x12345678;
+	uint16_t seq = 3456;
+	int requestCount = 0;
+	int resendCount = 0;
+
+	rtcp.registerVideoStream(ssrc, 96, &seq);
+	rtcp.requestKeyframeFn = [&](uint32_t requestedSsrc) {
+		++requestCount;
+		EXPECT_EQ(requestedSsrc, ssrc);
+	};
+	rtcp.sendH264Fn = [&](int, const uint8_t*, int, uint8_t, uint32_t, uint32_t, uint16_t&) {
+		++resendCount;
+	};
+
+	uint8_t pli[12]{};
+	pli[0] = 0x81;
+	pli[1] = RTCP_PT_PSFB;
+	pli[2] = 0x00;
+	pli[3] = 0x02;
+	pli[8] = static_cast<uint8_t>(ssrc >> 24);
+	pli[9] = static_cast<uint8_t>(ssrc >> 16);
+	pli[10] = static_cast<uint8_t>(ssrc >> 8);
+	pli[11] = static_cast<uint8_t>(ssrc & 0xFF);
+	ASSERT_EQ(::send(sv[1], pli, sizeof(pli), 0), static_cast<ssize_t>(sizeof(pli)));
+
+	rtcp.processIncomingRtcp(sv[0]);
+
+	EXPECT_EQ(requestCount, 1);
+	EXPECT_EQ(resendCount, 0);
+	EXPECT_EQ(rtcp.pliResponded, 1);
+
+	close(sv[0]);
+	close(sv[1]);
+}
+
+TEST(RtcpHandler, PliFallbackUsesLatestRtpTimestampForCachedKeyframe) {
+	int sv[2];
+	ASSERT_EQ(socketpair(AF_UNIX, SOCK_DGRAM, 0, sv), 0);
+
+	RtcpContext rtcp;
+	uint32_t ssrc = 0x87654321;
+	uint16_t seq = 2222;
+	uint32_t resentTs = 0;
+
+	rtcp.registerVideoStream(ssrc, 97, &seq);
+	uint8_t keyframe[] = {0x00, 0x00, 0x01, 0x65, 0xAA};
+	rtcp.cacheKeyframe(ssrc, keyframe, sizeof(keyframe), 90000);
+
+	uint8_t rtp[16]{};
+	rtp[0] = 0x80;
+	rtp[1] = 97;
+	rtp[2] = static_cast<uint8_t>(seq >> 8);
+	rtp[3] = static_cast<uint8_t>(seq & 0xFF);
+	rtp[4] = 0x00;
+	rtp[5] = 0x02;
+	rtp[6] = 0xBF;
+	rtp[7] = 0x20; // 180000
+	rtp[8] = static_cast<uint8_t>(ssrc >> 24);
+	rtp[9] = static_cast<uint8_t>(ssrc >> 16);
+	rtp[10] = static_cast<uint8_t>(ssrc >> 8);
+	rtp[11] = static_cast<uint8_t>(ssrc & 0xFF);
+	rtcp.onVideoRtpSent(rtp, sizeof(rtp));
+	rtcp.sendH264Fn = [&](int, const uint8_t*, int, uint8_t, uint32_t ts, uint32_t, uint16_t&) {
+		resentTs = ts;
+	};
+
+	uint8_t pli[12]{};
+	pli[0] = 0x81;
+	pli[1] = RTCP_PT_PSFB;
+	pli[2] = 0x00;
+	pli[3] = 0x02;
+	pli[8] = static_cast<uint8_t>(ssrc >> 24);
+	pli[9] = static_cast<uint8_t>(ssrc >> 16);
+	pli[10] = static_cast<uint8_t>(ssrc >> 8);
+	pli[11] = static_cast<uint8_t>(ssrc & 0xFF);
+	ASSERT_EQ(::send(sv[1], pli, sizeof(pli), 0), static_cast<ssize_t>(sizeof(pli)));
+
+	rtcp.processIncomingRtcp(sv[0]);
+
+	EXPECT_EQ(resentTs, 180000u);
+
+	close(sv[0]);
+	close(sv[1]);
+}
+
+TEST(RtcpHandler, ReceiverReportClampsNegativeCumulativeLostToZero) {
+	int sv[2];
+	ASSERT_EQ(socketpair(AF_UNIX, SOCK_DGRAM, 0, sv), 0);
+
+	RtcpContext rtcp;
+	uint32_t ssrc = 0x01020304;
+	uint16_t seq = 100;
+	rtcp.registerVideoStream(ssrc, 96, &seq);
+
+	uint8_t rr[32]{};
+	rr[0] = 0x81;
+	rr[1] = RTCP_PT_RR;
+	rr[2] = 0x00;
+	rr[3] = 0x07;
+	rr[8] = static_cast<uint8_t>(ssrc >> 24);
+	rr[9] = static_cast<uint8_t>(ssrc >> 16);
+	rr[10] = static_cast<uint8_t>(ssrc >> 8);
+	rr[11] = static_cast<uint8_t>(ssrc & 0xFF);
+	rr[13] = 0x80;
+	rr[14] = 0x00;
+	rr[15] = 0x01; // mediasoup worker signed 24-bit encoding for -1
+	ASSERT_EQ(::send(sv[1], rr, sizeof(rr), 0), static_cast<ssize_t>(sizeof(rr)));
+
+	rtcp.processIncomingRtcp(sv[0]);
+
+	const auto* stream = rtcp.getVideoStream(ssrc);
+	ASSERT_NE(stream, nullptr);
+	EXPECT_EQ(stream->rrCumulativeLost, 0u);
+
+	close(sv[0]);
+	close(sv[1]);
+}
+
 TEST(RtcpHandler, RtpPacketStoreEvictsOldEntries) {
 	RtpPacketStore store;
 	uint8_t pkt[20] = {};

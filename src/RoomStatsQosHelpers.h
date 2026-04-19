@@ -109,6 +109,9 @@ json BuildProducerStats(
 	}
 
 	for (const auto& [producerId, producer] : peer->producers) {
+		if (!producer || producer->closed()) {
+			continue;
+		}
 		json producerStats;
 		if (budgetLeft() > 0) {
 			try {
@@ -158,6 +161,9 @@ json BuildConsumerStats(
 	}
 
 	for (const auto& [consumerId, consumer] : peer->consumers) {
+		if (!consumer || consumer->closed()) {
+			continue;
+		}
 		json consumerStats;
 		consumerStats["kind"] = consumer->kind();
 		consumerStats["type"] = consumer->type();

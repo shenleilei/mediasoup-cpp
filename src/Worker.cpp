@@ -161,7 +161,7 @@ void Worker::spawn(const WorkerSettings& settings, bool threaded) {
 		waitThread_ = std::thread([this]() {
 			int status;
 			::waitpid(pid_, &status, 0);
-			if (!closed_) {
+			if (!closed_.load(std::memory_order_acquire)) {
 				workerDied("worker process exited with status " + std::to_string(status));
 			}
 		});
@@ -169,16 +169,20 @@ void Worker::spawn(const WorkerSettings& settings, bool threaded) {
 }
 
 void Worker::close() {
-	if (closed_) return;
-	closed_ = true;
+	if (closed_.exchange(true, std::memory_order_acq_rel)) return;
 
 	MS_DEBUG(logger_, "close() [pid:{}]", pid_);
 
 	// Close all routers
-	for (auto& router : routers_) {
+	std::vector<std::shared_ptr<Router>> routersToClose;
+	{
+		std::lock_guard<std::mutex> lock(routersMutex_);
+		routersToClose.assign(routers_.begin(), routers_.end());
+		routers_.clear();
+	}
+	for (auto& router : routersToClose) {
 		router->workerClosed();
 	}
-	routers_.clear();
 
 	// Send close request to worker (in 3.14.x, WORKER_CLOSE is a Request, not Notification)
 	if (channel_) {
@@ -217,15 +221,19 @@ void Worker::close() {
 }
 
 void Worker::workerDied(const std::string& reason) {
-	if (closed_) return;
-	closed_ = true;
+	if (closed_.exchange(true, std::memory_order_acq_rel)) return;
 
 	MS_ERROR(logger_, "worker died [pid:{}]: {}", pid_, reason);
 
-	for (auto& router : routers_) {
+	std::vector<std::shared_ptr<Router>> routersToClose;
+	{
+		std::lock_guard<std::mutex> lock(routersMutex_);
+		routersToClose.assign(routers_.begin(), routers_.end());
+		routers_.clear();
+	}
+	for (auto& router : routersToClose) {
 		router->workerClosed();
 	}
-	routers_.clear();
 
 	// Don't call channel_->close() here — we're in waitThread, and close()
 	// would join readThread which may deadlock. Channel will be cleaned up
@@ -235,12 +243,12 @@ void Worker::workerDied(const std::string& reason) {
 }
 
 bool Worker::processChannelData() {
-	if (!channel_ || closed_) return false;
+	if (!channel_ || closed_.load(std::memory_order_acquire)) return false;
 	return channel_->processAvailableData();
 }
 
 void Worker::handleWorkerDeath() {
-	if (closed_) return;
+	if (closed_.load(std::memory_order_acquire)) return;
 
 	int status = waitChildWithTimeout(pid_, kWorkerDeathReapTimeoutMs).value_or(0);
 	workerDied("worker process exited with status " + std::to_string(status));
@@ -249,7 +257,7 @@ void Worker::handleWorkerDeath() {
 std::shared_ptr<Router> Worker::createRouter(
 	const std::vector<nlohmann::json>& mediaCodecs)
 {
-	if (closed_) throw std::runtime_error("Worker closed");
+	if (closed_.load(std::memory_order_acquire)) throw std::runtime_error("Worker closed");
 
 	std::string routerId = utils::generateUUIDv4();
 	channel_->requestBuildWait(
@@ -262,10 +270,20 @@ std::shared_ptr<Router> Worker::createRouter(
 		}, ""); // wait for response
 
 	auto router = std::make_shared<Router>(routerId, channel_.get(), mediaCodecs);
-	routers_.insert(router);
+	{
+		std::lock_guard<std::mutex> lock(routersMutex_);
+		if (closed_.load(std::memory_order_acquire)) {
+			router->workerClosed();
+			throw std::runtime_error("Worker closed");
+		}
+		routers_.insert(router);
+	}
 
 	router->emitter().on("@close", [this, weak = std::weak_ptr<Router>(router)](auto&) {
-		if (auto r = weak.lock()) routers_.erase(r);
+		if (auto r = weak.lock()) {
+			std::lock_guard<std::mutex> lock(routersMutex_);
+			routers_.erase(r);
+		}
 	});
 
 	MS_DEBUG(logger_, "Router created [id:{}]", routerId);
