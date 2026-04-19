@@ -2,6 +2,7 @@
 build/
 build_dbg/
 build-*/
+/client/*.o
 
 # Generated files (can regenerate from fbs/)
 generated/
