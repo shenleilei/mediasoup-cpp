@@ -174,8 +174,8 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 					ws->send(resp.dump(), uWS::OpCode::TEXT);
 					return;
 				}
-				wt->post([wt, roomId, peerId, data] {
-					wt->roomService()->setClientStats(roomId, peerId, data);
+				wt->post([wt, roomId, peerId, snapshot = std::move(qosParse.value)]() mutable {
+					wt->roomService()->setClientStats(roomId, peerId, std::move(snapshot));
 				});
 				json resp = {{"response", true}, {"id", id}, {"ok", true}, {"data", json::object()}};
 				ws->send(resp.dump(), uWS::OpCode::TEXT);

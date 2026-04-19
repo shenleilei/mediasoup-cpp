@@ -222,6 +222,8 @@ TEST_F(QosIntegrationTest, GetStatsAfterProduce) {
 	for (auto& [pid, pstat] : data["producers"].items()) {
 		EXPECT_TRUE(pstat.contains("kind"));
 		EXPECT_EQ(pstat["kind"], "audio");
+		EXPECT_TRUE(pstat.contains("clockRate"));
+		EXPECT_EQ(pstat["clockRate"], 48000);
 		EXPECT_TRUE(pstat.contains("stats"));
 		EXPECT_TRUE(pstat.contains("scores"));
 	}

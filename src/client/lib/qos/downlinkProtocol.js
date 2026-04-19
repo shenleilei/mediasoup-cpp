@@ -36,24 +36,40 @@ function serializeDownlinkSnapshot({ seq, subscriberPeerId, transport, subscript
             availableIncomingBitrate: transport.availableIncomingBitrate || 0,
             currentRoundTripTime: transport.currentRoundTripTime || 0,
         },
-        subscriptions: capped.map(s => ({
-            consumerId: s.consumerId,
-            producerId: s.producerId,
-            kind: s.kind === 'audio' ? 'audio' : 'video',
-            visible: !!s.visible,
-            pinned: !!s.pinned,
-            activeSpeaker: !!s.activeSpeaker,
-            isScreenShare: !!s.isScreenShare,
-            targetWidth: s.targetWidth || 0,
-            targetHeight: s.targetHeight || 0,
-            packetsLost: s.packetsLost || 0,
-            jitter: s.jitter || 0,
-            framesPerSecond: s.framesPerSecond || 0,
-            frameWidth: s.frameWidth || 0,
-            frameHeight: s.frameHeight || 0,
-            freezeRate: s.freezeRate || 0,
-        })),
+        subscriptions: capped.map(s => {
+            const entry = {
+                consumerId: s.consumerId,
+                producerId: s.producerId,
+                kind: s.kind === 'audio' ? 'audio' : 'video',
+                visible: !!s.visible,
+                pinned: !!s.pinned,
+                activeSpeaker: !!s.activeSpeaker,
+                isScreenShare: !!s.isScreenShare,
+                targetWidth: s.targetWidth || 0,
+                targetHeight: s.targetHeight || 0,
+                packetsLost: s.packetsLost || 0,
+                jitter: s.jitter || 0,
+                framesPerSecond: s.framesPerSecond || 0,
+                frameWidth: s.frameWidth || 0,
+                frameHeight: s.frameHeight || 0,
+                freezeRate: s.freezeRate || 0,
+            };
+            copyOptionalNumber(s, entry, 'concealedSamples');
+            copyOptionalNumber(s, entry, 'totalSamplesReceived');
+            copyOptionalNumber(s, entry, 'freezeCount');
+            copyOptionalNumber(s, entry, 'totalFreezesDuration');
+            copyOptionalNumber(s, entry, 'framesDropped');
+            copyOptionalNumber(s, entry, 'jitterBufferDelayMs');
+            return entry;
+        }),
     };
+}
+
+function copyOptionalNumber(source, target, key) {
+    const value = source?.[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        target[key] = value;
+    }
 }
 
 /**

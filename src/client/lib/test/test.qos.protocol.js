@@ -109,6 +109,45 @@ test('downlink protocol rejects unsafe seq values', () => {
         subscriptions: [],
     })).toThrow(/safe integer/);
 });
+test('downlink protocol preserves optional concealment and freeze metrics', () => {
+    const snapshot = downlinkProtocol.serializeDownlinkSnapshot({
+        seq: 7,
+        subscriberPeerId: 'alice',
+        transport: {
+            availableIncomingBitrate: 320000,
+            currentRoundTripTime: 0.05,
+        },
+        subscriptions: [{
+            consumerId: 'consumer-1',
+            producerId: 'producer-1',
+            kind: 'audio',
+            visible: true,
+            pinned: false,
+            activeSpeaker: false,
+            isScreenShare: false,
+            targetWidth: 0,
+            targetHeight: 0,
+            packetsLost: 4,
+            jitter: 0.003,
+            framesPerSecond: 0,
+            frameWidth: 0,
+            frameHeight: 0,
+            freezeRate: 0,
+            concealedSamples: 20,
+            totalSamplesReceived: 400,
+            freezeCount: 1,
+            totalFreezesDuration: 0.2,
+            framesDropped: 3,
+            jitterBufferDelayMs: 16,
+        }],
+    });
+    expect(snapshot.subscriptions[0].concealedSamples).toBe(20);
+    expect(snapshot.subscriptions[0].totalSamplesReceived).toBe(400);
+    expect(snapshot.subscriptions[0].freezeCount).toBe(1);
+    expect(snapshot.subscriptions[0].totalFreezesDuration).toBe(0.2);
+    expect(snapshot.subscriptions[0].framesDropped).toBe(3);
+    expect(snapshot.subscriptions[0].jitterBufferDelayMs).toBe(16);
+});
 test('qos profiles expose source-specific defaults and resolve helper', () => {
     expect(typeof profiles.getDefaultCameraProfile).toBe('function');
     expect(typeof profiles.getDefaultScreenShareProfile).toBe('function');

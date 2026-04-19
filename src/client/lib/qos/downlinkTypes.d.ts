@@ -23,6 +23,12 @@ export interface DownlinkSubscriptionStats {
     frameWidth: number;
     frameHeight: number;
     freezeRate: number;
+    concealedSamples?: number;
+    totalSamplesReceived?: number;
+    freezeCount?: number;
+    totalFreezesDuration?: number;
+    framesDropped?: number;
+    jitterBufferDelayMs?: number;
 }
 
 export interface DownlinkSnapshot {

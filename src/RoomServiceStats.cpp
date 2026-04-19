@@ -96,17 +96,13 @@ size_t FilterConsistentDownlinkSubscriptions(
 
 } // namespace
 
-void RoomService::setClientStats(const std::string& roomId, const std::string& peerId,
-	const json& stats)
+void RoomService::setClientStats(
+	const std::string& roomId,
+	const std::string& peerId,
+	qos::ClientQosSnapshot stats)
 {
-	auto parsed = qos::QosValidator::ParseClientSnapshot(stats);
-	if (!parsed.ok) {
-		MS_WARN(logger_, "[{} {}] invalid QoS clientStats ignored: {}", roomId, peerId, parsed.error);
-		return;
-	}
-
 	std::string rejectReason;
-	if (!qosRegistry_.Upsert(roomId, peerId, parsed.value, qos::NowMs(), &rejectReason)) {
+	if (!qosRegistry_.Upsert(roomId, peerId, stats, qos::NowMs(), &rejectReason)) {
 		MS_DEBUG(logger_, "[{} {}] dropped QoS clientStats [{}]", roomId, peerId, rejectReason);
 		return;
 	}

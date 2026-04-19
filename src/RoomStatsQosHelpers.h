@@ -139,6 +139,9 @@ json BuildProducerStats(
 		}
 		producerStats["scores"] = std::move(scores);
 		producerStats["kind"] = producer->kind();
+		if (!producer->rtpParameters().codecs.empty()) {
+			producerStats["clockRate"] = producer->rtpParameters().codecs.front().clockRate;
+		}
 		producers[producerId] = std::move(producerStats);
 	}
 
