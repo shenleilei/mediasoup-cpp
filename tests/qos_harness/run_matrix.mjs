@@ -68,6 +68,32 @@ function compactJson(value) {
   }
 }
 
+function classifyInfrastructureFailure(diagnostics) {
+  if (!diagnostics) {
+    return 'unknown';
+  }
+
+  const failureMessage = diagnostics.failureContext?.errorMessage || '';
+  const browserExit = (diagnostics.browserProcessExits ?? []).find(
+    entry => entry.signal || entry.code !== null
+  );
+
+  if (browserExit?.signal === 'SIGKILL') {
+    return 'browser_sigkill';
+  }
+  if (browserExit) {
+    return 'browser_process_exit';
+  }
+  if (/The service is no longer running/.test(failureMessage)) {
+    return 'esbuild_service_unavailable';
+  }
+  if (diagnostics.browserDisconnected) {
+    return 'browser_disconnected';
+  }
+
+  return 'runner_error';
+}
+
 function emitDiagnostics(caseId, diagnostics) {
   if (!diagnostics) {
     return;
@@ -79,20 +105,28 @@ function emitDiagnostics(caseId, diagnostics) {
   const browser = snapshot?.browser;
   const browserState = [
     `browserPid=${browser?.pid ?? '-'}`,
+    `sessionId=${browser?.sessionId ?? '-'}`,
     `connected=${browser?.connected ?? '-'}`,
     `alive=${browser?.alive ?? '-'}`,
     `browserDisconnected=${diagnostics.browserDisconnected ?? '-'}`,
     `pageClosed=${diagnostics.pageClosed ?? '-'}`,
   ].join(' ');
   console.error(`[${caseId}] diagnostics summary ${browserState}`);
+  console.error(
+    `[${caseId}] diagnostics classification ${classifyInfrastructureFailure(diagnostics)}`
+  );
 
   if (host || node || browser?.procStatus) {
     console.error(
       `[${caseId}] diagnostics resources ` +
       `freeMemMb=${host?.freeMemMb ?? '-'} totalMemMb=${host?.totalMemMb ?? '-'} ` +
+      `memAvailableMb=${host?.memAvailableMb ?? '-'} ` +
+      `swapFreeMb=${host?.swapFreeMb ?? '-'} swapTotalMb=${host?.swapTotalMb ?? '-'} ` +
       `loadAvg=${(host?.loadAvg ?? []).join('/') || '-'} ` +
       `nodeRssMb=${node?.rssMb ?? '-'} browserVmRssKb=${browser?.procStatus?.vmRssKb ?? '-'} ` +
-      `browserOomScore=${browser?.oomScore ?? '-'} browserOomScoreAdj=${browser?.oomScoreAdj ?? '-'}`
+      `browserOomScore=${browser?.oomScore ?? '-'} browserOomScoreAdj=${browser?.oomScoreAdj ?? '-'} ` +
+      `browserCgroup=${browser?.memoryCgroupPath ?? '-'} browserCgroupUsageMb=${browser?.memoryCgroupUsageMb ?? '-'} ` +
+      `browserCgroupFailcnt=${browser?.memoryCgroupFailcnt ?? '-'}`
     );
   }
 
@@ -167,16 +201,64 @@ function emitDiagnostics(caseId, diagnostics) {
     for (const entry of recentSnapshots) {
       console.error(
         `[${caseId}]   ${entry.reason ?? '-'} @ ${entry.capturedAt ?? '-'} ` +
-        `freeMemMb=${entry.host?.freeMemMb ?? '-'} nodeRssMb=${entry.node?.rssMb ?? '-'} ` +
+        `freeMemMb=${entry.host?.freeMemMb ?? '-'} memAvailableMb=${entry.host?.memAvailableMb ?? '-'} ` +
+        `swapFreeMb=${entry.host?.swapFreeMb ?? '-'} nodeRssMb=${entry.node?.rssMb ?? '-'} ` +
         `browserVmRssKb=${entry.browser?.procStatus?.vmRssKb ?? '-'} browserAlive=${entry.browser?.alive ?? '-'}`
       );
     }
   }
 
-  const relevantProcesses = diagnostics.relevantProcesses ?? [];
-  if (relevantProcesses.length > 0) {
-    console.error(`[${caseId}] diagnostics relevant processes:`);
-    for (const line of relevantProcesses) {
+  const browserContext = diagnostics.browserContext;
+  if (browserContext) {
+    console.error(
+      `[${caseId}] diagnostics browser context ` +
+      compactJson({
+        pid: browserContext.pid,
+        alive: browserContext.alive,
+        ppid: browserContext.ppid,
+        sessionId: browserContext.sessionId,
+        memoryCgroup: browserContext.memoryCgroup,
+        cmdline: browserContext.cmdline,
+      })
+    );
+  }
+
+  const browserStdout = (diagnostics.browserStdout ?? []).slice(-20);
+  if (browserStdout.length > 0) {
+    console.error(`[${caseId}] diagnostics browser stdout tail:`);
+    for (const entry of browserStdout) {
+      console.error(`[${caseId}]   ${entry.ts ?? '-'} ${entry.line ?? ''}`);
+    }
+  }
+
+  const browserStderr = (diagnostics.browserStderr ?? []).slice(-20);
+  if (browserStderr.length > 0) {
+    console.error(`[${caseId}] diagnostics browser stderr tail:`);
+    for (const entry of browserStderr) {
+      console.error(`[${caseId}]   ${entry.ts ?? '-'} ${entry.line ?? ''}`);
+    }
+  }
+
+  const runnerProcessTree = diagnostics.runnerProcessTree ?? diagnostics.relevantProcesses ?? [];
+  if (runnerProcessTree.length > 0) {
+    console.error(`[${caseId}] diagnostics runner process tree:`);
+    for (const line of runnerProcessTree) {
+      console.error(`[${caseId}]   ${line}`);
+    }
+  }
+
+  const browserProcessTree = diagnostics.browserProcessTree ?? [];
+  if (browserProcessTree.length > 0) {
+    console.error(`[${caseId}] diagnostics browser process tree:`);
+    for (const line of browserProcessTree) {
+      console.error(`[${caseId}]   ${line}`);
+    }
+  }
+
+  const otherBrowserProcesses = diagnostics.otherBrowserProcesses ?? [];
+  if (otherBrowserProcesses.length > 0) {
+    console.error(`[${caseId}] diagnostics other browser roots:`);
+    for (const line of otherBrowserProcesses) {
       console.error(`[${caseId}]   ${line}`);
     }
   }
@@ -185,6 +267,14 @@ function emitDiagnostics(caseId, diagnostics) {
   if (kernelTail.length > 0) {
     console.error(`[${caseId}] diagnostics kernel tail:`);
     for (const line of kernelTail) {
+      console.error(`[${caseId}]   ${line}`);
+    }
+  }
+
+  const systemTail = diagnostics.systemTail ?? [];
+  if (systemTail.length > 0) {
+    console.error(`[${caseId}] diagnostics system tail:`);
+    for (const line of systemTail) {
       console.error(`[${caseId}]   ${line}`);
     }
   }

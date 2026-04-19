@@ -18,7 +18,10 @@ const HARNESS_WARMUP_MS = 2000;
 const MAX_DIAGNOSTIC_ITEMS = 200;
 const MAX_RUNTIME_SNAPSHOTS = 48;
 const MAX_KERNEL_LINES = 80;
+const MAX_SYSTEM_LINES = 80;
 const MAX_PROCESS_LINES = 40;
+const MAX_BROWSER_IO_LINES = 120;
+const RUNTIME_SNAPSHOT_INTERVAL_MS = 5000;
 
 function runTc(args) {
   execFileSync(tcPath, args, { stdio: 'inherit' });
@@ -37,6 +40,12 @@ function roundToOne(value) {
 function toMb(bytes) {
   return typeof bytes === 'number'
     ? roundToOne(bytes / (1024 * 1024))
+    : null;
+}
+
+function kbToMb(kb) {
+  return typeof kb === 'number'
+    ? roundToOne(kb / 1024)
     : null;
 }
 
@@ -63,6 +72,42 @@ function safeReadText(filePath) {
 function readNumericFile(filePath) {
   const value = safeReadText(filePath)?.trim();
   return value ? parseIntOrNull(value) : null;
+}
+
+function readByteCountFile(filePath) {
+  const value = safeReadText(filePath)?.trim();
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed > Number.MAX_SAFE_INTEGER) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function parseMemInfo() {
+  const text = safeReadText('/proc/meminfo');
+  if (!text) {
+    return null;
+  }
+
+  const values = {};
+  for (const line of text.split(/\r?\n/)) {
+    const match = line.match(/^([^:]+):\s+(\d+)/);
+    if (!match) {
+      continue;
+    }
+    values[match[1]] = Number(match[2]);
+  }
+
+  return {
+    memAvailableMb: kbToMb(values.MemAvailable),
+    swapFreeMb: kbToMb(values.SwapFree),
+    swapTotalMb: kbToMb(values.SwapTotal),
+  };
 }
 
 function parseProcStatus(text) {
@@ -92,6 +137,221 @@ function parseProcStatus(text) {
   };
 }
 
+function readProcCmdline(pid) {
+  const raw = safeReadText(`/proc/${pid}/cmdline`);
+  return raw
+    ? raw.replace(/\0/g, ' ').trim() || null
+    : null;
+}
+
+function readProcCgroup(pid) {
+  const text = safeReadText(`/proc/${pid}/cgroup`);
+  if (!text) {
+    return null;
+  }
+
+  const entries = [];
+  for (const line of text.split(/\r?\n/)) {
+    if (!line) {
+      continue;
+    }
+    const [hierarchyId, controllers, cgroupPath] = line.split(':');
+    entries.push({
+      hierarchyId: parseIntOrNull(hierarchyId),
+      controllers: controllers ? controllers.split(',').filter(Boolean) : [],
+      path: cgroupPath ?? null,
+    });
+  }
+
+  return entries;
+}
+
+function readMemoryCgroupSnapshot(cgroupEntries) {
+  const memoryEntry = cgroupEntries?.find(entry => entry.controllers.includes('memory'));
+  if (!memoryEntry?.path) {
+    return null;
+  }
+
+  const root = '/sys/fs/cgroup/memory';
+  const suffix = memoryEntry.path === '/' ? '' : memoryEntry.path;
+  const basePath = `${root}${suffix}`;
+
+  return {
+    path: memoryEntry.path,
+    usageMb: toMb(readByteCountFile(`${basePath}/memory.usage_in_bytes`)),
+    limitMb: toMb(readByteCountFile(`${basePath}/memory.limit_in_bytes`)),
+    memswUsageMb: toMb(readByteCountFile(`${basePath}/memory.memsw.usage_in_bytes`)),
+    memswLimitMb: toMb(readByteCountFile(`${basePath}/memory.memsw.limit_in_bytes`)),
+    failcnt: readNumericFile(`${basePath}/memory.failcnt`),
+  };
+}
+
+function parseProcessRow(line) {
+  const match = line
+    .trim()
+    .match(/^(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(\d+)\s+(\d+)\s+(\S+)\s*(.*)$/);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    pid: Number(match[1]),
+    ppid: Number(match[2]),
+    sess: Number(match[3]),
+    stat: match[4],
+    rssKb: Number(match[5]),
+    vszKb: Number(match[6]),
+    comm: match[7],
+    args: match[8] || match[7],
+  };
+}
+
+function getProcessTableRows() {
+  try {
+    const output = execFileSync(
+      'ps',
+      ['-eo', 'pid=,ppid=,sess=,stat=,rss=,vsz=,comm=,args='],
+      { encoding: 'utf8', maxBuffer: 1024 * 1024 }
+    );
+    return output
+      .split(/\r?\n/)
+      .map(parseProcessRow)
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function getPidTreeRows(rootPid, rows) {
+  if (!Number.isInteger(rootPid) || rootPid <= 0) {
+    return [];
+  }
+
+  const childrenByParent = new Map();
+  for (const row of rows) {
+    if (!childrenByParent.has(row.ppid)) {
+      childrenByParent.set(row.ppid, []);
+    }
+    childrenByParent.get(row.ppid).push(row);
+  }
+
+  const rowByPid = new Map(rows.map(row => [row.pid, row]));
+  const ordered = [];
+  const queue = [rootPid];
+  const seen = new Set();
+
+  while (queue.length > 0) {
+    const pid = queue.shift();
+    if (seen.has(pid)) {
+      continue;
+    }
+    seen.add(pid);
+
+    const current = rowByPid.get(pid);
+    if (current) {
+      ordered.push(current);
+    }
+
+    for (const child of childrenByParent.get(pid) ?? []) {
+      queue.push(child.pid);
+    }
+  }
+
+  return ordered;
+}
+
+function formatProcessRows(rows) {
+  if (!rows || rows.length === 0) {
+    return [];
+  }
+
+  return [
+    'PID    PPID SESS STAT   RSS    VSZ COMMAND         COMMAND',
+    ...rows.slice(0, MAX_PROCESS_LINES - 1).map(
+      row =>
+        `${String(row.pid).padStart(6)} ${String(row.ppid).padStart(6)} ${String(row.sess).padStart(4)} ` +
+        `${String(row.stat).padEnd(4)} ${String(row.rssKb).padStart(6)} ${String(row.vszKb).padStart(7)} ` +
+        `${String(row.comm).padEnd(15)} ${row.args}`
+    ),
+  ];
+}
+
+function collectPidContext(pid, rows = null) {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return null;
+  }
+
+  const processRows = rows ?? getProcessTableRows();
+  const row = processRows.find(entry => entry.pid === pid) ?? null;
+  const cgroup = readProcCgroup(pid);
+
+  return {
+    pid,
+    alive: fs.existsSync(`/proc/${pid}`),
+    ppid: row?.ppid ?? null,
+    sessionId: row?.sess ?? null,
+    cmdline: readProcCmdline(pid),
+    procStatus: parseProcStatus(safeReadText(`/proc/${pid}/status`)),
+    cgroup,
+    memoryCgroup: readMemoryCgroupSnapshot(cgroup),
+  };
+}
+
+function collectProcessDiagnostics(browserPid = null) {
+  const rows = getProcessTableRows();
+  const runnerTreeRows = getPidTreeRows(process.pid, rows);
+  const browserTreeRows = getPidTreeRows(browserPid, rows);
+  const excludedPids = new Set([
+    ...runnerTreeRows.map(row => row.pid),
+    ...browserTreeRows.map(row => row.pid),
+  ]);
+  const otherBrowserRows = rows.filter(
+    row =>
+      row.comm === 'headless_shell' &&
+      !excludedPids.has(row.pid) &&
+      !/--type=/.test(row.args)
+  );
+
+  return {
+    browserContext: collectPidContext(browserPid, rows),
+    runnerProcessTree: formatProcessRows(runnerTreeRows),
+    browserProcessTree: formatProcessRows(browserTreeRows),
+    otherBrowserProcesses: formatProcessRows(otherBrowserRows),
+  };
+}
+
+function createLineCollector(list, limit = MAX_BROWSER_IO_LINES) {
+  let remainder = '';
+
+  const pushLine = line => {
+    pushCapped(
+      list,
+      {
+        ts: nowIso(),
+        line,
+      },
+      limit
+    );
+  };
+
+  return {
+    push(chunk) {
+      remainder += chunk.toString('utf8');
+      const parts = remainder.split(/\r?\n/);
+      remainder = parts.pop() ?? '';
+      for (const line of parts) {
+        pushLine(line);
+      }
+    },
+    flush() {
+      if (remainder) {
+        pushLine(remainder);
+        remainder = '';
+      }
+    },
+  };
+}
+
 function getBrowserConnectionState(browser) {
   if (!browser) {
     return null;
@@ -112,15 +372,20 @@ function getBrowserPid(browser) {
 function collectRuntimeSnapshot(browser) {
   const browserPid = getBrowserPid(browser);
   const memoryUsage = process.memoryUsage();
+  const memInfo = parseMemInfo();
   const procStatus = browserPid
     ? parseProcStatus(safeReadText(`/proc/${browserPid}/status`))
     : null;
+  const browserContext = collectPidContext(browserPid);
 
   return {
     capturedAt: nowIso(),
     host: {
       totalMemMb: toMb(os.totalmem()),
       freeMemMb: toMb(os.freemem()),
+      memAvailableMb: memInfo?.memAvailableMb ?? null,
+      swapFreeMb: memInfo?.swapFreeMb ?? null,
+      swapTotalMb: memInfo?.swapTotalMb ?? null,
       loadAvg: os.loadavg().map(roundToOne),
       uptimeSec: Math.round(os.uptime()),
     },
@@ -138,38 +403,13 @@ function collectRuntimeSnapshot(browser) {
       alive: browserPid ? fs.existsSync(`/proc/${browserPid}`) : false,
       oomScore: browserPid ? readNumericFile(`/proc/${browserPid}/oom_score`) : null,
       oomScoreAdj: browserPid ? readNumericFile(`/proc/${browserPid}/oom_score_adj`) : null,
+      sessionId: browserContext?.sessionId ?? null,
+      memoryCgroupPath: browserContext?.memoryCgroup?.path ?? null,
+      memoryCgroupUsageMb: browserContext?.memoryCgroup?.usageMb ?? null,
+      memoryCgroupFailcnt: browserContext?.memoryCgroup?.failcnt ?? null,
       procStatus,
     },
   };
-}
-
-function getRelevantProcessLines(browserPid = null) {
-  try {
-    const output = execFileSync(
-      'ps',
-      ['-eo', 'pid,ppid,stat,rss,vsz,comm,args'],
-      { encoding: 'utf8', maxBuffer: 1024 * 1024 }
-    );
-    const interestingPids = new Set(
-      [process.pid, browserPid].filter(pid => Number.isInteger(pid))
-    );
-    const lines = output
-      .split(/\r?\n/)
-      .map(line => line.trimEnd())
-      .filter(Boolean);
-    const header = lines.shift();
-    const filtered = lines.filter(line => {
-      const pid = parseIntOrNull(line.trim().split(/\s+/, 2)[0]);
-      return (
-        interestingPids.has(pid) ||
-        /headless_shell|esbuild|run_matrix\.mjs|loopback_runner\.mjs/i.test(line)
-      );
-    });
-
-    return [header, ...filtered].filter(Boolean).slice(-MAX_PROCESS_LINES);
-  } catch (error) {
-    return [`<ps unavailable: ${error.message}>`];
-  }
 }
 
 function toDmesgSince(isoTimestamp) {
@@ -194,16 +434,49 @@ function toDmesgSince(isoTimestamp) {
   ].join('');
 }
 
+function getJournalLines(args, matcher, emptyMessage) {
+  try {
+    const output = execFileSync('journalctl', args, {
+      encoding: 'utf8',
+      maxBuffer: 4 * 1024 * 1024,
+    });
+    const lines = output
+      .split(/\r?\n/)
+      .map(line => line.trimEnd())
+      .filter(line => matcher.test(line));
+
+    return lines.length > 0
+      ? lines.slice(-MAX_SYSTEM_LINES).map(line => `[journalctl] ${line}`)
+      : [`<${emptyMessage}>`];
+  } catch {
+    return null;
+  }
+}
+
 function getKernelTail(createdAt) {
-  const args = ['-T'];
   const since = toDmesgSince(createdAt);
+  const matcher = /headless_shell|oom-kill|Out of memory|Killed process|chromium|esbuild/i;
+  const journalArgs = ['-k', '-o', 'short-iso'];
   if (since) {
-    args.push('--since', since);
+    journalArgs.push('--since', since);
   }
 
-  const matcher = /headless_shell|oom-kill|Out of memory|Killed process|chromium|esbuild/i;
+  const journalLines = getJournalLines(
+    journalArgs,
+    matcher,
+    `no matching kernel log lines since ${createdAt ?? 'unknown'}`
+  );
+  if (journalLines) {
+    return journalLines.slice(-MAX_KERNEL_LINES);
+  }
+
+  const dmesgArgs = ['-T'];
+  if (since) {
+    dmesgArgs.push('--since', since);
+  }
+
   try {
-    const output = execFileSync('dmesg', args, {
+    const output = execFileSync('dmesg', dmesgArgs, {
       encoding: 'utf8',
       maxBuffer: 2 * 1024 * 1024,
     });
@@ -213,11 +486,43 @@ function getKernelTail(createdAt) {
       .filter(line => matcher.test(line));
 
     return lines.length > 0
-      ? lines.slice(-MAX_KERNEL_LINES)
+      ? lines.slice(-MAX_KERNEL_LINES).map(line => `[dmesg] ${line}`)
       : [`<no matching kernel log lines since ${createdAt ?? 'unknown'}>`];
   } catch (error) {
-    return [`<dmesg unavailable: ${error.message}>`];
+    try {
+      const output = execFileSync('dmesg', ['-T'], {
+        encoding: 'utf8',
+        maxBuffer: 2 * 1024 * 1024,
+      });
+      const lines = output
+        .split(/\r?\n/)
+        .map(line => line.trimEnd())
+        .filter(line => matcher.test(line));
+
+      return lines.length > 0
+        ? lines.slice(-MAX_KERNEL_LINES).map(line => `[dmesg-fallback] ${line}`)
+        : ['<no matching kernel log lines in full dmesg>'];
+    } catch (fallbackError) {
+      return [`<dmesg unavailable: ${error.message}; fallback failed: ${fallbackError.message}>`];
+    }
   }
+}
+
+function getSystemTail(createdAt) {
+  const since = toDmesgSince(createdAt);
+  const matcher =
+    /headless_shell|chromium|esbuild|run_matrix|oom|Killed process|systemd-coredump|session-[0-9]+\.scope/i;
+  const journalArgs = ['-o', 'short-iso'];
+  if (since) {
+    journalArgs.push('--since', since);
+  }
+
+  const journalLines = getJournalLines(
+    journalArgs,
+    matcher,
+    `no matching system log lines since ${createdAt ?? 'unknown'}`
+  );
+  return journalLines ?? ['<system journal unavailable>'];
 }
 
 function pushEvent(diagnostics, type, details = {}) {
@@ -270,6 +575,9 @@ function captureFrameDetails(frame, page) {
 }
 
 function finalizeDiagnostics(diagnostics, browser, failureContext = {}) {
+  const browserPid = diagnostics.meta?.browserPid ?? getBrowserPid(browser);
+  const processDiagnostics = collectProcessDiagnostics(browserPid);
+
   return JSON.parse(JSON.stringify({
     ...diagnostics,
     failureContext: {
@@ -277,8 +585,26 @@ function finalizeDiagnostics(diagnostics, browser, failureContext = {}) {
       ...failureContext,
     },
     currentSnapshot: collectRuntimeSnapshot(browser),
-    relevantProcesses: getRelevantProcessLines(getBrowserPid(browser)),
+    browserContext:
+      processDiagnostics.browserContext ??
+      diagnostics.browserContextAtExit ??
+      diagnostics.browserContextAtLaunch ??
+      null,
+    runnerProcessTree:
+      processDiagnostics.runnerProcessTree.length > 0
+        ? processDiagnostics.runnerProcessTree
+        : diagnostics.runnerProcessTreeAtExit ?? [],
+    browserProcessTree:
+      processDiagnostics.browserProcessTree.length > 0
+        ? processDiagnostics.browserProcessTree
+        : diagnostics.browserProcessTreeAtExit ?? [],
+    otherBrowserProcesses: processDiagnostics.otherBrowserProcesses,
+    relevantProcesses:
+      processDiagnostics.runnerProcessTree.length > 0
+        ? processDiagnostics.runnerProcessTree
+        : diagnostics.runnerProcessTreeAtExit ?? [],
     kernelTail: getKernelTail(diagnostics.meta?.createdAt),
+    systemTail: getSystemTail(diagnostics.meta?.createdAt),
   }));
 }
 
@@ -391,6 +717,12 @@ export async function createLoopbackHarness(options = {}) {
     pageClosed: false,
     browserDisconnected: false,
     browserProcessExits: [],
+    browserStdout: [],
+    browserStderr: [],
+    browserContextAtLaunch: null,
+    browserContextAtExit: null,
+    browserProcessTreeAtExit: [],
+    runnerProcessTreeAtExit: [],
     events: [],
     runtimeSnapshots: [],
   };
@@ -398,6 +730,9 @@ export async function createLoopbackHarness(options = {}) {
   let bundlePath;
   let browser;
   let page;
+  let browserStdoutCollector;
+  let browserStderrCollector;
+  let runtimeSnapshotTimer;
 
   try {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qos-browser-'));
@@ -410,13 +745,24 @@ export async function createLoopbackHarness(options = {}) {
 
     browser = await launchBrowser();
     diagnostics.meta.browserPid = getBrowserPid(browser);
+    diagnostics.browserContextAtLaunch = collectPidContext(diagnostics.meta.browserPid);
     pushEvent(diagnostics, 'browser_launched', {
       browserPid: diagnostics.meta.browserPid,
       connected: getBrowserConnectionState(browser),
     });
 
     const browserProcess = browser.process?.();
+    browserStdoutCollector = createLineCollector(diagnostics.browserStdout);
+    browserStderrCollector = createLineCollector(diagnostics.browserStderr);
+    browserProcess?.stdout?.on('data', chunk => browserStdoutCollector.push(chunk));
+    browserProcess?.stderr?.on('data', chunk => browserStderrCollector.push(chunk));
     browserProcess?.on('exit', (code, signal) => {
+      browserStdoutCollector.flush();
+      browserStderrCollector.flush();
+      diagnostics.browserContextAtExit = collectPidContext(diagnostics.meta.browserPid);
+      const processDiagnostics = collectProcessDiagnostics(diagnostics.meta.browserPid);
+      diagnostics.browserProcessTreeAtExit = processDiagnostics.browserProcessTree;
+      diagnostics.runnerProcessTreeAtExit = processDiagnostics.runnerProcessTree;
       const event = {
         ts: nowIso(),
         code: code ?? null,
@@ -424,6 +770,14 @@ export async function createLoopbackHarness(options = {}) {
       };
       pushCapped(diagnostics.browserProcessExits, event, 20);
       pushEvent(diagnostics, 'browser_process_exit', event);
+      pushCapped(
+        diagnostics.runtimeSnapshots,
+        {
+          reason: 'browser_process_exit',
+          ...collectRuntimeSnapshot(browser),
+        },
+        MAX_RUNTIME_SNAPSHOTS
+      );
     });
 
     page = await browser.newPage();
@@ -487,6 +841,17 @@ export async function createLoopbackHarness(options = {}) {
     pushEvent(diagnostics, 'bundle_injected', {});
     await page.evaluate(() => window.__qosLoopbackHarness.init());
     pushEvent(diagnostics, 'harness_init_done', {});
+    runtimeSnapshotTimer = setInterval(() => {
+      pushCapped(
+        diagnostics.runtimeSnapshots,
+        {
+          reason: 'interval',
+          ...collectRuntimeSnapshot(browser),
+        },
+        MAX_RUNTIME_SNAPSHOTS
+      );
+    }, RUNTIME_SNAPSHOT_INTERVAL_MS);
+    runtimeSnapshotTimer.unref?.();
     pushCapped(
       diagnostics.runtimeSnapshots,
       {
@@ -532,6 +897,12 @@ export async function createLoopbackHarness(options = {}) {
       },
       async stop() {
         pushEvent(diagnostics, 'stop_start', {});
+        browserStdoutCollector?.flush();
+        browserStderrCollector?.flush();
+        if (runtimeSnapshotTimer) {
+          clearInterval(runtimeSnapshotTimer);
+          runtimeSnapshotTimer = null;
+        }
         try {
           await page?.evaluate(() => window.__qosLoopbackHarness.stop());
           pushEvent(diagnostics, 'page_stop_done', {});
@@ -571,6 +942,12 @@ export async function createLoopbackHarness(options = {}) {
     try {
       await browser?.close();
     } catch {}
+    browserStdoutCollector?.flush();
+    browserStderrCollector?.flush();
+    if (runtimeSnapshotTimer) {
+      clearInterval(runtimeSnapshotTimer);
+      runtimeSnapshotTimer = null;
+    }
     clearNetem();
     if (tmpDir) {
       fs.rmSync(tmpDir, { recursive: true, force: true });
