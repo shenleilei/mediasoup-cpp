@@ -1,5 +1,5 @@
 // test_thread_integration.cpp — Integration tests for multi-thread pipeline
-// Requires: test_sweep.mp4 in project root (run from project root)
+// Requires: tests/fixtures/media/test_sweep.mp4 (run from project root)
 #include <gtest/gtest.h>
 
 #include "../client/ThreadTypes.h"
@@ -21,7 +21,7 @@
 #include <set>
 #include <thread>
 
-static const char* kTestMp4 = "test_sweep.mp4";
+static const char* kTestMp4 = "tests/fixtures/media/test_sweep.mp4";
 
 static bool testFileExists() {
 	FILE* f = fopen(kTestMp4, "r");
@@ -140,7 +140,7 @@ protected:
 };
 
 TEST_F(ThreadedPlainPublishIntegrationTest, ExplicitThreadedSourcesDoNotRequireBootstrapMp4) {
-	if (!testFileExists()) { GTEST_SKIP() << "test_sweep.mp4 not found"; }
+	if (!testFileExists()) { GTEST_SKIP() << "tests/fixtures/media/test_sweep.mp4 not found"; }
 	if (!plainClientBinaryExists()) { GTEST_SKIP() << "client/build/plain-client not found"; }
 
 	const std::string missingBootstrap = "/tmp/threaded_dummy_missing_" + std::to_string(getpid()) + ".mp4";
@@ -176,7 +176,7 @@ TEST_F(ThreadedPlainPublishIntegrationTest, ExplicitThreadedSourcesDoNotRequireB
 // ═══════════════════════════════════════════════════════════
 
 TEST(SourceWorkerIntegration, ProducesEncodedAccessUnits) {
-	if (!testFileExists()) { GTEST_SKIP() << "test_sweep.mp4 not found"; }
+	if (!testFileExists()) { GTEST_SKIP() << "tests/fixtures/media/test_sweep.mp4 not found"; }
 
 	mt::SpscQueue<mt::EncodedAccessUnit, mt::kEncodedAuQueueCapacity> auQueue;
 	mt::SpscQueue<mt::TrackControlCommand, mt::kControlCommandQueueCapacity> ctrlQueue;
@@ -228,7 +228,7 @@ TEST(SourceWorkerIntegration, ProducesEncodedAccessUnits) {
 }
 
 TEST(SourceWorkerIntegration, RespondsToForceKeyframe) {
-	if (!testFileExists()) { GTEST_SKIP() << "test_sweep.mp4 not found"; }
+	if (!testFileExists()) { GTEST_SKIP() << "tests/fixtures/media/test_sweep.mp4 not found"; }
 
 	mt::SpscQueue<mt::EncodedAccessUnit, mt::kEncodedAuQueueCapacity> auQueue;
 	mt::SpscQueue<mt::TrackControlCommand, mt::kControlCommandQueueCapacity> ctrlQueue;
@@ -273,7 +273,7 @@ TEST(SourceWorkerIntegration, RespondsToForceKeyframe) {
 }
 
 TEST(SourceWorkerIntegration, PauseResumeStopsAndRestartsOutput) {
-	if (!testFileExists()) { GTEST_SKIP() << "test_sweep.mp4 not found"; }
+	if (!testFileExists()) { GTEST_SKIP() << "tests/fixtures/media/test_sweep.mp4 not found"; }
 
 	mt::SpscQueue<mt::EncodedAccessUnit, mt::kEncodedAuQueueCapacity> auQueue;
 	mt::SpscQueue<mt::TrackControlCommand, mt::kControlCommandQueueCapacity> ctrlQueue;
@@ -430,7 +430,7 @@ TEST(NetworkThreadIntegration, SendsRtpFromEncodedAU) {
 // ═══════════════════════════════════════════════════════════
 
 TEST(EndToEndIntegration, SourceWorkerToNetworkThreadToStats) {
-	if (!testFileExists()) { GTEST_SKIP() << "test_sweep.mp4 not found"; }
+	if (!testFileExists()) { GTEST_SKIP() << "tests/fixtures/media/test_sweep.mp4 not found"; }
 
 	int sendFd = -1, recvFd = -1;
 	uint16_t port = 0;
@@ -1046,7 +1046,7 @@ TEST(NetworkPause, PauseAckRequiresQuiescedTransport) {
 // ═══════════════════════════════════════════════════════════
 
 TEST(SourceWorkerIntegration, SetEncodingParametersChangesOutput) {
-	if (!testFileExists()) { GTEST_SKIP() << "test_sweep.mp4 not found"; }
+	if (!testFileExists()) { GTEST_SKIP() << "tests/fixtures/media/test_sweep.mp4 not found"; }
 
 	mt::SpscQueue<mt::EncodedAccessUnit, mt::kEncodedAuQueueCapacity> auQueue;
 	mt::SpscQueue<mt::TrackControlCommand, mt::kControlCommandQueueCapacity> ctrlQueue;
@@ -1108,7 +1108,7 @@ TEST(SourceWorkerIntegration, SetEncodingParametersChangesOutput) {
 }
 
 TEST(SourceWorkerIntegration, BitrateOnlyUpdateDoesNotBumpConfigGeneration) {
-	if (!testFileExists()) { GTEST_SKIP() << "test_sweep.mp4 not found"; }
+	if (!testFileExists()) { GTEST_SKIP() << "tests/fixtures/media/test_sweep.mp4 not found"; }
 
 	mt::SpscQueue<mt::EncodedAccessUnit, mt::kEncodedAuQueueCapacity> auQueue;
 	mt::SpscQueue<mt::TrackControlCommand, mt::kControlCommandQueueCapacity> ctrlQueue;
@@ -1162,7 +1162,7 @@ TEST(SourceWorkerIntegration, BitrateOnlyUpdateDoesNotBumpConfigGeneration) {
 }
 
 TEST(SourceWorkerIntegration, StaleConfigGenerationCommandRejected) {
-	if (!testFileExists()) { GTEST_SKIP() << "test_sweep.mp4 not found"; }
+	if (!testFileExists()) { GTEST_SKIP() << "tests/fixtures/media/test_sweep.mp4 not found"; }
 
 	mt::SpscQueue<mt::EncodedAccessUnit, mt::kEncodedAuQueueCapacity> auQueue;
 	mt::SpscQueue<mt::TrackControlCommand, mt::kControlCommandQueueCapacity> ctrlQueue;
@@ -1343,7 +1343,7 @@ TEST(PLIDebounce, RapidPLIsOnlyForwardOnce) {
 // ═══════════════════════════════════════════════════════════
 
 TEST(MultiTrackE2E, TwoSourceWorkersProduceRTP) {
-	if (!testFileExists()) { GTEST_SKIP() << "test_sweep.mp4 not found"; }
+	if (!testFileExists()) { GTEST_SKIP() << "tests/fixtures/media/test_sweep.mp4 not found"; }
 
 	int sendFd = -1, recvFd = -1;
 	uint16_t port = 0;
@@ -1510,7 +1510,7 @@ TEST(ConfirmAction, LastActionAppliedReflectsAsyncConfirm) {
 // ═══════════════════════════════════════════════════════════
 
 TEST(SourceWorkerIntegration, StopSourceCommandCausesCleanExit) {
-	if (!testFileExists()) { GTEST_SKIP() << "test_sweep.mp4 not found"; }
+	if (!testFileExists()) { GTEST_SKIP() << "tests/fixtures/media/test_sweep.mp4 not found"; }
 
 	mt::SpscQueue<mt::EncodedAccessUnit, mt::kEncodedAuQueueCapacity> auQueue;
 	mt::SpscQueue<mt::TrackControlCommand, mt::kControlCommandQueueCapacity> ctrlQueue;
@@ -1770,7 +1770,7 @@ TEST_F(ThreadedPlainPublishIntegrationTest, AudioRtpAndStatsSmoke) {
 }
 
 TEST_F(ThreadedPlainPublishIntegrationTest, MultiTrackClientStatsStoredAndAggregatedSmoke) {
-	ASSERT_TRUE(testFileExists()) << "test_sweep.mp4 not found";
+	ASSERT_TRUE(testFileExists()) << "tests/fixtures/media/test_sweep.mp4 not found";
 
 	auto ws = joinPeer("alice");
 

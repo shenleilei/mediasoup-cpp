@@ -17,7 +17,7 @@ CASES_FILE="$REPO_ROOT/tests/qos_harness/scenarios/sweep_cases.json"
 SERVER_IP="${SERVER_IP:-127.0.0.1}"
 SERVER_PORT="${SERVER_PORT:-3000}"
 IFACE="${IFACE:-lo}"
-MP4="$REPO_ROOT/test_sweep.mp4"
+MP4="$REPO_ROOT/tests/fixtures/media/test_sweep.mp4"
 RESULTS_DIR="$REPO_ROOT/client/test-results"
 RUNNER_NAME="${RUNNER_NAME:-}"
 

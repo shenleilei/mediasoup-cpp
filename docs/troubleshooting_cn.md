@@ -289,7 +289,7 @@ curl -s "http://127.0.0.1:3000/api/resolve?roomId=test-room&clientIp=1.2.3.4" | 
 手工联调建议：
 
 ```bash
-ffmpeg -y -stream_loop 19 -i test_sweep.mp4 -c copy /tmp/test_sweep_x20.mp4
+ffmpeg -y -stream_loop 19 -i tests/fixtures/media/test_sweep.mp4 -c copy /tmp/test_sweep_x20.mp4
 env PLAIN_CLIENT_VIDEO_TRACK_COUNT=3 \
   ./client/build/plain-client \
   127.0.0.1 3000 <roomId> plain_3track_demo /tmp/test_sweep_x20.mp4

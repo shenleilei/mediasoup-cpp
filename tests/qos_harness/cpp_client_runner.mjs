@@ -9,9 +9,9 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..', '..');
 const tcPath = '/usr/sbin/tc';
 const HARNESS_WARMUP_MS = 2000;
-const DEFAULT_HARNESS_MP4_PATH = path.join(repoRoot, 'test_sweep.mp4');
-const DEFAULT_HARNESS_AV_MP4_PATH = path.join(repoRoot, 'test_sweep_av.mp4');
-const DEFAULT_MATRIX_MP4_PATH = path.join(repoRoot, 'test_sweep_cpp_matrix.mp4');
+const DEFAULT_HARNESS_MP4_PATH = path.join(repoRoot, 'tests', 'fixtures', 'media', 'test_sweep.mp4');
+const DEFAULT_HARNESS_AV_MP4_PATH = path.join(repoRoot, 'tests', 'fixtures', 'media', 'test_sweep_av.mp4');
+const DEFAULT_MATRIX_MP4_PATH = path.join(repoRoot, 'tests', 'fixtures', 'media', 'test_sweep_cpp_matrix.mp4');
 
 function runTc(args) {
   execFileSync(tcPath, args, { stdio: 'inherit' });
