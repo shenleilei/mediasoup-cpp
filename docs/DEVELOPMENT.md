@@ -226,8 +226,8 @@ cd /path/to/mediasoup-cpp
 
 # run_all_tests.sh / run_qos_tests.sh 遇到单个测试失败后会继续跑剩余选中项，
 # 最终统一输出失败汇总并返回非 0。
-# run_all_tests.sh 同时会刷新 docs/full-cpp-test-results.md，
-# 记录本次 full C++ 选择项和逐任务结果。
+# run_all_tests.sh 同时会刷新 docs/full-regression-test-results.md，
+# 记录本次仓库全量回归的选择项和逐任务结果。
 
 # 快速验证：核心 unit + QoS unit
 ./build/mediasoup_tests
