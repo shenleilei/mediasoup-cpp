@@ -60,21 +60,157 @@ function fmtState(state) {
   return `${state.state}/L${state.level}`;
 }
 
-async function runPhase(harness, config, durationMs) {
+function compactJson(value) {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function emitDiagnostics(caseId, diagnostics) {
+  if (!diagnostics) {
+    return;
+  }
+
+  const snapshot = diagnostics.currentSnapshot;
+  const host = snapshot?.host;
+  const node = snapshot?.node;
+  const browser = snapshot?.browser;
+  const browserState = [
+    `browserPid=${browser?.pid ?? '-'}`,
+    `connected=${browser?.connected ?? '-'}`,
+    `alive=${browser?.alive ?? '-'}`,
+    `browserDisconnected=${diagnostics.browserDisconnected ?? '-'}`,
+    `pageClosed=${diagnostics.pageClosed ?? '-'}`,
+  ].join(' ');
+  console.error(`[${caseId}] diagnostics summary ${browserState}`);
+
+  if (host || node || browser?.procStatus) {
+    console.error(
+      `[${caseId}] diagnostics resources ` +
+      `freeMemMb=${host?.freeMemMb ?? '-'} totalMemMb=${host?.totalMemMb ?? '-'} ` +
+      `loadAvg=${(host?.loadAvg ?? []).join('/') || '-'} ` +
+      `nodeRssMb=${node?.rssMb ?? '-'} browserVmRssKb=${browser?.procStatus?.vmRssKb ?? '-'} ` +
+      `browserOomScore=${browser?.oomScore ?? '-'} browserOomScoreAdj=${browser?.oomScoreAdj ?? '-'}`
+    );
+  }
+
+  if (diagnostics.failureContext) {
+    console.error(
+      `[${caseId}] diagnostics failureContext ${compactJson(diagnostics.failureContext)}`
+    );
+  }
+
+  const recentEvents = (diagnostics.events ?? []).slice(-12);
+  if (recentEvents.length > 0) {
+    console.error(`[${caseId}] diagnostics recent events:`);
+    for (const event of recentEvents) {
+      console.error(
+        `[${caseId}]   ${event.ts} ${event.type} ${compactJson(event.details ?? {})}`
+      );
+    }
+  }
+
+  const recentPageErrors = (diagnostics.pageErrors ?? []).slice(-5);
+  if (recentPageErrors.length > 0) {
+    console.error(`[${caseId}] diagnostics page errors:`);
+    for (const entry of recentPageErrors) {
+      console.error(`[${caseId}]   ${entry.ts ?? '-'} ${entry.message ?? compactJson(entry)}`);
+    }
+  }
+
+  const recentCrashes = (diagnostics.pageCrashes ?? []).slice(-5);
+  if (recentCrashes.length > 0) {
+    console.error(`[${caseId}] diagnostics page crash events:`);
+    for (const entry of recentCrashes) {
+      console.error(`[${caseId}]   ${entry.ts ?? '-'} ${entry.message ?? compactJson(entry)}`);
+    }
+  }
+
+  const recentConsole = (diagnostics.console ?? [])
+    .filter(entry => entry.type === 'error' || entry.type === 'warning')
+    .slice(-8);
+  if (recentConsole.length > 0) {
+    console.error(`[${caseId}] diagnostics console warnings/errors:`);
+    for (const entry of recentConsole) {
+      console.error(
+        `[${caseId}]   ${entry.ts ?? '-'} ${entry.type}: ${entry.text}` +
+        `${entry.location?.url ? ` @ ${entry.location.url}:${entry.location.lineNumber ?? 0}` : ''}`
+      );
+    }
+  }
+
+  const recentRequests = (diagnostics.requestFailures ?? []).slice(-5);
+  if (recentRequests.length > 0) {
+    console.error(`[${caseId}] diagnostics request failures:`);
+    for (const entry of recentRequests) {
+      console.error(
+        `[${caseId}]   ${entry.ts ?? '-'} ${entry.failure}: ${entry.url ?? '-'}`
+      );
+    }
+  }
+
+  const browserProcessExits = (diagnostics.browserProcessExits ?? []).slice(-5);
+  if (browserProcessExits.length > 0) {
+    console.error(`[${caseId}] diagnostics browser process exits:`);
+    for (const entry of browserProcessExits) {
+      console.error(
+        `[${caseId}]   ${entry.ts ?? '-'} code=${entry.code ?? '-'} signal=${entry.signal ?? '-'}`
+      );
+    }
+  }
+
+  const recentSnapshots = (diagnostics.runtimeSnapshots ?? []).slice(-6);
+  if (recentSnapshots.length > 0) {
+    console.error(`[${caseId}] diagnostics runtime snapshots:`);
+    for (const entry of recentSnapshots) {
+      console.error(
+        `[${caseId}]   ${entry.reason ?? '-'} @ ${entry.capturedAt ?? '-'} ` +
+        `freeMemMb=${entry.host?.freeMemMb ?? '-'} nodeRssMb=${entry.node?.rssMb ?? '-'} ` +
+        `browserVmRssKb=${entry.browser?.procStatus?.vmRssKb ?? '-'} browserAlive=${entry.browser?.alive ?? '-'}`
+      );
+    }
+  }
+
+  const relevantProcesses = diagnostics.relevantProcesses ?? [];
+  if (relevantProcesses.length > 0) {
+    console.error(`[${caseId}] diagnostics relevant processes:`);
+    for (const line of relevantProcesses) {
+      console.error(`[${caseId}]   ${line}`);
+    }
+  }
+
+  const kernelTail = diagnostics.kernelTail ?? [];
+  if (kernelTail.length > 0) {
+    console.error(`[${caseId}] diagnostics kernel tail:`);
+    for (const line of kernelTail) {
+      console.error(`[${caseId}]   ${line}`);
+    }
+  }
+}
+
+async function runPhase(harness, phaseName, config, durationMs) {
   if (Object.keys(config).length > 0) {
     applyNetemConfig(config);
   } else {
     clearNetem();
   }
 
+  const runtimeStart = await harness.captureRuntimeSnapshot?.(`${phaseName}:start`);
   const startMs = await harness.nowMs();
   await sleep(durationMs);
   const state = await harness.getState();
+  const runtimeEnd = await harness.captureRuntimeSnapshot?.(`${phaseName}:end`);
   return {
     startMs,
     durationMs,
     netem: config,
     state,
+    runtime: {
+      start: runtimeStart ?? null,
+      end: runtimeEnd ?? null,
+    },
   };
 }
 
@@ -88,18 +224,20 @@ async function runCase(caseDef) {
   };
 
   try {
-    harness = await createLoopbackHarness();
+    harness = await createLoopbackHarness({ caseId: caseDef.caseId });
     const baselineNetwork = getPhaseNetwork(caseDef, 'baseline');
     const impairedNetwork = getPhaseNetwork(caseDef, 'impaired');
     const recoveryNetwork = getPhaseNetwork(caseDef, 'recovery');
 
     const baseline = await runPhase(
       harness,
+      'baseline',
       toNetemConfig(baselineNetwork),
       scaleDuration(caseDef.baselineMs, 15000)
     );
     const impairment = await runPhase(
       harness,
+      'impairment',
       toNetemConfig(impairedNetwork),
       scaleDuration(caseDef.impairmentMs, 20000)
     );
@@ -115,6 +253,7 @@ async function runCase(caseDef) {
     } else {
       recovery = await runPhase(
         harness,
+        'recovery',
         toNetemConfig(recoveryNetwork),
         scaleDuration(caseDef.recoveryMs, 30000)
       );
@@ -188,7 +327,12 @@ async function runCase(caseDef) {
   } catch (error) {
     if (harness?.getDiagnostics) {
       try {
-        error.qosDiagnostics = await harness.getDiagnostics();
+        error.qosDiagnostics = await harness.getDiagnostics({
+          reason: 'run_case_error',
+          caseId: caseDef.caseId,
+          errorMessage: error?.message ?? String(error),
+          errorStack: error?.stack ?? null,
+        });
       } catch {}
     }
     throw error;
@@ -272,6 +416,7 @@ async function runMatrix() {
       }
     } else {
       console.error(`case ${caseDef.caseId} failed: ${lastError.message}`);
+      emitDiagnostics(caseDef.caseId, lastError.qosDiagnostics);
       results.push({
         caseId: caseDef.caseId,
         group: caseDef.group,
