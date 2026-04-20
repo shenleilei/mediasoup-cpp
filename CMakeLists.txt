@@ -123,6 +123,9 @@ mediasoup_add_configured_executable(mediasoup-sfu
         src/main.cpp
         src/MainBootstrap.cpp
         src/RoomRegistry.cpp
+        src/RoomRegistryConnection.cpp
+        src/RoomRegistryPubSub.cpp
+        src/RoomRegistrySync.cpp
         src/RuntimeDaemon.cpp
         src/SignalingServer.cpp
         src/SignalingServerHttp.cpp
