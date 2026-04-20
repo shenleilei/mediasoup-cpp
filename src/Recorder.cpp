@@ -454,10 +454,17 @@ void PeerRecorder::writePacket(const media::rtp::RtpHeader& rtp)
 	}
 }
 
+uint64_t PeerRecorder::rtpTicksSinceBase(uint32_t ts, uint32_t baseTs)
+{
+	// RTP timestamp delta is modulo-32 by definition; keep that behavior and widen.
+	return static_cast<uint64_t>(static_cast<uint32_t>(ts - baseTs));
+}
+
 void PeerRecorder::writeAudioPacket(uint32_t ts, const uint8_t* data, int size)
 {
+	const auto ticks = rtpTicksSinceBase(ts, audioBaseTs_);
 	int64_t pts = msff::ClampNonNegativePts(msff::RescaleQ(
-		static_cast<int32_t>(ts - audioBaseTs_),
+		static_cast<int64_t>(ticks),
 		{1, (int)audioClockRate_},
 		audioStream_->time_base));
 	AVPacket pkt{};
@@ -494,8 +501,9 @@ void PeerRecorder::flushVideoFrame()
 		writeData = &avccBuf;
 	}
 
+	const auto ticks = rtpTicksSinceBase(videoFrameTs_, videoBaseTs_);
 	int64_t pts = msff::ClampNonNegativePts(msff::RescaleQ(
-		static_cast<int32_t>(videoFrameTs_ - videoBaseTs_),
+		static_cast<int64_t>(ticks),
 		{1, (int)videoClockRate_},
 		videoStream_->time_base));
 	AVPacket pkt{};

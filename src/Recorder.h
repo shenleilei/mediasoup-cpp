@@ -63,6 +63,7 @@ private:
 
 	static const uint8_t* stripVp8Descriptor(const uint8_t* data, int size,
 		int& outSize, bool& isStart);
+	static uint64_t rtpTicksSinceBase(uint32_t ts, uint32_t baseTs);
 	void depacketizeH264(const media::rtp::RtpHeader& rtp);
 	void writePacket(const media::rtp::RtpHeader& rtp);
 	void writeAudioPacket(uint32_t ts, const uint8_t* data, int size);

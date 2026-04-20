@@ -281,6 +281,19 @@ void WorkerThread::loop()
 
 	while (!stopping_) {
 		int nfds = ::epoll_wait(epollFd_, events, MAX_EVENTS, 1000);
+		if (nfds < 0) {
+			const int waitErr = errno;
+			if (IsRecoverableEpollWaitError(waitErr)) {
+				continue;
+			}
+			if (!stopping_.load(std::memory_order_relaxed)) {
+				MS_ERROR(logger_, "WorkerThread {} epoll_wait failed: {}", id_, strerror(waitErr));
+			}
+			break;
+		}
+		if (nfds == 0) {
+			continue;
+		}
 
 		for (int i = 0; i < nfds; i++) {
 			int fd = events[i].data.fd;

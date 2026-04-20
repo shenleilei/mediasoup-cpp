@@ -11,10 +11,13 @@
 #include "RoomRegistrySelection.h"
 #include "RoomStatsQosHelpers.h"
 #include "response_generated.h"
+#include "SignalingSocketState.h"
 #include "StaticFileResponder.h"
+#include "WorkerThread.h"
 #include "../client/RtcpHandler.h"
 #include <future>
 #include <chrono>
+#include <cerrno>
 #include <hiredis/hiredis.h>
 #include <unistd.h>
 
@@ -168,6 +171,32 @@ TEST(WorkerCountTest, NoCoresUnderflow) {
 	EXPECT_EQ(calc(2), 1);
 	EXPECT_EQ(calc(4), 2);
 	EXPECT_EQ(calc(8), 6);
+}
+
+TEST(WorkerThreadEpollWaitTest, RecoverableErrorClassification) {
+	EXPECT_TRUE(IsRecoverableEpollWaitError(EINTR));
+	EXPECT_FALSE(IsRecoverableEpollWaitError(EBADF));
+	EXPECT_FALSE(IsRecoverableEpollWaitError(EINVAL));
+}
+
+TEST(SocketPendingJoinStateTest, PendingJoinDoesNotCommitSessionState) {
+	PerSocketData socketData;
+
+	SetPendingSocketJoin(&socketData, "room-a", "peer-a", 42);
+	EXPECT_EQ(socketData.sessionId, kInvalidSessionId);
+	EXPECT_TRUE(socketData.roomId.empty());
+	EXPECT_TRUE(socketData.peerId.empty());
+	EXPECT_EQ(socketData.pendingSessionId, 42u);
+	EXPECT_EQ(socketData.pendingRoomId, "room-a");
+	EXPECT_EQ(socketData.pendingPeerId, "peer-a");
+
+	ClearPendingSocketJoinIfMatches(&socketData, 7);
+	EXPECT_EQ(socketData.pendingSessionId, 42u);
+
+	ClearPendingSocketJoinIfMatches(&socketData, 42);
+	EXPECT_EQ(socketData.pendingSessionId, kInvalidSessionId);
+	EXPECT_TRUE(socketData.pendingRoomId.empty());
+	EXPECT_TRUE(socketData.pendingPeerId.empty());
 }
 
 TEST(RoomRegistrySelectionTest, NoGeoComparatorPreservesStrictWeakOrderingForSelf) {

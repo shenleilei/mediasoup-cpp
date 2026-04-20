@@ -259,6 +259,9 @@ public:
 		int& outSize, bool& isStart) {
 		return PeerRecorder::stripVp8Descriptor(data, size, outSize, isStart);
 	}
+	static uint64_t rtpTicksSinceBase(uint32_t ts, uint32_t baseTs) {
+		return PeerRecorder::rtpTicksSinceBase(ts, baseTs);
+	}
 	static bool setH264Extradata(
 		PeerRecorder& recorder,
 		const std::vector<uint8_t>& sps,
@@ -305,6 +308,18 @@ TEST(Vp8DescriptorTest, EmptyPayload) {
 	PeerRecorderTestAccess::stripVp8Descriptor(nullptr, 0, outSize, isStart);
 	EXPECT_EQ(outSize, 0);
 	EXPECT_FALSE(isStart);
+}
+
+TEST(RecorderTimestampMathTest, DeltaStaysPositiveAcrossSignedBoundary) {
+	EXPECT_EQ(
+		PeerRecorderTestAccess::rtpTicksSinceBase(0x80000000u, 0u),
+		0x80000000ull);
+}
+
+TEST(RecorderTimestampMathTest, DeltaPreservesWraparoundModuloArithmetic) {
+	EXPECT_EQ(
+		PeerRecorderTestAccess::rtpTicksSinceBase(0x00001000u, 0xFFFFF000u),
+		0x00002000ull);
 }
 
 // ─── H264 deferred header: recorder starts OK without IDR, stop doesn't crash ───

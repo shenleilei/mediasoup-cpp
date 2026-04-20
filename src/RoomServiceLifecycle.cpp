@@ -158,6 +158,26 @@ RoomService::Result RoomService::leave(const std::string& roomId, const std::str
 	return {true, {}};
 }
 
+RoomService::Result RoomService::leaveIfSessionMatches(
+	const std::string& roomId,
+	const std::string& peerId,
+	uint64_t expectedSessionId)
+{
+	if (expectedSessionId == 0) {
+		return {true, {}};
+	}
+
+	auto room = roomManager_.getRoom(roomId);
+	if (!room) return {true, {}};
+	auto peer = room->getPeer(peerId);
+	if (!peer) return {true, {}};
+	if (peer->sessionId != expectedSessionId) {
+		return {true, {}};
+	}
+
+	return leave(roomId, peerId);
+}
+
 void RoomService::checkRoomHealth() {
 	auto deadRooms = roomManager_.getDeadRooms();
 	if (deadRooms.empty()) return;
