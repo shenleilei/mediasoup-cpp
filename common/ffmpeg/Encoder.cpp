@@ -5,6 +5,15 @@
 #include <stdexcept>
 
 namespace mediasoup::ffmpeg {
+namespace {
+
+AVCodecContext* RequireEncoderContext(AVCodecContext* context, const char* method)
+{
+	if (context) return context;
+	throw std::runtime_error(std::string("Encoder::") + method + " on empty encoder");
+}
+
+} // namespace
 
 Encoder::Encoder(CodecContextPtr context)
 	: context_(std::move(context))
@@ -30,7 +39,9 @@ Encoder Encoder::Create(AVCodecID codecId, ConfigureFn configure)
 
 bool Encoder::SendFrame(const AVFrame* frame)
 {
-	const int err = avcodec_send_frame(context_.get(), frame);
+	const int err = avcodec_send_frame(
+		RequireEncoderContext(context_.get(), "SendFrame"),
+		frame);
 	if (err >= 0) return true;
 	if (err == AVERROR(EAGAIN)) return false;
 	CheckError(err, "avcodec_send_frame");
@@ -39,7 +50,9 @@ bool Encoder::SendFrame(const AVFrame* frame)
 
 bool Encoder::ReceivePacket(AVPacket* packet)
 {
-	const int err = avcodec_receive_packet(context_.get(), packet);
+	const int err = avcodec_receive_packet(
+		RequireEncoderContext(context_.get(), "ReceivePacket"),
+		packet);
 	if (err >= 0) return true;
 	if (err == AVERROR(EAGAIN) || err == AVERROR_EOF) return false;
 	CheckError(err, "avcodec_receive_packet");

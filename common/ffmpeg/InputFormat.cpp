@@ -2,7 +2,18 @@
 
 #include "ffmpeg/AvError.h"
 
+#include <stdexcept>
+
 namespace mediasoup::ffmpeg {
+namespace {
+
+AVFormatContext* RequireInputContext(AVFormatContext* ctx, const char* method)
+{
+	if (ctx) return ctx;
+	throw std::runtime_error(std::string("InputFormat::") + method + " on empty format");
+}
+
+} // namespace
 
 InputFormat::InputFormat(AVFormatContext* ctx)
 	: ctx_(ctx)
@@ -39,7 +50,9 @@ InputFormat& InputFormat::operator=(InputFormat&& other) noexcept
 
 void InputFormat::FindStreamInfo()
 {
-	CheckError(avformat_find_stream_info(ctx_, nullptr), "avformat_find_stream_info");
+	CheckError(
+		avformat_find_stream_info(RequireInputContext(ctx_, "FindStreamInfo"), nullptr),
+		"avformat_find_stream_info");
 }
 
 int InputFormat::FindFirstStreamIndex(AVMediaType mediaType) const
@@ -60,7 +73,7 @@ AVStream* InputFormat::StreamAt(int index) const
 
 bool InputFormat::ReadPacket(AVPacket* packet)
 {
-	const int err = av_read_frame(ctx_, packet);
+	const int err = av_read_frame(RequireInputContext(ctx_, "ReadPacket"), packet);
 	if (err >= 0) return true;
 	if (err == AVERROR_EOF) return false;
 	CheckError(err, "av_read_frame");

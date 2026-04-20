@@ -5,6 +5,15 @@
 #include <stdexcept>
 
 namespace mediasoup::ffmpeg {
+namespace {
+
+AVBSFContext* RequireBitstreamFilterContext(AVBSFContext* context, const char* method)
+{
+	if (context) return context;
+	throw std::runtime_error(std::string("BitstreamFilter::") + method + " on empty filter");
+}
+
+} // namespace
 
 BitstreamFilter::BitstreamFilter(BitstreamFilterContextPtr context)
 	: context_(std::move(context))
@@ -33,7 +42,9 @@ BitstreamFilter BitstreamFilter::Create(
 
 bool BitstreamFilter::SendPacket(AVPacket* packet)
 {
-	const int err = av_bsf_send_packet(context_.get(), packet);
+	const int err = av_bsf_send_packet(
+		RequireBitstreamFilterContext(context_.get(), "SendPacket"),
+		packet);
 	if (err >= 0) return true;
 	if (err == AVERROR(EAGAIN)) return false;
 	CheckError(err, "av_bsf_send_packet");
@@ -42,7 +53,9 @@ bool BitstreamFilter::SendPacket(AVPacket* packet)
 
 bool BitstreamFilter::ReceivePacket(AVPacket* packet)
 {
-	const int err = av_bsf_receive_packet(context_.get(), packet);
+	const int err = av_bsf_receive_packet(
+		RequireBitstreamFilterContext(context_.get(), "ReceivePacket"),
+		packet);
 	if (err >= 0) return true;
 	if (err == AVERROR(EAGAIN) || err == AVERROR_EOF) return false;
 	CheckError(err, "av_bsf_receive_packet");
