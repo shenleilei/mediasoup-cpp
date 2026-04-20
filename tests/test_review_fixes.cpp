@@ -3,10 +3,18 @@
 #include "RoomManager.h"
 #include "Channel.h"
 #include "Constants.h"
+#include "message_generated.h"
+#include "MainBootstrap.h"
+#include "notification_generated.h"
+#include "RoomRegistryReplyUtils.h"
+#include "RuntimeOptionParsers.h"
 #include "RoomRegistrySelection.h"
+#include "response_generated.h"
+#include "StaticFileResponder.h"
 #include "../client/RtcpHandler.h"
 #include <future>
 #include <chrono>
+#include <hiredis/hiredis.h>
 #include <unistd.h>
 
 using namespace mediasoup;
@@ -220,6 +228,168 @@ TEST(ChannelThreadSafetyFixTest, ThreadedCloseDoesNotWaitForPeerWriterToClose) {
 
 	::close(producerPipe[0]);
 	if (consumerPipe[1] >= 0) ::close(consumerPipe[1]);
+}
+
+TEST(ChannelThreadSafetyFixTest, NonThreadedNotificationCanReenterRequestWaitWithoutReplay) {
+	int producerPipe[2];
+	int consumerPipe[2];
+	ASSERT_EQ(::pipe(producerPipe), 0);
+	ASSERT_EQ(::pipe(consumerPipe), 0);
+
+	Channel ch(
+		/*producerFd=*/producerPipe[1],
+		/*consumerFd=*/consumerPipe[0],
+		/*pid=*/12345,
+		/*threaded=*/false);
+
+	std::atomic<int> callbackCount{0};
+	std::atomic<bool> requestSucceeded{false};
+	auto readExact = [](int fd, void* data, size_t len) {
+		size_t total = 0;
+		while (total < len) {
+			const ssize_t n = ::read(fd, static_cast<uint8_t*>(data) + total, len - total);
+			if (n <= 0) {
+				return false;
+			}
+			total += static_cast<size_t>(n);
+		}
+		return true;
+	};
+
+	auto fakeWorker = std::async(std::launch::async, [&]() {
+		uint8_t sizePrefix[4];
+		if (!readExact(producerPipe[0], sizePrefix, sizeof(sizePrefix))) {
+			return false;
+		}
+		uint32_t messageSize = 0;
+		std::memcpy(&messageSize, sizePrefix, sizeof(messageSize));
+		std::vector<uint8_t> requestBuf(4 + messageSize);
+		std::memcpy(requestBuf.data(), sizePrefix, sizeof(sizePrefix));
+		if (!readExact(producerPipe[0], requestBuf.data() + 4, messageSize)) {
+			return false;
+		}
+
+		auto* requestMsg = FBS::Message::GetSizePrefixedMessage(requestBuf.data());
+		if (!requestMsg) {
+			return false;
+		}
+		auto* request = requestMsg->data_as_Request();
+		if (!request) {
+			return false;
+		}
+
+		flatbuffers::FlatBufferBuilder builder;
+		auto response = FBS::Response::CreateResponse(
+			builder,
+			request->id(),
+			true,
+			FBS::Response::Body::NONE,
+			0);
+		auto message = FBS::Message::CreateMessage(
+			builder,
+			FBS::Message::Body::Response,
+			response.Union());
+		builder.FinishSizePrefixed(message);
+		return ::write(consumerPipe[1], builder.GetBufferPointer(), builder.GetSize()) ==
+			static_cast<ssize_t>(builder.GetSize());
+	});
+
+	ch.emitter().on("reentrant", [&](const std::vector<std::any>&) {
+		if (callbackCount.fetch_add(1) != 0) {
+			return;
+		}
+		auto response = ch.requestWait(FBS::Request::Method::WORKER_CLOSE);
+		requestSucceeded.store(response.response() != nullptr);
+	});
+
+	flatbuffers::FlatBufferBuilder builder;
+	auto handlerId = builder.CreateString("reentrant");
+	auto notification = FBS::Notification::CreateNotification(
+		builder,
+		handlerId,
+		FBS::Notification::Event::WORKER_RUNNING,
+		FBS::Notification::Body::NONE,
+		0);
+	auto message = FBS::Message::CreateMessage(
+		builder,
+		FBS::Message::Body::Notification,
+		notification.Union());
+	builder.FinishSizePrefixed(message);
+	ASSERT_EQ(
+		::write(consumerPipe[1], builder.GetBufferPointer(), builder.GetSize()),
+		static_cast<ssize_t>(builder.GetSize()));
+
+	EXPECT_TRUE(ch.processAvailableData());
+	EXPECT_TRUE(fakeWorker.get());
+	EXPECT_EQ(callbackCount.load(), 1);
+	EXPECT_TRUE(requestSucceeded.load());
+
+	::close(producerPipe[0]);
+	::close(consumerPipe[1]);
+}
+
+TEST(RuntimeOptionParsersTest, RejectsInvalidIntegerValues) {
+	int parsed = 0;
+	EXPECT_FALSE(TryParseIntArgValue("abc", parsed));
+	EXPECT_FALSE(TryParseIntArgValue("10ms", parsed));
+	EXPECT_TRUE(TryParseIntArgValue("42", parsed));
+	EXPECT_EQ(parsed, 42);
+}
+
+TEST(RuntimeOptionParsersTest, RejectsInvalidDoubleValues) {
+	double parsed = 0.0;
+	EXPECT_FALSE(TryParseDoubleArgValue("abc", parsed));
+	EXPECT_FALSE(TryParseDoubleArgValue("1.5ms", parsed));
+	EXPECT_TRUE(TryParseDoubleArgValue("1.5", parsed));
+	EXPECT_DOUBLE_EQ(parsed, 1.5);
+}
+
+TEST(RuntimeOptionParsersTest, FinalizeRuntimeOptionsRejectsRecordedLoadError) {
+	RuntimeOptions options;
+	options.loadError = "invalid numeric CLI arg '--port=abc'";
+	EXPECT_TRUE(options.hasLoadError());
+}
+
+TEST(RoomRegistryReplyUtilsTest, RejectsMissingOrWronglyTypedTextElements) {
+	redisReply malformed{};
+	malformed.type = REDIS_REPLY_ARRAY;
+	malformed.elements = 1;
+	redisReply* elements[1]{nullptr};
+	malformed.element = elements;
+
+	std::string out;
+	EXPECT_FALSE(redisreply::GetTextElement(&malformed, 0, out));
+
+	redisReply integerElement{};
+	integerElement.type = REDIS_REPLY_INTEGER;
+	elements[0] = &integerElement;
+	EXPECT_FALSE(redisreply::GetTextElement(&malformed, 0, out));
+}
+
+TEST(RoomRegistryReplyUtilsTest, CopiesTextReplyUsingDeclaredLength) {
+	redisReply arrayReply{};
+	arrayReply.type = REDIS_REPLY_ARRAY;
+	arrayReply.elements = 1;
+
+	redisReply textElement{};
+	textElement.type = REDIS_REPLY_STRING;
+	char payload[] = "message";
+	textElement.str = payload;
+	textElement.len = 7;
+
+	redisReply* elements[1]{&textElement};
+	arrayReply.element = elements;
+
+	std::string out;
+	ASSERT_TRUE(redisreply::GetTextElement(&arrayReply, 0, out));
+	EXPECT_EQ(out, "message");
+}
+
+TEST(StaticFileResponderTest, MatchesOnlyRealSuffixes) {
+	EXPECT_EQ(ContentTypeForPath("/assets/app.css"), "text/css");
+	EXPECT_EQ(ContentTypeForPath("/assets/app.css.backup"), "application/octet-stream");
+	EXPECT_EQ(ContentTypeForPath("/assets/report.json"), "application/json");
+	EXPECT_EQ(ContentTypeForPath("/assets/report.json.tmp"), "application/octet-stream");
 }
 
 TEST(RtcpSuppressionFixTest, SuppressedVideoSkipsPliAndNackRetransmissions) {

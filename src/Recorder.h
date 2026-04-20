@@ -141,7 +141,11 @@ public:
 			qosFile_ << "[\n";
 			qosFirst_ = true;
 		}
-		auto baseTime = firstRtpReceived_ ? firstRtpTime_ : startTime_;
+		auto baseTime = startTime_;
+		const int64_t firstRtpTimeNs = firstRtpTimeNs_.load(std::memory_order_acquire);
+		if (firstRtpTimeNs >= 0) {
+			baseTime = std::chrono::steady_clock::time_point(std::chrono::nanoseconds(firstRtpTimeNs));
+		}
 		auto elapsed = std::chrono::steady_clock::now() - baseTime;
 		double secs = std::chrono::duration<double>(elapsed).count();
 		if (secs < 0) secs = 0;
@@ -386,10 +390,15 @@ private:
 		std::lock_guard<std::mutex> lock(muxMutex_);
 		if (!fmtCtx_) return;
 
-		if (!firstRtpReceived_) {
-			firstRtpTime_ = std::chrono::steady_clock::now();
-			firstRtpReceived_ = true;
-		}
+		const auto now = std::chrono::steady_clock::now();
+		const auto nowNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+			now.time_since_epoch()).count();
+		int64_t expectedFirstRtpTimeNs = -1;
+		(void)firstRtpTimeNs_.compare_exchange_strong(
+			expectedFirstRtpTimeNs,
+			nowNs,
+			std::memory_order_acq_rel,
+			std::memory_order_acquire);
 
 		if (rtp.payloadType == audioPT_) {
 			if (!audioBaseSet_) { audioBaseTs_ = rtp.timestamp; audioBaseSet_ = true; }
@@ -424,15 +433,14 @@ private:
 		}
 	}
 
-	void writeAudioPacket(uint32_t ts, const uint8_t* data, int size) {
-		int64_t pts = av_rescale_q((int32_t)(ts - audioBaseTs_),
-			{1, (int)audioClockRate_}, audioStream_->time_base);
-		if (pts < 0) pts = 0;
-		AVPacket pkt;
-		av_init_packet(&pkt);
-		pkt.stream_index = audioStream_->index;
-		pkt.data = const_cast<uint8_t*>(data);
-		pkt.size = size;
+		void writeAudioPacket(uint32_t ts, const uint8_t* data, int size) {
+			int64_t pts = av_rescale_q((int32_t)(ts - audioBaseTs_),
+				{1, (int)audioClockRate_}, audioStream_->time_base);
+			if (pts < 0) pts = 0;
+			AVPacket pkt{};
+			pkt.stream_index = audioStream_->index;
+			pkt.data = const_cast<uint8_t*>(data);
+			pkt.size = size;
 		pkt.pts = pts;
 		pkt.dts = pts;
 		av_interleaved_write_frame(fmtCtx_, &pkt);
@@ -461,12 +469,11 @@ private:
 			writeData = &avccBuf;
 		}
 
-		int64_t pts = av_rescale_q((int32_t)(videoFrameTs_ - videoBaseTs_),
-			{1, (int)videoClockRate_}, videoStream_->time_base);
-		if (pts < 0) pts = 0;
-		AVPacket pkt;
-		av_init_packet(&pkt);
-		pkt.stream_index = videoStream_->index;
+			int64_t pts = av_rescale_q((int32_t)(videoFrameTs_ - videoBaseTs_),
+				{1, (int)videoClockRate_}, videoStream_->time_base);
+			if (pts < 0) pts = 0;
+			AVPacket pkt{};
+			pkt.stream_index = videoStream_->index;
 		pkt.data = writeData->data();
 		pkt.size = writeData->size();
 		pkt.pts = pts;
@@ -532,13 +539,12 @@ private:
 	int h264NalLog_ = 0;
 	std::vector<uint8_t> h264Sps_, h264Pps_;
 
-	std::shared_ptr<spdlog::logger> logger_;
-	std::chrono::steady_clock::time_point startTime_;
-	std::atomic<bool> firstRtpReceived_{false};
-	std::chrono::steady_clock::time_point firstRtpTime_;
-	std::mutex qosMutex_;
-	std::ofstream qosFile_;
-	bool qosFirst_ = true;
+		std::shared_ptr<spdlog::logger> logger_;
+		std::chrono::steady_clock::time_point startTime_;
+		std::atomic<int64_t> firstRtpTimeNs_{-1};
+		std::mutex qosMutex_;
+		std::ofstream qosFile_;
+		bool qosFirst_ = true;
 };
 
 } // namespace mediasoup

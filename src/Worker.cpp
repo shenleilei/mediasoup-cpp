@@ -2,13 +2,18 @@
 #include "Router.h"
 #include "Utils.h"
 #include "worker_generated.h"
+#include <fcntl.h>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <spawn.h>
 #include <cstring>
 #include <chrono>
 #include <optional>
+#include <vector>
 #include <nlohmann/json.hpp>
+
+extern char** environ;
 
 namespace mediasoup {
 
@@ -17,6 +22,89 @@ static constexpr int kTerminateGraceMs = 500;
 static constexpr int kWorkerDeathReapTimeoutMs = 100;
 
 namespace {
+void closeFdIfValid(int& fd)
+{
+	if (fd >= 0) {
+		::close(fd);
+		fd = -1;
+	}
+}
+
+void setCloseOnExec(int fd)
+{
+	int flags = ::fcntl(fd, F_GETFD, 0);
+	if (flags >= 0) {
+		(void)::fcntl(fd, F_SETFD, flags | FD_CLOEXEC);
+	}
+}
+
+int normalizeChildFdForSpawn(int fd)
+{
+	if (fd > 4) {
+		return fd;
+	}
+
+	int dupFd = ::fcntl(fd, F_DUPFD_CLOEXEC, 5);
+	if (dupFd < 0) {
+		return -1;
+	}
+
+	::close(fd);
+	return dupFd;
+}
+
+std::vector<std::string> buildWorkerArgs(
+	const std::string& workerBin,
+	const WorkerSettings& settings)
+{
+	std::vector<std::string> args;
+	args.push_back(workerBin);
+	if (!settings.logLevel.empty())
+		args.push_back("--logLevel=" + settings.logLevel);
+	for (const auto& tag : settings.logTags)
+		args.push_back("--logTag=" + tag);
+	args.push_back("--rtcMinPort=" + std::to_string(settings.rtcMinPort));
+	args.push_back("--rtcMaxPort=" + std::to_string(settings.rtcMaxPort));
+	if (!settings.dtlsCertificateFile.empty())
+		args.push_back("--dtlsCertificateFile=" + settings.dtlsCertificateFile);
+	if (!settings.dtlsPrivateKeyFile.empty())
+		args.push_back("--dtlsPrivateKeyFile=" + settings.dtlsPrivateKeyFile);
+	return args;
+}
+
+std::vector<char*> buildCStringVector(std::vector<std::string>& storage)
+{
+	std::vector<char*> result;
+	result.reserve(storage.size() + 1);
+	for (auto& entry : storage) {
+		result.push_back(entry.data());
+	}
+	result.push_back(nullptr);
+	return result;
+}
+
+std::vector<std::string> buildWorkerEnvironment()
+{
+	std::vector<std::string> envStorage;
+	bool replacedVersion = false;
+
+	for (char** current = environ; current && *current; ++current) {
+		std::string entry(*current);
+		if (entry.rfind("MEDIASOUP_VERSION=", 0) == 0) {
+			envStorage.push_back("MEDIASOUP_VERSION=" + std::string(MEDIASOUP_VERSION));
+			replacedVersion = true;
+			continue;
+		}
+		envStorage.push_back(std::move(entry));
+	}
+
+	if (!replacedVersion) {
+		envStorage.push_back("MEDIASOUP_VERSION=" + std::string(MEDIASOUP_VERSION));
+	}
+
+	return envStorage;
+}
+
 std::optional<int> waitChildWithTimeout(pid_t pid, int timeoutMs)
 {
 	if (pid <= 0) return 0;
@@ -70,68 +158,114 @@ void Worker::spawn(const WorkerSettings& settings, bool threaded) {
 	int producerPipe[2]; // parent writes, child reads (child fd 3)
 	int consumerPipe[2]; // child writes, parent reads (child fd 4)
 
-	if (::pipe(producerPipe) != 0 || ::pipe(consumerPipe) != 0) {
+	if (::pipe(producerPipe) != 0) {
 		throw std::runtime_error("pipe() failed: " + std::string(strerror(errno)));
 	}
-
-	pid_ = ::fork();
-	if (pid_ < 0) {
-		throw std::runtime_error("fork() failed");
+	if (::pipe(consumerPipe) != 0) {
+		int pipeErrno = errno;
+		::close(producerPipe[0]);
+		::close(producerPipe[1]);
+		throw std::runtime_error("pipe() failed: " + std::string(strerror(pipeErrno)));
 	}
 
-	if (pid_ == 0) {
-		// Child process
-		// Close parent's ends first
+	for (int fd : {producerPipe[0], producerPipe[1], consumerPipe[0], consumerPipe[1]}) {
+		setCloseOnExec(fd);
+	}
+
+	producerPipe[0] = normalizeChildFdForSpawn(producerPipe[0]);
+	if (producerPipe[0] < 0) {
+		int dupErrno = errno;
 		::close(producerPipe[1]);
 		::close(consumerPipe[0]);
-
-		// Map pipes to fd 3 and 4
-		// fd 3: child reads commands from parent
-		// fd 4: child writes responses to parent
-		if (producerPipe[0] != 3) {
-			::dup2(producerPipe[0], 3);
-			::close(producerPipe[0]);
-		}
-		if (consumerPipe[1] != 4) {
-			::dup2(consumerPipe[1], 4);
-			::close(consumerPipe[1]);
-		}
-
-		// Build args
-		std::vector<std::string> args;
-		args.push_back(workerBin);
-		if (!settings.logLevel.empty())
-			args.push_back("--logLevel=" + settings.logLevel);
-		for (auto& tag : settings.logTags)
-			args.push_back("--logTag=" + tag);
-		args.push_back("--rtcMinPort=" + std::to_string(settings.rtcMinPort));
-		args.push_back("--rtcMaxPort=" + std::to_string(settings.rtcMaxPort));
-		if (!settings.dtlsCertificateFile.empty())
-			args.push_back("--dtlsCertificateFile=" + settings.dtlsCertificateFile);
-		if (!settings.dtlsPrivateKeyFile.empty())
-			args.push_back("--dtlsPrivateKeyFile=" + settings.dtlsPrivateKeyFile);
-
-		// Convert to char*[]
-		std::vector<char*> argv;
-		for (auto& a : args) argv.push_back(const_cast<char*>(a.c_str()));
-		argv.push_back(nullptr);
-
-		// Set env
-		setenv("MEDIASOUP_VERSION", MEDIASOUP_VERSION, 1);
-
-		::execvp(workerBin.c_str(), argv.data());
-		// If exec fails
-		_exit(1);
+		::close(consumerPipe[1]);
+		throw std::runtime_error("fcntl(F_DUPFD_CLOEXEC) failed: " + std::string(strerror(dupErrno)));
 	}
 
-	// Parent process
+	consumerPipe[1] = normalizeChildFdForSpawn(consumerPipe[1]);
+	if (consumerPipe[1] < 0) {
+		int dupErrno = errno;
+		::close(producerPipe[0]);
+		::close(producerPipe[1]);
+		::close(consumerPipe[0]);
+		throw std::runtime_error("fcntl(F_DUPFD_CLOEXEC) failed: " + std::string(strerror(dupErrno)));
+	}
+
+	auto args = buildWorkerArgs(workerBin, settings);
+	auto argv = buildCStringVector(args);
+	auto envStorage = buildWorkerEnvironment();
+	auto envp = buildCStringVector(envStorage);
+
+	posix_spawn_file_actions_t fileActions;
+	int actionRc = ::posix_spawn_file_actions_init(&fileActions);
+	if (actionRc != 0) {
+		::close(producerPipe[0]);
+		::close(producerPipe[1]);
+		::close(consumerPipe[0]);
+		::close(consumerPipe[1]);
+		throw std::runtime_error("posix_spawn_file_actions_init() failed: " + std::string(strerror(actionRc)));
+	}
+
+	auto throwSpawnActionError = [&](const char* action, int rc) {
+		::posix_spawn_file_actions_destroy(&fileActions);
+		::close(producerPipe[0]);
+		::close(producerPipe[1]);
+		::close(consumerPipe[0]);
+		::close(consumerPipe[1]);
+		throw std::runtime_error(std::string(action) + " failed: " + std::string(strerror(rc)));
+	};
+
+	actionRc = ::posix_spawn_file_actions_addclose(&fileActions, producerPipe[1]);
+	if (actionRc != 0) throwSpawnActionError("posix_spawn_file_actions_addclose(producer parent)", actionRc);
+	actionRc = ::posix_spawn_file_actions_addclose(&fileActions, consumerPipe[0]);
+	if (actionRc != 0) throwSpawnActionError("posix_spawn_file_actions_addclose(consumer parent)", actionRc);
+	actionRc = ::posix_spawn_file_actions_adddup2(&fileActions, producerPipe[0], 3);
+	if (actionRc != 0) throwSpawnActionError("posix_spawn_file_actions_adddup2(fd3)", actionRc);
+	actionRc = ::posix_spawn_file_actions_adddup2(&fileActions, consumerPipe[1], 4);
+	if (actionRc != 0) throwSpawnActionError("posix_spawn_file_actions_adddup2(fd4)", actionRc);
+	if (producerPipe[0] != 3) {
+		actionRc = ::posix_spawn_file_actions_addclose(&fileActions, producerPipe[0]);
+		if (actionRc != 0) throwSpawnActionError("posix_spawn_file_actions_addclose(child read)", actionRc);
+	}
+	if (consumerPipe[1] != 4) {
+		actionRc = ::posix_spawn_file_actions_addclose(&fileActions, consumerPipe[1]);
+		if (actionRc != 0) throwSpawnActionError("posix_spawn_file_actions_addclose(child write)", actionRc);
+	}
+
+	int spawnRc = ::posix_spawnp(
+		&pid_,
+		workerBin.c_str(),
+		&fileActions,
+		nullptr,
+		argv.data(),
+		envp.data());
+	::posix_spawn_file_actions_destroy(&fileActions);
+	if (spawnRc != 0) {
+		::close(producerPipe[0]);
+		::close(producerPipe[1]);
+		::close(consumerPipe[0]);
+		::close(consumerPipe[1]);
+		throw std::runtime_error("posix_spawnp() failed: " + std::string(strerror(spawnRc)));
+	}
+
 	::close(producerPipe[0]); // close child's read end
 	::close(consumerPipe[1]); // close child's write end
 
+	// Parent process
 	int parentWriteFd = producerPipe[1]; // parent writes to child's fd 3
 	int parentReadFd = consumerPipe[0];  // parent reads from child's fd 4
 
-	channel_ = std::make_unique<Channel>(parentWriteFd, parentReadFd, pid_, threaded);
+	try {
+		channel_ = std::make_unique<Channel>(parentWriteFd, parentReadFd, pid_, threaded);
+	} catch (...) {
+		closeFdIfValid(parentWriteFd);
+		closeFdIfValid(parentReadFd);
+		if (pid_ > 0) {
+			::kill(pid_, SIGKILL);
+			int status = 0;
+			(void)::waitpid(pid_, &status, 0);
+		}
+		throw;
+	}
 
 	MS_DEBUG(logger_, "worker spawned [pid:{}] threaded={}", pid_, threaded);
 

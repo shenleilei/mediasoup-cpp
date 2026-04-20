@@ -66,6 +66,7 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 
 	// Redis heartbeat timer — runs in main thread (RoomRegistry is thread-safe)
 	struct us_timer_t* redisTimer = nullptr;
+	struct us_timer_t* shutdownTimer = nullptr;
 
 	bool listenSucceeded = false;
 	uWS::App app;
@@ -73,20 +74,36 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 
 	SignalingServerHttp::RegisterHttpRoutes(app, *this, loop);
 
-	app.listen(port_, [this, &statsTimer, &redisTimer, &listenSucceeded, &notifyStartup](auto* listenSocket) {
-		if (listenSocket) {
-			listenSucceeded = true;
-			notifyStartup(true);
-			spdlog::info("SignalingServer listening on port {}", port_);
-			auto* loop = uWS::Loop::get();
-			SignalingServerHttp::StartBackgroundTimers(*this, loop, listenSocket, statsTimer, redisTimer);
-		} else {
-			notifyStartup(false);
-			spdlog::error("SignalingServer failed to listen on port {}", port_);
-		}
-	});
+		app.listen(port_, [this, &statsTimer, &redisTimer, &shutdownTimer, &listenSucceeded, &notifyStartup](auto* listenSocket) {
+			if (listenSocket) {
+				listenSucceeded = true;
+				notifyStartup(true);
+				spdlog::info("SignalingServer listening on port {}", port_);
+				auto* loop = uWS::Loop::get();
+				SignalingServerHttp::StartBackgroundTimers(
+					*this,
+					loop,
+					listenSocket,
+					statsTimer,
+					redisTimer,
+					shutdownTimer);
+			} else {
+				notifyStartup(false);
+				spdlog::error("SignalingServer failed to listen on port {}", port_);
+			}
+		});
 
 	app.run();
+
+	const auto closeTimer = [](us_timer_t*& timer) {
+		if (timer) {
+			us_timer_close(timer);
+			timer = nullptr;
+		}
+	};
+	closeTimer(statsTimer);
+	closeTimer(redisTimer);
+	closeTimer(shutdownTimer);
 
 	running_ = false;
 	if (!listenSucceeded) {

@@ -16,7 +16,8 @@ struct SignalingServerHttp {
 		uWS::Loop* loop,
 		us_listen_socket_t* listenSocket,
 		us_timer_t*& statsTimer,
-		us_timer_t*& redisTimer);
-};
+		us_timer_t*& redisTimer,
+		us_timer_t*& shutdownTimer);
+	};
 
 } // namespace mediasoup

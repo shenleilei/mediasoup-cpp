@@ -157,8 +157,14 @@ void SignalingServer::enqueueRegistryTask(std::function<void()> task, std::strin
 	if (!registry_) return;
 	if (stopRegistryThread_.load(std::memory_order_relaxed)) {
 		const auto taskId = nextRegistryTaskId_.fetch_add(1, std::memory_order_relaxed);
-		spdlog::warn("registry task inline [id:{} label:{}]", taskId, label);
-		try { task(); } catch (...) {}
+		spdlog::debug("registry task inline [id:{} label:{}]", taskId, label);
+		try {
+			task();
+		} catch (const std::exception& e) {
+			spdlog::error("registry inline task failed [id:{} label:{} error:{}]", taskId, label, e.what());
+		} catch (...) {
+			spdlog::error("registry inline task failed [id:{} label:{} error:unknown]", taskId, label);
+		}
 		return;
 	}
 	const auto taskId = nextRegistryTaskId_.fetch_add(1, std::memory_order_relaxed);
@@ -172,8 +178,8 @@ void SignalingServer::enqueueRegistryTask(std::function<void()> task, std::strin
 			const auto startedAt = std::chrono::steady_clock::now();
 			const auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(
 				startedAt - enqueuedAt).count();
-			spdlog::warn("registry task start [id:{} label:{} waitMs:{}]",
-				taskId, label, waitMs);
+				spdlog::debug("registry task start [id:{} label:{} waitMs:{}]",
+					taskId, label, waitMs);
 			try {
 				task();
 				const auto finishedAt = std::chrono::steady_clock::now();
@@ -181,8 +187,8 @@ void SignalingServer::enqueueRegistryTask(std::function<void()> task, std::strin
 					finishedAt - startedAt).count();
 				const auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(
 					finishedAt - enqueuedAt).count();
-				spdlog::warn("registry task done [id:{} label:{} execMs:{} totalMs:{}]",
-					taskId, label, execMs, totalMs);
+					spdlog::debug("registry task done [id:{} label:{} execMs:{} totalMs:{}]",
+						taskId, label, execMs, totalMs);
 			} catch (const std::exception& e) {
 				const auto failedAt = std::chrono::steady_clock::now();
 				const auto execMs = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -200,7 +206,7 @@ void SignalingServer::enqueueRegistryTask(std::function<void()> task, std::strin
 			}
 		});
 	}
-	spdlog::warn("registry task queued [id:{} label:{} queueDepth:{}]", taskId, queuedLabel, queueDepth);
+		spdlog::debug("registry task queued [id:{} label:{} queueDepth:{}]", taskId, queuedLabel, queueDepth);
 	registryTaskCv_.notify_one();
 }
 

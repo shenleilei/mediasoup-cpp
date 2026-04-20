@@ -2,12 +2,15 @@
 
 #include "GeoDbResolver.h"
 #include "Logger.h"
+#include "RuntimeOptionParsers.h"
 #include "WorkerThread.h"
 
 #include <arpa/inet.h>
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <cmath>
+#include <cstring>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -19,6 +22,14 @@
 
 namespace mediasoup {
 namespace {
+
+void AppendLoadError(RuntimeOptions& options, const std::string& message)
+{
+	if (!options.loadError.empty()) {
+		options.loadError += "; ";
+	}
+	options.loadError += message;
+}
 
 void ApplyLegacyLogFileSetting(
 	const std::string& value,
@@ -156,20 +167,41 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 
 	for (int i = 1; i < argc; i++) {
 		std::string arg = argv[i];
-		if (arg.find("--port=") == 0) options.signalingPort = std::stoi(arg.substr(7));
-		else if (arg.find("--workers=") == 0) options.numWorkers = std::stoi(arg.substr(10));
-		else if (arg.find("--workerThreads=") == 0) options.numWorkerThreads = std::stoi(arg.substr(16));
+		auto trySetInt = [&](const char* prefix, int& target) {
+			if (arg.find(prefix) != 0) return false;
+			int parsed = 0;
+			if (TryParseIntArgValue(arg.substr(std::strlen(prefix)), parsed)) {
+				target = parsed;
+			} else {
+				AppendLoadError(options, "invalid numeric CLI arg '" + arg + "'");
+			}
+			return true;
+		};
+		auto trySetDouble = [&](const char* prefix, double& target) {
+			if (arg.find(prefix) != 0) return false;
+			double parsed = 0.0;
+			if (TryParseDoubleArgValue(arg.substr(std::strlen(prefix)), parsed)) {
+				target = parsed;
+			} else {
+				AppendLoadError(options, "invalid numeric CLI arg '" + arg + "'");
+			}
+			return true;
+		};
+
+		if (trySetInt("--port=", options.signalingPort)) {}
+		else if (trySetInt("--workers=", options.numWorkers)) {}
+		else if (trySetInt("--workerThreads=", options.numWorkerThreads)) {}
 		else if (arg.find("--listenIp=") == 0) options.listenIp = arg.substr(11);
 		else if (arg.find("--announcedIp=") == 0) options.announcedIp = arg.substr(14);
 		else if (arg.find("--workerBin=") == 0) options.workerBin = arg.substr(12);
 		else if (arg.find("--redisHost=") == 0) options.redisHost = arg.substr(12);
-		else if (arg.find("--redisPort=") == 0) options.redisPort = std::stoi(arg.substr(12));
+		else if (trySetInt("--redisPort=", options.redisPort)) {}
 		else if (arg.find("--nodeId=") == 0) options.nodeId = arg.substr(9);
 		else if (arg.find("--nodeAddress=") == 0) options.nodeAddress = arg.substr(14);
 		else if (arg.find("--recordDir=") == 0) options.recordDir = arg.substr(12);
-		else if (arg.find("--maxRoutersPerWorker=") == 0) options.maxRoutersPerWorker = std::stoi(arg.substr(22));
-		else if (arg.find("--lat=") == 0) options.nodeLat = std::stod(arg.substr(6));
-		else if (arg.find("--lng=") == 0) options.nodeLng = std::stod(arg.substr(6));
+		else if (trySetInt("--maxRoutersPerWorker=", options.maxRoutersPerWorker)) {}
+		else if (trySetDouble("--lat=", options.nodeLat)) {}
+		else if (trySetDouble("--lng=", options.nodeLng)) {}
 		else if (arg.find("--isp=") == 0) options.nodeIsp = arg.substr(6);
 		else if (arg.find("--country=") == 0) options.nodeCountry = arg.substr(10);
 		else if (arg == "--countryIsolation") options.countryIsolation = true;
@@ -180,7 +212,7 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 		else if (arg.find("--logFile=") == 0) ApplyLegacyLogFileSetting(arg.substr(10), options.logDir, options.logPrefix);
 		else if (arg.find("--pidFile=") == 0) options.pidFile = arg.substr(10);
 		else if (arg.find("--logLevel=") == 0) options.logLevel = arg.substr(11);
-		else if (arg.find("--logRotateHours=") == 0) options.logRotateHours = std::stoi(arg.substr(17));
+		else if (trySetInt("--logRotateHours=", options.logRotateHours)) {}
 		else if (arg == "--nodaemon") options.noDaemon = true;
 	}
 
@@ -189,6 +221,11 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 
 bool FinalizeRuntimeOptions(RuntimeOptions& options)
 {
+	if (options.hasLoadError()) {
+		spdlog::error("Runtime option parsing failed: {}", options.loadError);
+		return false;
+	}
+
 	if (options.announcedIp.empty()) {
 		options.announcedIp = DetectPublicIp();
 		if (!options.announcedIp.empty()) {
@@ -200,7 +237,10 @@ bool FinalizeRuntimeOptions(RuntimeOptions& options)
 
 	if (options.nodeId.empty()) {
 		char hostname[256]{};
-		gethostname(hostname, sizeof(hostname));
+		if (::gethostname(hostname, sizeof(hostname) - 1) != 0) {
+			spdlog::warn("gethostname() failed: {}", std::strerror(errno));
+		}
+		hostname[sizeof(hostname) - 1] = '\0';
 		options.nodeId = std::string(hostname) + ":" + std::to_string(options.signalingPort);
 	}
 	if (!IsValidNodeId(options.nodeId)) {

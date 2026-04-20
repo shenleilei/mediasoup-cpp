@@ -2,6 +2,7 @@
 
 #include "GeoRouter.h"
 #include "Logger.h"
+#include "RoomRegistryReplyUtils.h"
 #include "RoomRegistrySelection.h"
 
 #include <algorithm>
@@ -508,11 +509,18 @@ void RoomRegistry::subscriberLoop()
 			}
 
 			if (msg->type == REDIS_REPLY_ARRAY && msg->elements >= 3) {
-				std::string type = msg->element[0]->str;
-				if (type == "message") {
-					std::string channel = msg->element[1]->str;
-					std::string data = msg->element[2]->str;
-					handlePubSubMessage(channel, data);
+				std::string type;
+				if (!redisreply::GetTextElement(msg, 0, type)) {
+					MS_WARN(logger_, "Subscriber received malformed pubsub message header");
+				} else if (type == "message") {
+					std::string channel;
+					std::string data;
+					if (redisreply::GetTextElement(msg, 1, channel) &&
+						redisreply::GetTextElement(msg, 2, data)) {
+						handlePubSubMessage(channel, data);
+					} else {
+						MS_WARN(logger_, "Subscriber received malformed pubsub message payload");
+					}
 				}
 			}
 			freeReplyObject(msg);
@@ -628,10 +636,21 @@ std::vector<std::string> RoomRegistry::scanKeys(const char* pattern)
 			if (r) freeReplyObject(r);
 			break;
 		}
-		cursor = r->element[0]->str;
-		auto* arr = r->element[1];
-		for (size_t i = 0; i < arr->elements; i++)
-			keys.push_back(arr->element[i]->str);
+		if (!redisreply::GetTextElement(r, 0, cursor)) {
+			freeReplyObject(r);
+			break;
+		}
+		const auto* arr = redisreply::GetArrayElement(r, 1, REDIS_REPLY_ARRAY);
+		if (!arr) {
+			freeReplyObject(r);
+			break;
+		}
+		for (size_t i = 0; i < arr->elements; i++) {
+			std::string key;
+			if (redisreply::GetTextElement(arr, i, key)) {
+				keys.push_back(std::move(key));
+			}
+		}
 		freeReplyObject(r);
 	} while (cursor != "0");
 	return keys;
@@ -646,14 +665,17 @@ void RoomRegistry::syncNodesUnlocked()
 		std::vector<std::string> nids;
 		for (auto& key : nodeKeys)
 			nids.push_back(key.substr(9));
-		auto* mr = mgetArgv(nodeKeys);
-		if (mr && mr->type == REDIS_REPLY_ARRAY) {
-			for (size_t i = 0; i < mr->elements && i < nids.size(); i++)
-				if (mr->element[i]->type == REDIS_REPLY_STRING)
-					tmpNodes[nids[i]] = parseNodeValue(mr->element[i]->str);
+			auto* mr = mgetArgv(nodeKeys);
+			if (mr && mr->type == REDIS_REPLY_ARRAY) {
+				for (size_t i = 0; i < mr->elements && i < nids.size(); i++) {
+					std::string value;
+					if (redisreply::GetTextElement(mr, i, value)) {
+						tmpNodes[nids[i]] = parseNodeValue(value);
+					}
+				}
+			}
+			if (mr) freeReplyObject(mr);
 		}
-		if (mr) freeReplyObject(mr);
-	}
 	if (!tmpNodes.empty()) {
 		std::lock_guard<std::mutex> cl(cacheMutex_);
 		for (auto& [nid, info] : tmpNodes)
@@ -671,14 +693,17 @@ void RoomRegistry::syncAllUnlocked()
 		std::vector<std::string> nids;
 		for (auto& key : nodeKeys)
 			nids.push_back(key.substr(9));
-		auto* mr = mgetArgv(nodeKeys);
-		if (mr && mr->type == REDIS_REPLY_ARRAY) {
-			for (size_t i = 0; i < mr->elements && i < nids.size(); i++)
-				if (mr->element[i]->type == REDIS_REPLY_STRING)
-					tmpNodes[nids[i]] = parseNodeValue(mr->element[i]->str);
+			auto* mr = mgetArgv(nodeKeys);
+			if (mr && mr->type == REDIS_REPLY_ARRAY) {
+				for (size_t i = 0; i < mr->elements && i < nids.size(); i++) {
+					std::string value;
+					if (redisreply::GetTextElement(mr, i, value)) {
+						tmpNodes[nids[i]] = parseNodeValue(value);
+					}
+				}
+			}
+			if (mr) freeReplyObject(mr);
 		}
-		if (mr) freeReplyObject(mr);
-	}
 
 	std::unordered_map<std::string, std::string> tmpRooms;
 	auto roomKeys = scanKeys("sfu:room:*");
@@ -686,18 +711,19 @@ void RoomRegistry::syncAllUnlocked()
 		std::vector<std::string> rids;
 		for (auto& key : roomKeys)
 			rids.push_back(key.substr(9));
-		auto* mr = mgetArgv(roomKeys);
-		if (mr && mr->type == REDIS_REPLY_ARRAY) {
-			for (size_t i = 0; i < mr->elements && i < rids.size(); i++)
-				if (mr->element[i]->type == REDIS_REPLY_STRING) {
-					std::string ownerNid = mr->element[i]->str;
-					auto nit = tmpNodes.find(ownerNid);
-					if (nit != tmpNodes.end())
-						tmpRooms[rids[i]] = nit->second.address;
+			auto* mr = mgetArgv(roomKeys);
+			if (mr && mr->type == REDIS_REPLY_ARRAY) {
+				for (size_t i = 0; i < mr->elements && i < rids.size(); i++) {
+					std::string ownerNid;
+					if (redisreply::GetTextElement(mr, i, ownerNid)) {
+						auto nit = tmpNodes.find(ownerNid);
+						if (nit != tmpNodes.end())
+							tmpRooms[rids[i]] = nit->second.address;
+					}
 				}
+			}
+			if (mr) freeReplyObject(mr);
 		}
-		if (mr) freeReplyObject(mr);
-	}
 
 	size_t syncedNodeCount = 0;
 	size_t syncedRoomCount = 0;

@@ -61,10 +61,18 @@ public:
 		downlinkSnapshotApplied_ = std::move(fn);
 	}
 
-	void postRegistryTask(std::function<void()> task) {
-		if (registryTask_) registryTask_(std::move(task));
-		else { try { task(); } catch (...) {} }
-	}
+		void postRegistryTask(std::function<void()> task) {
+			if (registryTask_) registryTask_(std::move(task));
+			else {
+				try {
+					task();
+				} catch (const std::exception& e) {
+					MS_WARN(logger_, "postRegistryTask inline fallback failed: {}", e.what());
+				} catch (...) {
+					MS_WARN(logger_, "postRegistryTask inline fallback failed: unknown error");
+				}
+			}
+		}
 
 	struct Result {
 		bool ok = true;
