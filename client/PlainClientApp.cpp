@@ -190,8 +190,17 @@ bool PlainClientApp::ParseArguments(int argc, char* argv[])
 
 void PlainClientApp::InstallSignalHandlers()
 {
-	signal(SIGINT, PlainClientApp::OnSignal);
-	signal(SIGPIPE, SIG_IGN);
+	struct sigaction sigintAction {};
+	sigemptyset(&sigintAction.sa_mask);
+	sigintAction.sa_handler = PlainClientApp::OnSignal;
+	sigintAction.sa_flags = 0;
+	sigaction(SIGINT, &sigintAction, nullptr);
+
+	struct sigaction sigpipeAction {};
+	sigemptyset(&sigpipeAction.sa_mask);
+	sigpipeAction.sa_handler = SIG_IGN;
+	sigpipeAction.sa_flags = 0;
+	sigaction(SIGPIPE, &sigpipeAction, nullptr);
 }
 
 bool PlainClientApp::RecreateVideoEncoder(

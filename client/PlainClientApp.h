@@ -131,6 +131,7 @@ private:
 
 	std::shared_ptr<CachedServerStatsResponse> cachedServerStatsResponse_;
 	int64_t lastPeerQosSampleMs_{0};
+	int peerSnapshotSeq_{0};
 
 	std::thread testClientStatsThread_;
 	std::thread testWsRequestsThread_;

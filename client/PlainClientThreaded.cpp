@@ -507,11 +507,10 @@ int PlainClientApp::RunThreadedMode()
 				}
 
 				if (peerSnapshotRequested && !peerTrackStates.empty()) {
-					static int peerSnapshotSeq = 0;
 					if (ws_.pendingRequestCount() < 8) {
 						auto peerDecision = qos::buildPeerDecision(peerTrackStates);
 						auto snapshot = qos::serializeSnapshot(
-							peerSnapshotSeq++,
+							peerSnapshotSeq_++,
 							wallNowMs(),
 							peerDecision.peerQuality,
 							false,

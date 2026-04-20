@@ -425,6 +425,48 @@ TEST(NetworkThreadIntegration, SendsRtpFromEncodedAU) {
 	close(recvFd);
 }
 
+TEST(NetworkThreadIntegration, ComediaProbeCoversAllRegisteredTrackSsrcs) {
+	int sendFd = -1, recvFd = -1;
+	uint16_t port = 0;
+	ASSERT_EQ(createConnectedUdpPair(sendFd, recvFd, port), 0);
+
+	NetworkThread::Config cfg;
+	cfg.udpFd = sendFd;
+	cfg.audioSsrc = 22222222;
+	cfg.audioPt = 111;
+
+	NetworkThread net(cfg);
+	net.registerVideoTrack(0, 11111111u, 96);
+	net.registerVideoTrack(1, 33333333u, 97);
+
+	net.sendComediaProbe();
+
+	std::set<uint32_t> observedSsrcs;
+	uint8_t buf[1500];
+	for (int i = 0; i < 16; ++i) {
+		const int n = recv(recvFd, buf, sizeof(buf), MSG_DONTWAIT);
+		if (n <= 0) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(20));
+			continue;
+		}
+		if (n >= 12 && (buf[0] & 0xC0) == 0x80) {
+			const uint32_t ssrc =
+				(static_cast<uint32_t>(buf[8]) << 24) |
+				(static_cast<uint32_t>(buf[9]) << 16) |
+				(static_cast<uint32_t>(buf[10]) << 8) |
+				static_cast<uint32_t>(buf[11]);
+			observedSsrcs.insert(ssrc);
+		}
+	}
+
+	EXPECT_EQ(observedSsrcs.size(), 2u);
+	EXPECT_TRUE(observedSsrcs.count(11111111u));
+	EXPECT_TRUE(observedSsrcs.count(33333333u));
+
+	close(sendFd);
+	close(recvFd);
+}
+
 // ═══════════════════════════════════════════════════════════
 // End-to-end: SourceWorker → NetworkThread → stats
 // ═══════════════════════════════════════════════════════════
