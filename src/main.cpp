@@ -14,10 +14,25 @@ void signalHandler(int sig) {
 	g_shutdown = true;
 }
 
+namespace {
+
+bool installSignalHandler(int signalNumber, void (*handler)(int))
+{
+	struct sigaction action {};
+	action.sa_handler = handler;
+	sigemptyset(&action.sa_mask);
+	action.sa_flags = 0;
+	return ::sigaction(signalNumber, &action, nullptr) == 0;
+}
+
+} // namespace
+
 int main(int argc, char* argv[]) {
-	signal(SIGINT, signalHandler);
-	signal(SIGTERM, signalHandler);
-	signal(SIGPIPE, SIG_IGN);
+	if (!installSignalHandler(SIGINT, signalHandler) ||
+		!installSignalHandler(SIGTERM, signalHandler) ||
+		!installSignalHandler(SIGPIPE, SIG_IGN)) {
+		return 1;
+	}
 
 	auto options = LoadRuntimeOptions(argc, argv);
 

@@ -233,7 +233,8 @@ void SignalingServerHttp::StartBackgroundTimers(
 	uWS::Loop* loop,
 	us_listen_socket_t* listenSocket,
 	us_timer_t*& statsTimer,
-	us_timer_t*& redisTimer)
+	us_timer_t*& redisTimer,
+	us_timer_t*& shutdownTimer)
 {
 	statsTimer = us_create_timer((struct us_loop_t*)loop, 0, sizeof(SignalingServer*));
 	SignalingServer* self = &server;
@@ -285,15 +286,14 @@ void SignalingServerHttp::StartBackgroundTimers(
 	}, kRedisHeartbeatIntervalSec * 1000, kRedisHeartbeatIntervalSec * 1000);
 
 	struct ShutdownCtx { us_listen_socket_t* sock; };
-	auto* shutdownTimer = us_create_timer((struct us_loop_t*)loop, 0, sizeof(ShutdownCtx));
+	shutdownTimer = us_create_timer((struct us_loop_t*)loop, 0, sizeof(ShutdownCtx));
 	ShutdownCtx sctx{listenSocket};
 	memcpy(us_timer_ext(shutdownTimer), &sctx, sizeof(ShutdownCtx));
 	us_timer_set(shutdownTimer, [](struct us_timer_t* t) {
-		if (g_shutdown) {
-			ShutdownCtx ctx;
-			memcpy(&ctx, us_timer_ext(t), sizeof(ShutdownCtx));
-			us_listen_socket_close(0, ctx.sock);
-			us_timer_close(t);
+		auto* ctx = static_cast<ShutdownCtx*>(us_timer_ext(t));
+		if (g_shutdown && ctx && ctx->sock) {
+			us_listen_socket_close(0, ctx->sock);
+			ctx->sock = nullptr;
 		}
 	}, kShutdownPollIntervalMs, kShutdownPollIntervalMs);
 }

@@ -164,7 +164,10 @@ void WorkerThread::post(std::function<void()> task)
 				peak, depth, std::memory_order_relaxed, std::memory_order_relaxed)) {}
 	}
 	uint64_t val = 1;
-	::write(eventFd_, &val, sizeof(val));
+	const ssize_t written = ::write(eventFd_, &val, sizeof(val));
+	if (written != static_cast<ssize_t>(sizeof(val)) && !stopping_.load(std::memory_order_relaxed)) {
+		MS_ERROR(logger_, "WorkerThread {} eventfd write failed: {}", id_, strerror(errno));
+	}
 }
 
 void WorkerThread::postDelayed(std::function<void()> task, uint64_t delayMs)
@@ -216,17 +219,29 @@ void WorkerThread::createWorkers()
 	for (int i = 0; i < numWorkersTarget_; i++) {
 		try {
 			auto worker = std::make_shared<Worker>(workerSettings_, /*threaded=*/false);
-			workers_.push_back(worker);
 
 			int fd = worker->channelConsumerFd();
-			if (fd >= 0) {
-				struct epoll_event ev{};
-				ev.events = EPOLLIN;
-				ev.data.fd = fd;
-				::epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd, &ev);
-				fdToWorker_[fd] = worker;
+			if (fd < 0) {
+				MS_ERROR(logger_, "WorkerThread {} worker {} has invalid channel fd", id_, i);
+				worker->close();
+				continue;
 			}
 
+			struct epoll_event ev{};
+			ev.events = EPOLLIN;
+			ev.data.fd = fd;
+			if (::epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd, &ev) != 0) {
+				MS_ERROR(logger_,
+					"WorkerThread {} failed to add worker fd {} to epoll: {}",
+					id_,
+					fd,
+					strerror(errno));
+				worker->close();
+				continue;
+			}
+
+			workers_.push_back(worker);
+			fdToWorker_[fd] = worker;
 			workerManager_->addExistingWorker(worker);
 			MS_DEBUG(logger_, "WorkerThread {} created worker {} [pid:{}]", id_, i, worker->pid());
 		} catch (const std::exception& e) {
@@ -289,12 +304,18 @@ void WorkerThread::loop()
 			} else {
 				auto it = fdToWorker_.find(fd);
 				if (it != fdToWorker_.end()) {
-					if (!it->second->processChannelData()) {
-						auto worker = it->second;
-						::epoll_ctl(epollFd_, EPOLL_CTL_DEL, fd, nullptr);
-						fdToWorker_.erase(it);
-						worker->handleWorkerDeath();
-						onWorkerDied(worker);
+						if (!it->second->processChannelData()) {
+							auto worker = it->second;
+							if (::epoll_ctl(epollFd_, EPOLL_CTL_DEL, fd, nullptr) != 0) {
+								MS_WARN(logger_,
+									"WorkerThread {} failed to remove worker fd {} from epoll: {}",
+									id_,
+									fd,
+									strerror(errno));
+							}
+							fdToWorker_.erase(it);
+							worker->handleWorkerDeath();
+							onWorkerDied(worker);
 					}
 				}
 			}
@@ -341,8 +362,11 @@ void WorkerThread::processDelayedTasks()
 		std::lock_guard<std::mutex> lock(delayedQueueMutex_);
 		const auto now = std::chrono::steady_clock::now();
 		while (!delayedTasks_.empty() && delayedTasks_.top().dueAt <= now) {
-			readyTasks.push_back(std::move(delayedTasks_.top().fn));
+			// std::priority_queue::top() returns const&, so move the element out
+			// before pop to avoid copying the stored closure.
+			auto task = std::move(const_cast<DelayedTask&>(delayedTasks_.top()));
 			delayedTasks_.pop();
+			readyTasks.push_back(std::move(task.fn));
 		}
 		armDelayedTimerLocked();
 	}
@@ -375,7 +399,9 @@ void WorkerThread::armDelayedTimerLocked()
 		its.it_value.tv_sec = static_cast<time_t>(delayNs.count() / 1000000000LL);
 		its.it_value.tv_nsec = static_cast<long>(delayNs.count() % 1000000000LL);
 	}
-	::timerfd_settime(delayedTimerFd_, 0, &its, nullptr);
+	if (::timerfd_settime(delayedTimerFd_, 0, &its, nullptr) != 0) {
+		MS_ERROR(logger_, "WorkerThread {} timerfd_settime failed: {}", id_, strerror(errno));
+	}
 }
 
 void WorkerThread::onHealthCheck()
@@ -422,17 +448,31 @@ void WorkerThread::onWorkerDied(std::shared_ptr<Worker> worker)
 
 	try {
 		auto newWorker = std::make_shared<Worker>(workerSettings_, /*threaded=*/false);
-		workers_.push_back(newWorker);
 
 		int fd = newWorker->channelConsumerFd();
-		if (fd >= 0) {
-			struct epoll_event ev{};
-			ev.events = EPOLLIN;
-			ev.data.fd = fd;
-			::epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd, &ev);
-			fdToWorker_[fd] = newWorker;
+		if (fd < 0) {
+			MS_ERROR(logger_, "WorkerThread {} respawned worker has invalid channel fd", id_);
+			newWorker->close();
+			workerCount_.store(workers_.size(), std::memory_order_relaxed);
+			return;
 		}
 
+		struct epoll_event ev{};
+		ev.events = EPOLLIN;
+		ev.data.fd = fd;
+		if (::epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd, &ev) != 0) {
+			MS_ERROR(logger_,
+				"WorkerThread {} failed to add respawned worker fd {} to epoll: {}",
+				id_,
+				fd,
+				strerror(errno));
+			newWorker->close();
+			workerCount_.store(workers_.size(), std::memory_order_relaxed);
+			return;
+		}
+
+		workers_.push_back(newWorker);
+		fdToWorker_[fd] = newWorker;
 		workerManager_->addExistingWorker(newWorker);
 		MS_WARN(logger_, "WorkerThread {} respawned worker [pid:{}]", id_, newWorker->pid());
 	} catch (const std::exception& e) {

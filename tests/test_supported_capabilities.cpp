@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
+#include "RtpParametersFbs.h"
 #include "supportedRtpCapabilities.h"
+#include <flatbuffers/flatbuffers.h>
+#include <set>
 
 using namespace mediasoup;
 
@@ -38,4 +41,40 @@ TEST(SupportedCapabilitiesTest, CodecsHaveValidFields) {
 		EXPECT_GT(c.clockRate, 0u);
 		EXPECT_FALSE(c.kind.empty());
 	}
+}
+
+TEST(SupportedCapabilitiesTest, NonZeroPayloadTypesAreUnique) {
+	auto caps = getSupportedRtpCapabilities();
+	std::set<uint32_t> payloadTypes;
+
+	for (const auto& codec : caps.codecs) {
+		if (codec.preferredPayloadType == 0) {
+			continue;
+		}
+		EXPECT_TRUE(payloadTypes.insert(codec.preferredPayloadType).second)
+			<< "duplicate payload type " << codec.preferredPayloadType
+			<< " for " << codec.mimeType;
+	}
+}
+
+TEST(SupportedCapabilitiesTest, RepairRtpStreamIdMapsToRepairUri) {
+	RtpParameters params;
+	params.headerExtensions.push_back({
+		"urn:ietf:params:rtp-hdrext:sdes:repaired-rtp-stream-id",
+		3,
+		false,
+		json::object()
+	});
+
+	flatbuffers::FlatBufferBuilder builder;
+	builder.Finish(BuildFbsRtpParameters(builder, params));
+
+	auto* fbsParams =
+		flatbuffers::GetRoot<FBS::RtpParameters::RtpParameters>(builder.GetBufferPointer());
+	ASSERT_NE(fbsParams, nullptr);
+	ASSERT_NE(fbsParams->header_extensions(), nullptr);
+	ASSERT_EQ(fbsParams->header_extensions()->size(), 1u);
+	EXPECT_EQ(
+		fbsParams->header_extensions()->Get(0)->uri(),
+		FBS::RtpParameters::RtpHeaderExtensionUri::RepairRtpStreamId);
 }

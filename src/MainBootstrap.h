@@ -39,6 +39,9 @@ struct RuntimeOptions {
 	std::string logLevel{ "info" };
 	int logRotateHours{ 3 };
 	std::string configPath{ "config.json" };
+	std::string loadError;
+
+	bool hasLoadError() const { return !loadError.empty(); }
 };
 
 struct RuntimeServices {

@@ -109,7 +109,13 @@ void Channel::close() {
 		}
 	}
 
-	if (producerFd_ >= 0) { ::close(producerFd_); producerFd_ = -1; }
+	int producerFd = -1;
+	{
+		std::lock_guard<std::mutex> lock(producerFdMutex_);
+		producerFd = producerFd_;
+		producerFd_ = -1;
+	}
+	if (producerFd >= 0) { ::close(producerFd); }
 	if (consumerFd_ >= 0) { ::close(consumerFd_); consumerFd_ = -1; }
 
 	if (channelTraceEnabled()) {
@@ -117,18 +123,43 @@ void Channel::close() {
 	}
 }
 
+int Channel::duplicateProducerFd() {
+	std::lock_guard<std::mutex> lock(producerFdMutex_);
+	if (closed_.load(std::memory_order_acquire) || producerFd_ < 0) {
+		return -1;
+	}
+
+	int dupFd = ::fcntl(producerFd_, F_DUPFD_CLOEXEC, 0);
+	if (dupFd < 0) {
+		MS_ERROR(logger_, "duplicate worker pipe fd failed: {}", strerror(errno));
+	}
+	return dupFd;
+}
+
 void Channel::sendBytes(const uint8_t* data, size_t len) {
-	if (closed_) return;
+	if (closed_.load(std::memory_order_acquire)) return;
+
+	const int producerFd = duplicateProducerFd();
+	if (producerFd < 0) {
+		if (!closed_.load(std::memory_order_acquire)) {
+			close();
+		}
+		return;
+	}
+
 	size_t written = 0;
 	while (written < len) {
-		ssize_t n = ::write(producerFd_, data + written, len - written);
+		ssize_t n = ::write(producerFd, data + written, len - written);
 		if (n <= 0) {
 			MS_ERROR(logger_, "write to worker pipe failed: {}", strerror(errno));
+			::close(producerFd);
 			close();
 			return;
 		}
 		written += n;
 	}
+
+	::close(producerFd);
 }
 
 void Channel::notify(
@@ -357,11 +388,12 @@ bool Channel::processAvailableData() {
 		return false;
 	}
 
-	// Process complete messages from recvBuf_
-	size_t offset = 0;
-	while (offset + 4 <= recvBuf_.size()) {
+	// Process complete messages from recvBuf_. Remove each frame before dispatch
+	// so notification callbacks can safely re-enter requestWait/processAvailableData
+	// without re-processing the same buffered message.
+	while (recvBuf_.size() >= 4) {
 		uint32_t msgLen;
-		std::memcpy(&msgLen, recvBuf_.data() + offset, 4);
+		std::memcpy(&msgLen, recvBuf_.data(), 4);
 		if (msgLen == 0 || msgLen > MESSAGE_MAX_LEN) {
 			MS_WARN(logger_,
 				"invalid frame length [pid:{} msgLen:{} max:{}], closing channel",
@@ -369,18 +401,20 @@ bool Channel::processAvailableData() {
 			close();
 			return false;
 		}
-		if (offset + 4 + msgLen > recvBuf_.size()) break;
+		if (recvBuf_.size() < 4 + msgLen) break;
 
-		if (!processMessage(recvBuf_.data() + offset + 4, msgLen)) {
+		std::vector<uint8_t> message(
+			recvBuf_.begin() + 4,
+			recvBuf_.begin() + static_cast<ptrdiff_t>(4 + msgLen));
+		recvBuf_.erase(
+			recvBuf_.begin(),
+			recvBuf_.begin() + static_cast<ptrdiff_t>(4 + msgLen));
+
+		if (!processMessage(message.data(), msgLen)) {
 			MS_WARN(logger_, "invalid FlatBuffers message [pid:{} len:{}], closing channel", pid_, msgLen);
 			close();
 			return false;
 		}
-		offset += 4 + msgLen;
-	}
-
-	if (offset > 0) {
-		recvBuf_.erase(recvBuf_.begin(), recvBuf_.begin() + static_cast<ptrdiff_t>(offset));
 	}
 
 	return true;

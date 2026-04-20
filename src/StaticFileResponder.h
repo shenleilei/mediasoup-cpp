@@ -77,11 +77,16 @@ inline std::optional<ResolvedFile> ResolveFileUnderBase(
 
 inline std::string ContentTypeForPath(std::string_view path)
 {
-	if (path.find(".webm") != std::string::npos) return "video/webm";
-	if (path.find(".json") != std::string::npos) return "application/json";
-	if (path.find(".html") != std::string::npos) return "text/html";
-	if (path.find(".js") != std::string::npos) return "application/javascript";
-	if (path.find(".css") != std::string::npos) return "text/css";
+	const auto hasSuffix = [path](std::string_view suffix) {
+		return path.size() >= suffix.size() &&
+			path.compare(path.size() - suffix.size(), suffix.size(), suffix) == 0;
+	};
+
+	if (hasSuffix(".webm")) return "video/webm";
+	if (hasSuffix(".json")) return "application/json";
+	if (hasSuffix(".html")) return "text/html";
+	if (hasSuffix(".js")) return "application/javascript";
+	if (hasSuffix(".css")) return "text/css";
 	return "application/octet-stream";
 }
 

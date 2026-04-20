@@ -1,5 +1,9 @@
 #include <gtest/gtest.h>
+#include "Channel.h"
+#include "Producer.h"
 #include "RoomManager.h"
+#include <future>
+#include <unistd.h>
 
 using namespace mediasoup;
 
@@ -79,6 +83,45 @@ TEST_F(RoomTest, IsIdle) {
 	EXPECT_TRUE(room->isIdle(0));
 	// Not idle if threshold is high enough
 	EXPECT_FALSE(room->isIdle(9999));
+}
+
+TEST_F(RoomTest, RemovePeerDoesNotHoldRoomLockAcrossPeerClose) {
+	int producerPipe[2];
+	int consumerPipe[2];
+	ASSERT_EQ(::pipe(producerPipe), 0);
+	ASSERT_EQ(::pipe(consumerPipe), 0);
+
+	Channel channel(
+		/*producerFd=*/producerPipe[1],
+		/*consumerFd=*/consumerPipe[0],
+		/*pid=*/12345,
+		/*threaded=*/false);
+
+	auto alice = makePeer("alice");
+	auto producer = std::make_shared<Producer>(
+		"producer-1",
+		"video",
+		RtpParameters{},
+		"simple",
+		RtpParameters{},
+		&channel,
+		"transport-1");
+	alice->producers[producer->id()] = producer;
+	producer->emitter().once("@close", [room = room](const std::vector<std::any>&) {
+		EXPECT_LE(room->peerCount(), 1u);
+	});
+
+	room->addPeer(alice);
+	auto removed = std::async(std::launch::async, [&] {
+		room->removePeer("alice");
+	});
+
+	EXPECT_EQ(removed.wait_for(std::chrono::milliseconds(500)), std::future_status::ready);
+	removed.get();
+	EXPECT_EQ(room->peerCount(), 0u);
+
+	::close(producerPipe[0]);
+	::close(consumerPipe[1]);
 }
 
 // --- Peer tests ---

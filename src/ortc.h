@@ -1,6 +1,7 @@
 #pragma once
 #include "RtpTypes.h"
 #include "supportedRtpCapabilities.h"
+#include <array>
 #include <stdexcept>
 #include <algorithm>
 #include <random>
@@ -9,7 +10,7 @@ namespace mediasoup {
 namespace ortc {
 
 // Dynamic payload types pool
-static const std::vector<uint8_t> DynamicPayloadTypes = {
+inline constexpr std::array<uint8_t, 32> DynamicPayloadTypes = {
 	100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,
 	116,117,118,119,120,121,122,123,124,125,126,127,96,97,98,99
 };
@@ -102,7 +103,7 @@ inline RtpCapabilities generateRouterRtpCapabilities(
 	const std::vector<RtpCodecCapability>& mediaCodecs)
 {
 	auto supported = getSupportedRtpCapabilities();
-	auto dynamicPTs = DynamicPayloadTypes;
+	std::vector<uint8_t> dynamicPTs(DynamicPayloadTypes.begin(), DynamicPayloadTypes.end());
 
 	RtpCapabilities caps;
 	caps.headerExtensions = supported.headerExtensions;

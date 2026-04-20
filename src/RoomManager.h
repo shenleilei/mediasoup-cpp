@@ -48,15 +48,21 @@ public:
 		return it != peers_.end() ? it->second : nullptr;
 	}
 
-	void removePeer(const std::string& peerId) {
-		std::lock_guard<std::mutex> lock(mutex_);
-		auto it = peers_.find(peerId);
-		if (it != peers_.end()) {
-			it->second->close();
-			peers_.erase(it);
+		void removePeer(const std::string& peerId) {
+			std::shared_ptr<Peer> peerToClose;
+			{
+				std::lock_guard<std::mutex> lock(mutex_);
+				auto it = peers_.find(peerId);
+				if (it != peers_.end()) {
+					peerToClose = it->second;
+					peers_.erase(it);
+				}
+				touch();
+			}
+			if (peerToClose) {
+				peerToClose->close();
+			}
 		}
-		touch();
-	}
 
 	bool empty() const { std::lock_guard<std::mutex> lock(mutex_); return peers_.empty(); }
 	size_t peerCount() const { std::lock_guard<std::mutex> lock(mutex_); return peers_.size(); }

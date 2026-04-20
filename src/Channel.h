@@ -127,6 +127,7 @@ private:
 	void processNotification(const uint8_t* data, size_t len,
 		const FBS::Notification::Notification* notification);
 	void processLog(const FBS::Log::Log* log);
+	int duplicateProducerFd();
 	void sendBytes(const uint8_t* data, size_t len);
 	RequestResult requestWithIdLocked(
 		FBS::Request::Method method,
@@ -153,6 +154,7 @@ private:
 	};
 	std::unordered_map<uint32_t, std::shared_ptr<PendingSent>> sents_;
 	std::mutex sentsMutex_;
+	std::mutex producerFdMutex_;
 
 	// Non-threaded mode receive buffer (owned by WorkerThread event loop thread).
 	std::vector<uint8_t> recvBuf_;

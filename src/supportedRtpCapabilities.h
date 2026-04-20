@@ -49,10 +49,10 @@ inline RtpCapabilities getSupportedRtpCapabilities() {
 		{{"nack", ""}, {"nack", "pli"}, {"ccm", "fir"}, {"goog-remb", ""}, {"transport-cc", ""}}});
 	caps.codecs.push_back({"video", "video/rtx", 125, 90000, 0, {{"apt", 127}}, {}});
 
-	caps.codecs.push_back({"video", "video/H264", 108, 90000, 0,
-		{{"level-asymmetry-allowed", 1}, {"packetization-mode", 0}, {"profile-level-id", "42e01f"}},
-		{{"nack", ""}, {"nack", "pli"}, {"ccm", "fir"}, {"goog-remb", ""}, {"transport-cc", ""}}});
-	caps.codecs.push_back({"video", "video/rtx", 124, 90000, 0, {{"apt", 108}}, {}});
+		caps.codecs.push_back({"video", "video/H264", 126, 90000, 0,
+			{{"level-asymmetry-allowed", 1}, {"packetization-mode", 0}, {"profile-level-id", "42e01f"}},
+			{{"nack", ""}, {"nack", "pli"}, {"ccm", "fir"}, {"goog-remb", ""}, {"transport-cc", ""}}});
+		caps.codecs.push_back({"video", "video/rtx", 124, 90000, 0, {{"apt", 126}}, {}});
 
 	caps.codecs.push_back({"video", "video/H265", 111, 90000, 0,
 		{{"level-id", 93}, {"profile-id", 1}, {"tier-flag", 0}},
