@@ -6,7 +6,7 @@ This project replaces mediasoup's usual Node.js control layer with a native C++ 
 
 ## Start Here
 
-首次接手建议先读：
+New to this project? Start here:
 
 - [docs/GETTING_STARTED.md](./docs/GETTING_STARTED.md)
 - [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md)
