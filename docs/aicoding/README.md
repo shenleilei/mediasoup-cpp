@@ -17,10 +17,17 @@ They are thin wrappers that point back to this directory.
 - `PROJECT_STANDARD.md`: primary workflow and delivery standard
 - `PLANS.md`: execution-planning rules
 - `REVIEW.md`: review and self-review standard
+- `PROMPTING.md`: supplemental prompt-writing and context-packaging guide
 - `DELIVERY_CHECKLIST.md`: pre-merge delivery gate
 - `AGENTS.md`: full shared agent instruction body
 - `CLAUDE.md`: Claude-specific entry note
 - `research-notes.md`: background on why this structure exists
+
+## GitHub Customization Assets
+
+- `.github/copilot-instructions.md`: thin repo-wide Copilot entrypoint
+- `.github/instructions/*.instructions.md`: path-specific Copilot guidance
+- `.github/prompts/*.prompt.md`: reusable prompt starters for common repo workflows
 
 ## Adjacent Workflow Directories
 
