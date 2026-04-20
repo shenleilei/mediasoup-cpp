@@ -46,7 +46,7 @@ sudo dnf install -y \
 ## 2) 拉代码并一键构建
 
 ```bash
-git clone --recursive https://github.com/shenleilei/mediasoup-cpp.git
+git clone --recursive https://github.com/<owner>/mediasoup-cpp.git
 cd mediasoup-cpp
 ./setup.sh
 ```

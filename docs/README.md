@@ -50,7 +50,7 @@
 
 | 文档 | 用途 |
 |---|---|
-| [GETTING_STARTED.md](./GETTING_STARTED.md) | 首次接手快速路径：依赖安装、`setup.sh` 一键构建、前台启动与最小验证。 |
+| [GETTING_STARTED.md](./GETTING_STARTED.md) | 首次接手 / 快速启动路径：依赖安装、`setup.sh` 一键构建、前台启动与最小验证。 |
 | [full-architecture-flow_cn.md](./full-architecture-flow_cn.md) | 全链路架构流程图：从信令加入到 Worker 媒体转发，覆盖进程模型、SDP/DTLS/ICE、IPC、BWE、Redis 多节点、QoS。 |
 | [architecture_cn.md](./architecture_cn.md) | 运行时架构详解，覆盖线程/进程模型、关键时序、IPC、多节点与故障恢复。 |
 | [dependencies_cn.md](./dependencies_cn.md) | 构建 / 运行 / 测试依赖总览，统一说明系统包、vendored 依赖、Node harness 依赖和 `setup.sh` / CMake 解析规则。 |
