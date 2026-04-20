@@ -99,14 +99,14 @@ public:
 	void addSourceInput(SourceInput input) { sourceInputs_.push_back(input); }
 
 	void sendComediaProbe() {
-		if (tracks_.empty()) return;
-		auto& t = tracks_[0];
-		for (int i = 0; i < 5; ++i) {
-			uint8_t dummy[13];
-			rtpHeader(dummy, t.payloadType, t.seq++, 0, t.ssrc, false);
-			dummy[12] = 0;
-			send(cfg_.udpFd, dummy, 13, 0);
-			std::this_thread::sleep_for(std::chrono::milliseconds(20));
+		for (auto& t : tracks_) {
+			for (int i = 0; i < 5; ++i) {
+				uint8_t dummy[13];
+				rtpHeader(dummy, t.payloadType, t.seq++, 0, t.ssrc, false);
+				dummy[12] = 0;
+				send(cfg_.udpFd, dummy, 13, 0);
+				std::this_thread::sleep_for(std::chrono::milliseconds(20));
+			}
 		}
 	}
 
