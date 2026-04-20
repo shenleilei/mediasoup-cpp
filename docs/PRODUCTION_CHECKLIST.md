@@ -1,5 +1,9 @@
 # 上线 Checklist
 
+配套执行节奏与验收口径请先读：
+
+- [生产可用性落地计划（按周执行版）](./production-availability-execution-plan_cn.md)
+
 ## P0 — 上线前必须完成
 
 ### 基础设施
