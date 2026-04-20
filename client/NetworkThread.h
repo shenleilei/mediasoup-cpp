@@ -4,6 +4,7 @@
 
 #include "RtcpHandler.h"
 #include "ThreadTypes.h"
+#include "media/rtp/H264Packetizer.h"
 
 #include <arpa/inet.h>
 #include <sys/eventfd.h>
@@ -22,9 +23,9 @@
 #include <vector>
 
 // ═══════════════════════════════════════════════════════════
-// RTP packetizer (moved from main.cpp, now network-thread-local)
+// Shared H264 packetization now lives in common/media; this file still owns
+// the local RTP header helper used by non-H264 send paths.
 // ═══════════════════════════════════════════════════════════
-static constexpr int kMaxRtpPayload = 1200;
 
 inline void rtpHeader(uint8_t* buf, uint8_t pt, uint16_t seq, uint32_t ts, uint32_t ssrc, bool marker) {
 	buf[0] = 0x80;
@@ -175,50 +176,32 @@ private:
 	}
 
 	void sendH264(const uint8_t* data, int size, uint8_t pt, uint32_t ts, uint32_t ssrc, uint16_t& seq) {
-		// Parse NALUs from Annex-B stream
-		std::vector<std::pair<const uint8_t*, int>> nalus;
-		int i = 0;
-		while (i < size) {
-			int scLen = 0;
-			if (i + 3 <= size && data[i]==0 && data[i+1]==0 && data[i+2]==1) scLen = 3;
-			else if (i + 4 <= size && data[i]==0 && data[i+1]==0 && data[i+2]==0 && data[i+3]==1) scLen = 4;
-			if (scLen) { i += scLen; continue; }
-			int start = i;
-			i++;
-			while (i < size) {
-				if (i + 3 <= size && data[i]==0 && data[i+1]==0 && (data[i+2]==1 || (data[i+2]==0 && i+3<size && data[i+3]==1)))
-					break;
-				i++;
+		class NetworkPacingSink final : public mediasoup::media::rtp::H264PacketSink {
+		public:
+			NetworkPacingSink(NetworkThread* owner, uint32_t sinkSsrc)
+				: owner_(owner)
+				, ssrc_(sinkSsrc)
+			{
 			}
-			if (i - start > 0) nalus.push_back({data + start, i - start});
-		}
 
-		for (size_t n = 0; n < nalus.size(); n++) {
-			auto [nalu, nLen] = nalus[n];
-			bool last = (n == nalus.size() - 1);
-			if (nLen <= kMaxRtpPayload) {
-				uint8_t pkt[12 + 1400];
-				rtpHeader(pkt, pt, seq++, ts, ssrc, last);
-				memcpy(pkt + 12, nalu, nLen);
-				pacingEnqueue(pkt, 12 + nLen, ssrc);
-			} else {
-				uint8_t naluHdr = nalu[0];
-				int off = 1;
-				bool first = true;
-				while (off < nLen) {
-					int chunk = std::min(kMaxRtpPayload - 2, nLen - off);
-					bool end = (off + chunk >= nLen);
-					uint8_t pkt[12 + 2 + 1400];
-					rtpHeader(pkt, pt, seq++, ts, ssrc, end && last);
-					pkt[12] = (naluHdr & 0x60) | 28;
-					pkt[13] = (naluHdr & 0x1F) | (first ? 0x80 : 0) | (end ? 0x40 : 0);
-					memcpy(pkt + 14, nalu + off, chunk);
-					pacingEnqueue(pkt, 14 + chunk, ssrc);
-					off += chunk;
-					first = false;
-				}
+			void OnPacket(const uint8_t* packet, size_t packetLen) override {
+				owner_->pacingEnqueue(packet, packetLen, ssrc_);
 			}
-		}
+
+		private:
+			NetworkThread* owner_{nullptr};
+			uint32_t ssrc_{0};
+		};
+
+		NetworkPacingSink sink(this, ssrc);
+		mediasoup::media::rtp::H264Packetizer::PacketizeAnnexB(
+			data,
+			static_cast<size_t>(std::max(0, size)),
+			pt,
+			ts,
+			ssrc,
+			&seq,
+			&sink);
 	}
 
 	void sendOpus(const uint8_t* data, int size, uint8_t pt, uint32_t ts, uint32_t ssrc, uint16_t& seq) {

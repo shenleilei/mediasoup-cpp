@@ -8,6 +8,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 include(ResolveFFmpeg)
 include(MediasoupTargetHelpers)
+include(CommonMediaHelpers)
+include(CommonFfmpegAdapters)
 resolve_ffmpeg_include_dirs(MEDIASOUP_FFMPEG_INCLUDE_DIRS)
 message(STATUS "Using FFmpeg include dir: ${MEDIASOUP_FFMPEG_INCLUDE_DIRS}")
 
@@ -19,6 +21,7 @@ set(USOCKETS_DIR ${CMAKE_SOURCE_DIR}/third_party/uWebSockets/uSockets)
 set(IP2REGION_DIR ${CMAKE_SOURCE_DIR}/third_party/ip2region/binding/c)
 
 set(MEDIASOUP_BUILD_COMMON_INCLUDE_DIRS
+    ${CMAKE_SOURCE_DIR}/common
     ${CMAKE_SOURCE_DIR}/src
     ${FLATBUFFERS_INCLUDE}
     ${JSON_INCLUDE}
@@ -64,6 +67,7 @@ target_link_libraries(uSockets PUBLIC mediasoup_build_ssl_crypto)
 set(MEDIASOUP_LIBRARY_SOURCES
     src/Channel.cpp
     src/GeoDbResolver.cpp
+    src/Recorder.cpp
     src/Worker.cpp
     src/Transport.cpp
     src/WebRtcTransport.cpp
@@ -94,6 +98,18 @@ target_link_libraries(mediasoup_lib PUBLIC
     spdlog::spdlog
     uSockets
 )
+
+mediasoup_collect_common_media_sources(MEDIASOUP_COMMON_MEDIA_SOURCES ${CMAKE_SOURCE_DIR})
+add_library(mediasoup_common_media STATIC ${MEDIASOUP_COMMON_MEDIA_SOURCES})
+target_link_libraries(mediasoup_common_media PUBLIC mediasoup_build_common)
+
+mediasoup_collect_common_ffmpeg_sources(MEDIASOUP_COMMON_FFMPEG_SOURCES ${CMAKE_SOURCE_DIR})
+add_library(mediasoup_common_ffmpeg STATIC ${MEDIASOUP_COMMON_FFMPEG_SOURCES})
+target_link_libraries(mediasoup_common_ffmpeg PUBLIC mediasoup_build_common mediasoup_build_ffmpeg_extended)
+
+target_link_libraries(mediasoup_lib PUBLIC mediasoup_common_media mediasoup_common_ffmpeg)
+
+target_link_libraries(mediasoup_build_test_support INTERFACE mediasoup_common_media mediasoup_common_ffmpeg)
 
 add_library(ip2region STATIC ${IP2REGION_DIR}/xdb_searcher.c ${IP2REGION_DIR}/xdb_util.c)
 target_include_directories(ip2region PUBLIC ${IP2REGION_DIR})
@@ -147,8 +163,10 @@ if(BUILD_TESTS)
     )
 
     set(MEDIASOUP_UNIT_TEST_SOURCES
+        client/WsClient.cpp
         tests/test_geo_db_resolver.cpp
         tests/test_geo_router.cpp
+        tests/test_common_media.cpp
         tests/test_multinode.cpp
         tests/test_ortc.cpp
         tests/test_request_timeout.cpp
@@ -158,6 +176,7 @@ if(BUILD_TESTS)
         tests/test_stability.cpp
         tests/test_supported_capabilities.cpp
         tests/test_utils.cpp
+        tests/test_ws_client.cpp
         tests/test_worker_queue.cpp
     )
 
@@ -181,6 +200,7 @@ if(BUILD_TESTS)
         SOURCES tests/test_integration.cpp
         LINK_LIBRARIES
             mediasoup_build_test_support
+            mediasoup_lib
             mediasoup_build_pthread
             mediasoup_build_ffmpeg_core
             spdlog::spdlog
