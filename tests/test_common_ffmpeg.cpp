@@ -4,6 +4,7 @@
 #include "ffmpeg/BitstreamFilter.h"
 #include "ffmpeg/Decoder.h"
 #include "ffmpeg/Encoder.h"
+#include "ffmpeg/InputFormat.h"
 #include "ffmpeg/OutputFormat.h"
 
 extern "C" {
@@ -212,4 +213,153 @@ TEST(BitstreamFilterSharedTest, SendPacketReturnsFalseOnEagain)
 	auto packet = ffmpeg::MakePacket();
 	ASSERT_NE(packet, nullptr);
 	EXPECT_TRUE(filter.ReceivePacket(packet.get()));
+}
+
+TEST(InputFormatSharedTest, EmptyQueriesKeepSafeSentinelBehavior)
+{
+	ffmpeg::InputFormat input;
+	EXPECT_EQ(input.FindFirstStreamIndex(AVMEDIA_TYPE_VIDEO), -1);
+	EXPECT_EQ(input.StreamAt(0), nullptr);
+}
+
+TEST(InputFormatSharedTest, EmptyOperationalMethodsThrow)
+{
+	ffmpeg::InputFormat input;
+	auto packet = ffmpeg::MakePacket();
+	ASSERT_NE(packet, nullptr);
+
+	EXPECT_THROW(input.FindStreamInfo(), std::runtime_error);
+	EXPECT_THROW(input.ReadPacket(packet.get()), std::runtime_error);
+}
+
+TEST(InputFormatSharedTest, MovedFromOperationalMethodsThrow)
+{
+	ffmpeg::InputFormat original;
+	ffmpeg::InputFormat moved(std::move(original));
+	auto packet = ffmpeg::MakePacket();
+	ASSERT_NE(packet, nullptr);
+
+	EXPECT_THROW(original.FindStreamInfo(), std::runtime_error);
+	EXPECT_THROW(original.ReadPacket(packet.get()), std::runtime_error);
+	EXPECT_EQ(original.FindFirstStreamIndex(AVMEDIA_TYPE_AUDIO), -1);
+	EXPECT_EQ(original.StreamAt(0), nullptr);
+}
+
+TEST(OutputFormatSharedTest, EmptyOperationalMethodsThrow)
+{
+	ffmpeg::OutputFormat output;
+	auto packet = ffmpeg::MakePacket();
+	ASSERT_NE(packet, nullptr);
+
+	EXPECT_THROW(output.NewStream(), std::runtime_error);
+	EXPECT_THROW(output.OpenIo(), std::runtime_error);
+	EXPECT_THROW(output.WriteHeader(), std::runtime_error);
+	EXPECT_THROW(output.WriteInterleavedFrame(packet.get()), std::runtime_error);
+}
+
+TEST(OutputFormatSharedTest, MovedFromOperationalMethodsThrow)
+{
+	ffmpeg::OutputFormat original;
+	ffmpeg::OutputFormat moved(std::move(original));
+	auto packet = ffmpeg::MakePacket();
+	ASSERT_NE(packet, nullptr);
+
+	EXPECT_THROW(original.NewStream(), std::runtime_error);
+	EXPECT_THROW(original.OpenIo(), std::runtime_error);
+	EXPECT_THROW(original.WriteHeader(), std::runtime_error);
+	EXPECT_THROW(original.WriteInterleavedFrame(packet.get()), std::runtime_error);
+}
+
+TEST(DecoderSharedTest, EmptyMethodsThrow)
+{
+	ffmpeg::Decoder decoder;
+	auto packet = ffmpeg::MakePacket();
+	auto frame = ffmpeg::MakeFrame();
+	ASSERT_NE(packet, nullptr);
+	ASSERT_NE(frame, nullptr);
+
+	EXPECT_THROW(decoder.SendPacket(packet.get()), std::runtime_error);
+	EXPECT_THROW(decoder.ReceiveFrame(frame.get()), std::runtime_error);
+}
+
+TEST(DecoderSharedTest, MovedFromMethodsThrow)
+{
+	if (!HasMpeg4Encoder()) {
+		GTEST_SKIP() << "mpeg4 encoder unavailable";
+	}
+	auto parameters = std::unique_ptr<AVCodecParameters, CodecParametersDeleter>(
+		avcodec_parameters_alloc(),
+		CodecParametersDeleter{});
+	ASSERT_NE(parameters, nullptr);
+
+	const auto packets = EncodePackets(1, parameters.get());
+	ffmpeg::Decoder original = ffmpeg::Decoder::OpenFromParameters(parameters.get());
+	ffmpeg::Decoder moved(std::move(original));
+	EXPECT_NE(moved.get(), nullptr);
+
+	auto frame = ffmpeg::MakeFrame();
+	ASSERT_NE(frame, nullptr);
+
+	EXPECT_THROW(original.SendPacket(packets[0].get()), std::runtime_error);
+	EXPECT_THROW(original.ReceiveFrame(frame.get()), std::runtime_error);
+}
+
+TEST(EncoderSharedTest, EmptyMethodsThrow)
+{
+	ffmpeg::Encoder encoder;
+	auto frame = ffmpeg::MakeFrame();
+	auto packet = ffmpeg::MakePacket();
+	ASSERT_NE(frame, nullptr);
+	ASSERT_NE(packet, nullptr);
+
+	EXPECT_THROW(encoder.SendFrame(frame.get()), std::runtime_error);
+	EXPECT_THROW(encoder.ReceivePacket(packet.get()), std::runtime_error);
+}
+
+TEST(EncoderSharedTest, MovedFromMethodsThrow)
+{
+	if (!HasMpeg4Encoder()) {
+		GTEST_SKIP() << "mpeg4 encoder unavailable";
+	}
+	ffmpeg::Encoder original = MakeMpeg4Encoder();
+	ffmpeg::Encoder moved(std::move(original));
+	EXPECT_NE(moved.get(), nullptr);
+
+	auto frame = MakeYuv420Frame(16, 16, 0, 10);
+	auto packet = ffmpeg::MakePacket();
+	ASSERT_NE(packet, nullptr);
+
+	EXPECT_THROW(original.SendFrame(frame.get()), std::runtime_error);
+	EXPECT_THROW(original.ReceivePacket(packet.get()), std::runtime_error);
+}
+
+TEST(BitstreamFilterSharedTest, EmptyMethodsThrow)
+{
+	ffmpeg::BitstreamFilter filter;
+	auto packet = ffmpeg::MakePacket();
+	ASSERT_NE(packet, nullptr);
+
+	EXPECT_THROW(filter.SendPacket(packet.get()), std::runtime_error);
+	EXPECT_THROW(filter.ReceivePacket(packet.get()), std::runtime_error);
+}
+
+TEST(BitstreamFilterSharedTest, MovedFromMethodsThrow)
+{
+	auto params = std::unique_ptr<AVCodecParameters, CodecParametersDeleter>(
+		avcodec_parameters_alloc(),
+		CodecParametersDeleter{});
+	ASSERT_NE(params, nullptr);
+	params->codec_type = AVMEDIA_TYPE_VIDEO;
+	params->codec_id = AV_CODEC_ID_H264;
+
+	ffmpeg::BitstreamFilter original =
+		ffmpeg::BitstreamFilter::Create("null", params.get(), AVRational{1, 90000});
+	ffmpeg::BitstreamFilter moved(std::move(original));
+	EXPECT_NE(moved.get(), nullptr);
+
+	auto packet = ffmpeg::MakePacket();
+	ASSERT_NE(packet, nullptr);
+
+	EXPECT_THROW(original.SendPacket(packet.get()), std::runtime_error);
+	EXPECT_THROW(original.ReceivePacket(packet.get()), std::runtime_error);
 }
