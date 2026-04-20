@@ -427,6 +427,7 @@ export async function createCppClientHarness({
       '--listenIp=127.0.0.1',
       '--redisHost=0.0.0.0',
       '--redisPort=1',
+      '--noRedisRequired',
     ],
     {
       cwd: repoRoot,

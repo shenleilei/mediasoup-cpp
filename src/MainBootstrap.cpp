@@ -133,15 +133,16 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 		if (cfgFile.is_open()) {
 			try {
 				auto cfg = nlohmann::json::parse(cfgFile);
-				if (cfg.contains("port")) options.signalingPort = cfg["port"].get<int>();
-				if (cfg.contains("workers")) { int v = cfg["workers"].get<int>(); if (v > 0) options.numWorkers = v; }
-				if (cfg.contains("workerThreads")) { int v = cfg["workerThreads"].get<int>(); if (v > 0) options.numWorkerThreads = v; }
-				if (cfg.contains("workerBin")) options.workerBin = cfg["workerBin"].get<std::string>();
-				if (cfg.contains("listenIp")) options.listenIp = cfg["listenIp"].get<std::string>();
-				if (cfg.contains("announcedIp")) options.announcedIp = cfg["announcedIp"].get<std::string>();
-				if (cfg.contains("redisHost")) options.redisHost = cfg["redisHost"].get<std::string>();
-				if (cfg.contains("redisPort")) options.redisPort = cfg["redisPort"].get<int>();
-				if (cfg.contains("nodeId")) options.nodeId = cfg["nodeId"].get<std::string>();
+					if (cfg.contains("port")) options.signalingPort = cfg["port"].get<int>();
+					if (cfg.contains("workers")) { int v = cfg["workers"].get<int>(); if (v > 0) options.numWorkers = v; }
+					if (cfg.contains("workerThreads")) { int v = cfg["workerThreads"].get<int>(); if (v > 0) options.numWorkerThreads = v; }
+					if (cfg.contains("workerBin")) options.workerBin = cfg["workerBin"].get<std::string>();
+					if (cfg.contains("listenIp")) options.listenIp = cfg["listenIp"].get<std::string>();
+					if (cfg.contains("announcedIp")) options.announcedIp = cfg["announcedIp"].get<std::string>();
+					if (cfg.contains("redisHost")) options.redisHost = cfg["redisHost"].get<std::string>();
+					if (cfg.contains("redisPort")) options.redisPort = cfg["redisPort"].get<int>();
+					if (cfg.contains("redisRequired")) options.redisRequired = cfg["redisRequired"].get<bool>();
+					if (cfg.contains("nodeId")) options.nodeId = cfg["nodeId"].get<std::string>();
 				if (cfg.contains("nodeAddress")) options.nodeAddress = cfg["nodeAddress"].get<std::string>();
 				if (cfg.contains("recordDir")) options.recordDir = cfg["recordDir"].get<std::string>();
 				if (cfg.contains("maxRoutersPerWorker")) options.maxRoutersPerWorker = cfg["maxRoutersPerWorker"].get<int>();
@@ -188,15 +189,17 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 			return true;
 		};
 
-		if (trySetInt("--port=", options.signalingPort)) {}
-		else if (trySetInt("--workers=", options.numWorkers)) {}
-		else if (trySetInt("--workerThreads=", options.numWorkerThreads)) {}
-		else if (arg.find("--listenIp=") == 0) options.listenIp = arg.substr(11);
-		else if (arg.find("--announcedIp=") == 0) options.announcedIp = arg.substr(14);
-		else if (arg.find("--workerBin=") == 0) options.workerBin = arg.substr(12);
-		else if (arg.find("--redisHost=") == 0) options.redisHost = arg.substr(12);
-		else if (trySetInt("--redisPort=", options.redisPort)) {}
-		else if (arg.find("--nodeId=") == 0) options.nodeId = arg.substr(9);
+			if (trySetInt("--port=", options.signalingPort)) {}
+			else if (trySetInt("--workers=", options.numWorkers)) {}
+			else if (trySetInt("--workerThreads=", options.numWorkerThreads)) {}
+			else if (arg.find("--listenIp=") == 0) options.listenIp = arg.substr(11);
+			else if (arg.find("--announcedIp=") == 0) options.announcedIp = arg.substr(14);
+			else if (arg.find("--workerBin=") == 0) options.workerBin = arg.substr(12);
+			else if (arg.find("--redisHost=") == 0) options.redisHost = arg.substr(12);
+			else if (trySetInt("--redisPort=", options.redisPort)) {}
+			else if (arg == "--redisRequired") options.redisRequired = true;
+			else if (arg == "--noRedisRequired") options.redisRequired = false;
+			else if (arg.find("--nodeId=") == 0) options.nodeId = arg.substr(9);
 		else if (arg.find("--nodeAddress=") == 0) options.nodeAddress = arg.substr(14);
 		else if (arg.find("--recordDir=") == 0) options.recordDir = arg.substr(12);
 		else if (trySetInt("--maxRoutersPerWorker=", options.maxRoutersPerWorker)) {}
@@ -331,7 +334,15 @@ RuntimeServices CreateRuntimeServices(RuntimeOptions& options)
 			options.nodeId, options.nodeAddress, options.nodeLat, options.nodeLng,
 			options.nodeIsp, options.nodeCountry, options.countryIsolation);
 	} catch (const std::exception& e) {
-		spdlog::warn("Redis not available ({}), running in single-node mode", e.what());
+		if (options.redisRequired) {
+			services.startupError =
+				"Redis required but unavailable: " + std::string(e.what());
+			spdlog::error("{}", services.startupError);
+		} else {
+			spdlog::warn(
+				"Redis not available ({}), local-only mode explicitly enabled via redisRequired=false",
+				e.what());
+		}
 	}
 
 	return services;

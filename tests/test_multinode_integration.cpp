@@ -336,6 +336,8 @@ TEST_F(MultiNodeResolveTest, HealthEndpointReportsHealthy) {
 	EXPECT_TRUE(j["startupSucceeded"].get<bool>());
 	EXPECT_EQ(j["workers"].get<int>(), 1);
 	EXPECT_EQ(j["availableWorkerThreads"].get<int>(), 1);
+	EXPECT_TRUE(j["redisRequired"].get<bool>());
+	EXPECT_TRUE(j["redisReady"].get<bool>());
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -348,8 +350,51 @@ TEST_F(MultiNodeResolveTest, MetricsEndpointExportsHealthGauges) {
 	ASSERT_FALSE(body.empty());
 	EXPECT_NE(body.find("mediasoup_sfu_up 1"), std::string::npos);
 	EXPECT_NE(body.find("mediasoup_sfu_healthy 1"), std::string::npos);
+	EXPECT_NE(body.find("mediasoup_sfu_ready 1"), std::string::npos);
 	EXPECT_NE(body.find("mediasoup_sfu_has_available_workers 1"), std::string::npos);
 	EXPECT_NE(body.find("mediasoup_sfu_workers 1"), std::string::npos);
+}
+
+TEST_F(MultiNodeResolveTest, ReadyEndpointFailsWhenRedisBecomesUnavailable) {
+	startNodes({{14010, 10}});
+	std::string room = roomName("readyz_redis_down");
+
+	redisServer_.stop();
+
+	TestWsClient ws;
+	ASSERT_TRUE(ws.connect(HOST, 14010));
+	auto joinResp = ws.request("join", {
+		{"roomId", room}, {"peerId", "alice"},
+		{"displayName", "alice"}, {"rtpCapabilities", makeRtpCaps()}
+	});
+	ASSERT_FALSE(joinResp.value("ok", true));
+	EXPECT_EQ(joinResp.value("error", ""), "room registry unavailable");
+
+	int fd = socket(AF_INET, SOCK_STREAM, 0);
+	ASSERT_GE(fd, 0);
+	sockaddr_in addr{};
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(14010);
+	inet_pton(AF_INET, HOST.c_str(), &addr.sin_addr);
+	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
+	std::string req = "GET /readyz HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+	::send(fd, req.data(), req.size(), 0);
+	std::string response;
+	char buf[4096];
+	while (true) {
+		int n = ::recv(fd, buf, sizeof(buf), 0);
+		if (n <= 0) break;
+		response.append(buf, n);
+	}
+	::close(fd);
+
+	ASSERT_NE(response.find("503 Service Unavailable"), std::string::npos) << response;
+	auto hdrEnd = response.find("\r\n\r\n");
+	ASSERT_NE(hdrEnd, std::string::npos);
+	auto ready = json::parse(response.substr(hdrEnd + 4));
+	EXPECT_FALSE(ready["ok"].get<bool>());
+	EXPECT_TRUE(ready["redisRequired"].get<bool>());
+	EXPECT_FALSE(ready["redisReady"].get<bool>());
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -505,10 +550,10 @@ TEST_F(MultiNodeResolveTest, ResolveAndDirectConnect) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Test 9: Resolve failure (no Redis) — join still works on current node
+// Test 9: startup should fail when Redis is required but unavailable
 // ═══════════════════════════════════════════════════════════════
-TEST_F(MultiNodeResolveTest, ResolveFallbackWithoutRedis) {
-	// Start SFU without Redis (use bogus redis host so registry fails)
+TEST_F(MultiNodeResolveTest, StartupFailsWithoutRedisWhenRedisIsRequired) {
+	// Start SFU without Redis and without explicit opt-out.
 	std::string cmd = "./build/mediasoup-sfu --nodaemon"
 		" --port=14012 --workers=1 --workerBin=./mediasoup-worker"
 		" --announcedIp=127.0.0.1 --listenIp=127.0.0.1"
@@ -521,28 +566,10 @@ TEST_F(MultiNodeResolveTest, ResolveFallbackWithoutRedis) {
 	pid_t pid = atoi(buf);
 	ASSERT_GT(pid, 0);
 	nodes_.push_back({14012, pid, 0});
-	ASSERT_TRUE(waitForPort(14012));
-	usleep(500000);
+	EXPECT_FALSE(waitForPort(14012, 1500));
 
-	// /api/resolve should still return something (fallback to self)
-	std::string body = httpGet(HOST, 14012, "/api/resolve?roomId=" + roomName("nredis"));
-	ASSERT_FALSE(body.empty());
-	auto j = json::parse(body);
-	EXPECT_TRUE(j.contains("wsUrl"));
-	// Without Redis, wsUrl should be empty (single-node fallback) — frontend handles this
-	std::string wsUrl = j.value("wsUrl", "");
-	EXPECT_TRUE(wsUrl.empty() || wsUrl.find("ws://") == 0 || wsUrl.find("wss://") == 0)
-		<< "wsUrl should be empty or valid ws URL, got: " << wsUrl;
-
-	// Join should work regardless of resolve outcome
 	TestWsClient ws;
-	ASSERT_TRUE(ws.connect(HOST, 14012));
-	auto resp = ws.request("join", {
-		{"roomId", roomName("nredis")}, {"peerId", "p1"},
-		{"displayName", "p1"}, {"rtpCapabilities", makeRtpCaps()}
-	});
-	ASSERT_TRUE(resp.value("ok", false)) << "Join must succeed even without Redis";
-	ws.close();
+	EXPECT_FALSE(ws.connect(HOST, 14012));
 }
 
 // ═══════════════════════════════════════════════════════════════

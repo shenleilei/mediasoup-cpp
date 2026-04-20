@@ -58,7 +58,7 @@ protected:
 			" --workerBin=./mediasoup-worker"
 			" --announcedIp=127.0.0.1"
 			" --listenIp=127.0.0.1"
-			" --redisHost=0.0.0.0 --redisPort=1"
+			" --redisHost=0.0.0.0 --redisPort=1 --noRedisRequired"
 			" > /dev/null 2>&1 & echo $!";
 		FILE* fp = popen(cmd.c_str(), "r");
 		ASSERT_NE(fp, nullptr);
@@ -903,22 +903,8 @@ protected:
 		pclose(fp);
 		sfuPid_ = atoi(buf);
 		ASSERT_GT(sfuPid_, 0);
-
-		for (int i = 0; i < 50; ++i) {
-			usleep(100000);
-			int fd = socket(AF_INET, SOCK_STREAM, 0);
-			sockaddr_in addr{};
-			addr.sin_family = AF_INET;
-			addr.sin_port = htons(DEGRADE_PORT);
-			inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
-			if (::connect(fd, (sockaddr*)&addr, sizeof(addr)) == 0) {
-				::close(fd);
-				usleep(200000);
-				return;
-			}
-			::close(fd);
-		}
-		FAIL() << "SFU did not start";
+		EXPECT_FALSE(waitForTcpPortListening(DEGRADE_PORT, 20, 100000));
+		EXPECT_TRUE(waitForDirectChildExit(sfuPid_, 50, 100000));
 	}
 
 	void TearDown() override {
@@ -952,45 +938,16 @@ protected:
 	}
 };
 
-// /api/resolve should return a valid response even with Redis down
-TEST_F(RedisDegradeTest, ResolveWorksWithoutRedis) {
+TEST_F(RedisDegradeTest, StartupFailsWithoutRedisWhenRequired) {
 	int fd = socket(AF_INET, SOCK_STREAM, 0);
 	sockaddr_in addr{};
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(DEGRADE_PORT);
 	inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
-	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
-
-	std::string req = "GET /api/resolve?roomId=" + testRoom_ +
-		" HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
-	::send(fd, req.data(), req.size(), 0);
-
-	std::string response = recvHttp(fd);
+	EXPECT_NE(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
 	::close(fd);
-	ASSERT_FALSE(response.empty());
-
-	EXPECT_NE(response.find("200"), std::string::npos) << "Should return 200, got: " << response;
-	EXPECT_NE(response.find("wsUrl"), std::string::npos) << "Should contain wsUrl, got: " << response;
-}
-
-// Direct join should succeed locally even with Redis down
-TEST_F(RedisDegradeTest, JoinWorksWithoutRedis) {
 	TestWsClient ws;
-	ASSERT_TRUE(ws.connect("127.0.0.1", DEGRADE_PORT));
-
-	auto resp = ws.request("join", {
-		{"roomId", testRoom_}, {"peerId", "alice"},
-		{"displayName", "alice"}, {"rtpCapabilities", rtpCaps()}
-	});
-	ASSERT_TRUE(resp.value("ok", false))
-		<< "Join should succeed locally when Redis is down, got: " << resp.dump();
-
-	// Should also be able to create transport
-	auto transport = ws.request("createWebRtcTransport", {
-		{"producing", true}, {"consuming", false}
-	});
-	EXPECT_TRUE(transport.value("ok", false))
-		<< "createTransport should work after degraded join, got: " << transport.dump();
+	EXPECT_FALSE(ws.connect("127.0.0.1", DEGRADE_PORT));
 }
 
 // ═══════════════════════════════════════════════════════════════

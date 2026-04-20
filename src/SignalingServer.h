@@ -31,7 +31,8 @@ public:
 	SignalingServer(int port,
 		std::vector<std::unique_ptr<WorkerThread>>& workerThreads,
 		RoomRegistry* registry,
-		const std::string& recordDir = "");
+		const std::string& recordDir = "",
+		bool redisRequired = true);
 	~SignalingServer();
 	bool run(const std::function<void(bool)>& startupResult = {});
 	void stop();
@@ -41,16 +42,18 @@ private:
 	friend struct SignalingServerHttp;
 	friend struct SignalingServerWs;
 
-		struct RuntimeSnapshot {
-			size_t totalRooms = 0;
-			size_t totalWorkers = 0;
-			size_t totalMaxRooms = 0;
-			size_t availableWorkerThreads = 0;
-			size_t knownNodes = 0;
-			size_t dispatchRooms = 0;
+	struct RuntimeSnapshot {
+		size_t totalRooms = 0;
+		size_t totalWorkers = 0;
+		size_t totalMaxRooms = 0;
+		size_t availableWorkerThreads = 0;
+		size_t knownNodes = 0;
+		size_t dispatchRooms = 0;
 		uint64_t staleRequestDrops = 0;
 		uint64_t rejectedClientStats = 0;
 		bool registryEnabled = false;
+		bool redisRequired = true;
+		bool redisReady = false;
 		bool startupSucceeded = false;
 		bool shutdownRequested = false;
 		json workerQueues = json::array();
@@ -59,6 +62,7 @@ private:
 
 	RuntimeSnapshot collectRuntimeSnapshot() const;
 	bool isHealthy(const RuntimeSnapshot& snapshot) const;
+	bool isReady(const RuntimeSnapshot& snapshot) const;
 	std::string buildPrometheusMetrics(const RuntimeSnapshot& snapshot) const;
 
 	// Pick the WorkerThread for a given roomId.
@@ -79,6 +83,7 @@ private:
 	std::vector<std::unique_ptr<WorkerThread>>& workerThreads_;
 	RoomRegistry* registry_;
 	std::string recordDir_;
+	bool redisRequired_ = true;
 	bool running_ = false;
 
 	// Room → WorkerThread dispatch table (only accessed from main uWS thread, no lock needed)

@@ -27,8 +27,13 @@ namespace mediasoup {
 SignalingServer::SignalingServer(int port,
 	std::vector<std::unique_ptr<WorkerThread>>& workerThreads,
 	RoomRegistry* registry,
-	const std::string& recordDir)
-	: port_(port), workerThreads_(workerThreads), registry_(registry), recordDir_(recordDir)
+	const std::string& recordDir,
+	bool redisRequired)
+	: port_(port)
+	, workerThreads_(workerThreads)
+	, registry_(registry)
+	, recordDir_(recordDir)
+	, redisRequired_(redisRequired)
 {}
 
 SignalingServer::~SignalingServer() {

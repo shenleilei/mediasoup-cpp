@@ -659,16 +659,22 @@ subscriber 线程：
 
 ### 8.4 Redis 不可用时的降级
 
+默认运行契约下不再做隐式降级。
+
 如果 Redis 启动失败：
 
-- 主进程仍可继续运行
+- 启动直接失败
+- 进程不会继续对外提供默认多节点路由服务
+
+如果 Redis 在运行中失联：
+
+- `/readyz` 返回 `503`
+- 新的 `join` / `/api/resolve` 等 room-registry 依赖路径显式失败
+
+只有在显式设置 `redisRequired=false` 时：
+
 - `registry_ == nullptr`
-- 项目退化为单节点模式
-
-这意味着：
-
-- 本机内房间仍然能正常跑
-- 多节点重定向和全局路由不可用
+- 进程才允许进入 local-only 模式
 
 ## 9. QoS 与录制的侧链路
 
