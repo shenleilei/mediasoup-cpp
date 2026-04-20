@@ -16,6 +16,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { pruneTimestampedArchiveDirs } from './report_artifacts.mjs';
 
 const require = createRequire(import.meta.url);
 const esbuild = require('esbuild');
@@ -598,6 +599,7 @@ function archiveReport(report) {
     selectedCaseIds: selectedCases ? [...selectedCases] : 'all',
     sourceScript: 'tests/qos_harness/run_downlink_matrix.mjs',
   }, null, 2) + '\n');
+  pruneTimestampedArchiveDirs(archiveRoot);
 }
 
 async function runMatrix() {

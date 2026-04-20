@@ -58,15 +58,21 @@ export function backupLatestCppClientReportSet(repoRoot, runType, metadata = {})
         relativePath: reportPaths.matrixJsonRelativePath,
         kind: 'matrixJson',
         runType,
+        archiveRootRelativePath: CPP_CLIENT_REPORT_RELATIVE_PATHS.archiveRoot,
       },
       {
         path: reportPaths.caseMarkdownPath,
         relativePath: reportPaths.caseMarkdownRelativePath,
         kind: 'caseMarkdown',
         runType,
+        archiveRootRelativePath: CPP_CLIENT_REPORT_RELATIVE_PATHS.archiveRoot,
       },
     ],
-    { runType, ...metadata }
+    {
+      runType,
+      archiveRootRelativePath: CPP_CLIENT_REPORT_RELATIVE_PATHS.archiveRoot,
+      ...metadata,
+    }
   );
 }
 
@@ -83,6 +89,7 @@ export function archiveCurrentCppClientReportSet(
       generatedAt,
       runType,
       sourceScript,
+      archiveRootRelativePath: CPP_CLIENT_REPORT_RELATIVE_PATHS.archiveRoot,
     },
   ];
 
@@ -94,6 +101,7 @@ export function archiveCurrentCppClientReportSet(
       generatedAt,
       runType,
       sourceScript,
+      archiveRootRelativePath: CPP_CLIENT_REPORT_RELATIVE_PATHS.archiveRoot,
     });
   }
 
@@ -101,5 +109,6 @@ export function archiveCurrentCppClientReportSet(
     runType,
     selectedCaseIds,
     sourceScript,
+    archiveRootRelativePath: CPP_CLIENT_REPORT_RELATIVE_PATHS.archiveRoot,
   });
 }

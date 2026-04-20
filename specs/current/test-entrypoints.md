@@ -31,15 +31,23 @@
 - `scripts/nightly_full_regression.py run` is the repo-local nightly full-regression wrapper.
 - It SHALL delegate actual test execution to `scripts/run_all_tests.sh`.
 - It SHALL create a timestamped run directory under `artifacts/nightly-full-regression/`.
+- It SHALL retain only the most recent 100 timestamped nightly run directories under that artifact root.
 - It SHALL preserve the full raw log for each run.
 - It SHALL refresh the configured latest-log copy path after each run.
 - It SHALL snapshot the configured Markdown report attachments into the run directory.
+- It SHALL auto-record newly changed `docs/` paths from the nightly run in git.
+- It SHALL exclude `docs/` paths that were already dirty before the run started.
 - It SHALL render an email body that includes:
   - overall status
   - task pass rate when `docs/full-regression-test-results.md` is available
   - failed tasks
   - best-effort failed cases parsed from the raw log
 - It SHALL preserve local artifacts even when tests fail or email delivery fails.
+
+## Date-Based Report Archives
+
+- Date-based report archive roots created by the QoS report pipeline SHALL keep only the most recent 100 timestamped report directories.
+- Archive retention SHALL prune timestamped directories only and SHALL NOT treat helper symlinks such as `latest` as retention candidates.
 
 ## `scripts/install_nightly_full_regression_cron.sh`
 

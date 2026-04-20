@@ -1,6 +1,6 @@
 # Full Regression Test Results
 
-Generated at: `2026-04-19 23:01:14 CST`
+Generated at: `2026-04-20 05:04:58 CST`
 
 ## Summary
 
@@ -16,7 +16,7 @@ Generated at: `2026-04-19 23:01:14 CST`
 
 | Task | Group | Duration |
 |---|---|---|
-| `qos:qos-regression` | `qos` | `7329s` |
+| `qos:qos-regression` | `qos` | `7328s` |
 
 ## Task Results
 
@@ -26,7 +26,7 @@ Generated at: `2026-04-19 23:01:14 CST`
 | `integration:mediasoup_integration_tests` | `integration` | `PASS` | `17s` |
 | `integration:mediasoup_e2e_tests` | `integration` | `PASS` | `5s` |
 | `integration:mediasoup_stability_integration_tests` | `integration` | `PASS` | `5s` |
-| `integration:mediasoup_review_fix_tests` | `integration` | `PASS` | `46s` |
-| `qos:qos-regression` | `qos` | `FAIL` | `7329s` |
-| `topology:mediasoup_topology_tests` | `topology` | `PASS` | `12s` |
+| `integration:mediasoup_review_fix_tests` | `integration` | `PASS` | `45s` |
+| `qos:qos-regression` | `qos` | `FAIL` | `7328s` |
+| `topology:mediasoup_topology_tests` | `topology` | `PASS` | `13s` |
 | `topology:mediasoup_multinode_tests` | `topology` | `PASS` | `39s` |

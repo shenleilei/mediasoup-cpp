@@ -8,6 +8,7 @@ export const REPORT_RELATIVE_PATHS = {
   targetedMatrixJson: 'docs/generated/uplink-qos-matrix-report.targeted.json',
   targetedCaseMarkdown: 'docs/generated/uplink-qos-case-results.targeted.md',
 };
+export const MAX_ARCHIVED_REPORT_RUNS = 100;
 
 function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
@@ -42,6 +43,43 @@ function pushUnique(items, value) {
 
 export function sanitizeArchiveTimestamp(timestamp) {
   return String(timestamp).replace(/:/g, '-');
+}
+
+function isTimestampedArchiveDir(dirent) {
+  return (
+    dirent?.isDirectory?.() &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}[-:]\d{2}[-:]\d{2}/.test(dirent.name)
+  );
+}
+
+function listTimestampedArchiveDirs(archiveRootPath) {
+  if (!fs.existsSync(archiveRootPath)) {
+    return [];
+  }
+
+  return fs
+    .readdirSync(archiveRootPath, { withFileTypes: true })
+    .filter(isTimestampedArchiveDir)
+    .map(dirent => dirent.name)
+    .sort();
+}
+
+export function pruneTimestampedArchiveDirs(
+  archiveRootPath,
+  maxRuns = MAX_ARCHIVED_REPORT_RUNS
+) {
+  if (!Number.isFinite(maxRuns) || maxRuns < 1) {
+    return [];
+  }
+
+  const dirs = listTimestampedArchiveDirs(archiveRootPath);
+  const toDelete = dirs.slice(0, Math.max(0, dirs.length - maxRuns));
+
+  for (const name of toDelete) {
+    fs.rmSync(path.join(archiveRootPath, name), { recursive: true, force: true });
+  }
+
+  return toDelete;
 }
 
 export function getRunTypeForSelectedCases(selectedCases) {
@@ -84,10 +122,14 @@ export function readArtifactGeneratedAt(filePath) {
   return null;
 }
 
-export function getArchiveDir(repoRoot, generatedAt) {
+export function getArchiveDir(
+  repoRoot,
+  generatedAt,
+  archiveRootRelativePath = REPORT_RELATIVE_PATHS.archiveRoot
+) {
   return path.join(
     repoRoot,
-    REPORT_RELATIVE_PATHS.archiveRoot,
+    archiveRootRelativePath,
     sanitizeArchiveTimestamp(generatedAt)
   );
 }
@@ -102,6 +144,7 @@ function loadArchiveMetadata(metadataPath) {
 
 export function archiveKnownArtifacts(repoRoot, artifacts, metadata = {}) {
   const groupedArtifacts = new Map();
+  const archiveRootsToPrune = new Set();
 
   for (const artifact of artifacts) {
     if (!artifact?.path || !artifact?.relativePath) {
@@ -124,7 +167,11 @@ export function archiveKnownArtifacts(repoRoot, artifacts, metadata = {}) {
   const archived = [];
 
   for (const [generatedAt, group] of groupedArtifacts.entries()) {
-    const archiveDir = getArchiveDir(repoRoot, generatedAt);
+    const archiveRootRelativePath =
+      group[0]?.archiveRootRelativePath ??
+      metadata.archiveRootRelativePath ??
+      REPORT_RELATIVE_PATHS.archiveRoot;
+    const archiveDir = getArchiveDir(repoRoot, generatedAt, archiveRootRelativePath);
     const metadataPath = path.join(archiveDir, 'metadata.json');
     const archiveMetadata = loadArchiveMetadata(metadataPath);
     const nextMetadata = {
@@ -160,6 +207,11 @@ export function archiveKnownArtifacts(repoRoot, artifacts, metadata = {}) {
 
     fs.writeFileSync(metadataPath, `${JSON.stringify(nextMetadata, null, 2)}\n`);
     archived.push({ generatedAt, archiveDir });
+    archiveRootsToPrune.add(path.join(repoRoot, archiveRootRelativePath));
+  }
+
+  for (const archiveRootPath of archiveRootsToPrune) {
+    pruneTimestampedArchiveDirs(archiveRootPath);
   }
 
   return archived;
