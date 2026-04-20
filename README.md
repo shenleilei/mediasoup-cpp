@@ -4,6 +4,14 @@ A C++17 SFU control plane built around the upstream `mediasoup-worker`.
 
 This project replaces mediasoup's usual Node.js control layer with a native C++ server while still relying on the battle-tested `mediasoup-worker` process for media handling. The result is a C++-native signaling stack with room/session management, multi-node room routing, recording, and QoS aggregation.
 
+## Start Here
+
+New to this project? Start here:
+
+- [docs/GETTING_STARTED.md](./docs/GETTING_STARTED.md)
+- [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md)
+- [docs/dependencies_cn.md](./docs/dependencies_cn.md)
+
 ## Live Demo
 
 Try it now: **http://47.99.237.234:3000**
@@ -480,6 +488,10 @@ Recorder responsibilities include:
 - QoS timeline sidecar output
 
 ## Quick Start
+
+First-time setup shortcut:
+
+- [docs/GETTING_STARTED.md](./docs/GETTING_STARTED.md)
 
 ### Prerequisites
 
