@@ -5,18 +5,6 @@
 
 namespace mediasoup {
 
-void RoomService::heartbeatRegistry()
-{
-	if (!registry_) return;
-	registry_->heartbeat();
-	auto roomIds = roomManager_.getRoomIds();
-	if (!roomIds.empty())
-		registry_->refreshRooms(roomIds);
-	registry_->updateLoad(
-		roomManager_.roomCount(),
-		roomManager_.workerManager().maxTotalRouters());
-}
-
 json RoomService::resolveRoom(const std::string& roomId, const std::string& clientIp)
 {
 	if (!registry_) return {{"wsUrl", ""}, {"isNew", true}};

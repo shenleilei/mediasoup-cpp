@@ -28,9 +28,13 @@ Encoder Encoder::Create(AVCodecID codecId, ConfigureFn configure)
 	return Encoder(std::move(context));
 }
 
-void Encoder::SendFrame(const AVFrame* frame)
+bool Encoder::SendFrame(const AVFrame* frame)
 {
-	CheckError(avcodec_send_frame(context_.get(), frame), "avcodec_send_frame");
+	const int err = avcodec_send_frame(context_.get(), frame);
+	if (err >= 0) return true;
+	if (err == AVERROR(EAGAIN)) return false;
+	CheckError(err, "avcodec_send_frame");
+	return false;
 }
 
 bool Encoder::ReceivePacket(AVPacket* packet)

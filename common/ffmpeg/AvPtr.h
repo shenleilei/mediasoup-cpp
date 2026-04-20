@@ -62,7 +62,8 @@ inline CodecContextPtr MakeCodecContext(const AVCodec* codec)
 inline BitstreamFilterContextPtr MakeBitstreamFilterContext(const AVBitStreamFilter* filter)
 {
 	AVBSFContext* context = nullptr;
-	if (filter) av_bsf_alloc(filter, &context);
+	if (filter)
+		CheckError(av_bsf_alloc(filter, &context), "av_bsf_alloc");
 	return BitstreamFilterContextPtr(context);
 }
 

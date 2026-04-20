@@ -21,7 +21,7 @@ public:
 	explicit BitstreamFilter(BitstreamFilterContextPtr context);
 
 	AVBSFContext* get() const { return context_.get(); }
-	void SendPacket(AVPacket* packet);
+	bool SendPacket(AVPacket* packet);
 	bool ReceivePacket(AVPacket* packet);
 
 private:

@@ -7,16 +7,6 @@
 namespace mediasoup {
 namespace {
 
-json BuildStatsStoreResponseData(bool stored, std::string reason = "")
-{
-	json data = {
-		{"stored", stored}
-	};
-	if (!reason.empty())
-		data["reason"] = std::move(reason);
-	return data;
-}
-
 std::string SummarizePeerQosAggregate(const qos::PeerQosAggregate& aggregate)
 {
 	std::ostringstream summary;
@@ -80,7 +70,7 @@ RoomService::Result RoomService::setClientStats(
 	std::string rejectReason;
 	if (!qosRegistry_.Upsert(roomId, peerId, stats, qos::NowMs(), &rejectReason)) {
 		MS_DEBUG(logger_, "[{} {}] dropped QoS clientStats [{}]", roomId, peerId, rejectReason);
-		return {true, BuildStatsStoreResponseData(false, rejectReason), "", ""};
+		return {true, roomstatsqos::BuildStatsStoreResponseData(false, rejectReason), "", ""};
 	}
 
 	auto qosEntry = qosRegistry_.Get(roomId, peerId);
@@ -92,7 +82,7 @@ RoomService::Result RoomService::setClientStats(
 	maybeSendAutomaticQosOverride(roomId, peerId, aggregate);
 	maybeBroadcastRoomQosState(roomId);
 	cleanupExpiredQosOverrides();
-	return {true, BuildStatsStoreResponseData(true), "", ""};
+	return {true, roomstatsqos::BuildStatsStoreResponseData(true), "", ""};
 }
 
 void RoomService::maybeSendAutomaticQosOverride(

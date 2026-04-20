@@ -2,6 +2,7 @@
 
 #include "ffmpeg/AvError.h"
 
+#include <cstdio>
 #include <stdexcept>
 
 namespace mediasoup::ffmpeg {
@@ -94,12 +95,22 @@ void OutputFormat::WriteInterleavedFrame(AVPacket* packet)
 void OutputFormat::Close()
 {
 	if (!ctx_) return;
+	if (headerWritten_) {
+		const int err = av_write_trailer(ctx_);
+		if (err < 0) {
+			std::fprintf(
+				stderr,
+				"OutputFormat::Close av_write_trailer(%s) failed: %s\n",
+				outputPath_.c_str(),
+				ErrorToString(err).c_str());
+		}
+		headerWritten_ = false;
+	}
 	if (ioOpened_ && ctx_->pb)
 		avio_closep(&ctx_->pb);
 	avformat_free_context(ctx_);
 	ctx_ = nullptr;
 	ioOpened_ = false;
-	headerWritten_ = false;
 }
 
 } // namespace mediasoup::ffmpeg

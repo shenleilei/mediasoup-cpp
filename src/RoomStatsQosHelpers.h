@@ -10,6 +10,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 namespace mediasoup::roomstatsqos {
 
@@ -21,6 +22,16 @@ inline std::string MakePeerKey(const std::string& roomId, const std::string& pee
 inline std::string MakeRoomPressureKey(const std::string& roomId, const std::string& peerId)
 {
 	return MakePeerKey(roomId, peerId) + "#room";
+}
+
+template<typename OverrideMap>
+inline void ClearPeerAutomaticOverrideRecords(
+	OverrideMap& records,
+	const std::string& roomId,
+	const std::string& peerId)
+{
+	records.erase(MakePeerKey(roomId, peerId));
+	records.erase(MakeRoomPressureKey(roomId, peerId));
 }
 
 inline std::string MakeTrackOverrideKey(
@@ -46,6 +57,16 @@ inline json BuildDefaultQosPolicy()
 			{"audio", "speech-first"}
 		}}
 	};
+}
+
+inline json BuildStatsStoreResponseData(bool stored, std::string reason = "")
+{
+	json data = {
+		{"stored", stored}
+	};
+	if (!reason.empty())
+		data["reason"] = std::move(reason);
+	return data;
 }
 
 inline json BuildPeerOverrideClearPayload(const std::string& reason)

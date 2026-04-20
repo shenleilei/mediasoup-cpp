@@ -88,6 +88,10 @@ private:
 	std::vector<std::string> scanKeys(const char* pattern);
 	void syncNodesUnlocked();
 	void syncAllUnlocked();
+	bool refreshCachedRemoteRoomAddressUnlocked(
+		const std::string& roomId,
+		const std::string& cachedAddress,
+		std::string* refreshedAddress);
 	std::string findBestNodeCached(const std::string& clientIp);
 	bool hasRemoteNodeCached() const;
 

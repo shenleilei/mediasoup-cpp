@@ -9,6 +9,7 @@
 #include "RoomRegistryReplyUtils.h"
 #include "RuntimeOptionParsers.h"
 #include "RoomRegistrySelection.h"
+#include "RoomStatsQosHelpers.h"
 #include "response_generated.h"
 #include "StaticFileResponder.h"
 #include "../client/RtcpHandler.h"
@@ -383,6 +384,30 @@ TEST(RoomRegistryReplyUtilsTest, CopiesTextReplyUsingDeclaredLength) {
 	std::string out;
 	ASSERT_TRUE(redisreply::GetTextElement(&arrayReply, 0, out));
 	EXPECT_EQ(out, "message");
+}
+
+TEST(RoomStatsQosHelpersTest, ClearPeerAutomaticOverrideRecordsRemovesPeerAndRoomPressureKeys) {
+	std::unordered_map<std::string, int> records = {
+		{roomstatsqos::MakePeerKey("room", "alice"), 1},
+		{roomstatsqos::MakeRoomPressureKey("room", "alice"), 2},
+		{roomstatsqos::MakePeerKey("room", "bob"), 3}
+	};
+
+	roomstatsqos::ClearPeerAutomaticOverrideRecords(records, "room", "alice");
+
+	EXPECT_EQ(records.count(roomstatsqos::MakePeerKey("room", "alice")), 0u);
+	EXPECT_EQ(records.count(roomstatsqos::MakeRoomPressureKey("room", "alice")), 0u);
+	EXPECT_EQ(records.count(roomstatsqos::MakePeerKey("room", "bob")), 1u);
+}
+
+TEST(RoomStatsQosHelpersTest, BuildStatsStoreResponseDataIncludesReasonOnlyWhenPresent) {
+	const auto stored = roomstatsqos::BuildStatsStoreResponseData(true);
+	EXPECT_TRUE(stored.value("stored", false));
+	EXPECT_FALSE(stored.contains("reason"));
+
+	const auto rejected = roomstatsqos::BuildStatsStoreResponseData(false, "stale-seq");
+	EXPECT_FALSE(rejected.value("stored", true));
+	EXPECT_EQ(rejected.value("reason", ""), "stale-seq");
 }
 
 TEST(StaticFileResponderTest, MatchesOnlyRealSuffixes) {

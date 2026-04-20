@@ -31,9 +31,13 @@ BitstreamFilter BitstreamFilter::Create(
 	return BitstreamFilter(std::move(context));
 }
 
-void BitstreamFilter::SendPacket(AVPacket* packet)
+bool BitstreamFilter::SendPacket(AVPacket* packet)
 {
-	CheckError(av_bsf_send_packet(context_.get(), packet), "av_bsf_send_packet");
+	const int err = av_bsf_send_packet(context_.get(), packet);
+	if (err >= 0) return true;
+	if (err == AVERROR(EAGAIN)) return false;
+	CheckError(err, "av_bsf_send_packet");
+	return false;
 }
 
 bool BitstreamFilter::ReceivePacket(AVPacket* packet)
