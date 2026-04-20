@@ -81,6 +81,5 @@
 
 ## 6. 与现有文档关系
 
-- 上线检查项：`/home/runner/work/mediasoup-cpp/mediasoup-cpp/docs/PRODUCTION_CHECKLIST.md`
-- 监控与告警实施：`/home/runner/work/mediasoup-cpp/mediasoup-cpp/docs/MONITORING_RUNBOOK.md`
-
+- 上线检查项：`./PRODUCTION_CHECKLIST.md`
+- 监控与告警实施：`./MONITORING_RUNBOOK.md`
