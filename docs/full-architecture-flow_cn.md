@@ -268,7 +268,8 @@ Redis Key 设计:
 - `sfu:room:{roomId}` → `nodeId` (TTL, Lua EVAL 原子抢占: SET NX + 死节点接管)
 - Pub/Sub: `sfu:ch:nodes`, `sfu:ch:rooms` 实时同步本地缓存
 - 每个节点维护 nodeCache_ / roomCache_ 内存缓存，resolveRoom 优先查缓存，miss 才走 Redis
-- Redis 不可用时退化为单节点模式：`registry_ == nullptr`，房间仍可在本机运行，但没有跨节点 redirect / resolve
+- 默认运行契约下，Redis 是 readiness 强依赖：Redis 不可用时启动失败，运行中 `/readyz` 变为 `503`
+- 只有显式配置 `redisRequired=false` 时才允许 `registry_ == nullptr` 的 local-only 模式；该模式不属于默认多节点路由契约
 
 ## 8. Linux PlainTransport C++ client 与 PlainTransport 发布路径
 

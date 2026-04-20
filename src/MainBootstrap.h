@@ -21,6 +21,7 @@ struct RuntimeOptions {
 	std::string workerBin;
 	std::string redisHost{ "127.0.0.1" };
 	int redisPort{ 6379 };
+	bool redisRequired{ true };
 	std::string nodeId;
 	std::string nodeAddress;
 	std::string recordDir{ "./recordings" };
@@ -47,6 +48,7 @@ struct RuntimeOptions {
 struct RuntimeServices {
 	std::unique_ptr<GeoRouter> geoRouter;
 	std::unique_ptr<RoomRegistry> registry;
+	std::string startupError;
 };
 
 RuntimeOptions LoadRuntimeOptions(int argc, char* argv[]);

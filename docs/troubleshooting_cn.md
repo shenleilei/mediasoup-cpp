@@ -413,13 +413,13 @@ env PLAIN_CLIENT_VIDEO_TRACK_COUNT=3 \
 
 ### 8.3 Redis 不可用时的表现
 
-系统会降级成单节点：
+默认运行契约下，Redis 不可用不会再隐式降级成单节点：
 
-- 本机房间仍可跑
-- `/api/resolve` 会退化
-- 多节点 redirect / room takeover 会失效
+- 启动阶段：进程直接启动失败
+- 运行阶段：`/readyz` 返回 `503`
+- 新的 `/api/resolve` / `join` 等依赖 room-registry 的路径会显式失败
 
-所以“Redis 故障”不一定表现为服务完全不可用，更常见的是“跨节点行为错了”。
+只有显式使用 `redisRequired=false` 时，才允许 local-only 模式继续运行。
 
 ### 8.4 subscriber 忙循环
 

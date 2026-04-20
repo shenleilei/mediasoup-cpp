@@ -14,8 +14,8 @@ json RoomService::resolveRoom(const std::string& roomId, const std::string& clie
 			return {{"error", "no available nodes"}, {"wsUrl", ""}, {"isNew", true}};
 		return {{"wsUrl", result.wsUrl}, {"isNew", result.isNew}};
 	} catch (const std::exception& e) {
-		MS_WARN(logger_, "resolveRoom failed ({}), degrading to local", e.what());
-		return {{"wsUrl", ""}, {"isNew", true}};
+		MS_WARN(logger_, "resolveRoom failed ({}), returning registry unavailable", e.what());
+		return {{"error", "room registry unavailable"}, {"wsUrl", ""}, {"isNew", false}};
 	}
 }
 

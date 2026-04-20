@@ -137,6 +137,7 @@ public:
 			"--listenIp=127.0.0.1",
 			"--redisHost=0.0.0.0",
 			"--redisPort=1",
+			"--noRedisRequired",
 		};
 		args.insert(args.end(), extraArgs.begin(), extraArgs.end());
 

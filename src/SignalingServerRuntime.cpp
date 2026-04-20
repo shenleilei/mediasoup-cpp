@@ -13,6 +13,8 @@ namespace mediasoup {
 SignalingServer::RuntimeSnapshot SignalingServer::collectRuntimeSnapshot() const {
 	RuntimeSnapshot snapshot;
 	snapshot.registryEnabled = (registry_ != nullptr);
+	snapshot.redisRequired = redisRequired_;
+	snapshot.redisReady = registry_ ? registry_->isReady() : false;
 	if (registry_) snapshot.knownNodes = registry_->knownNodeCount();
 	snapshot.startupSucceeded = startupSucceeded_.load(std::memory_order_relaxed);
 	snapshot.shutdownRequested = g_shutdown.load(std::memory_order_relaxed);
@@ -50,6 +52,11 @@ bool SignalingServer::isHealthy(const RuntimeSnapshot& snapshot) const {
 		snapshot.availableWorkerThreads > 0;
 }
 
+bool SignalingServer::isReady(const RuntimeSnapshot& snapshot) const {
+	return isHealthy(snapshot) &&
+		(!snapshot.redisRequired || snapshot.redisReady);
+}
+
 std::string SignalingServer::buildPrometheusMetrics(const RuntimeSnapshot& snapshot) const {
 	std::ostringstream out;
 	auto writeMetric = [&out](const char* name, const char* help, double value) {
@@ -65,8 +72,11 @@ std::string SignalingServer::buildPrometheusMetrics(const RuntimeSnapshot& snaps
 
 	writeMetric("mediasoup_sfu_up", "Whether the signaling server finished startup successfully", snapshot.startupSucceeded ? 1 : 0);
 	writeMetric("mediasoup_sfu_healthy", "Whether the signaling server currently has capacity to serve traffic", isHealthy(snapshot) ? 1 : 0);
+	writeMetric("mediasoup_sfu_ready", "Whether the signaling server currently passes readiness checks", isReady(snapshot) ? 1 : 0);
 	writeMetric("mediasoup_sfu_shutdown_requested", "Whether shutdown has been requested", snapshot.shutdownRequested ? 1 : 0);
 	writeMetric("mediasoup_sfu_registry_enabled", "Whether Redis-backed registry is enabled", snapshot.registryEnabled ? 1 : 0);
+	writeMetric("mediasoup_sfu_redis_required", "Whether Redis is required for readiness", snapshot.redisRequired ? 1 : 0);
+	writeMetric("mediasoup_sfu_redis_ready", "Whether Redis-backed room registry is currently ready", snapshot.redisReady ? 1 : 0);
 	writeMetric("mediasoup_sfu_workers", "Total mediasoup worker processes currently attached", static_cast<double>(snapshot.totalWorkers));
 	writeMetric("mediasoup_sfu_worker_threads", "Configured worker thread count", static_cast<double>(workerThreads_.size()));
 	writeMetric("mediasoup_sfu_available_worker_threads", "Worker threads that still have at least one worker", static_cast<double>(snapshot.availableWorkerThreads));

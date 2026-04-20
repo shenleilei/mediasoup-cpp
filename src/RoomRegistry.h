@@ -46,6 +46,7 @@ public:
 	std::string claimRoom(const std::string& roomId, const std::string& clientIp = "");
 	void refreshRoom(const std::string& roomId);
 	void unregisterRoom(const std::string& roomId);
+	bool isReady();
 
 	const std::string& nodeId() const { return nodeId_; }
 	const std::string& nodeAddress() const { return nodeAddress_; }

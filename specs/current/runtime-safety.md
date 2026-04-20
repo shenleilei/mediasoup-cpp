@@ -26,6 +26,12 @@
 
 - Normal `/api/resolve` and room-registry maintenance tracing SHALL log below warning level; warning logs are reserved for failures, degradation, or anomalous states.
 
+## Runtime Readiness
+
+- Redis-backed room registry SHALL be treated as a readiness dependency by default.
+- When Redis is required and unavailable during startup, the process SHALL fail startup instead of silently entering local-only routing.
+- When Redis is required and becomes unavailable at runtime, `/readyz` SHALL return `503` and new routing-dependent requests SHALL fail explicitly instead of degrading to local-only behavior.
+
 ## RTP And Capability Correctness
 
 - `repaired-rtp-stream-id` header extensions SHALL map to the repair-stream URI enum rather than the plain stream-id enum.

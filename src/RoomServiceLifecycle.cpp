@@ -15,7 +15,8 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 			std::string addr = registry_->claimRoom(roomId, clientIp);
 			if (!addr.empty()) return {false, {}, addr, ""};
 		} catch (const std::exception& e) {
-			MS_WARN(logger_, "[{} {}] claimRoom failed ({}), degrading to local", roomId, peerId, e.what());
+			MS_WARN(logger_, "[{} {}] claimRoom failed ({}), rejecting join", roomId, peerId, e.what());
+			return {false, {}, "", "room registry unavailable"};
 		}
 	}
 

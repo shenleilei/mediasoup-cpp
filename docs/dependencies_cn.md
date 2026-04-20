@@ -172,7 +172,14 @@ Redis 在运行时的定位是：
 - room / node cache 同步
 - pub/sub 通知
 
-单节点本地调试时可以不启动 Redis，但：
+- 默认运行契约下，Redis 是 readiness 强依赖：
+
+- Redis 不可用时，启动不会成功
+- Redis 在运行中失联时，`/readyz` 会失败
+
+如果确实需要本地 isolated 调试，必须显式配置 `redisRequired=false`，而不是依赖隐式降级。
+
+- 无论是否启用 local-only：
 
 - 构建时仍需要 `hiredis`
 - 多节点测试和生产路由依赖 Redis

@@ -48,6 +48,12 @@ size_t RoomRegistry::knownNodeCount() const
 	return cache_.knownNodeCount();
 }
 
+bool RoomRegistry::isReady()
+{
+	std::lock_guard<std::mutex> lock(command_.mutex);
+	return command_.connected();
+}
+
 void RoomRegistry::heartbeat()
 {
 	auto start = std::chrono::steady_clock::now();
@@ -139,6 +145,12 @@ RoomRegistry::ResolveResult RoomRegistry::resolveRoom(
 {
 	auto start = std::chrono::steady_clock::now();
 	MS_DEBUG(logger_, "resolveRoom start [roomId:{} clientIp:{}]", roomId, clientIp);
+	{
+		std::lock_guard<std::mutex> lock(command_.mutex);
+		if (!ensureConnected()) {
+			throw std::runtime_error("redis unavailable during resolveRoom");
+		}
+	}
 	{
 		if (auto cachedAddress = cache_.roomAddress(roomId); cachedAddress.has_value()) {
 			MS_DEBUG(logger_, "resolveRoom cache hit [roomId:{} wsUrl:{} totalMs:{}]",
@@ -233,13 +245,17 @@ RoomRegistry::ResolveResult RoomRegistry::resolveRoom(
 
 std::string RoomRegistry::claimRoom(const std::string& roomId, const std::string& clientIp)
 {
+	std::lock_guard<std::mutex> lock(command_.mutex);
+	if (!ensureConnected()) {
+		throw std::runtime_error("redis unavailable during claimRoom");
+	}
+
 	const auto cachedAddress = cache_.roomAddress(roomId);
 	if (cachedAddress.has_value() && *cachedAddress == nodeAddress_) {
 		return "";
 	}
 
 	std::string roomKey = std::string(kKeyPrefixRoom) + roomId;
-	std::lock_guard<std::mutex> lock(command_.mutex);
 	if (cachedAddress.has_value()) {
 		std::string refreshedAddress;
 		if (refreshCachedRemoteRoomAddressUnlocked(roomId, *cachedAddress, &refreshedAddress)) {
@@ -255,11 +271,6 @@ std::string RoomRegistry::claimRoom(const std::string& roomId, const std::string
 			*cachedAddress);
 		cache_.eraseRoom(roomId);
 	}
-	if (!ensureConnected()) {
-		MS_WARN(logger_, "Redis unavailable, degrading to local-only for room {}", roomId);
-		return "";
-	}
-
 	static const char* luaScript = R"LUA(
 		local ok = redis.call('SET', KEYS[1], ARGV[1], 'NX', 'EX', ARGV[2])
 		if ok then return '' end
@@ -287,8 +298,7 @@ std::string RoomRegistry::claimRoom(const std::string& roomId, const std::string
 
 	if (!reply) {
 		handleDisconnect();
-		MS_WARN(logger_, "Redis EVAL failed for room {}, degrading to local-only", roomId);
-		return "";
+		throw std::runtime_error("redis unavailable during claimRoom eval");
 	}
 
 	std::string result;
@@ -324,13 +334,10 @@ std::string RoomRegistry::claimRoom(const std::string& roomId, const std::string
 			cache_.upsertRoom(roomId, info.address);
 			return info.address;
 		}
-		MS_WARN(logger_, "Owner node value unparseable for room {}, degrading to local-only", roomId);
-		return "";
+		throw std::runtime_error("owner node value unparseable during claimRoom");
 	}
 
-	MS_WARN(logger_, "Unexpected claimRoom result for room {}: {}, degrading to local-only",
-		roomId, result);
-	return "";
+	throw std::runtime_error("unexpected claimRoom result: " + result);
 }
 
 bool RoomRegistry::refreshCachedRemoteRoomAddressUnlocked(
