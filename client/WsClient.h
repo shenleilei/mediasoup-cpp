@@ -17,6 +17,8 @@ using json = nlohmann::json;
 
 class WsClient {
 public:
+	using NotificationHandler = std::function<void(const json&)>;
+
 	struct PendingRequest {
 		std::mutex mutex;
 		std::condition_variable cv;
@@ -30,27 +32,31 @@ public:
 	~WsClient();
 
 	bool connect(const std::string& host, int port, const std::string& path);
-	void sendText(const std::string& msg);
+	bool sendText(const std::string& msg);
 	enum class RecvTextStatus {
 		Text,
 		Timeout,
 		Closed
 	};
 	RecvTextStatus recvText(std::string* text, int timeoutMs = 10000);
-	void readerLoop();
 
 	json request(const std::string& method, const json& reqData, int timeoutMs = 5000);
 	bool requestAsync(const std::string& method, const json& reqData,
 		std::function<void(bool, const json&, const std::string&)> completion);
 
+	void setNotificationHandler(NotificationHandler handler);
 	size_t pendingRequestCount() const;
 	void dispatchNotifications();
-	void handleResponse(const json& response);
-	void failAllPendingRequests(const std::string& error);
 	void close();
 
-	int fd = -1;
-	std::function<void(const json&)> onNotification;
+private:
+	void readerLoop();
+	void handleResponse(const json& response);
+	void failAllPendingRequests(const std::string& error);
+	void abortConnection();
+
+	int fd_{-1};
+	NotificationHandler notificationHandler_;
 	std::atomic<bool> running_{false};
 	std::atomic<uint32_t> nextId_{1};
 	std::thread readerThread_;

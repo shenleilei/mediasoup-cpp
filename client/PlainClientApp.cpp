@@ -422,7 +422,7 @@ void PlainClientApp::ConfigureQosControllers()
 
 void PlainClientApp::ConfigureNotifications()
 {
-	ws_.onNotification = [this](const json& msg) {
+	ws_.setNotificationHandler([this](const json& msg) {
 		std::string method = msg.value("method", "");
 		auto data = msg.value("data", json::object());
 		if (method == "qosPolicy") {
@@ -446,7 +446,7 @@ void PlainClientApp::ConfigureNotifications()
 				std::printf("[QoS] override parse error: %s\n", e.what());
 			}
 		}
-	};
+	});
 }
 
 void PlainClientApp::RequestServerProducerStats()

@@ -11,12 +11,20 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <cerrno>
 #include <cstring>
 #include <random>
 #include <stdexcept>
 #include <vector>
 
 namespace {
+
+constexpr uint8_t kWsOpcodeContinuation = 0x0;
+constexpr uint8_t kWsOpcodeText = 0x1;
+constexpr uint8_t kWsOpcodeClose = 0x8;
+constexpr uint8_t kWsOpcodePing = 0x9;
+constexpr uint8_t kWsOpcodePong = 0xA;
+constexpr uint64_t kMaxIncomingFrameBytes = 4 * 1024 * 1024;
 
 std::string base64Encode(const unsigned char* data, int len)
 {
@@ -33,6 +41,158 @@ std::string base64Encode(const unsigned char* data, int len)
 	return result;
 }
 
+bool sendAll(int fd, const uint8_t* data, size_t len)
+{
+	size_t sent = 0;
+	while (sent < len) {
+		const ssize_t rc = ::send(fd, data + sent, len - sent, 0);
+		if (rc > 0) {
+			sent += static_cast<size_t>(rc);
+			continue;
+		}
+		if (rc < 0 && errno == EINTR) {
+			continue;
+		}
+		return false;
+	}
+	return true;
+}
+
+bool recvAll(int fd, void* data, size_t len)
+{
+	size_t received = 0;
+	while (received < len) {
+		const ssize_t rc = ::recv(
+			fd,
+			static_cast<uint8_t*>(data) + received,
+			len - received,
+			MSG_WAITALL);
+		if (rc > 0) {
+			received += static_cast<size_t>(rc);
+			continue;
+		}
+		if (rc < 0 && errno == EINTR) {
+			continue;
+		}
+		return false;
+	}
+	return true;
+}
+
+enum class PollReadStatus {
+	Ready,
+	Timeout,
+	Closed
+};
+
+PollReadStatus waitForReadable(int fd, int timeoutMs)
+{
+	while (true) {
+		struct pollfd pfd{fd, POLLIN, 0};
+		const int rc = poll(&pfd, 1, timeoutMs);
+		if (rc == 0) return PollReadStatus::Timeout;
+		if (rc < 0) {
+			if (errno == EINTR) {
+				continue;
+			}
+			return PollReadStatus::Closed;
+		}
+		if ((pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0)
+			return PollReadStatus::Closed;
+		if ((pfd.revents & POLLIN) != 0)
+			return PollReadStatus::Ready;
+		return PollReadStatus::Timeout;
+	}
+}
+
+struct WsFrame {
+	uint8_t opcode{0};
+	bool fin{false};
+	std::string payload;
+};
+
+bool sendClientFrame(int fd, uint8_t opcode, const uint8_t* payload, size_t payloadSize)
+{
+	std::vector<uint8_t> frame;
+	frame.reserve(2 + 8 + 4 + payloadSize);
+	frame.push_back(static_cast<uint8_t>(0x80 | (opcode & 0x0F)));
+	uint8_t maskKey[4];
+	std::random_device rd;
+	for (auto& b : maskKey) b = static_cast<uint8_t>(rd() & 0xFF);
+
+	if (payloadSize < 126) {
+		frame.push_back(0x80 | static_cast<uint8_t>(payloadSize));
+	} else if (payloadSize < 65536) {
+		frame.push_back(0x80 | 126);
+		frame.push_back(static_cast<uint8_t>((payloadSize >> 8) & 0xFF));
+		frame.push_back(static_cast<uint8_t>(payloadSize & 0xFF));
+	} else {
+		frame.push_back(0x80 | 127);
+		for (int i = 7; i >= 0; --i) {
+			frame.push_back(static_cast<uint8_t>((payloadSize >> (i * 8)) & 0xFF));
+		}
+	}
+
+	frame.insert(frame.end(), std::begin(maskKey), std::end(maskKey));
+	for (size_t i = 0; i < payloadSize; ++i) {
+		frame.push_back(payload[i] ^ maskKey[i % 4]);
+	}
+	return sendAll(fd, frame.data(), frame.size());
+}
+
+bool receiveWsFrame(int fd, WsFrame* frame)
+{
+	if (!frame) return false;
+
+	uint8_t hdr[2];
+	if (!recvAll(fd, hdr, sizeof(hdr))) return false;
+
+	frame->fin = (hdr[0] & 0x80) != 0;
+	frame->opcode = hdr[0] & 0x0F;
+	const bool masked = (hdr[1] & 0x80) != 0;
+
+	uint64_t payloadSize = hdr[1] & 0x7F;
+	if (payloadSize == 126) {
+		uint8_t ext[2];
+		if (!recvAll(fd, ext, sizeof(ext))) return false;
+		payloadSize =
+			(static_cast<uint64_t>(ext[0]) << 8) |
+			static_cast<uint64_t>(ext[1]);
+	} else if (payloadSize == 127) {
+		uint8_t ext[8];
+		if (!recvAll(fd, ext, sizeof(ext))) return false;
+		payloadSize = 0;
+		for (uint8_t byte : ext)
+			payloadSize = (payloadSize << 8) | static_cast<uint64_t>(byte);
+	}
+
+	const bool controlFrame =
+		frame->opcode == kWsOpcodeClose ||
+		frame->opcode == kWsOpcodePing ||
+		frame->opcode == kWsOpcodePong;
+	if (controlFrame && (!frame->fin || payloadSize > 125)) {
+		return false;
+	}
+	if (payloadSize > kMaxIncomingFrameBytes) {
+		return false;
+	}
+
+	uint8_t mask[4] = {};
+	if (masked && !recvAll(fd, mask, sizeof(mask))) return false;
+
+	frame->payload.resize(static_cast<size_t>(payloadSize));
+	if (payloadSize > 0 &&
+		!recvAll(fd, frame->payload.data(), static_cast<size_t>(payloadSize))) {
+		return false;
+	}
+	if (masked) {
+		for (size_t i = 0; i < frame->payload.size(); ++i)
+			frame->payload[i] ^= mask[i % 4];
+	}
+
+	return true;
+}
+
 } // namespace
 
 WsClient::~WsClient()
@@ -46,21 +206,21 @@ bool WsClient::connect(const std::string& host, int port, const std::string& pat
 	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
 	if (getaddrinfo(host.c_str(), std::to_string(port).c_str(), &hints, &res) != 0) return false;
-	fd = socket(res->ai_family, SOCK_STREAM, 0);
-	if (fd < 0) {
+	fd_ = socket(res->ai_family, SOCK_STREAM, 0);
+	if (fd_ < 0) {
 		freeaddrinfo(res);
-		fd = -1;
+		fd_ = -1;
 		return false;
 	}
-	if (::connect(fd, res->ai_addr, res->ai_addrlen) < 0) {
+	if (::connect(fd_, res->ai_addr, res->ai_addrlen) < 0) {
 		freeaddrinfo(res);
-		::close(fd);
-		fd = -1;
+		::close(fd_);
+		fd_ = -1;
 		return false;
 	}
 	freeaddrinfo(res);
 	int flag = 1;
-	setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
+	setsockopt(fd_, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
 
 	unsigned char keyBytes[16];
 	std::random_device rd;
@@ -72,19 +232,31 @@ bool WsClient::connect(const std::string& host, int port, const std::string& pat
 		"Upgrade: websocket\r\nConnection: Upgrade\r\n"
 		"Sec-WebSocket-Key: " + key + "\r\n"
 		"Sec-WebSocket-Version: 13\r\n\r\n";
-	::send(fd, req.data(), req.size(), 0);
-
-	char buf[4096];
-	int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
-	if (n <= 0) {
-		::close(fd);
-		fd = -1;
+	if (!sendAll(fd_, reinterpret_cast<const uint8_t*>(req.data()), req.size())) {
+		::close(fd_);
+		fd_ = -1;
 		return false;
 	}
-	buf[n] = 0;
-	if (strstr(buf, "101") == nullptr) {
-		::close(fd);
-		fd = -1;
+
+	std::string response;
+	char buf[4096];
+	while (response.find("\r\n\r\n") == std::string::npos) {
+		const ssize_t n = ::recv(fd_, buf, sizeof(buf), 0);
+		if (n <= 0) {
+			::close(fd_);
+			fd_ = -1;
+			return false;
+		}
+		response.append(buf, static_cast<size_t>(n));
+		if (response.size() > 16384) {
+			::close(fd_);
+			fd_ = -1;
+			return false;
+		}
+	}
+	if (response.find("101") == std::string::npos) {
+		::close(fd_);
+		fd_ = -1;
 		return false;
 	}
 
@@ -93,76 +265,93 @@ bool WsClient::connect(const std::string& host, int port, const std::string& pat
 	return true;
 }
 
-void WsClient::sendText(const std::string& msg)
+bool WsClient::sendText(const std::string& msg)
 {
 	std::lock_guard<std::mutex> lock(sendMutex_);
-	if (fd < 0) return;
-	std::vector<uint8_t> frame;
-	frame.push_back(0x81);
-	uint8_t maskKey[4];
-	std::random_device rd;
-	for (auto& b : maskKey) b = rd() & 0xFF;
-
-	if (msg.size() < 126) {
-		frame.push_back(0x80 | static_cast<uint8_t>(msg.size()));
-	} else if (msg.size() < 65536) {
-		frame.push_back(0x80 | 126);
-		frame.push_back((msg.size() >> 8) & 0xFF);
-		frame.push_back(msg.size() & 0xFF);
-	} else {
-		frame.push_back(0x80 | 127);
-		for (int i = 7; i >= 0; i--)
-			frame.push_back((msg.size() >> (i * 8)) & 0xFF);
+	if (fd_ < 0) return false;
+	const bool ok = sendClientFrame(
+		fd_,
+		kWsOpcodeText,
+		reinterpret_cast<const uint8_t*>(msg.data()),
+		msg.size());
+	if (!ok) {
+		abortConnection();
 	}
-	frame.insert(frame.end(), maskKey, maskKey + 4);
-	for (size_t i = 0; i < msg.size(); i++)
-		frame.push_back(msg[i] ^ maskKey[i % 4]);
-	::send(fd, frame.data(), frame.size(), 0);
+	return ok;
 }
 
 WsClient::RecvTextStatus WsClient::recvText(std::string* text, int timeoutMs)
 {
 	if (text) text->clear();
-	if (fd < 0) return RecvTextStatus::Closed;
+	if (fd_ < 0) return RecvTextStatus::Closed;
 
-	struct pollfd pfd{fd, POLLIN, 0};
-	const int pollRc = poll(&pfd, 1, timeoutMs);
-	if (pollRc == 0) return RecvTextStatus::Timeout;
-	if (pollRc < 0) return RecvTextStatus::Closed;
-	if ((pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0)
-		return RecvTextStatus::Closed;
-	if ((pfd.revents & POLLIN) == 0) return RecvTextStatus::Timeout;
+	const auto deadline =
+		std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+	std::string fragmentedText;
+	bool awaitingContinuation = false;
 
-	uint8_t hdr[2];
-	if (::recv(fd, hdr, 2, MSG_WAITALL) != 2) return RecvTextStatus::Closed;
-	const uint8_t opcode = hdr[0] & 0x0F;
-	bool masked = hdr[1] & 0x80;
-	uint64_t len = hdr[1] & 0x7F;
-	if (len == 126) {
-		uint8_t ext[2];
-		if (::recv(fd, ext, 2, MSG_WAITALL) != 2) return RecvTextStatus::Closed;
-		len = (ext[0] << 8) | ext[1];
-	} else if (len == 127) {
-		uint8_t ext[8];
-		if (::recv(fd, ext, 8, MSG_WAITALL) != 8) return RecvTextStatus::Closed;
-		len = 0;
-		for (int i = 0; i < 8; i++) len = (len << 8) | ext[i];
+	while (true) {
+		const auto remainingMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+			deadline - std::chrono::steady_clock::now()).count();
+		if (remainingMs <= 0) return RecvTextStatus::Timeout;
+
+		const auto pollStatus = waitForReadable(fd_, static_cast<int>(remainingMs));
+		if (pollStatus == PollReadStatus::Timeout) return RecvTextStatus::Timeout;
+		if (pollStatus == PollReadStatus::Closed) return RecvTextStatus::Closed;
+
+		WsFrame frame;
+		if (!receiveWsFrame(fd_, &frame)) {
+			return RecvTextStatus::Closed;
+		}
+
+		if (frame.opcode == kWsOpcodeClose) {
+			return RecvTextStatus::Closed;
+		}
+		if (frame.opcode == kWsOpcodePing) {
+			std::lock_guard<std::mutex> lock(sendMutex_);
+			if (!sendClientFrame(
+					fd_,
+					kWsOpcodePong,
+					reinterpret_cast<const uint8_t*>(frame.payload.data()),
+					frame.payload.size())) {
+				abortConnection();
+				return RecvTextStatus::Closed;
+			}
+			continue;
+		}
+		if (frame.opcode == kWsOpcodePong) {
+			continue;
+		}
+		if (frame.opcode == kWsOpcodeText) {
+			if (awaitingContinuation) {
+				return RecvTextStatus::Closed;
+			}
+			if (frame.fin) {
+				if (text) *text = std::move(frame.payload);
+				return RecvTextStatus::Text;
+			}
+			fragmentedText = std::move(frame.payload);
+			awaitingContinuation = true;
+			continue;
+		}
+		if (frame.opcode == kWsOpcodeContinuation) {
+			if (!awaitingContinuation) {
+				return RecvTextStatus::Closed;
+			}
+			if (fragmentedText.size() + frame.payload.size() > kMaxIncomingFrameBytes) {
+				return RecvTextStatus::Closed;
+			}
+			fragmentedText += frame.payload;
+			if (frame.fin) {
+				if (text) *text = std::move(fragmentedText);
+				return RecvTextStatus::Text;
+			}
+			continue;
+		}
+
+		// Ignore unsupported non-text data frames rather than treating them as a
+		// timeout. The plain client only expects JSON text responses.
 	}
-	uint8_t mask[4] = {};
-	if (masked && ::recv(fd, mask, 4, MSG_WAITALL) != 4) return RecvTextStatus::Closed;
-
-	std::string data(len, 0);
-	size_t got = 0;
-	while (got < len) {
-		int n = ::recv(fd, &data[got], len - got, 0);
-		if (n <= 0) return RecvTextStatus::Closed;
-		got += n;
-	}
-	if (masked) for (size_t i = 0; i < len; i++) data[i] ^= mask[i % 4];
-	if (opcode == 0x8) return RecvTextStatus::Closed;
-	if (opcode != 0x1) return RecvTextStatus::Timeout;
-	if (text) *text = std::move(data);
-	return RecvTextStatus::Text;
 }
 
 void WsClient::readerLoop()
@@ -198,7 +387,13 @@ json WsClient::request(const std::string& method, const json& reqData, int timeo
 	}
 
 	json msg = {{"request", true}, {"id", id}, {"method", method}, {"data", reqData}};
-	sendText(msg.dump());
+	if (!sendText(msg.dump())) {
+		{
+			std::lock_guard<std::mutex> stateLock(stateMutex_);
+			pendingRequests_.erase(id);
+		}
+		throw std::runtime_error(method + ": connection closed");
+	}
 
 	std::unique_lock<std::mutex> lock(pending->mutex);
 	bool completed = pending->cv.wait_for(lock, std::chrono::milliseconds(timeoutMs), [&] {
@@ -235,8 +430,23 @@ bool WsClient::requestAsync(const std::string& method, const json& reqData,
 	}
 
 	json msg = {{"request", true}, {"id", id}, {"method", method}, {"data", reqData}};
-	sendText(msg.dump());
+	if (!sendText(msg.dump())) {
+		{
+			std::lock_guard<std::mutex> lock(stateMutex_);
+			pendingRequests_.erase(id);
+		}
+		if (pending->completion) {
+			pending->completion(false, json::object(), "connection closed");
+		}
+		return false;
+	}
 	return true;
+}
+
+void WsClient::setNotificationHandler(NotificationHandler handler)
+{
+	std::lock_guard<std::mutex> lock(stateMutex_);
+	notificationHandler_ = std::move(handler);
 }
 
 size_t WsClient::pendingRequestCount() const
@@ -248,14 +458,16 @@ size_t WsClient::pendingRequestCount() const
 void WsClient::dispatchNotifications()
 {
 	std::deque<json> notifications;
+	NotificationHandler handler;
 	{
 		std::lock_guard<std::mutex> lock(stateMutex_);
 		notifications.swap(pendingNotifications_);
+		handler = notificationHandler_;
 	}
 	while (!notifications.empty()) {
 		auto msg = std::move(notifications.front());
 		notifications.pop_front();
-		if (onNotification) onNotification(msg);
+		if (handler) handler(msg);
 	}
 }
 
@@ -316,16 +528,21 @@ void WsClient::failAllPendingRequests(const std::string& error)
 
 void WsClient::close()
 {
-	const bool wasRunning = running_.exchange(false);
-	if (fd >= 0 && wasRunning) {
-		::shutdown(fd, SHUT_RDWR);
-	}
+	abortConnection();
 	if (readerThread_.joinable()) {
 		readerThread_.join();
 	}
-	if (fd >= 0) {
-		::close(fd);
-		fd = -1;
+	if (fd_ >= 0) {
+		::close(fd_);
+		fd_ = -1;
 	}
 	failAllPendingRequests("connection closed");
+}
+
+void WsClient::abortConnection()
+{
+	const bool wasRunning = running_.exchange(false);
+	if (fd_ >= 0 && wasRunning) {
+		::shutdown(fd_, SHUT_RDWR);
+	}
 }
