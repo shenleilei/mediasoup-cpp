@@ -87,7 +87,22 @@ Review in this order:
 
 Do not spend review energy on stylistic nits before correctness and verification are covered.
 
-## 4. Branch Comparison Review
+## 4. Change Size And Reviewability
+
+Reviewers are allowed to push back on a change that is too large or too mixed to review reliably.
+
+Reviewers should ask:
+
+- does this diff stay small enough to reason about end to end?
+- does it mix behavior change with mechanical refactor, rename, formatting, or file-move churn that should usually be separate?
+- would a preparatory refactor, test move, or cleanup pass make the behavior change easier to review if landed separately?
+- if the change cannot be split safely, did the author explain why and make the review strategy explicit?
+
+Small, self-contained changes are preferred because they improve correctness review, rollback clarity, and bisectability.
+
+If a reviewer cannot confidently reason about the change because of its breadth, that is a valid review finding, not a process nit.
+
+## 5. Branch Comparison Review
 
 When reviewing one branch against another branch, compare the branches as complete change sets.
 
@@ -110,7 +125,26 @@ The output should describe the branch impact globally, then list file-level find
 - When branch scope is broad or risk-heavy, the review output MUST state what areas were inspected and what areas were not inspected deeply.
 - If a likely-risk area was not inspected deeply enough, report that as a verification gap instead of treating it as safe by omission.
 
-## 5. What To Check
+## 6. Reviewer Coverage And Approval Discipline
+
+Review coverage should match the risk areas touched by the change, not only the visible ownership of files.
+
+- If you are not qualified to judge a concurrency, protocol, security, build, crash-recovery, or performance-critical aspect of the change, say so.
+- For specialized risk areas, require additional qualified review or record the missing expertise as a review gap.
+- Partial reviews are acceptable only when the reviewed scope is stated explicitly.
+- Approval must be explicit. Silence, inactivity, or an unanswered thread is not approval.
+- Authors should acknowledge every substantive reviewer comment with a code change, a reasoned reply, or an explicit follow-up item accepted as debt.
+- Final approval should reflect the latest diff and prior discussion, not only the first patch version.
+
+## 7. When Code Review Is Not Enough
+
+Code review does not replace documented design review for significant changes.
+
+- If a change materially affects architecture, protocols, public APIs or events, schemas, operational workflows, or rollback assumptions, review should confirm that requirements and design docs exist and are still accurate before approval.
+- If code review reveals unresolved design disagreement or missing design intent, stop approval and send the change back to the change-doc or design stage.
+- Emergency changes may land with narrower upfront design docs only if risk, mitigation, and follow-up verification are explicit.
+
+## 8. What To Check
 
 ### Correctness
 
@@ -183,6 +217,14 @@ The output should describe the branch impact globally, then list file-level find
 - Do comments explain why, constraints, invariants, or tradeoffs rather than restating what the code already says?
 - Does the change follow existing local conventions unless there is a clear reason to introduce a better shared pattern?
 
+### C++ API And Class Design
+
+- Are public headers exposing only what callers need, or leaking internal implementation details unnecessarily?
+- Is inheritance justified, or would composition or delegation be simpler and safer here?
+- Are ownership, copy, move, borrowing, and destruction semantics explicit enough to prevent misuse across module boundaries?
+- If a class or component is difficult to test without broad integration scaffolding, does that reveal avoidable coupling or a missing boundary?
+- Is `friend`, global mutable state, or hidden cross-object coupling introduced without a clear reason?
+
 ### Errors And Dependencies
 
 - Are failures and edge cases handled explicitly instead of being silently ignored?
@@ -201,6 +243,10 @@ The output should describe the branch impact globally, then list file-level find
 - For stateful resources, do tests cover repeated call, reconnect, retry, replacement, and cleanup paths?
 - For protocol-heavy changes, do tests cover field encoding/decoding, signedness, unit conversion, and timestamp semantics?
 - For metrics or state machines, do tests cover source switching, counter resets, and fallback transitions?
+- For parser, allocator, syscall, low-level memory, or undefined-behavior-sensitive C++ changes, did the review require sanitizer-like or memory-safety evidence when the repo or local environment supports it?
+- For concurrency, teardown, or lifecycle changes, did the review require repeated-run, stress, race-focused, or long-lived verification beyond one happy-path execution?
+- For crash-recovery, process supervision, failover, or restart-sensitive behavior, did the review require fault-injection or crash-recovery evidence where applicable?
+- For hot-path or allocation-sensitive changes, did the review require benchmark or before-versus-after performance evidence instead of intuition?
 - Do not use total test count or broad coverage claims as a proxy for risk coverage; map tests to the specific failure modes introduced by the change.
 
 ### Contracts
@@ -227,7 +273,7 @@ The output should describe the branch impact globally, then list file-level find
 - Are auth, authz, secrets, and sensitive data handled correctly?
 - Is sensitive data exposed in logs, APIs, or frontend state?
 
-## 6. Review Output Format
+## 9. Review Output Format
 
 For AI reviews, respond in this order:
 
@@ -237,6 +283,7 @@ For AI reviews, respond in this order:
 - Include file references.
 - Explain the impact and why it matters.
 - For branch comparison, start from the overall branch impact, then list concrete findings.
+- Call out oversized mixed-scope diffs, missing design-stage review, or missing qualified reviewer coverage when those process defects materially reduce confidence in the change.
 - Separate confirmed defects from candidate issues when the evidence level differs.
 - If the input includes prior review notes, broad branch audit notes, or another AI review, mark items that are already fixed or superseded instead of restating them as current defects.
 
@@ -246,7 +293,7 @@ For AI reviews, respond in this order:
 
 ### Verification Gaps
 
-- State missing tests, missing commands, or missing smoke checks.
+- State missing tests, missing commands, missing reviewer coverage, intentionally unreviewed scope, or missing smoke checks.
 
 ### Summary
 
@@ -257,15 +304,18 @@ If there are no findings:
 - say that explicitly
 - mention residual risks or missing verification
 
-## 7. Self-Review Before Completion
+## 10. Self-Review Before Completion
 
 Before claiming a change is done, the author should ask:
 
 - Does the change match the approved intent?
 - Am I reviewing and judging this change against the documented design standard and implementation plan?
+- Is this change too large or too mixed-scope for a reliable review, and if I did not split it, did I explain why?
 - What can regress?
 - What still lacks proof?
 - What boundary changed?
+- Is code review being asked to settle a design question that should already be documented in the change docs?
+- What qualified reviewer or domain expertise does this change need?
 - Am I anchoring only on the currently reported bug cluster, active change narrative, or the files already named in the review prompt?
 - What shared infrastructure or foundational code could still invalidate this change even if the edited files look correct?
 - What happens on the second call, retry, reconnect, or replacement of the same resource?
@@ -276,6 +326,7 @@ Before claiming a change is done, the author should ask:
 - If buffers, builders, offsets, pointers, views, or callback captures cross scopes, resets, or threads, did I verify their lifetime rules explicitly?
 - What thread boundary, callback path, timer path, or teardown race did I inspect explicitly?
 - If a metric can come from different sources, are baseline, reset, and fallback transitions safe?
+- For high-risk C++ runtime paths, what sanitizer-like, crash-recovery, stress, or performance evidence is applicable here?
 - Did I reuse existing code where practical and reduce duplication instead of adding another parallel path?
 - Did I keep the change as simple and self-contained as practical instead of mixing in avoidable churn?
 - Did I avoid speculative abstractions and keep names, comments, and error handling explicit?
