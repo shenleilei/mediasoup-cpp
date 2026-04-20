@@ -3,6 +3,7 @@
 ## Stored Subscriber Snapshots
 
 - An accepted `downlinkClientStats` snapshot SHALL be visible through `getStats` as `downlinkClientStats`.
+- For `downlinkClientStats`, "accepted" means the request response returned `ok=true` with `data.stored=true`.
 - `downlinkClientStats.subscriptions` SHALL preserve valid consumer / producer mappings and SHALL drop inconsistent mappings before storage.
 
 ## Async Downlink Health

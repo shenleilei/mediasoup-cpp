@@ -132,11 +132,15 @@ mediasoup_add_configured_executable(mediasoup-sfu
         src/RoomServiceDownlink.cpp
         src/RoomServiceLifecycle.cpp
         src/RoomServiceMedia.cpp
+        src/RoomServiceQos.cpp
+        src/RoomServiceRegistryView.cpp
         src/RoomServiceStats.cpp
         src/RoomRecordingHelpers.cpp
         src/WorkerThread.cpp
     LINK_LIBRARIES
         mediasoup_lib
+        mediasoup_common_media
+        mediasoup_common_ffmpeg
         ip2region
         z
         hiredis

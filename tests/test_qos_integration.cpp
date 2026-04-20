@@ -984,7 +984,11 @@ TEST_F(QosIntegrationTest, OlderClientStatsSeqIsIgnored) {
 	older["tracks"][0]["quality"] = "poor";
 
 	ASSERT_TRUE(alice.ws->request("clientStats", newer).value("ok", false));
-	ASSERT_TRUE(alice.ws->request("clientStats", older).value("ok", false));
+	auto olderResp = alice.ws->request("clientStats", older);
+	ASSERT_TRUE(olderResp.value("ok", false)) << olderResp.dump();
+	ASSERT_TRUE(olderResp["data"].is_object()) << olderResp.dump();
+	EXPECT_FALSE(olderResp["data"].value("stored", true));
+	EXPECT_EQ(olderResp["data"].value("reason", ""), "stale-seq");
 	usleep(500000);
 
 	auto resp = observer.ws->request("getStats", {{"peerId", "alice"}});
@@ -1545,7 +1549,9 @@ TEST_F(QosIntegrationTest, ReconnectClearsQosAndAcceptsNewStats) {
 		{"schema", "mediasoup.qos.client.v1"}, {"seq", 5000},
 		{"tsMs", 1712736000000LL}, {"peerState", peerState}, {"tracks", json::array()}
 	};
-	alice.ws->request("clientStats", report1);
+	auto report1Resp = alice.ws->request("clientStats", report1);
+	ASSERT_TRUE(report1Resp.value("ok", false)) << report1Resp.dump();
+	EXPECT_TRUE(report1Resp["data"].value("stored", false));
 	usleep(300000);
 
 	// Verify baseline stored
@@ -1568,7 +1574,9 @@ TEST_F(QosIntegrationTest, ReconnectClearsQosAndAcceptsNewStats) {
 		{"schema", "mediasoup.qos.client.v1"}, {"seq", 1},
 		{"tsMs", 1712736010000LL}, {"peerState", peerState}, {"tracks", json::array()}
 	};
-	alice2.ws->request("clientStats", report2);
+	auto report2Resp = alice2.ws->request("clientStats", report2);
+	ASSERT_TRUE(report2Resp.value("ok", false)) << report2Resp.dump();
+	EXPECT_TRUE(report2Resp["data"].value("stored", false));
 	usleep(300000);
 
 	auto stats1 = observer.ws->request("getStats", {{"peerId", "alice"}});
@@ -1594,12 +1602,16 @@ TEST_F(QosIntegrationTest, SeqResetThresholdWithoutReconnect) {
 	ASSERT_TRUE(alice.ws->request("clientStats", report1).value("ok", false));
 	usleep(300000);  // let async post settle
 
-	// Small jump back (within 1000) → silently dropped, stored seq stays 5000
+	// Small jump back (within 1000) → ignored by the registry, stored seq stays 5000
 	json stale = {
 		{"schema", "mediasoup.qos.client.v1"}, {"seq", 4500},
 		{"tsMs", 1712736001000LL}, {"peerState", peerState}, {"tracks", json::array()}
 	};
-	alice.ws->request("clientStats", stale);
+	auto staleResp = alice.ws->request("clientStats", stale);
+	ASSERT_TRUE(staleResp.value("ok", false)) << staleResp.dump();
+	ASSERT_TRUE(staleResp["data"].is_object()) << staleResp.dump();
+	EXPECT_FALSE(staleResp["data"].value("stored", true));
+	EXPECT_EQ(staleResp["data"].value("reason", ""), "stale-seq");
 	usleep(300000);
 
 	auto stats1 = observer.ws->request("getStats", {{"peerId", "alice"}});
@@ -1647,6 +1659,7 @@ TEST_F(QosIntegrationTest, DownlinkClientStatsStored) {
 		1, "bob", consumerId, producerId, 2'000'000.0, true, false, 640, 360);
 	auto resp = bob.ws->request("downlinkClientStats", payload);
 	ASSERT_TRUE(resp.value("ok", false)) << resp.dump();
+	EXPECT_TRUE(resp["data"].value("stored", false));
 
 	auto statsResp = waitForPeerStats(
 		bob,
@@ -1797,8 +1810,14 @@ TEST_F(QosIntegrationTest, DownlinkClientStatsRejectsStaleSeq) {
 	// Send stale seq (lower)
 	payload["seq"] = 5;
 	auto resp2 = alice.ws->request("downlinkClientStats", payload);
-	// Structurally valid so parse passes; stale seq is silently dropped inside the registry
-	EXPECT_TRUE(resp2.value("ok", false));
+	ASSERT_TRUE(resp2.value("ok", false)) << resp2.dump();
+	ASSERT_TRUE(resp2["data"].is_object()) << resp2.dump();
+	EXPECT_FALSE(resp2["data"].value("stored", true));
+	EXPECT_EQ(resp2["data"].value("reason", ""), "stale-seq");
+
+	auto statsResp = alice.ws->request("getStats", {{"peerId", "alice"}});
+	ASSERT_TRUE(statsResp.value("ok", false)) << statsResp.dump();
+	EXPECT_EQ(statsResp["data"]["downlinkClientStats"]["seq"], 10);
 }
 
 TEST_F(QosIntegrationTest, DownlinkClientStatsAcceptsSeqResetFromHighValue) {
@@ -1813,6 +1832,9 @@ TEST_F(QosIntegrationTest, DownlinkClientStatsAcceptsSeqResetFromHighValue) {
 	payload["seq"] = 1;
 	auto resp2 = alice.ws->request("downlinkClientStats", payload);
 	ASSERT_TRUE(resp2.value("ok", false)) << resp2.dump();
+	ASSERT_TRUE(resp2["data"].is_object()) << resp2.dump();
+	EXPECT_FALSE(resp2["data"].value("stored", true));
+	EXPECT_EQ(resp2["data"].value("reason", ""), "stale-ts");
 
 	auto statsResp = alice.ws->request("getStats", {{"peerId", "alice"}});
 	ASSERT_TRUE(statsResp.value("ok", false)) << statsResp.dump();

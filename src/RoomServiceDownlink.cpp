@@ -4,6 +4,94 @@
 #include "RoomStatsQosHelpers.h"
 
 namespace mediasoup {
+namespace {
+
+json BuildStatsStoreResponseData(bool stored, std::string reason = "")
+{
+	json data = {
+		{"stored", stored}
+	};
+	if (!reason.empty())
+		data["reason"] = std::move(reason);
+	return data;
+}
+
+size_t FilterConsistentDownlinkSubscriptions(
+	const std::shared_ptr<Peer>& peer,
+	qos::DownlinkSnapshot* snapshot)
+{
+	if (!peer || !snapshot) return 0;
+
+	std::vector<qos::DownlinkSubscription> filtered;
+	filtered.reserve(snapshot->subscriptions.size());
+	json filteredRaw = json::array();
+	const bool hasRawSubscriptions =
+		snapshot->raw.is_object() &&
+		snapshot->raw.contains("subscriptions") &&
+		snapshot->raw["subscriptions"].is_array();
+
+	size_t dropped = 0;
+	for (size_t i = 0; i < snapshot->subscriptions.size(); ++i) {
+		const auto& sub = snapshot->subscriptions[i];
+		auto consumerIt = peer->consumers.find(sub.consumerId);
+		if (consumerIt == peer->consumers.end() ||
+			!consumerIt->second ||
+			consumerIt->second->producerId() != sub.producerId) {
+			++dropped;
+			continue;
+		}
+		auto normalizedSub = sub;
+		normalizedSub.kind = consumerIt->second->kind();
+		filtered.push_back(std::move(normalizedSub));
+		if (hasRawSubscriptions && i < snapshot->raw["subscriptions"].size()) {
+			auto raw = snapshot->raw["subscriptions"][i];
+			raw["kind"] = consumerIt->second->kind();
+			filteredRaw.push_back(std::move(raw));
+		}
+	}
+
+	snapshot->subscriptions = std::move(filtered);
+	if (hasRawSubscriptions)
+		snapshot->raw["subscriptions"] = std::move(filteredRaw);
+
+	return dropped;
+}
+
+} // namespace
+
+RoomService::Result RoomService::setDownlinkClientStats(
+	const std::string& roomId,
+	const std::string& peerId,
+	qos::DownlinkSnapshot stats)
+{
+	auto room = roomManager_.getRoom(roomId);
+	if (!room)
+		return {false, json::object(), "", "room missing during downlinkClientStats"};
+
+	auto peer = room->getPeer(peerId);
+	if (!peer)
+		return {false, json::object(), "", "peer missing during downlinkClientStats"};
+
+	if (stats.subscriberPeerId != peerId) {
+		MS_WARN(logger_, "[{} {}] downlink subscriberPeerId mismatch: {}", roomId, peerId, stats.subscriberPeerId);
+		return {false, json::object(), "", "downlink subscriberPeerId mismatch"};
+	}
+	const auto droppedSubscriptions =
+		FilterConsistentDownlinkSubscriptions(peer, &stats);
+	if (droppedSubscriptions > 0) {
+		MS_WARN(logger_,
+			"[{} {}] dropped {} inconsistent downlink subscriptions",
+			roomId, peerId, droppedSubscriptions);
+	}
+	std::string rejectReason;
+	if (!downlinkQosRegistry_.Upsert(roomId, peerId, stats, qos::NowMs(), &rejectReason)) {
+		MS_DEBUG(logger_, "[{} {}] dropped downlink stats [{}]", roomId, peerId, rejectReason);
+		return {true, BuildStatsStoreResponseData(false, rejectReason), "", ""};
+	}
+
+	markDownlinkRoomDirty(roomId);
+	return {true, BuildStatsStoreResponseData(true), "", ""};
+}
 
 void RoomService::markDownlinkRoomDirty(const std::string& roomId) {
 	if (dirtyDownlinkRooms_.insert(roomId).second)

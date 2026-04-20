@@ -250,26 +250,6 @@ TEST_F(RecorderQosTest, StopWithNoSnapshots) {
 // RTP depacketization unit tests
 // ═══════════════════════════════════════════════════════════════
 
-// ─── RtpHeader tests ───
-
-TEST(RtpHeaderTest, MarkerBitParsed) {
-	uint8_t pkt[20] = {0x80, 0x80 | 100, 0, 1, 0,0,0,0, 0,0,0,1, 0xAA};
-	RtpHeader h;
-	ASSERT_TRUE(RtpHeader::parse(pkt, sizeof(pkt), h));
-	EXPECT_TRUE(h.marker);
-	EXPECT_EQ(h.payloadType, 100);
-
-	pkt[1] = 100; // no marker
-	ASSERT_TRUE(RtpHeader::parse(pkt, sizeof(pkt), h));
-	EXPECT_FALSE(h.marker);
-}
-
-TEST(RtpHeaderTest, TooShortFails) {
-	uint8_t pkt[8] = {};
-	RtpHeader h;
-	EXPECT_FALSE(RtpHeader::parse(pkt, sizeof(pkt), h));
-}
-
 // ─── Test accessor for PeerRecorder private methods ───
 
 namespace mediasoup {
@@ -278,9 +258,6 @@ public:
 	static const uint8_t* stripVp8Descriptor(const uint8_t* data, int size,
 		int& outSize, bool& isStart) {
 		return PeerRecorder::stripVp8Descriptor(data, size, outSize, isStart);
-	}
-	static void annexBToAvcc(const std::vector<uint8_t>& annexB, std::vector<uint8_t>& avcc) {
-		PeerRecorder::annexBToAvcc(annexB, avcc);
 	}
 	static bool setH264Extradata(
 		PeerRecorder& recorder,
@@ -328,39 +305,6 @@ TEST(Vp8DescriptorTest, EmptyPayload) {
 	PeerRecorderTestAccess::stripVp8Descriptor(nullptr, 0, outSize, isStart);
 	EXPECT_EQ(outSize, 0);
 	EXPECT_FALSE(isStart);
-}
-
-// ─── Annex-B to AVCC conversion ───
-
-TEST(AnnexBToAvccTest, SingleNal) {
-	std::vector<uint8_t> annexB = {0,0,0,1, 0x65, 0xAA, 0xBB}; // IDR NAL
-	std::vector<uint8_t> avcc;
-	PeerRecorderTestAccess::annexBToAvcc(annexB, avcc);
-	ASSERT_EQ(avcc.size(), 7u); // 4-byte length + 3 bytes NAL
-	uint32_t len = (avcc[0]<<24)|(avcc[1]<<16)|(avcc[2]<<8)|avcc[3];
-	EXPECT_EQ(len, 3u);
-	EXPECT_EQ(avcc[4], 0x65);
-}
-
-TEST(AnnexBToAvccTest, TwoNals) {
-	std::vector<uint8_t> annexB = {0,0,0,1, 0x67, 0x42, 0,0,0,1, 0x68, 0x01};
-	std::vector<uint8_t> avcc;
-	PeerRecorderTestAccess::annexBToAvcc(annexB, avcc);
-	// First NAL: len=2 (0x67, 0x42), Second NAL: len=2 (0x68, 0x01)
-	ASSERT_EQ(avcc.size(), 12u);
-	uint32_t len1 = (avcc[0]<<24)|(avcc[1]<<16)|(avcc[2]<<8)|avcc[3];
-	EXPECT_EQ(len1, 2u);
-	EXPECT_EQ(avcc[4], 0x67);
-	uint32_t len2 = (avcc[6]<<24)|(avcc[7]<<16)|(avcc[8]<<8)|avcc[9];
-	EXPECT_EQ(len2, 2u);
-	EXPECT_EQ(avcc[10], 0x68);
-}
-
-TEST(AnnexBToAvccTest, EmptyInput) {
-	std::vector<uint8_t> annexB;
-	std::vector<uint8_t> avcc;
-	PeerRecorderTestAccess::annexBToAvcc(annexB, avcc);
-	EXPECT_TRUE(avcc.empty());
 }
 
 // ─── H264 deferred header: recorder starts OK without IDR, stop doesn't crash ───
