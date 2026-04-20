@@ -128,11 +128,14 @@ public:
 	std::shared_ptr<Room> getRoom(const std::string& roomId) { return roomManager_.getRoom(roomId); }
 	void cleanOldRecordings(uint64_t maxBytes = kMaxRecordingDirBytes);
 	// Expects a snapshot already validated on the signaling thread.
-	void setClientStats(
+	Result setClientStats(
 		const std::string& roomId,
 		const std::string& peerId,
 		qos::ClientQosSnapshot stats);
-	void setDownlinkClientStats(const std::string& roomId, const std::string& peerId, const json& stats);
+	Result setDownlinkClientStats(
+		const std::string& roomId,
+		const std::string& peerId,
+		qos::DownlinkSnapshot stats);
 	json collectPeerStats(const std::string& roomId, const std::string& peerId);
 	void broadcastStats();
 	void heartbeatRegistry();

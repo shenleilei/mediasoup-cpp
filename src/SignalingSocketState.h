@@ -52,13 +52,28 @@ inline bool IsDownlinkSeqWrapOrReset(uint64_t prevSeq, uint64_t nextSeq)
 
 inline bool IsAdvancingDownlinkSeq(const DownlinkStatsRateLimitState& state, uint64_t seq)
 {
-	if (!state.hasAcceptedSeq) return true;
-	if (seq > state.lastAcceptedSeq) return true;
-	if (seq < state.lastAcceptedSeq &&
-		IsDownlinkSeqWrapOrReset(state.lastAcceptedSeq, seq)) {
+	const uint64_t baselineSeq = state.pending
+		? state.pendingSeq
+		: state.lastAcceptedSeq;
+	if (!state.pending && !state.hasAcceptedSeq) return true;
+	if (seq > baselineSeq) return true;
+	if (seq < baselineSeq &&
+		IsDownlinkSeqWrapOrReset(baselineSeq, seq)) {
 		return true;
 	}
 	return false;
+}
+
+inline void MarkAcceptedDownlinkSeq(DownlinkStatsRateLimitState& state, uint64_t seq)
+{
+	state.lastAcceptedSeq = seq;
+	state.hasAcceptedSeq = true;
+}
+
+inline void ClearPendingDownlinkSeqIfMatches(DownlinkStatsRateLimitState& state, uint64_t seq)
+{
+	if (state.pending && state.pendingSeq == seq)
+		state.pending = false;
 }
 
 inline bool HasMappedSession(
