@@ -173,6 +173,7 @@ if(BUILD_TESTS)
         client/WsClient.cpp
         tests/test_geo_db_resolver.cpp
         tests/test_geo_router.cpp
+        tests/test_common_ffmpeg.cpp
         tests/test_common_media.cpp
         tests/test_multinode.cpp
         tests/test_ortc.cpp

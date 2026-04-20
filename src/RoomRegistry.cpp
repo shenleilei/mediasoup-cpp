@@ -35,8 +35,11 @@ RoomRegistry::~RoomRegistry()
 
 void RoomRegistry::start()
 {
-	registerNode();
-	syncAll();
+	{
+		std::lock_guard<std::mutex> lock(command_.mutex);
+		registerNode();
+		syncAllUnlocked();
+	}
 	startSubscriber();
 }
 
@@ -230,14 +233,28 @@ RoomRegistry::ResolveResult RoomRegistry::resolveRoom(
 
 std::string RoomRegistry::claimRoom(const std::string& roomId, const std::string& clientIp)
 {
-	{
-		if (auto cachedAddress = cache_.roomAddress(roomId); cachedAddress.has_value()) {
-			if (*cachedAddress == nodeAddress_) return "";
-			return *cachedAddress;
-		}
+	const auto cachedAddress = cache_.roomAddress(roomId);
+	if (cachedAddress.has_value() && *cachedAddress == nodeAddress_) {
+		return "";
 	}
 
+	std::string roomKey = std::string(kKeyPrefixRoom) + roomId;
 	std::lock_guard<std::mutex> lock(command_.mutex);
+	if (cachedAddress.has_value()) {
+		std::string refreshedAddress;
+		if (refreshCachedRemoteRoomAddressUnlocked(roomId, *cachedAddress, &refreshedAddress)) {
+			return refreshedAddress == nodeAddress_ ? "" : refreshedAddress;
+		}
+		if (!refreshedAddress.empty()) {
+			cache_.upsertRoom(roomId, refreshedAddress);
+			return refreshedAddress == nodeAddress_ ? "" : refreshedAddress;
+		}
+		MS_WARN(logger_,
+			"claimRoom dropping stale cached redirect [roomId:{} cached:{}]",
+			roomId,
+			*cachedAddress);
+		cache_.eraseRoom(roomId);
+	}
 	if (!ensureConnected()) {
 		MS_WARN(logger_, "Redis unavailable, degrading to local-only for room {}", roomId);
 		return "";
@@ -257,7 +274,6 @@ std::string RoomRegistry::claimRoom(const std::string& roomId, const std::string
 		return 'addr:' .. node
 	)LUA";
 
-	std::string roomKey = std::string(kKeyPrefixRoom) + roomId;
 	std::string nodePrefix = kKeyPrefixNode;
 	std::string ttlStr = std::to_string(roomTTL_);
 
@@ -315,6 +331,51 @@ std::string RoomRegistry::claimRoom(const std::string& roomId, const std::string
 	MS_WARN(logger_, "Unexpected claimRoom result for room {}: {}, degrading to local-only",
 		roomId, result);
 	return "";
+}
+
+bool RoomRegistry::refreshCachedRemoteRoomAddressUnlocked(
+	const std::string& roomId,
+	const std::string& cachedAddress,
+	std::string* refreshedAddress)
+{
+	if (refreshedAddress) {
+		refreshedAddress->clear();
+	}
+	if (cachedAddress.empty() || cachedAddress == nodeAddress_) {
+		if (refreshedAddress) {
+			*refreshedAddress = cachedAddress;
+		}
+		return !cachedAddress.empty();
+	}
+	if (!ensureConnected()) {
+		return false;
+	}
+
+	const std::string roomKey = std::string(kKeyPrefixRoom) + roomId;
+	std::unique_ptr<redisReply, decltype(&freeReplyObject)> roomReply(
+		command_.command("GET %s", roomKey.c_str()),
+		&freeReplyObject);
+	if (!roomReply || roomReply->type != REDIS_REPLY_STRING || !roomReply->str) {
+		return false;
+	}
+
+	const std::string ownerNodeKey =
+		std::string(kKeyPrefixNode) + std::string(roomReply->str, roomReply->len);
+	std::unique_ptr<redisReply, decltype(&freeReplyObject)> nodeReply(
+		command_.command("GET %s", ownerNodeKey.c_str()),
+		&freeReplyObject);
+	if (!nodeReply || nodeReply->type != REDIS_REPLY_STRING || !nodeReply->str) {
+		return false;
+	}
+
+	auto info = parseNodeValue(std::string(nodeReply->str, nodeReply->len));
+	if (info.address.empty()) {
+		return false;
+	}
+	if (refreshedAddress) {
+		*refreshedAddress = info.address;
+	}
+	return info.address == cachedAddress;
 }
 
 void RoomRegistry::refreshRoom(const std::string& roomId)

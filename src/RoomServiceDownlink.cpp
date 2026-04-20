@@ -6,16 +6,6 @@
 namespace mediasoup {
 namespace {
 
-json BuildStatsStoreResponseData(bool stored, std::string reason = "")
-{
-	json data = {
-		{"stored", stored}
-	};
-	if (!reason.empty())
-		data["reason"] = std::move(reason);
-	return data;
-}
-
 size_t FilterConsistentDownlinkSubscriptions(
 	const std::shared_ptr<Peer>& peer,
 	qos::DownlinkSnapshot* snapshot)
@@ -86,11 +76,11 @@ RoomService::Result RoomService::setDownlinkClientStats(
 	std::string rejectReason;
 	if (!downlinkQosRegistry_.Upsert(roomId, peerId, stats, qos::NowMs(), &rejectReason)) {
 		MS_DEBUG(logger_, "[{} {}] dropped downlink stats [{}]", roomId, peerId, rejectReason);
-		return {true, BuildStatsStoreResponseData(false, rejectReason), "", ""};
+		return {true, roomstatsqos::BuildStatsStoreResponseData(false, rejectReason), "", ""};
 	}
 
 	markDownlinkRoomDirty(roomId);
-	return {true, BuildStatsStoreResponseData(true), "", ""};
+	return {true, roomstatsqos::BuildStatsStoreResponseData(true), "", ""};
 }
 
 void RoomService::markDownlinkRoomDirty(const std::string& roomId) {

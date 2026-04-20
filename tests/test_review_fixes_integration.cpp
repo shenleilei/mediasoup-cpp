@@ -1145,6 +1145,51 @@ TEST_F(CacheTest, DirectJoinRedirectsViaCachedRoom) {
 	}
 }
 
+TEST_F(CacheTest, StaleCachedRedirectFallsBackToLocalClaimWhenNodeKeyMissing) {
+	TestWsClient alice;
+	ASSERT_TRUE(alice.connect("127.0.0.1", CACHE_PORT_A));
+	auto joinResp = alice.request("join", {
+		{"roomId", testRoom_}, {"peerId", "alice"},
+		{"displayName", "alice"}, {"rtpCapabilities", rtpCaps()}
+	});
+	ASSERT_TRUE(joinResp.value("ok", false)) << joinResp.dump();
+	usleep(500000);
+
+	redisContext* ctx = redisConnect("127.0.0.1", redisServer_.port());
+	ASSERT_NE(ctx, nullptr);
+	ASSERT_FALSE(ctx->err);
+
+	auto* owner = (redisReply*)redisCommand(
+		ctx,
+		"GET sfu:room:%s",
+		testRoom_.c_str());
+	ASSERT_NE(owner, nullptr);
+	ASSERT_EQ(owner->type, REDIS_REPLY_STRING);
+	ASSERT_NE(owner->str, nullptr);
+	const std::string ownerNodeId(owner->str, owner->len);
+	freeReplyObject(owner);
+
+	auto* del = (redisReply*)redisCommand(
+		ctx,
+		"DEL sfu:node:%s",
+		ownerNodeId.c_str());
+	ASSERT_NE(del, nullptr);
+	freeReplyObject(del);
+	redisFree(ctx);
+
+	TestWsClient bob;
+	ASSERT_TRUE(bob.connect("127.0.0.1", CACHE_PORT_B));
+	auto bobResp = bob.request("join", {
+		{"roomId", testRoom_}, {"peerId", "bob"},
+		{"displayName", "bob"}, {"rtpCapabilities", rtpCaps()}
+	});
+
+	EXPECT_TRUE(bobResp.value("ok", false))
+		<< "Stale cached redirect should be revalidated instead of sent to a missing node: "
+		<< bobResp.dump();
+	EXPECT_FALSE(bobResp.contains("redirect")) << bobResp.dump();
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Full node can still redirect to existing rooms on other nodes
 // ═══════════════════════════════════════════════════════════════

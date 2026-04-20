@@ -70,6 +70,26 @@ TEST(RtpHeaderSharedTest, TooShortFails)
 	EXPECT_FALSE(media::rtp::RtpHeader::Parse(packet, sizeof(packet), &header));
 }
 
+TEST(RtpHeaderSharedTest, NonRtpVersionFails)
+{
+	uint8_t packet[12] = {0x40, 96, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1};
+	media::rtp::RtpHeader header;
+	EXPECT_FALSE(media::rtp::RtpHeader::Parse(packet, sizeof(packet), &header));
+}
+
+TEST(RtpHeaderSharedTest, PaddingExcludedFromPayload)
+{
+	uint8_t packet[16] = {
+		0xA0, 96, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1,
+		0xAA, 0xBB, 0x00, 0x02
+	};
+	media::rtp::RtpHeader header;
+	ASSERT_TRUE(media::rtp::RtpHeader::Parse(packet, sizeof(packet), &header));
+	ASSERT_EQ(header.payloadSize, 2u);
+	EXPECT_EQ(header.payload[0], 0xAA);
+	EXPECT_EQ(header.payload[1], 0xBB);
+}
+
 TEST(AnnexBToAvccSharedTest, SingleNal)
 {
 	std::vector<uint8_t> annexB = {0, 0, 0, 1, 0x65, 0xAA, 0xBB};
@@ -265,4 +285,24 @@ TEST(H264PacketizerSharedTest, LargeNalFragmentsAsFuA)
 	ASSERT_EQ(reconstructed.size(), annexB.size() - 4);
 	EXPECT_EQ(reconstructed[0], 0x65);
 	EXPECT_EQ(reconstructed.back(), annexB.back());
+}
+
+TEST(H264PacketizerSharedTest, FuAPreservesNalFAndNriBits)
+{
+	std::vector<uint8_t> annexB = {0, 0, 0, 1, 0xE5};
+	for (size_t i = 0; i < 2500; ++i)
+		annexB.push_back(static_cast<uint8_t>(i & 0xFF));
+
+	uint16_t sequenceNumber = 200;
+	CollectingPacketSink sink;
+
+	const size_t emitted = media::rtp::H264Packetizer::PacketizeAnnexB(
+		annexB, 102, 43210, 9876, &sequenceNumber, &sink);
+
+	ASSERT_GT(emitted, 1u);
+	media::rtp::RtpHeader first;
+	ASSERT_TRUE(media::rtp::RtpHeader::Parse(
+		sink.packets.front().data(), sink.packets.front().size(), &first));
+	ASSERT_GE(first.payloadSize, 2u);
+	EXPECT_EQ(first.payload[0], 0xFC);
 }

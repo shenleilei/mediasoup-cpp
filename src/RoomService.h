@@ -138,7 +138,6 @@ public:
 		qos::DownlinkSnapshot stats);
 	json collectPeerStats(const std::string& roomId, const std::string& peerId);
 	void broadcastStats();
-	void heartbeatRegistry();
 
 	// Multi-node: resolve room location
 	json resolveRoom(const std::string& roomId, const std::string& clientIp = "");

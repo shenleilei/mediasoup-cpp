@@ -30,9 +30,13 @@ Decoder Decoder::OpenFromParameters(const AVCodecParameters* parameters)
 	return Decoder(std::move(context));
 }
 
-void Decoder::SendPacket(const AVPacket* packet)
+bool Decoder::SendPacket(const AVPacket* packet)
 {
-	CheckError(avcodec_send_packet(context_.get(), packet), "avcodec_send_packet");
+	const int err = avcodec_send_packet(context_.get(), packet);
+	if (err >= 0) return true;
+	if (err == AVERROR(EAGAIN)) return false;
+	CheckError(err, "avcodec_send_packet");
+	return false;
 }
 
 bool Decoder::ReceiveFrame(AVFrame* frame)

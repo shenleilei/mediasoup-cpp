@@ -56,7 +56,7 @@ size_t EmitFragmentedNalu(
 	H264PacketSink* sink)
 {
 	const uint8_t naluHeader = nalu.data[0];
-	const uint8_t fuIndicator = static_cast<uint8_t>((naluHeader & 0x60) | 28);
+	const uint8_t fuIndicator = static_cast<uint8_t>((naluHeader & 0xE0) | 28);
 	size_t packets = 0;
 	size_t offset = 1;
 	bool first = true;

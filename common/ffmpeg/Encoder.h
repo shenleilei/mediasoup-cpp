@@ -20,7 +20,7 @@ public:
 	explicit Encoder(CodecContextPtr context);
 
 	AVCodecContext* get() const { return context_.get(); }
-	void SendFrame(const AVFrame* frame);
+	bool SendFrame(const AVFrame* frame);
 	bool ReceivePacket(AVPacket* packet);
 
 private:

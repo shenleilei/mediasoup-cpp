@@ -67,7 +67,10 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 		std::string key = roomstatsqos::MakePeerKey(roomId, peerId);
 		roomrecording::RemovePeerRecorder(key, recorders_, recorderTransports_, logger_);
 		qosRegistry_.ErasePeer(roomId, peerId);
-		autoQosOverrideRecords_.erase(key);
+		roomstatsqos::ClearPeerAutomaticOverrideRecords(
+			autoQosOverrideRecords_,
+			roomId,
+			peerId);
 		lastConnectionQualitySignatures_.erase(key);
 		downlinkQosRegistry_.ErasePeer(roomId, peerId);
 		subscriberControllers_.erase(key);
@@ -115,7 +118,10 @@ RoomService::Result RoomService::leave(const std::string& roomId, const std::str
 	roomrecording::RemovePeerRecorder(key, recorders_, recorderTransports_, logger_);
 
 	qosRegistry_.ErasePeer(roomId, peerId);
-	autoQosOverrideRecords_.erase(roomstatsqos::MakePeerKey(roomId, peerId));
+	roomstatsqos::ClearPeerAutomaticOverrideRecords(
+		autoQosOverrideRecords_,
+		roomId,
+		peerId);
 	lastConnectionQualitySignatures_.erase(roomstatsqos::MakePeerKey(roomId, peerId));
 	downlinkQosRegistry_.ErasePeer(roomId, peerId);
 	subscriberControllers_.erase(roomstatsqos::MakePeerKey(roomId, peerId));

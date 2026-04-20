@@ -16,7 +16,7 @@ public:
 	explicit Decoder(CodecContextPtr context);
 
 	AVCodecContext* get() const { return context_.get(); }
-	void SendPacket(const AVPacket* packet);
+	bool SendPacket(const AVPacket* packet);
 	bool ReceiveFrame(AVFrame* frame);
 
 private:

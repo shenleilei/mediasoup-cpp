@@ -17,6 +17,7 @@ struct RtpHeader {
 	static bool Parse(const uint8_t* data, size_t len, RtpHeader* header)
 	{
 		if (!data || !header || len < 12) return false;
+		if ((data[0] >> 6) != 2) return false;
 
 		header->marker = (data[1] & 0x80) != 0;
 		header->payloadType = data[1] & 0x7F;
@@ -42,8 +43,16 @@ struct RtpHeader {
 		}
 		if (headerLen > len) return false;
 
+		size_t payloadSize = len - headerLen;
+		if ((data[0] & 0x20) != 0) {
+			if (payloadSize == 0) return false;
+			const size_t paddingSize = data[len - 1];
+			if (paddingSize == 0 || paddingSize > payloadSize) return false;
+			payloadSize -= paddingSize;
+		}
+
 		header->payload = data + headerLen;
-		header->payloadSize = len - headerLen;
+		header->payloadSize = payloadSize;
 		return true;
 	}
 };
