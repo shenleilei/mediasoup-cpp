@@ -14,6 +14,9 @@ ALL_GROUPS=(
   topology
   threaded
 )
+ALIAS_GROUPS=(
+  non-qos
+)
 
 SELECTED_GROUPS=()
 SKIP_BUILD=0
@@ -27,6 +30,7 @@ usage() {
 Usage:
   scripts/run_all_tests.sh
   scripts/run_all_tests.sh unit threaded
+  scripts/run_all_tests.sh non-qos
   scripts/run_all_tests.sh --list
 
 Options:
@@ -40,6 +44,7 @@ Groups:
   qos          full QoS regression delegated to scripts/run_qos_tests.sh
   topology     topology + multinode binaries
   threaded     compatibility alias for threaded QoS regression only
+  non-qos      alias for unit + integration + topology
 
 Notes:
   - This script is the full repository regression entry.
@@ -54,6 +59,7 @@ EOF
 
 list_groups() {
   printf '%s\n' "${ALL_GROUPS[@]}"
+  printf '%s\n' "${ALIAS_GROUPS[@]}"
 }
 
 normalize_selected_groups() {
@@ -62,6 +68,16 @@ normalize_selected_groups() {
   local -a normalized=()
 
   for group in "${SELECTED_GROUPS[@]}"; do
+    if [[ "$group" == "non-qos" ]]; then
+      for expanded_group in unit integration topology; do
+        case " ${normalized[*]} " in
+          *" $expanded_group "*) continue ;;
+        esac
+        normalized+=("$expanded_group")
+      done
+      continue
+    fi
+
     case " ${ALL_GROUPS[*]} " in
       *" $group "*) ;;
       *)

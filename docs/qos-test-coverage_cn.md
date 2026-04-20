@@ -128,7 +128,7 @@ uplink 相关能力覆盖：
 | Case | 测试目的 | 测试方法 | 结果分析口径 |
 |---|---|---|---|
 | `publish_snapshot` | 验证正常 client snapshot 可被服务端接收、保存并聚合成 QoS 状态 | 启动 SFU；用 Node 客户端 join；本地 QoS controller 连续采样并 publish 两次 snapshot；最后读取 `getStats` | 失败通常说明 `clientStats` publish、seq 递增、聚合或 stats 回读有问题 |
-| `stale_seq` | 验证旧 snapshot 不会覆盖更新 snapshot | 先发 `seq=50`，再发 `seq=49`；读取服务端 stats 检查最终 seq 和 quality | 如果旧 seq 覆盖了新状态，说明服务端 stale-seq 防护失效 |
+| `stale_seq` | 验证旧 snapshot 不会覆盖更新 snapshot，且响应能显式反映 ignored/store 结果 | 先发 `seq=50`，再发 `seq=49`；检查第二次响应里的 `stored=false/reason=stale-seq`，再读取服务端 stats 检查最终 seq 和 quality | 如果旧 seq 覆盖了新状态，或响应不再暴露 ignored 原因，说明 stale-seq 防护或可观测性回退了 |
 | `policy_update` | 验证 policy 更新能送达并改变 runtime 配置 | join 后构造 controller；发 `setQosPolicy`；读取 runtime policy / controller 行为 | 失败通常是 policy 分发、解析或 runtime 应用链路断了 |
 | `auto_override_poor` | 验证差网络 snapshot 会触发 automatic override | 发 `peerState.quality=poor`、高 RTT / 丢包 snapshot，等待 `qosOverride` | 没收到 override：优先看 aggregate / automatic override 生成；收到错误 reason：看 poor/lost 判定 |
 | `override_force_audio_only` | 验证手动 `forceAudioOnly` override 能驱动 client 执行动作 | 发 `setQosOverride(forceAudioOnly=true)`，controller 再采样一次，检查执行动作 | 失败说明 override 通知没送到，或 controller 没把 override 落成动作 |

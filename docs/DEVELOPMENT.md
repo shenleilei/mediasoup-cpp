@@ -228,6 +228,8 @@ cd /path/to/mediasoup-cpp
 # 最终统一输出失败汇总并返回非 0。
 # run_all_tests.sh 同时会刷新 docs/full-regression-test-results.md，
 # 记录本次仓库全量回归的选择项和逐任务结果。
+./scripts/run_all_tests.sh unit integration topology
+./scripts/run_all_tests.sh non-qos
 
 # nightly 全量回归包装器：
 #  - 仍然委托 scripts/run_all_tests.sh 做真实执行
@@ -257,8 +259,25 @@ cd /path/to/mediasoup-cpp
 ## 关键文件
 
 ```
+common/
+└── ffmpeg/
+    ├── AvError.{h,cpp}        # FFmpeg 错误码/错误字符串 helper
+    ├── AvPtr.h                # FFmpeg 句柄 unique_ptr deleter / packet/frame helper
+    ├── AvTime.h               # timebase / pts helper
+    ├── InputFormat.{h,cpp}    # demux input open / stream info / read packet
+    ├── OutputFormat.{h,cpp}   # mux output alloc / io / header / trailer / write packet
+    ├── Decoder.{h,cpp}        # decoder open / send packet / receive frame
+    ├── Encoder.{h,cpp}        # encoder open / send frame / receive packet
+    └── BitstreamFilter.{h,cpp} # BSF alloc / init / send / receive
+└── media/
+    ├── rtp/
+    │   ├── RtpHeader.h            # 共享 RTP header parse helper
+    │   └── H264Packetizer.{h,cpp} # 共享 H264 RTP packetizer（sink callback，无 I/O）
+    └── h264/
+        ├── AnnexB.{h,cpp}         # 共享 Annex-B NAL reader
+        └── Avcc.{h,cpp}           # 共享 Annex-B → AVCC 转换
 src/
-├── main.cpp                  # 薄入口：signal wiring + 最终 assemble/run
+├── main.cpp                  # 控制编排入口（依赖 common/ffmpeg + common/media）
 ├── MainBootstrap.{h,cpp}     # 参数解析、geo/bootstrap、WorkerThread 池创建
 ├── RuntimeDaemon.{h,cpp}     # daemonize、启动状态通知
 ├── Constants.h               # 所有常量（kXx 命名）
@@ -273,9 +292,11 @@ src/
 ├── RoomService.h             # 房间业务 facade
 ├── RoomServiceLifecycle.cpp  # join/leave/health/cleanup
 ├── RoomServiceMedia.cpp      # transport / produce / consume
-├── RoomServiceStats.cpp      # stats / QoS / broadcast
-├── RoomServiceDownlink.cpp   # downlink planning / publisher supply
-├── RoomMediaHelpers.h        # media helper
+├── RoomServiceStats.cpp      # peer stats collect / stats broadcast
+├── RoomServiceQos.cpp        # QoS ingest / override / connection-quality / room-pressure
+├── RoomServiceRegistryView.cpp # registry heartbeat / resolve / node-load view
+├── RoomServiceDownlink.cpp   # downlink ingest / planning / publisher supply
+├── RoomMediaHelpers.h        # room-level media helper
 ├── RoomRecordingHelpers.{h,cpp} # recorder helper
 ├── RoomDownlinkHelpers.h     # downlink helper
 ├── RoomStatsQosHelpers.h     # stats / QoS helper
@@ -294,9 +315,17 @@ src/
 ├── Consumer.h/cpp            # Consumer（score 追踪、stats）
 ├── Peer.h                    # Peer 状态（transports、producers、consumers、sessionId）
 ├── ortc.h                    # ORTC 协商（codec 匹配、RTP mapping）
-├── Recorder.h                # RTP→WebM 录制 + QoS 时间线
+├── Recorder.h                # PeerRecorder 声明
+├── Recorder.cpp              # RTP→WebM 录制 + QoS 时间线实现（依赖 common/media + common/ffmpeg）
 ├── EventEmitter.h            # 轻量事件系统
 └── Logger.h                  # spdlog 封装
+client/
+├── main.cpp                  # 薄入口：只调用 PlainClientApp
+├── PlainClientApp.{h,cpp}    # plain-client shared orchestration / session bootstrap / teardown
+├── PlainClientLegacy.cpp     # legacy single-thread runtime orchestration
+├── PlainClientThreaded.cpp   # threaded runtime orchestration
+├── PlainClientSupport.{h,cpp} # stats / matrix / test helper support
+├── WsClient.{h,cpp}          # WS request/response/notification client
 tests/
 ├── test_ortc.cpp                      # ORTC 协商
 ├── test_room.cpp                      # Room/Peer 管理
@@ -306,6 +335,7 @@ tests/
 ├── test_multinode.cpp                 # WorkerManager、room dispatch、respawn 限流
 ├── test_request_timeout.cpp           # Channel IPC 超时
 ├── test_review_fixes.cpp              # 历史 review 修复回归
+├── test_common_media.cpp              # 共享 RTP/H264 helper 单测
 ├── test_client_qos.cpp                # PlainTransport C++ client QoS 单测
 ├── test_qos_unit.cpp                  # QoS 数据结构
 ├── test_qos_accuracy.cpp             # QoS 精度（真实 UDP 收发）

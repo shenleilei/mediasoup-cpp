@@ -190,7 +190,9 @@ flowchart TB
 
 这个仓库除了浏览器信令 / WebRTC 路径，还维护一条 Linux `PlainTransport C++ client` 路径：
 
-- 控制面入口：`client/main.cpp`
+- 薄入口：`client/main.cpp`
+- shared orchestration / session bootstrap：`client/PlainClientApp.*`
+- threaded / legacy runtime orchestration：`client/PlainClientThreaded.cpp`, `client/PlainClientLegacy.cpp`
 - RTCP：`client/RtcpHandler.h`
 - QoS：`client/qos/*`
 
@@ -688,6 +690,14 @@ Client -> 主线程
 - 丢掉明显无效或 stale 的 stats
 - 避免无意义请求进入 `WorkerThread`
 
+当前响应语义再细化了一层：
+
+- `ok=true` 不再表示“已经投递到 worker 队列”，而是表示 worker 已经处理完这次 stats 请求
+- `data.stored=true` 表示 snapshot 已入库
+- `data.stored=false` 且带 `reason` 表示请求本身处理成功，但 snapshot 被 registry 按 `stale-seq` / `stale-ts` 等原因忽略
+
+`downlinkClientStats` 也采用同样的 store-result 语义，但它仍然只把 snapshot 入库变成同步可观测；`downlinkQos` planner 收敛依旧是异步的。
+
 这条路径同时服务于两类 client：
 
 - 浏览器 / JS client
@@ -979,8 +989,8 @@ WorkerThread event loop
 | transport / produce / consume | `RoomServiceMedia.cpp` | `Router.cpp`, `Transport.cpp`, `WebRtcTransport.cpp` | `Channel.cpp` |
 | mediasoup IPC 超时 / 死锁 / 通知丢失 | `Channel.cpp` | `WorkerThread.{h,cpp}` | `Worker.cpp` |
 | 多节点路由 / Redis 缓存 | `RoomRegistry.{h,cpp}` | `SignalingServerRuntime.cpp` 的 registry worker | `GeoRouter.*` |
-| QoS 聚合 / override / policy | `RoomServiceStats.cpp` | `src/qos/*` | 客户端 `src/client/lib/qos/*` |
-| 录制链路 | `RoomServiceMedia.cpp:autoRecord` + `RoomRecordingHelpers.*` | `Recorder.h`, `PlainTransport.*` | `Transport.cpp` |
+| QoS 聚合 / override / policy | `RoomServiceQos.cpp` | `src/qos/*` | 客户端 `src/client/lib/qos/*` |
+| 录制链路 | `RoomServiceMedia.cpp:autoRecord` + `RoomRecordingHelpers.*` | `Recorder.h`, `Recorder.cpp`, `PlainTransport.*`, `common/media/*`, `common/ffmpeg/*` | `Transport.cpp` |
 | worker 崩溃恢复 | `WorkerThread.cpp:onWorkerDied` | `RoomServiceLifecycle.cpp:checkRoomHealth` | `Worker.cpp` |
 
 ### 15.2 三条最应该先建立的心智模型

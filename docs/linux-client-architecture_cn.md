@@ -58,6 +58,11 @@ WsClient
   ├─ async response matching
   └─ qosPolicy / qosOverride notification queue
 
+PlainClientSupport
+  ├─ server-side producer stats parsing
+  ├─ matrix test profile parsing
+  └─ test-env request/payload helpers
+
 FFmpeg Pipeline
   ├─ MP4 demux
   ├─ AAC -> Opus transcode
@@ -76,11 +81,29 @@ QoS Runtime
   ├─ peer-level budget coordination
   ├─ clientStats snapshot publish
   └─ server getStats assisted sampling
+
+Shared Media Helpers
+  ├─ RTP header parse
+  ├─ H264 RTP packetization
+  └─ Annex-B / AVCC conversion
+
+Shared FFmpeg Adapters
+  ├─ input / output format ownership
+  ├─ decoder / encoder ownership
+  ├─ bitstream filter ownership
+  └─ packet / frame / timebase helper
 ```
 
 对应代码入口：
 
-- 控制面：`client/main.cpp`
+- 薄入口：`client/main.cpp`
+- shared orchestration / session bootstrap：`client/PlainClientApp.h` + `client/PlainClientApp.cpp`
+- threaded runtime：`client/PlainClientThreaded.cpp`
+- legacy runtime：`client/PlainClientLegacy.cpp`
+- WebSocket：`client/WsClient.h` + `client/WsClient.cpp`
+- server/QoS support helper：`client/PlainClientSupport.h` + `client/PlainClientSupport.cpp`
+- 共享媒体协议 helper：`common/media/*`
+- 共享 FFmpeg adapter：`common/ffmpeg/*`
 - RTCP：`client/RtcpHandler.h`
 - QoS：`client/qos/QosController.h` 及周边头文件
 
