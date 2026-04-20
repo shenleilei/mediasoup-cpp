@@ -201,6 +201,37 @@ TEST_F(MultiNodeResolveTest, ResolveExistingRoomReturnsOwner) {
 	alice.close();
 }
 
+TEST_F(MultiNodeResolveTest, ResolveStaleOwnerFallsBackToLiveNode) {
+	startNodes({{14010, 0}, {14011, 0}});
+	std::string room = roomName("stale_owner");
+
+	auto* ctx = redisConnect("127.0.0.1", redisServer_.port());
+	ASSERT_NE(ctx, nullptr);
+	ASSERT_FALSE(ctx->err);
+
+	auto* setReply = (redisReply*)redisCommand(
+		ctx,
+		"SET sfu:room:%s %s EX 300",
+		room.c_str(),
+		"ghost-node");
+	ASSERT_NE(setReply, nullptr);
+	freeReplyObject(setReply);
+	redisFree(ctx);
+
+	std::string body = httpGet(HOST, 14010, "/api/resolve?roomId=" + room);
+	ASSERT_FALSE(body.empty());
+
+	auto j = json::parse(body, nullptr, false);
+	ASSERT_FALSE(j.is_discarded()) << body;
+	EXPECT_TRUE(j.value("isNew", false));
+	const std::string wsUrl = j.value("wsUrl", "");
+	EXPECT_FALSE(wsUrl.empty()) << body;
+	EXPECT_TRUE(
+		wsUrl.find("14010") != std::string::npos ||
+		wsUrl.find("14011") != std::string::npos)
+		<< body;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Test 2b: two fresh nodes discover each other without any rooms
 // ═══════════════════════════════════════════════════════════════

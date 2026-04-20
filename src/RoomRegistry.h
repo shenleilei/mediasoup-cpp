@@ -3,8 +3,10 @@
 #include "Constants.h"
 
 #include <atomic>
+#include <cstddef>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -89,6 +91,114 @@ private:
 	std::string findBestNodeCached(const std::string& clientIp);
 	bool hasRemoteNodeCached() const;
 
+	struct CommandConnection {
+		CommandConnection() = default;
+		~CommandConnection();
+
+		CommandConnection(const CommandConnection&) = delete;
+		CommandConnection& operator=(const CommandConnection&) = delete;
+
+		bool reconnect(
+			const std::string& redisHost,
+			int redisPort,
+			const std::shared_ptr<spdlog::logger>& logger);
+		bool ensureConnected(
+			const std::string& redisHost,
+			int redisPort,
+			const std::shared_ptr<spdlog::logger>& logger);
+		void disconnect(
+			const std::shared_ptr<spdlog::logger>& logger,
+			bool logAsWarning = true);
+		bool connected() const;
+		redisReply* command(const char* format, ...);
+		int appendCommand(const char* format, ...);
+		int getReply(void** reply);
+		redisReply* commandArgv(
+			int argc,
+			const char** argv,
+			const size_t* argvLen);
+
+		redisContext* ctx = nullptr;
+		std::mutex mutex;
+	};
+
+	struct CacheView {
+		std::unordered_map<std::string, NodeInfo> nodes;
+		std::unordered_map<std::string, std::string> rooms;
+		mutable std::mutex mutex;
+
+		size_t knownNodeCount() const {
+			std::lock_guard<std::mutex> lock(mutex);
+			return nodes.size();
+		}
+
+		std::optional<std::string> roomAddress(const std::string& roomId) const {
+			std::lock_guard<std::mutex> lock(mutex);
+			auto it = rooms.find(roomId);
+			if (it == rooms.end() || it->second.empty()) return std::nullopt;
+			return it->second;
+		}
+
+		std::optional<std::string> nodeAddressForId(const std::string& nodeId) const {
+			std::lock_guard<std::mutex> lock(mutex);
+			auto it = nodes.find(nodeId);
+			if (it == nodes.end() || it->second.address.empty()) return std::nullopt;
+			return it->second.address;
+		}
+
+		void upsertNode(const std::string& nodeId, const NodeInfo& info) {
+			std::lock_guard<std::mutex> lock(mutex);
+			nodes[nodeId] = info;
+		}
+
+		void upsertRoom(const std::string& roomId, const std::string& address) {
+			std::lock_guard<std::mutex> lock(mutex);
+			rooms[roomId] = address;
+		}
+
+		void eraseRoom(const std::string& roomId) {
+			std::lock_guard<std::mutex> lock(mutex);
+			rooms.erase(roomId);
+		}
+
+		void eraseNodeAndOwnedRooms(const std::string& nodeId) {
+			std::lock_guard<std::mutex> lock(mutex);
+			auto it = nodes.find(nodeId);
+			if (it == nodes.end()) return;
+			const std::string deadAddr = it->second.address;
+			nodes.erase(it);
+			if (deadAddr.empty()) return;
+			for (auto rit = rooms.begin(); rit != rooms.end(); ) {
+				if (rit->second == deadAddr) rit = rooms.erase(rit);
+				else ++rit;
+			}
+		}
+
+		std::vector<std::string> otherNodeIds(const std::string& selfNodeId) const {
+			std::lock_guard<std::mutex> lock(mutex);
+			std::vector<std::string> result;
+			for (const auto& [nodeId, _] : nodes)
+				if (nodeId != selfNodeId) result.push_back(nodeId);
+			return result;
+		}
+
+		void mergeNodes(const std::unordered_map<std::string, NodeInfo>& newNodes) {
+			if (newNodes.empty()) return;
+			std::lock_guard<std::mutex> lock(mutex);
+			for (const auto& [nodeId, info] : newNodes)
+				nodes[nodeId] = info;
+		}
+
+		void replaceAll(
+			std::unordered_map<std::string, NodeInfo> newNodes,
+			std::unordered_map<std::string, std::string> newRooms)
+		{
+			std::lock_guard<std::mutex> lock(mutex);
+			nodes = std::move(newNodes);
+			rooms = std::move(newRooms);
+		}
+	};
+
 	std::string nodeId_;
 	std::string nodeAddress_;
 	double nodeLat_;
@@ -99,12 +209,8 @@ private:
 	std::string redisHost_;
 	int redisPort_;
 
-	redisContext* ctx_ = nullptr;
-	std::mutex cmdMutex_;
-
-	std::unordered_map<std::string, NodeInfo> nodeCache_;
-	std::unordered_map<std::string, std::string> roomCache_;
-	mutable std::mutex cacheMutex_;
+	CommandConnection command_;
+	CacheView cache_;
 
 	std::thread subThread_;
 	std::atomic<bool> subStop_{false};
