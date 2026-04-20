@@ -69,7 +69,7 @@ cd mediasoup-cpp
   --listenIp=0.0.0.0
 ```
 
-浏览器访问 `http://<server-ip>:3000`。
+浏览器访问 `http://<server-ip>:3000`（本机调试可直接用 `http://127.0.0.1:3000`）。
 
 成功标志（最小口径）：
 
