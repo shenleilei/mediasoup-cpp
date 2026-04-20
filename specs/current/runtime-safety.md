@@ -4,6 +4,8 @@
 
 - Malformed WebSocket request payloads SHALL be dropped without terminating the signaling server process.
 - A malformed request SHALL NOT poison the connection or prevent a later valid request from being processed.
+- A single WebSocket connection SHALL NOT establish multiple joined sessions; a repeated `join` on an already joined socket SHALL be rejected.
+- If a WebSocket disconnects before async `join` completion is applied on the signaling loop, the server SHALL rollback that join on the worker side when the joined peer session still matches.
 
 ## Room Registry Ordering
 
@@ -18,6 +20,11 @@
 - `Channel::close()` SHALL not leave a joinable read thread behind when invoked on the read thread itself.
 - `Channel` send/close paths SHALL not write through a stale producer fd during concurrent shutdown.
 - Non-threaded `Channel` message pumping SHALL tolerate notification callbacks that re-enter `requestWait()` without replaying the same buffered message.
+- `WorkerThread` event loop SHALL handle `epoll_wait` error paths explicitly; `EINTR` retries and unrecoverable errors are logged and break the loop to avoid silent degraded spinning.
+
+## Operational Logging
+
+- Normal `/api/resolve` and room-registry maintenance tracing SHALL log below warning level; warning logs are reserved for failures, degradation, or anomalous states.
 
 ## RTP And Capability Correctness
 
@@ -34,3 +41,4 @@
 - Recorder startup SHALL fail safely if FFmpeg cannot allocate the required audio or video streams.
 - H264 extradata construction SHALL reject SPS data shorter than 4 bytes instead of reading past the buffer.
 - Recorder QoS timestamps SHALL use a synchronization-safe first-RTP baseline.
+- Recorder RTP PTS deltas SHALL use unsigned modulo-32 timestamp arithmetic widened before rescale, avoiding signed 32-bit overflow during long sessions.

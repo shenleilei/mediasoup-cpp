@@ -85,6 +85,8 @@ public:
 		const std::string& displayName, const json& rtpCapabilities,
 		const std::string& clientIp = "");
 	Result leave(const std::string& roomId, const std::string& peerId);
+	Result leaveIfSessionMatches(const std::string& roomId, const std::string& peerId,
+		uint64_t expectedSessionId);
 	Result createTransport(const std::string& roomId, const std::string& peerId,
 		bool producing, bool consuming);
 	Result connectTransport(const std::string& roomId, const std::string& peerId,

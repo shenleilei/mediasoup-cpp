@@ -249,6 +249,81 @@ TEST_F(ReviewFixIntegration, ReconnectStaleRequestRejectedImmediately) {
 		<< "New session should still work: " << freshResp.dump();
 }
 
+TEST_F(ReviewFixIntegration, RepeatedJoinOnSameSocketRejected) {
+	TestWsClient ws;
+	ASSERT_TRUE(ws.connect(HOST, SFU_PORT));
+
+	auto firstJoin = ws.request("join", {
+		{"roomId", testRoom_},
+		{"peerId", "repeat_join_user"},
+		{"displayName", "repeat_join_user"},
+		{"rtpCapabilities", rtpCaps()}
+	});
+	ASSERT_TRUE(firstJoin.value("ok", false)) << firstJoin.dump();
+
+	auto secondJoin = ws.request("join", {
+		{"roomId", testRoom_ + "_other"},
+		{"peerId", "repeat_join_user_other"},
+		{"displayName", "repeat_join_user_other"},
+		{"rtpCapabilities", rtpCaps()}
+	});
+	EXPECT_FALSE(secondJoin.value("ok", false))
+		<< "Repeated join on same socket must be rejected: " << secondJoin.dump();
+	EXPECT_NE(secondJoin.value("error", "").find("already joined"), std::string::npos)
+		<< secondJoin.dump();
+
+	// Original joined session remains usable.
+	auto transportResp = ws.request("createWebRtcTransport", {
+		{"producing", true},
+		{"consuming", false}
+	});
+	EXPECT_TRUE(transportResp.value("ok", false))
+		<< "Original session should remain usable after rejected rejoin: "
+		<< transportResp.dump();
+}
+
+TEST_F(ReviewFixIntegration, EarlyCloseJoinDoesNotLeaveGhostParticipants) {
+	auto observer = joinRoom(testRoom_, "observer");
+
+	static constexpr int kGhostAttempts = 40;
+	for (int i = 0; i < kGhostAttempts; ++i) {
+		TestWsClient ghostWs;
+		ASSERT_TRUE(ghostWs.connect(HOST, SFU_PORT));
+		const std::string ghostPeerId = "ghost_" + std::to_string(i);
+		ghostWs.sendRequest("join", {
+			{"roomId", testRoom_},
+			{"peerId", ghostPeerId},
+			{"displayName", ghostPeerId},
+			{"rtpCapabilities", rtpCaps()}
+		});
+		ghostWs.close();
+	}
+
+	// Allow worker/main-loop cleanup to settle.
+	usleep(800000);
+
+	TestWsClient inspector;
+	ASSERT_TRUE(inspector.connect(HOST, SFU_PORT));
+	auto inspectJoin = inspector.request("join", {
+		{"roomId", testRoom_},
+		{"peerId", "inspector"},
+		{"displayName", "inspector"},
+		{"rtpCapabilities", rtpCaps()}
+	});
+	ASSERT_TRUE(inspectJoin.value("ok", false)) << inspectJoin.dump();
+	ASSERT_TRUE(inspectJoin.contains("data")) << inspectJoin.dump();
+	ASSERT_TRUE(inspectJoin["data"].contains("participants")) << inspectJoin.dump();
+
+	const auto& participants = inspectJoin["data"]["participants"];
+	ASSERT_TRUE(participants.is_array()) << inspectJoin.dump();
+	for (const auto& participant : participants) {
+		const std::string participantPeerId = participant.value("peerId", "");
+		EXPECT_FALSE(participantPeerId.rfind("ghost_", 0) == 0)
+			<< "Ghost participant leaked after early-close join race: "
+			<< inspectJoin.dump();
+	}
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Fix 3: restartIce returns fresh ICE parameters
 // ═══════════════════════════════════════════════════════════════

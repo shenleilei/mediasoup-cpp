@@ -7,6 +7,7 @@
 #include "Worker.h"
 
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
@@ -21,6 +22,10 @@
 namespace mediasoup {
 
 class RoomRegistry;
+inline bool IsRecoverableEpollWaitError(int errorCode)
+{
+	return errorCode == EINTR;
+}
 
 /// WorkerThread: an event-loop thread owning a set of Worker processes and Rooms.
 ///

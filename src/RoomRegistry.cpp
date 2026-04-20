@@ -51,21 +51,21 @@ size_t RoomRegistry::knownNodeCount() const
 void RoomRegistry::heartbeat()
 {
 	auto start = std::chrono::steady_clock::now();
-	MS_WARN(logger_, "heartbeat start [nodeId:{}]", nodeId_);
+	MS_DEBUG(logger_, "heartbeat start [nodeId:{}]", nodeId_);
 	std::lock_guard<std::mutex> lock(command_.mutex);
 	if (!ensureConnected()) return;
 
 	auto stepStart = std::chrono::steady_clock::now();
-	MS_WARN(logger_, "heartbeat registerNode start [nodeId:{}]", nodeId_);
+	MS_DEBUG(logger_, "heartbeat registerNode start [nodeId:{}]", nodeId_);
 	registerNode();
-	MS_WARN(logger_, "heartbeat registerNode done [nodeId:{} ms:{}]",
+	MS_DEBUG(logger_, "heartbeat registerNode done [nodeId:{} ms:{}]",
 		nodeId_, std::chrono::duration_cast<std::chrono::milliseconds>(
 			std::chrono::steady_clock::now() - stepStart).count());
 
 	stepStart = std::chrono::steady_clock::now();
-	MS_WARN(logger_, "heartbeat evictDeadNodes start [nodeId:{}]", nodeId_);
+	MS_DEBUG(logger_, "heartbeat evictDeadNodes start [nodeId:{}]", nodeId_);
 	evictDeadNodes();
-	MS_WARN(logger_, "heartbeat evictDeadNodes done [nodeId:{} ms:{} totalMs:{}]",
+	MS_DEBUG(logger_, "heartbeat evictDeadNodes done [nodeId:{} ms:{} totalMs:{}]",
 		nodeId_,
 		std::chrono::duration_cast<std::chrono::milliseconds>(
 			std::chrono::steady_clock::now() - stepStart).count(),
@@ -76,13 +76,13 @@ void RoomRegistry::heartbeat()
 void RoomRegistry::updateLoad(size_t rooms, size_t maxRooms)
 {
 	auto start = std::chrono::steady_clock::now();
-	MS_WARN(logger_, "updateLoad start [nodeId:{} rooms:{} maxRooms:{}]",
+	MS_DEBUG(logger_, "updateLoad start [nodeId:{} rooms:{} maxRooms:{}]",
 		nodeId_, rooms, maxRooms);
 	std::lock_guard<std::mutex> lock(command_.mutex);
 	if (!ensureConnected()) return;
 
 	std::string val = buildNodeValue(rooms, maxRooms);
-	MS_WARN(logger_, "updateLoad redis SET start [nodeId:{} key:{}]",
+	MS_DEBUG(logger_, "updateLoad redis SET start [nodeId:{} key:{}]",
 		nodeId_, (std::string(kKeyPrefixNode) + nodeId_));
 	auto* reply = command_.command(
 		"SET %s %s EX %d",
@@ -90,7 +90,7 @@ void RoomRegistry::updateLoad(size_t rooms, size_t maxRooms)
 		val.c_str(),
 		nodeTTL_);
 	if (reply) {
-		MS_WARN(logger_, "updateLoad redis SET done [nodeId:{} ms:{}]",
+		MS_DEBUG(logger_, "updateLoad redis SET done [nodeId:{} ms:{}]",
 			nodeId_, std::chrono::duration_cast<std::chrono::milliseconds>(
 				std::chrono::steady_clock::now() - start).count());
 		freeReplyObject(reply);
@@ -102,7 +102,7 @@ void RoomRegistry::updateLoad(size_t rooms, size_t maxRooms)
 		cache_.upsertNode(nodeId_, parseNodeValue(val));
 	}
 	publishNodeUpdate(nodeId_, val);
-	MS_WARN(logger_, "updateLoad done [nodeId:{} totalMs:{}]",
+	MS_DEBUG(logger_, "updateLoad done [nodeId:{} totalMs:{}]",
 		nodeId_, std::chrono::duration_cast<std::chrono::milliseconds>(
 			std::chrono::steady_clock::now() - start).count());
 }
@@ -110,11 +110,11 @@ void RoomRegistry::updateLoad(size_t rooms, size_t maxRooms)
 void RoomRegistry::refreshRooms(const std::vector<std::string>& roomIds)
 {
 	auto start = std::chrono::steady_clock::now();
-	MS_WARN(logger_, "refreshRooms start [count:{}]", roomIds.size());
+	MS_DEBUG(logger_, "refreshRooms start [count:{}]", roomIds.size());
 	std::lock_guard<std::mutex> lock(command_.mutex);
 	if (!ensureConnected()) return;
 	for (const auto& roomId : roomIds) {
-		MS_WARN(logger_, "refreshRooms redis EXPIRE start [roomId:{}]", roomId);
+		MS_DEBUG(logger_, "refreshRooms redis EXPIRE start [roomId:{}]", roomId);
 		auto* reply = command_.command(
 			"EXPIRE %s %d",
 			(std::string(kKeyPrefixRoom) + roomId).c_str(),
@@ -125,11 +125,11 @@ void RoomRegistry::refreshRooms(const std::vector<std::string>& roomIds)
 			handleDisconnect();
 			return;
 		}
-		MS_WARN(logger_, "refreshRooms redis EXPIRE done [roomId:{} elapsedMs:{}]",
+		MS_DEBUG(logger_, "refreshRooms redis EXPIRE done [roomId:{} elapsedMs:{}]",
 			roomId, std::chrono::duration_cast<std::chrono::milliseconds>(
 				std::chrono::steady_clock::now() - start).count());
 	}
-	MS_WARN(logger_, "refreshRooms done [count:{} totalMs:{}]",
+	MS_DEBUG(logger_, "refreshRooms done [count:{} totalMs:{}]",
 		roomIds.size(), std::chrono::duration_cast<std::chrono::milliseconds>(
 			std::chrono::steady_clock::now() - start).count());
 }
@@ -138,10 +138,10 @@ RoomRegistry::ResolveResult RoomRegistry::resolveRoom(
 	const std::string& roomId, const std::string& clientIp)
 {
 	auto start = std::chrono::steady_clock::now();
-	MS_WARN(logger_, "resolveRoom start [roomId:{} clientIp:{}]", roomId, clientIp);
+	MS_DEBUG(logger_, "resolveRoom start [roomId:{} clientIp:{}]", roomId, clientIp);
 	{
 		if (auto cachedAddress = cache_.roomAddress(roomId); cachedAddress.has_value()) {
-			MS_WARN(logger_, "resolveRoom cache hit [roomId:{} wsUrl:{} totalMs:{}]",
+			MS_DEBUG(logger_, "resolveRoom cache hit [roomId:{} wsUrl:{} totalMs:{}]",
 				roomId, *cachedAddress, std::chrono::duration_cast<std::chrono::milliseconds>(
 					std::chrono::steady_clock::now() - start).count());
 			return {*cachedAddress, false};
@@ -152,14 +152,14 @@ RoomRegistry::ResolveResult RoomRegistry::resolveRoom(
 		std::lock_guard<std::mutex> lock(command_.mutex);
 		if (ensureConnected()) {
 			auto getRoomStart = std::chrono::steady_clock::now();
-			MS_WARN(logger_, "resolveRoom redis GET room start [roomId:{} key:{}]",
+			MS_DEBUG(logger_, "resolveRoom redis GET room start [roomId:{} key:{}]",
 				roomId, (std::string(kKeyPrefixRoom) + roomId));
 			std::unique_ptr<redisReply, decltype(&freeReplyObject)> roomReply(
 				command_.command(
 					"GET %s",
 					(std::string(kKeyPrefixRoom) + roomId).c_str()),
 				&freeReplyObject);
-			MS_WARN(logger_, "resolveRoom redis GET room done [roomId:{} ms:{} replyType:{}]",
+			MS_DEBUG(logger_, "resolveRoom redis GET room done [roomId:{} ms:{} replyType:{}]",
 				roomId, std::chrono::duration_cast<std::chrono::milliseconds>(
 					std::chrono::steady_clock::now() - getRoomStart).count(),
 				roomReply ? roomReply->type : -1);
@@ -168,14 +168,14 @@ RoomRegistry::ResolveResult RoomRegistry::resolveRoom(
 				std::string addr = cache_.nodeAddressForId(ownerNodeId).value_or("");
 				if (addr.empty()) {
 					auto getNodeStart = std::chrono::steady_clock::now();
-					MS_WARN(logger_, "resolveRoom redis GET node start [roomId:{} ownerNodeId:{} key:{}]",
+					MS_DEBUG(logger_, "resolveRoom redis GET node start [roomId:{} ownerNodeId:{} key:{}]",
 						roomId, ownerNodeId, (std::string(kKeyPrefixNode) + ownerNodeId));
 					std::unique_ptr<redisReply, decltype(&freeReplyObject)> nodeReply(
 						command_.command(
 							"GET %s",
 							(std::string(kKeyPrefixNode) + ownerNodeId).c_str()),
 						&freeReplyObject);
-					MS_WARN(logger_, "resolveRoom redis GET node done [roomId:{} ownerNodeId:{} ms:{} replyType:{}]",
+					MS_DEBUG(logger_, "resolveRoom redis GET node done [roomId:{} ownerNodeId:{} ms:{} replyType:{}]",
 						roomId,
 						ownerNodeId,
 						std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -191,7 +191,7 @@ RoomRegistry::ResolveResult RoomRegistry::resolveRoom(
 				}
 				if (!addr.empty()) {
 					cache_.upsertRoom(roomId, addr);
-					MS_WARN(logger_, "resolveRoom owner resolved [roomId:{} ownerNodeId:{} wsUrl:{} totalMs:{}]",
+					MS_DEBUG(logger_, "resolveRoom owner resolved [roomId:{} ownerNodeId:{} wsUrl:{} totalMs:{}]",
 						roomId,
 						ownerNodeId,
 						addr,
@@ -211,21 +211,21 @@ RoomRegistry::ResolveResult RoomRegistry::resolveRoom(
 	if (shouldRefreshNodes) {
 		std::lock_guard<std::mutex> lock(command_.mutex);
 		(void)lock;
-		MS_WARN(logger_, "resolveRoom syncNodes start [roomId:{} clientIp:{}]", roomId, clientIp);
+		MS_DEBUG(logger_, "resolveRoom syncNodes start [roomId:{} clientIp:{}]", roomId, clientIp);
 		syncNodesUnlocked();
-		MS_WARN(logger_, "resolveRoom syncNodes done [roomId:{} elapsedMs:{}]",
+		MS_DEBUG(logger_, "resolveRoom syncNodes done [roomId:{} elapsedMs:{}]",
 			roomId, std::chrono::duration_cast<std::chrono::milliseconds>(
 				std::chrono::steady_clock::now() - start).count());
 		best = findBestNodeCached(clientIp);
 	}
 	if (best.empty()) {
-		MS_WARN(logger_, "resolveRoom no node found [roomId:{} totalMs:{}]",
+		MS_DEBUG(logger_, "resolveRoom no node found [roomId:{} totalMs:{}]",
 			roomId, std::chrono::duration_cast<std::chrono::milliseconds>(
 				std::chrono::steady_clock::now() - start).count());
 		return {"", true};
 	}
 
-	MS_WARN(logger_, "resolveRoom picked node [roomId:{} wsUrl:{} isNew:true totalMs:{}]",
+	MS_DEBUG(logger_, "resolveRoom picked node [roomId:{} wsUrl:{} isNew:true totalMs:{}]",
 		roomId, best, std::chrono::duration_cast<std::chrono::milliseconds>(
 			std::chrono::steady_clock::now() - start).count());
 	return {best, true};

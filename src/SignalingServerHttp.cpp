@@ -50,7 +50,7 @@ void SignalingServerHttp::RegisterHttpRoutes(uWS::App& app, SignalingServer& ser
 		}
 		const std::string clientIp = ResolveClientIp(res, req);
 		const auto requestStart = std::chrono::steady_clock::now();
-		spdlog::warn("api.resolve received [req:{} roomId:{} clientIp:{} registry:{}]",
+		spdlog::debug("api.resolve received [req:{} roomId:{} clientIp:{} registry:{}]",
 			requestId, roomId, clientIp, server.registry_ != nullptr);
 
 		if (!server.registry_) {
@@ -68,7 +68,7 @@ void SignalingServerHttp::RegisterHttpRoutes(uWS::App& app, SignalingServer& ser
 		server.enqueueRegistryTask([&server, loop, res, aborted, roomId, clientIp, requestId, requestStart] {
 			RoomRegistry::ResolveResult result{"", true};
 			const auto resolveStart = std::chrono::steady_clock::now();
-			spdlog::warn("api.resolve executing [req:{} roomId:{} clientIp:{}]",
+			spdlog::debug("api.resolve executing [req:{} roomId:{} clientIp:{}]",
 				requestId, roomId, clientIp);
 			try {
 				result = server.registry_->resolveRoom(roomId, clientIp);
@@ -81,7 +81,7 @@ void SignalingServerHttp::RegisterHttpRoutes(uWS::App& app, SignalingServer& ser
 			}
 			const auto resolveMs = std::chrono::duration_cast<std::chrono::milliseconds>(
 				std::chrono::steady_clock::now() - resolveStart).count();
-			spdlog::warn("api.resolve resolved [req:{} roomId:{} wsUrl:{} isNew:{} resolveMs:{}]",
+			spdlog::debug("api.resolve resolved [req:{} roomId:{} wsUrl:{} isNew:{} resolveMs:{}]",
 				requestId, roomId, result.wsUrl, result.isNew, resolveMs);
 
 			json responseBody;
@@ -100,7 +100,7 @@ void SignalingServerHttp::RegisterHttpRoutes(uWS::App& app, SignalingServer& ser
 			});
 			const auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(
 				std::chrono::steady_clock::now() - requestStart).count();
-			spdlog::warn("api.resolve response scheduled [req:{} roomId:{} totalMs:{}]",
+			spdlog::debug("api.resolve response scheduled [req:{} roomId:{} totalMs:{}]",
 				requestId, roomId, totalMs);
 		}, "api.resolve#" + std::to_string(requestId) + " room=" + roomId);
 	});
