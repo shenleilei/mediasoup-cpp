@@ -20,6 +20,7 @@ DEFAULT_CONFIG_PATH = ".nightly-full-regression.env"
 DEFAULT_ARTIFACT_ROOT = "artifacts/nightly-full-regression"
 DEFAULT_REPORT_PATH = "docs/full-regression-test-results.md"
 DEFAULT_LATEST_LOG_PATH = "/var/log/run_all_tests.log"
+DEFAULT_MAX_BACKUP_RUNS = 100
 DEFAULT_ATTACHMENTS = [
     "docs/full-regression-test-results.md",
     "docs/uplink-qos-case-results.md",
@@ -290,6 +291,14 @@ def build_runtime_config(repo_root, config_path):
             "MAIL_SUBJECT_PREFIX",
             DEFAULT_SUBJECT_PREFIX,
         ),
+        "nightly_max_backup_runs": int(
+            config_value(file_config, "NIGHTLY_MAX_BACKUP_RUNS", str(DEFAULT_MAX_BACKUP_RUNS))
+            or str(DEFAULT_MAX_BACKUP_RUNS)
+        ),
+        "nightly_git_commit_docs": parse_bool(
+            config_value(file_config, "NIGHTLY_GIT_COMMIT_DOCS"),
+            True,
+        ),
         "smtp_host": config_value(file_config, "SMTP_HOST"),
         "smtp_port": int(config_value(file_config, "SMTP_PORT", "587") or "587"),
         "smtp_username": config_value(file_config, "SMTP_USERNAME"),
@@ -326,6 +335,187 @@ def create_run_context(repo_root, config):
         email_body_path=run_dir / "email-body.txt",
         summary_path=run_dir / "summary.json",
     )
+
+
+def list_timestamped_run_dirs(root_path):
+    if not root_path.exists():
+        return []
+
+    results = []
+    for child in root_path.iterdir():
+        if child.is_symlink() or not child.is_dir():
+            continue
+        if not re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}", child.name):
+            continue
+        results.append(child)
+    return sorted(results, key=lambda item: item.name)
+
+
+def prune_timestamped_run_dirs(root_path, max_runs):
+    if max_runs < 1:
+        return []
+
+    timestamped_dirs = list_timestamped_run_dirs(root_path)
+    to_delete = timestamped_dirs[: max(0, len(timestamped_dirs) - max_runs)]
+    removed = []
+
+    for entry in to_delete:
+        shutil.rmtree(entry, ignore_errors=False)
+        removed.append(str(entry))
+
+    return removed
+
+
+def run_git_command(repo_root, args):
+    try:
+        completed = subprocess.run(
+            ["git"] + list(args),
+            cwd=repo_root,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
+        )
+    except OSError as error:
+        return {
+            "ran": False,
+            "returncode": None,
+            "stdout": "",
+            "stderr": str(error),
+        }
+
+    return {
+        "ran": True,
+        "returncode": completed.returncode,
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
+    }
+
+
+def parse_porcelain_path(line):
+    if len(line) < 4:
+        return None
+    raw_path = line[3:].strip()
+    if " -> " in raw_path:
+        return raw_path.split(" -> ", 1)[1].strip()
+    return raw_path
+
+
+def git_status_paths(repo_root, pathspecs):
+    result = run_git_command(
+        repo_root,
+        ["status", "--porcelain=v1", "--untracked-files=all", "--"] + list(pathspecs),
+    )
+    if not result["ran"] or result["returncode"] != 0:
+        return None
+
+    paths = set()
+    for raw_line in result["stdout"].splitlines():
+        path = parse_porcelain_path(raw_line)
+        if path:
+            paths.add(path)
+    return paths
+
+
+def git_staged_paths(repo_root):
+    result = run_git_command(repo_root, ["diff", "--cached", "--name-only"])
+    if not result["ran"] or result["returncode"] != 0:
+        return None
+    return {
+        line.strip()
+        for line in result["stdout"].splitlines()
+        if line.strip()
+    }
+
+
+def record_changed_docs_in_git(
+    repo_root,
+    run_context,
+    enabled,
+    skip_tests,
+    preexisting_doc_paths,
+    preexisting_staged_paths,
+    overall_status,
+):
+    result = {
+        "enabled": enabled,
+        "attempted": False,
+        "status": "skipped",
+        "reason": None,
+        "preexistingDirtyDocPaths": sorted(preexisting_doc_paths or []),
+        "preexistingStagedPaths": sorted(preexisting_staged_paths or []),
+        "newlyDirtyDocPaths": [],
+        "commitMessage": None,
+        "commitSha": None,
+        "stdout": "",
+        "stderr": "",
+    }
+
+    if not enabled:
+        result["reason"] = "nightly git doc recording disabled"
+        return result
+
+    if skip_tests:
+        result["reason"] = "--skip-tests mode does not create nightly doc commits"
+        return result
+
+    if preexisting_doc_paths is None:
+        result["status"] = "failed"
+        result["reason"] = "failed to read pre-run git doc status"
+        return result
+
+    if preexisting_staged_paths is None:
+        result["status"] = "failed"
+        result["reason"] = "failed to read pre-run staged paths"
+        return result
+
+    if preexisting_staged_paths:
+        result["reason"] = "pre-existing staged changes present; nightly doc commit skipped"
+        return result
+
+    post_run_doc_paths = git_status_paths(repo_root, ["docs"])
+    if post_run_doc_paths is None:
+        result["status"] = "failed"
+        result["reason"] = "failed to read post-run git doc status"
+        return result
+
+    newly_dirty = sorted(post_run_doc_paths - preexisting_doc_paths)
+    result["newlyDirtyDocPaths"] = newly_dirty
+
+    if not newly_dirty:
+        result["reason"] = "no newly changed docs to record"
+        return result
+
+    result["attempted"] = True
+    add_result = run_git_command(repo_root, ["add", "--"] + newly_dirty)
+    if not add_result["ran"] or add_result["returncode"] != 0:
+        result["status"] = "failed"
+        result["reason"] = "git add failed"
+        result["stdout"] = add_result["stdout"]
+        result["stderr"] = add_result["stderr"]
+        return result
+
+    commit_message = "chore(nightly): record full regression docs {status} {run_id}".format(
+        status=(overall_status or "UNKNOWN").upper(),
+        run_id=run_context.run_id,
+    )
+    result["commitMessage"] = commit_message
+
+    commit_result = run_git_command(repo_root, ["commit", "-m", commit_message, "--"] + newly_dirty)
+    result["stdout"] = commit_result["stdout"]
+    result["stderr"] = commit_result["stderr"]
+    if not commit_result["ran"] or commit_result["returncode"] != 0:
+        result["status"] = "failed"
+        result["reason"] = "git commit failed"
+        return result
+
+    rev_result = run_git_command(repo_root, ["rev-parse", "HEAD"])
+    if rev_result["ran"] and rev_result["returncode"] == 0:
+        result["commitSha"] = rev_result["stdout"].strip() or None
+
+    result["status"] = "committed"
+    result["reason"] = "nightly docs committed"
+    return result
 
 
 def write_latest_log_copy(source, latest_path):
@@ -819,6 +1009,7 @@ def render_email_html(
     missing_attachments,
     latest_log_path,
     latest_log_error,
+    git_record_result,
 ):
     overall_status = report_summary.overall_status if report_summary else ("PASS" if exit_code == 0 else "FAIL")
     status_cn = overall_status_cn(overall_status)
@@ -840,6 +1031,12 @@ def render_email_html(
         ("运行目录", run_context.run_dir),
         ("原始日志", run_context.log_path),
         ("最新日志", "失败（{0}）".format(latest_log_error) if latest_log_error else latest_log_path),
+        (
+            "文档记录",
+            "已提交 {0}".format(git_record_result.get("commitSha"))
+            if git_record_result and git_record_result.get("status") == "committed"
+            else (git_record_result.get("reason") if git_record_result else "未知"),
+        ),
     ]
 
     html_parts = [
@@ -933,6 +1130,21 @@ def render_email_html(
             html_parts.append("<li>{0}</li>".format(esc(item)))
         html_parts.append("</ul>")
 
+    if git_record_result:
+        html_parts.append("<h3 style=\"margin:20px 0 8px 0;\">文档 git 记录</h3><ul>")
+        html_parts.append("<li>状态：{0}</li>".format(esc(git_record_result.get("status", "unknown"))))
+        if git_record_result.get("reason"):
+            html_parts.append("<li>说明：{0}</li>".format(esc(git_record_result["reason"])))
+        if git_record_result.get("commitMessage"):
+            html_parts.append("<li>提交消息：{0}</li>".format(esc(git_record_result["commitMessage"])))
+        if git_record_result.get("preexistingDirtyDocPaths"):
+            html_parts.append(
+                "<li>运行前已脏文档：{0}</li>".format(
+                    esc("、".join(git_record_result["preexistingDirtyDocPaths"]))
+                )
+            )
+        html_parts.append("</ul>")
+
     html_parts.append("</body></html>")
     return "".join(html_parts)
 
@@ -945,6 +1157,7 @@ def render_email_body(
     missing_attachments,
     latest_log_path,
     latest_log_error,
+    git_record_result,
 ):
     overall_status = report_summary.overall_status if report_summary else ("PASS" if exit_code == 0 else "FAIL")
     status_cn = overall_status_cn(overall_status)
@@ -1008,6 +1221,23 @@ def render_email_body(
     lines.append("")
     lines.append("邮件附件")
     lines.extend(render_attachment_lines(run_context, missing_attachments))
+
+    if git_record_result:
+        lines.append("")
+        lines.append("文档 git 记录")
+        lines.append("- 状态：{0}".format(git_record_result.get("status", "unknown")))
+        if git_record_result.get("reason"):
+            lines.append("- 说明：{0}".format(git_record_result["reason"]))
+        if git_record_result.get("commitMessage"):
+            lines.append("- 提交消息：{0}".format(git_record_result["commitMessage"]))
+        if git_record_result.get("commitSha"):
+            lines.append("- 提交哈希：{0}".format(git_record_result["commitSha"]))
+        if git_record_result.get("preexistingDirtyDocPaths"):
+            lines.append(
+                "- 运行前已脏文档：{0}".format(
+                    "、".join(git_record_result["preexistingDirtyDocPaths"])
+                )
+            )
 
     return "\n".join(lines) + "\n"
 
@@ -1122,6 +1352,7 @@ def send_email(
         config["missing_attachments"],
         config["latest_log_path"],
         config["latest_log_error"],
+        config["git_record_result"],
     )
     message = build_email_message(
         subject,
@@ -1167,6 +1398,12 @@ def handle_run(args):
     config_path = abs_path(repo_root, args.config, DEFAULT_CONFIG_PATH)
     config = build_runtime_config(repo_root, config_path)
     run_context = create_run_context(repo_root, config)
+    pruned_artifact_run_dirs = prune_timestamped_run_dirs(
+        Path(config["artifact_root"]),
+        int(config["nightly_max_backup_runs"]),
+    )
+    preexisting_doc_paths = git_status_paths(repo_root, ["docs"])
+    preexisting_staged_paths = git_staged_paths(repo_root)
 
     exit_code = 0
     latest_log_error = None
@@ -1201,6 +1438,16 @@ def handle_run(args):
     if args.skip_tests and exit_code == 0 and report_summary and report_summary.overall_status == "FAIL":
         exit_code = 1
     failed_cases = parse_failed_cases(run_context.log_path)
+    overall_status = report_summary.overall_status if report_summary else ("PASS" if exit_code == 0 else "FAIL")
+    git_record_result = record_changed_docs_in_git(
+        repo_root,
+        run_context,
+        bool(config["nightly_git_commit_docs"]),
+        args.skip_tests,
+        preexisting_doc_paths,
+        preexisting_staged_paths,
+        overall_status,
+    )
     body = render_email_body(
         run_context,
         exit_code,
@@ -1209,12 +1456,13 @@ def handle_run(args):
         missing_attachments,
         str(config["latest_log_path"]),
         latest_log_error,
+        git_record_result,
     )
     run_context.email_body_path.write_text(body, encoding="utf-8")
 
     subject = build_subject(
         str(config["mail_subject_prefix"] or DEFAULT_SUBJECT_PREFIX),
-        report_summary.overall_status if report_summary else ("PASS" if exit_code == 0 else "FAIL"),
+        overall_status,
         run_context.run_id,
         report_summary.group_case_rows if report_summary else [],
     )
@@ -1224,6 +1472,7 @@ def handle_run(args):
     config["failed_cases"] = failed_cases
     config["missing_attachments"] = missing_attachments
     config["latest_log_error"] = latest_log_error
+    config["git_record_result"] = git_record_result
     mail_result = send_email(config, subject, body, attachments, args.no_mail)
 
     summary_payload = {
@@ -1234,7 +1483,9 @@ def handle_run(args):
         "logPath": str(run_context.log_path),
         "latestLogPath": str(config["latest_log_path"]),
         "latestLogCopyError": latest_log_error,
+        "prunedArtifactRunDirs": pruned_artifact_run_dirs,
         "reportPath": str(source_report_path),
+        "gitDocRecording": git_record_result,
         "mail": {
             "transport": mail_result.transport,
             "delivered": mail_result.delivered,
