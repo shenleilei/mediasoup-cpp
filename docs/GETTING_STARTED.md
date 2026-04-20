@@ -46,7 +46,7 @@ sudo dnf install -y \
 ## 2) 拉代码并一键构建
 
 ```bash
-git clone --recursive https://github.com/<owner>/mediasoup-cpp.git
+git clone --recursive https://github.com/shenleilei/mediasoup-cpp.git
 cd mediasoup-cpp
 ./setup.sh
 ```
@@ -103,7 +103,7 @@ cd mediasoup-cpp
 ## 5) 常见失败与定位
 
 - `FFmpeg headers not found`  
-  没装 FFmpeg 开发包，回到第 1 步安装 `libavformat/libavcodec/libavutil/libswscale/libavdevice` 对应 dev 包。
+  没装 FFmpeg 开发包，回到第 1 步安装对应 dev 包（例如 `libavformat-dev/libavcodec-dev/libavutil-dev/libswscale-dev/libavdevice-dev`）。
 - `hiredis not found`  
   没装 hiredis 开发包（`libhiredis-dev` / `hiredis-devel`）。
 - `required command not found`（来自 `setup.sh`）  
