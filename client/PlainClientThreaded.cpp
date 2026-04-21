@@ -350,10 +350,10 @@ int PlainClientApp::RunThreadedMode()
 					std::optional<ServerProducerStats> serverStats;
 					if (cachedPeerStats.has_value() && !track.producerId.empty())
 						serverStats = parseServerProducerStats(*cachedPeerStats, track.producerId, "video");
-					if (forcedStaleTrackIndex_.has_value() && ti == *forcedStaleTrackIndex_) {
-						statsFresh = false;
-						serverStats = std::nullopt;
-					}
+						if (forcedStaleTrackIndex_.has_value() && ti == *forcedStaleTrackIndex_) {
+							statsFresh = false;
+							serverStats = std::nullopt;
+						}
 
 						if (!mt::shouldSampleTrack(statsFresh, serverStats.has_value()))
 							continue;
@@ -375,11 +375,11 @@ int PlainClientApp::RunThreadedMode()
 							auto& ns = trackStats[ti].latest;
 							qSnap.bytesSent = ns.octetCount;
 							qSnap.packetsSent = ns.packetCount;
-						qSnap.packetsLost = ns.rrCumulativeLost;
-						qSnap.roundTripTimeMs = ns.rrRttMs;
-						qSnap.jitterMs = ns.rrJitterMs;
-						lossCounterSource = LossCounterSource::LocalRtcp;
-					}
+							qSnap.packetsLost = ns.rrCumulativeLost;
+							qSnap.roundTripTimeMs = ns.rrRttMs;
+							qSnap.jitterMs = ns.rrJitterMs;
+							lossCounterSource = LossCounterSource::LocalRtcp;
+						}
 
 					double observedBitrateBps = 0.0;
 					bool usingMatrixProfile = false;
@@ -431,19 +431,19 @@ int PlainClientApp::RunThreadedMode()
 					if (lossCounterSource != LossCounterSource::None)
 						track.lossCounterSource = lossCounterSource;
 
-					track.qosCtrl->onSample(qSnap);
-					const double traceLossRate = track.qosCtrl->lastSignals().has_value()
-						? track.qosCtrl->lastSignals()->lossRate
-						: 0.0;
-						std::printf("[QOS_TRACE] tsMs=%lld track=%s state=%s level=%d mode=%s sample=%s bitrateBps=%d sendBps=%.0f lossRate=%.6f packetsLost=%llu rttMs=%.1f jitterMs=%.1f senderUsageBps=%u transportEstimateBps=%u effectivePacingBps=%u feedbackReports=%llu probePackets=%u probeActive=%d wouldBlockTotal=%llu queuedVideoRetentions=%llu audioDeadlineDrops=%llu retransmissionDrops=%llu retransmissionSent=%llu queuedFreshVideoPackets=%u queuedAudioPackets=%u queuedRetransmissionPackets=%u width=%d height=%d fps=%d suppressed=%d\n",
+						track.qosCtrl->onSample(qSnap);
+						const double traceLossRate = track.qosCtrl->lastSignals().has_value()
+							? track.qosCtrl->lastSignals()->lossRate
+							: 0.0;
+						std::printf("[QOS_TRACE] tsMs=%lld track=%s state=%s level=%d mode=%s sample=%s bitrateBps=%d sendBps=%.0f lossRate=%.6f packetsLost=%llu rttMs=%.1f jitterMs=%.1f senderUsageBps=%u transportEstimateBps=%u effectivePacingBps=%u feedbackReports=%llu probePackets=%u probeActive=%d probeClusterStarts=%llu probeClusterCompletes=%llu probeClusterEarlyStops=%llu probeBytesSent=%llu wouldBlockTotal=%llu queuedVideoRetentions=%llu audioDeadlineDrops=%llu retransmissionDrops=%llu retransmissionSent=%llu queuedFreshVideoPackets=%u queuedAudioPackets=%u queuedRetransmissionPackets=%u width=%d height=%d fps=%d suppressed=%d\n",
 							static_cast<long long>(wallNowMs()),
 							track.trackId.c_str(),
 							qos::stateStr(track.qosCtrl->currentState()),
 							track.qosCtrl->currentLevel(),
-						track.videoSuppressed ? "audio-only" : "audio-video",
-						usingMatrixProfile ? "matrix" :
-							(serverStats.has_value() ? "server" : (statsFresh ? "local" : "stale")),
-						track.encBitrate,
+							track.videoSuppressed ? "audio-only" : "audio-video",
+							usingMatrixProfile ? "matrix" :
+								(serverStats.has_value() ? "server" : (statsFresh ? "local" : "stale")),
+							track.encBitrate,
 							observedBitrateBps > 0.0 ? observedBitrateBps : qSnap.targetBitrateBps,
 							traceLossRate,
 							static_cast<unsigned long long>(qSnap.packetsLost),
@@ -455,6 +455,10 @@ int PlainClientApp::RunThreadedMode()
 							static_cast<unsigned long long>(trackStats[ti].latest.transportCcFeedbackReports),
 							trackStats[ti].latest.probePacketCount,
 							trackStats[ti].latest.probeActive ? 1 : 0,
+							static_cast<unsigned long long>(trackStats[ti].latest.probeClusterStartCount),
+							static_cast<unsigned long long>(trackStats[ti].latest.probeClusterCompleteCount),
+							static_cast<unsigned long long>(trackStats[ti].latest.probeClusterEarlyStopCount),
+							static_cast<unsigned long long>(trackStats[ti].latest.probeBytesSent),
 							static_cast<unsigned long long>(trackStats[ti].latest.transportWouldBlockTotal),
 							static_cast<unsigned long long>(trackStats[ti].latest.queuedVideoRetentions),
 							static_cast<unsigned long long>(trackStats[ti].latest.audioDeadlineDrops),
@@ -466,9 +470,9 @@ int PlainClientApp::RunThreadedMode()
 							qSnap.frameWidth,
 							qSnap.frameHeight,
 							static_cast<int>(qSnap.framesPerSecond),
-						track.videoSuppressed ? 1 : 0);
-					sampledTrackIds.insert(track.trackId);
-				}
+							track.videoSuppressed ? 1 : 0);
+						sampledTrackIds.insert(track.trackId);
+					}
 
 				std::vector<qos::PeerTrackState> peerTrackStates;
 				std::map<std::string, qos::DerivedSignals> peerTrackSignals;

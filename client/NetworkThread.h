@@ -261,30 +261,34 @@ public:
 		snap.rrCumulativeLost = stream->rrCumulativeLost;
 		snap.rrLossFraction = stream->rrLossFraction;
 		snap.rrRttMs = stream->rrRttMs;
-			snap.rrJitterMs = stream->rrJitterMs;
-			snap.lastRrReceivedMs = stream->lastRrReceivedMs;
-			snap.probePacketCount = stream->probePacketCount;
-			snap.probeActive =
-				probeObserver_.ActiveClusterId() != mediasoup::ccutils::ProbeClusterIdInvalid;
-			snap.senderUsageBitrateBps = CurrentSenderUsageBitrateBps();
-			snap.transportEstimatedBitrateBps = transportEstimatedBitrateBps_;
-			snap.effectivePacingBitrateBps = effectivePacingBitrateBps();
-			snap.transportCcFeedbackReports = transportCcFeedbackReports_;
-			const auto& transportMetrics = transportController_.GetMetrics();
-			snap.transportWouldBlockTotal =
-				std::accumulate(
-					transportMetrics.wouldBlockByClass.begin(),
-					transportMetrics.wouldBlockByClass.end(),
-					uint64_t{0});
-			snap.queuedVideoRetentions = transportMetrics.queuedVideoRetentions;
-			snap.audioDeadlineDrops = transportMetrics.audioDeadlineDrops;
-			snap.retransmissionDrops = transportMetrics.retransmissionDrops;
-			snap.retransmissionSent = transportMetrics.retransmissionSent;
-			snap.queuedFreshVideoPackets = static_cast<uint32_t>(queuedFreshVideoPackets());
-			snap.queuedAudioPackets = static_cast<uint32_t>(queuedAudioPackets());
-			snap.queuedRetransmissionPackets = static_cast<uint32_t>(queuedRetransmissionPackets());
-			statsQueue->tryPush(std::move(snap));
-		}
+		snap.rrJitterMs = stream->rrJitterMs;
+		snap.lastRrReceivedMs = stream->lastRrReceivedMs;
+		snap.probePacketCount = stream->probePacketCount;
+		snap.probeActive =
+			probeObserver_.ActiveClusterId() != mediasoup::ccutils::ProbeClusterIdInvalid;
+		snap.senderUsageBitrateBps = CurrentSenderUsageBitrateBps();
+		snap.transportEstimatedBitrateBps = transportEstimatedBitrateBps_;
+		snap.effectivePacingBitrateBps = effectivePacingBitrateBps();
+		snap.transportCcFeedbackReports = transportCcFeedbackReports_;
+		const auto& transportMetrics = transportController_.GetMetrics();
+		snap.transportWouldBlockTotal =
+			std::accumulate(
+				transportMetrics.wouldBlockByClass.begin(),
+				transportMetrics.wouldBlockByClass.end(),
+				uint64_t{0});
+		snap.queuedVideoRetentions = transportMetrics.queuedVideoRetentions;
+		snap.audioDeadlineDrops = transportMetrics.audioDeadlineDrops;
+		snap.retransmissionDrops = transportMetrics.retransmissionDrops;
+		snap.retransmissionSent = transportMetrics.retransmissionSent;
+		snap.probeClusterStartCount = probeClusterStartCount_;
+		snap.probeClusterCompleteCount = probeClusterCompleteCount_;
+		snap.probeClusterEarlyStopCount = probeClusterEarlyStopCount_;
+		snap.probeBytesSent = probeBytesSent_;
+		snap.queuedFreshVideoPackets = static_cast<uint32_t>(queuedFreshVideoPackets());
+		snap.queuedAudioPackets = static_cast<uint32_t>(queuedAudioPackets());
+		snap.queuedRetransmissionPackets = static_cast<uint32_t>(queuedRetransmissionPackets());
+		statsQueue->tryPush(std::move(snap));
+	}
 
 private:
 	static int64_t steadyNowMs() {
@@ -345,21 +349,31 @@ private:
 			packetClass == mediasoup::plainclient::PacketClass::VideoRetransmission;
 		const bool isProbe = transportMetadata && transportMetadata->isProbe;
 		const auto activeProbeClusterId = probeObserver_.ActiveClusterId();
-		const bool shouldTagWithActiveProbeCluster =
-			!isProbe &&
-			packetClass != mediasoup::plainclient::PacketClass::AudioRtp &&
-			activeProbeClusterId != mediasoup::ccutils::ProbeClusterIdInvalid;
-		const auto probeClusterId = isProbe
-			? static_cast<mediasoup::ccutils::ProbeClusterId>(
-				transportMetadata ? transportMetadata->probeClusterId : 0)
-			: (shouldTagWithActiveProbeCluster
-				? activeProbeClusterId
-				: mediasoup::ccutils::ProbeClusterIdInvalid);
+		mediasoup::ccutils::ProbeClusterId probeClusterId =
+			transportMetadata
+				? static_cast<mediasoup::ccutils::ProbeClusterId>(
+					transportMetadata->probeClusterId)
+				: mediasoup::ccutils::ProbeClusterIdInvalid;
 		uint16_t transportSequence = 0;
 		if (transportMetadata && transportMetadata->retryable &&
 			transportMetadata->hasTransportSequence) {
 			transportSequence = transportMetadata->transportSequence;
 		} else {
+			if (transportMetadata) {
+				if (isProbe) {
+					probeClusterId = static_cast<mediasoup::ccutils::ProbeClusterId>(
+						transportMetadata->probeClusterId);
+				} else if (
+					packetClass != mediasoup::plainclient::PacketClass::AudioRtp &&
+					activeProbeClusterId != mediasoup::ccutils::ProbeClusterIdInvalid) {
+					probeClusterId = activeProbeClusterId;
+					transportMetadata->probeClusterId =
+						static_cast<uint32_t>(activeProbeClusterId);
+				} else {
+					probeClusterId = mediasoup::ccutils::ProbeClusterIdInvalid;
+					transportMetadata->probeClusterId = 0;
+				}
+			}
 			transportSequence = sendSideBwe_.GetNextSequenceNumber();
 			if (transportMetadata && transportMetadata->retryable) {
 				transportMetadata->hasTransportSequence = true;
@@ -439,16 +453,16 @@ private:
 		uint8_t pkt[12 + 4096];
 		rtpHeader(pkt, pt, seq++, ts, ssrc, true);
 		memcpy(pkt + 12, data, size);
-		if (useTransportController_) {
-			(void)transportController_.EnqueueAudioPacket(ssrc, ts, pkt, 12 + size);
-			} else {
-				const auto result = sendMediaPacketWithTransportCc(
-					mediasoup::plainclient::PacketClass::AudioRtp,
-					nullptr,
-					pkt,
-					12 + size);
-				if (result.status == mediasoup::plainclient::SendStatus::Sent) {
-					rtcp_.onAudioRtpSent(size, ts);
+			if (useTransportController_) {
+				(void)transportController_.EnqueueAudioPacket(ssrc, ts, pkt, 12 + size);
+		} else {
+			const auto result = sendMediaPacketWithTransportCc(
+				mediasoup::plainclient::PacketClass::AudioRtp,
+				nullptr,
+				pkt,
+				12 + size);
+			if (result.status == mediasoup::plainclient::SendStatus::Sent) {
+				rtcp_.onAudioRtpSent(size, ts);
 			}
 		}
 	}
@@ -738,18 +752,19 @@ private:
 			events.swap(probeEvents_);
 		}
 
-			for (const auto& event : events) {
-				switch (event.type) {
-					case ProbeEventType::StartCluster:
-						probeObserver_.StartProbeCluster(event.probeClusterInfo);
-						sendSideBwe_.ProbeClusterStarting(event.probeClusterInfo);
-						break;
-					case ProbeEventType::CompleteCluster:
-						CompleteProbeCluster(event.clusterId);
-						break;
-				}
+		for (const auto& event : events) {
+			switch (event.type) {
+				case ProbeEventType::StartCluster:
+					probeObserver_.StartProbeCluster(event.probeClusterInfo);
+					sendSideBwe_.ProbeClusterStarting(event.probeClusterInfo);
+					probeClusterStartCount_++;
+					break;
+				case ProbeEventType::CompleteCluster:
+					CompleteProbeCluster(event.clusterId);
+					break;
 			}
 		}
+	}
 
 	void loop() {
 		constexpr int kMaxEvents = 8;
@@ -769,14 +784,14 @@ private:
 				} else if (fd == statsTimerFd_) {
 					uint64_t v; ::read(statsTimerFd_, &v, sizeof(v));
 					for (auto& t : tracks_) pushStatsSnapshot(t);
-					} else if (fd == pacingTimerFd_) {
-						uint64_t v; ::read(pacingTimerFd_, &v, sizeof(v));
-						MaybeStartProbeCluster();
-						FlushPendingProbePackets();
-						MaybeStopProbeClusterOnGoalReached();
-						MaybeFinalizeProbeCluster();
-						if (useTransportController_) {
-							transportController_.OnPacingTick(steadyNowMs());
+				} else if (fd == pacingTimerFd_) {
+					uint64_t v; ::read(pacingTimerFd_, &v, sizeof(v));
+					MaybeStartProbeCluster();
+					FlushPendingProbePackets();
+					MaybeStopProbeClusterOnGoalReached();
+					MaybeFinalizeProbeCluster();
+					if (useTransportController_) {
+						transportController_.OnPacingTick(steadyNowMs());
 					} else {
 						pacingFlush();
 					}
@@ -820,24 +835,24 @@ private:
 	}
 
 	void pacingFlush() {
-			// Send up to a burst of packets per tick
-			constexpr int kBurstLimit = 8;
-			for (int i = 0; i < kBurstLimit && !pacingQueue_.empty(); ++i) {
-				auto& e = pacingQueue_.front();
-				const auto result = sendMediaPacketWithTransportCc(
-					mediasoup::plainclient::PacketClass::VideoMedia,
-					nullptr,
-					e.data,
-					e.len);
-				if (result.status == mediasoup::plainclient::SendStatus::Sent && e.len >= 12) {
-					rtcp_.onVideoRtpSent(e.data, e.len);
-				}
-				pacingQueue_.pop_front();
+		// Send up to a burst of packets per tick
+		constexpr int kBurstLimit = 8;
+		for (int i = 0; i < kBurstLimit && !pacingQueue_.empty(); ++i) {
+			auto& e = pacingQueue_.front();
+			const auto result = sendMediaPacketWithTransportCc(
+				mediasoup::plainclient::PacketClass::VideoMedia,
+				nullptr,
+				e.data,
+				e.len);
+			if (result.status == mediasoup::plainclient::SendStatus::Sent && e.len >= 12) {
+				rtcp_.onVideoRtpSent(e.data, e.len);
 			}
+			pacingQueue_.pop_front();
 		}
+	}
 
-		void UpdateTransportEstimateFromFeedback(
-			const mediasoup::plainclient::TransportCcFeedback& feedback)
+	void UpdateTransportEstimateFromFeedback(
+		const mediasoup::plainclient::TransportCcFeedback& feedback)
 	{
 		if (!useTransportController_ || feedback.packetStatusCount == 0) {
 			return;
@@ -845,41 +860,41 @@ private:
 		if (!useTransportEstimate_) {
 			return;
 		}
-			sendSideBwe_.HandleTransportFeedback(feedback, steadyNowUs());
-			RefreshPublishedTransportEstimate();
-			lastTransportFeedbackAtMs_ = steadyNowMs();
-		}
+		sendSideBwe_.HandleTransportFeedback(feedback, steadyNowUs());
+		RefreshPublishedTransportEstimate();
+		lastTransportFeedbackAtMs_ = steadyNowMs();
+	}
 
-		void RecordSenderUsageSample(int64_t nowUs, size_t bytes)
-		{
-			senderUsageSamples_.push_back({nowUs, bytes});
-			senderUsageBytesWindow_ += bytes;
-			PruneSenderUsageSamples(nowUs);
-		}
+	void RecordSenderUsageSample(int64_t nowUs, size_t bytes)
+	{
+		senderUsageSamples_.push_back({nowUs, bytes});
+		senderUsageBytesWindow_ += bytes;
+		PruneSenderUsageSamples(nowUs);
+	}
 
-		void PruneSenderUsageSamples(int64_t nowUs)
-		{
-			while (!senderUsageSamples_.empty() &&
-				nowUs - senderUsageSamples_.front().atUs > kSenderUsageWindowUs) {
-				senderUsageBytesWindow_ -= senderUsageSamples_.front().bytes;
-				senderUsageSamples_.pop_front();
-			}
+	void PruneSenderUsageSamples(int64_t nowUs)
+	{
+		while (!senderUsageSamples_.empty() &&
+			nowUs - senderUsageSamples_.front().atUs > kSenderUsageWindowUs) {
+			senderUsageBytesWindow_ -= senderUsageSamples_.front().bytes;
+			senderUsageSamples_.pop_front();
 		}
+	}
 
-		uint32_t CurrentSenderUsageBitrateBps()
-		{
-			const int64_t nowUs = steadyNowUs();
-			PruneSenderUsageSamples(nowUs);
-			if (senderUsageBytesWindow_ == 0) {
-				return 0;
-			}
-			const uint64_t bitrate =
-				static_cast<uint64_t>(senderUsageBytesWindow_) * 8u * 1000000u /
-				static_cast<uint64_t>(kSenderUsageWindowUs);
-			return bitrate > std::numeric_limits<uint32_t>::max()
-				? std::numeric_limits<uint32_t>::max()
-				: static_cast<uint32_t>(bitrate);
+	uint32_t CurrentSenderUsageBitrateBps()
+	{
+		const int64_t nowUs = steadyNowUs();
+		PruneSenderUsageSamples(nowUs);
+		if (senderUsageBytesWindow_ == 0) {
+			return 0;
 		}
+		const uint64_t bitrate =
+			static_cast<uint64_t>(senderUsageBytesWindow_) * 8u * 1000000u /
+			static_cast<uint64_t>(kSenderUsageWindowUs);
+		return bitrate > std::numeric_limits<uint32_t>::max()
+			? std::numeric_limits<uint32_t>::max()
+			: static_cast<uint32_t>(bitrate);
+	}
 
 	void MaybeStartProbeCluster()
 	{
@@ -1032,6 +1047,7 @@ private:
 		if (result.status == mediasoup::plainclient::SendStatus::Sent) {
 			rtcp_.onVideoProbeRtpSent(packet, packetLen);
 			prober_.ProbesSent(static_cast<int>(result.bytesSent));
+			probeBytesSent_ += result.bytesSent;
 		}
 		return result;
 	}
@@ -1045,6 +1061,7 @@ private:
 		if (!sendSideBwe_.ProbeClusterIsGoalReached(probeClusterInfo)) {
 			return;
 		}
+		probeClusterEarlyStopCount_++;
 		CompleteProbeCluster(probeClusterInfo.id);
 	}
 
@@ -1061,12 +1078,14 @@ private:
 
 	void CompleteProbeCluster(mediasoup::ccutils::ProbeClusterId clusterId)
 	{
+		transportController_.ClearQueuedProbeClusterAssociation(static_cast<uint32_t>(clusterId));
 		auto probeClusterInfo = probeObserver_.EndProbeCluster(clusterId);
 		if (!probeClusterInfo.IsValid()) {
 			return;
 		}
 		prober_.ClusterDone(probeClusterInfo);
 		sendSideBwe_.ProbeClusterDone(probeClusterInfo);
+		probeClusterCompleteCount_++;
 	}
 
 	uint32_t ClampConfiguredTransportEstimate(int64_t rawEstimateBps) const
@@ -1190,10 +1209,10 @@ public:
 		};
 		static constexpr int64_t kSenderUsageWindowUs = 500000;
 
-		mediasoup::plainclient::SendResult SendUdpPacket(const uint8_t* data, size_t len)
-		{
-			if (udpSendFn_) {
-				return udpSendFn_(cfg_.udpFd, data, len);
+	mediasoup::plainclient::SendResult SendUdpPacket(const uint8_t* data, size_t len)
+	{
+		if (udpSendFn_) {
+			return udpSendFn_(cfg_.udpFd, data, len);
 		}
 		return mediasoup::plainclient::SendUdpDatagram(cfg_.udpFd, data, len);
 	}
@@ -1217,6 +1236,10 @@ public:
 	uint64_t transportCcFeedbackPacketCount_{ 0 };
 	uint64_t transportCcFeedbackLostCount_{ 0 };
 	uint64_t transportCcMalformedFeedbackCount_{ 0 };
+	uint64_t probeClusterStartCount_{ 0 };
+	uint64_t probeClusterCompleteCount_{ 0 };
+	uint64_t probeClusterEarlyStopCount_{ 0 };
+	uint64_t probeBytesSent_{ 0 };
 	std::deque<SenderUsageSample> senderUsageSamples_;
 	size_t senderUsageBytesWindow_{ 0 };
 	uint64_t statsGeneration_ = 0;

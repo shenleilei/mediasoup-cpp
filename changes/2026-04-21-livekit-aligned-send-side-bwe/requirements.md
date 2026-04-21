@@ -2,20 +2,13 @@
 
 ## Problem Statement
 
-The plain client now contains a C++ port of the main LiveKit send-side BWE modules under `client/sendsidebwe/` and `client/ccutils/`, but the end-to-end sender path is not fully aligned yet.
+The repository previously had a partial C++ port of LiveKit-style send-side BWE modules under `client/sendsidebwe/` and `client/ccutils/`, but runtime sender semantics, probe isolation, and probe-trigger behavior were not yet aligned on the main path.
 
-The remaining gaps are no longer in the estimator core itself. They are in the surrounding sender semantics:
-
-- a queued RTP packet can still receive a new transport-wide sequence number on each local retry after `WouldBlock`
-- probe RTP packets still share ordinary video sender bookkeeping in ways that can leak into retransmission behavior
-- probe lifecycle is wired, but early stop on "goal reached" is not yet connected on the network-thread side
-- probe-trigger math is still a local simplification and does not yet follow LiveKit's default padding-probe policy closely enough
-
-As long as those gaps remain, the repository cannot truthfully claim that the plain-client send-side BWE path is aligned with LiveKit's default send-side BWE behavior.
+This change closes those main-path gaps so the plain client can truthfully claim LiveKit-aligned send-side BWE behavior for its supported transport-estimate path.
 
 ## Goal
 
-Finish the plain-client send-side BWE integration so the supported main path follows LiveKit's module boundaries and the relevant sender-side runtime semantics:
+Keep the plain-client send-side BWE integration aligned so the supported main path follows LiveKit's module boundaries and the relevant sender-side runtime semantics:
 
 - TWCC feedback time-order protection
 - packet tracker
@@ -41,6 +34,7 @@ Finish the plain-client send-side BWE integration so the supported main path fol
 - browser-side QoS controller changes
 - room-level multi-peer coordination
 - a literal port of LiveKit's downlink `streamallocator` object model into the plain-client sender
+- a new weight-aware multi-track media scheduler under aggregate transport caps
 - non-default probing strategies beyond the sender-side equivalent of LiveKit's default padding-probe behavior
 
 ## Sender-Side Equivalence Boundary
