@@ -1154,6 +1154,32 @@ TEST(SenderTransportControllerTest, PauseDropsQueuedRetransmissionsForTrack) {
 	EXPECT_EQ(controller.GetMetrics().retransmissionDrops, 1u);
 }
 
+TEST(SenderTransportControllerTest, FlushForShutdownDrainsQueuedVideoBeforeDiscardingRemainder) {
+	SenderTransportController controller;
+	int64_t nowMs = 1000;
+	controller.SetNowFn([&nowMs] { return nowMs; });
+	controller.SetSendFn([](PacketClass, const uint8_t*, size_t len) {
+		return SendResult{SendStatus::Sent, 0, len};
+	});
+	controller.RegisterVideoTrack(0, 7777, 100000);
+	controller.UpdateTrackTransportHint(0, 7777, 100000, false);
+
+	uint8_t video[1000] = {};
+	for (int i = 0; i < 10; ++i) {
+		ASSERT_TRUE(controller.EnqueueVideoMediaPacket(7777, video, sizeof(video)));
+	}
+	ASSERT_EQ(controller.QueuedFreshVideoPackets(), 10u);
+
+	controller.FlushForShutdown(nowMs);
+
+	EXPECT_EQ(controller.QueuedFreshVideoPackets(), 0u);
+	EXPECT_EQ(
+		controller.GetMetrics().sentByClass[
+			mediasoup::plainclient::PacketClassIndex(PacketClass::VideoMedia)],
+		10u);
+	EXPECT_EQ(controller.GetMetrics().queuedVideoDiscards, 0u);
+}
+
 TEST(SenderTransportControllerTest, EffectivePacingBitrateUsesMinOfTargetEstimateAndCap) {
 	SenderTransportController controller;
 	int64_t nowMs = 1000;

@@ -672,6 +672,47 @@ TEST(NetworkThreadIntegration, TransportCcFeedbackUpdatesEstimatedBitrate) {
 	close(recvFd);
 }
 
+TEST(NetworkThreadIntegration, TransportEstimateRaisesWhenAggregateTargetIncreases) {
+	int sendFd = -1, recvFd = -1;
+	uint16_t port = 0;
+	ASSERT_EQ(createConnectedUdpPair(sendFd, recvFd, port), 0);
+
+	mt::SpscQueue<mt::NetworkControlCommand, mt::kControlCommandQueueCapacity> controlQueue;
+
+	NetworkThread::Config cfg;
+	cfg.udpFd = sendFd;
+	cfg.audioSsrc = 22222222;
+	cfg.audioPt = 111;
+
+	NetworkThread net(cfg);
+	net.controlQueue = &controlQueue;
+	net.registerVideoTrack(0, 11111111u, 96, 5);
+
+	EXPECT_EQ(net.transportEstimatedBitrateBps(), 900000u);
+	EXPECT_EQ(net.effectivePacingBitrateBps(), 900000u);
+
+	net.start();
+
+	mt::NetworkControlCommand cmd;
+	cmd.type = mt::NetworkControlCommand::TrackTransportConfig;
+	cmd.trackIndex = 0;
+	cmd.ssrc = 11111111u;
+	cmd.payloadType = 96;
+	cmd.targetBitrateBps = 1500000u;
+	cmd.paused = false;
+	ASSERT_TRUE(controlQueue.tryPush(std::move(cmd)));
+	net.wakeup();
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(120));
+	net.stop();
+
+	EXPECT_EQ(net.transportEstimatedBitrateBps(), 1500000u);
+	EXPECT_EQ(net.effectivePacingBitrateBps(), 1500000u);
+
+	close(sendFd);
+	close(recvFd);
+}
+
 // ═══════════════════════════════════════════════════════════
 // End-to-end: SourceWorker → NetworkThread → stats
 // ═══════════════════════════════════════════════════════════

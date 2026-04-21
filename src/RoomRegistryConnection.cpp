@@ -103,17 +103,22 @@ redisReply* RoomRegistry::CommandConnection::commandArgv(
 
 bool RoomRegistry::reconnect()
 {
-	return command_.reconnect(redisHost_, redisPort_, logger_);
+	const bool ready = command_.reconnect(redisHost_, redisPort_, logger_);
+	commandReady_.store(ready, std::memory_order_relaxed);
+	return ready;
 }
 
 bool RoomRegistry::ensureConnected()
 {
-	return command_.ensureConnected(redisHost_, redisPort_, logger_);
+	const bool ready = command_.ensureConnected(redisHost_, redisPort_, logger_);
+	commandReady_.store(ready, std::memory_order_relaxed);
+	return ready;
 }
 
 void RoomRegistry::handleDisconnect()
 {
 	command_.disconnect(logger_);
+	commandReady_.store(false, std::memory_order_relaxed);
 }
 
 std::string RoomRegistry::buildNodeValue(size_t rooms, size_t maxRooms)
@@ -167,6 +172,7 @@ void RoomRegistry::publishNodeUpdate(const std::string& nodeId, const std::strin
 	std::string msg = nodeId + "=" + nodeValue;
 	auto* reply = command_.command("PUBLISH %s %s", kChannelNodes, msg.c_str());
 	if (reply) freeReplyObject(reply);
+	else handleDisconnect();
 }
 
 void RoomRegistry::publishRoomUpdate(const std::string& roomId, const std::string& ownerAddr)
@@ -175,6 +181,7 @@ void RoomRegistry::publishRoomUpdate(const std::string& roomId, const std::strin
 	std::string msg = roomId + "=" + ownerAddr;
 	auto* reply = command_.command("PUBLISH %s %s", kChannelRooms, msg.c_str());
 	if (reply) freeReplyObject(reply);
+	else handleDisconnect();
 }
 
 } // namespace mediasoup
