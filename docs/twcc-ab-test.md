@@ -157,7 +157,29 @@ TWCC_AB_CASES=AB-001,AB-003,AB-005 \
 ./scripts/run_qos_tests.sh cpp-client-ab
 ```
 
-## 8. 使用建议
+## 8. 报告怎么读
+
+如果你不是在调试脚本本身，而是在判断 “这次 TWCC 路径到底有没有收益”，建议按这个顺序读：
+
+1. `docs/generated/twcc-ab-report.md`
+   - 先看 stable 总入口
+   - 它会先解释本次在比什么、overall `PASS/FAIL` 该怎么理解、每组 pairwise 大致意味着什么
+2. `docs/generated/twcc-ab-g1-vs-g2.md`
+   - 当你想看 transport estimate / TWCC 主路径本身的净收益时，先看这份
+   - 它最适合回答“在 controller 已开启的前提下，打开 estimate 后有没有额外收益”
+3. `docs/generated/twcc-ab-g0-vs-g2.md`
+   - 当你想看新整条发送路径相对旧路径的整体效果时，再看这份
+   - 它更适合回答“新路径总体上是否值得”
+4. 时间戳目录下的 `raw-groups.json` 与 `raw/`
+   - 只有在要排查具体白盒行为、trace、log 时再看
+
+阅读时要特别注意：
+
+- overall `FAIL` 的意思是“没有满足全部预设 gate”，不自动等于路径已经坏了
+- baseline 与 candidate 可能是同一提交，因为这里经常比较的是不同 runtime mode，而不是不同代码版本
+- 真正决定 `PASS/FAIL` 的直接原因，在 pairwise 报告的“判定门槛检查”一节
+
+## 9. 使用建议
 
 - 看最新结果，优先打开 `docs/generated/twcc-ab-report.md`
 - 看具体 pairwise 明细，再进入 `docs/generated/twcc-ab-g1-vs-g2.md` 或 `docs/generated/twcc-ab-g0-vs-g2.md`

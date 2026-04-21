@@ -9,6 +9,21 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import {
+  AB_SCENARIO_GUIDE,
+  average,
+  buildPairTakeaways,
+  fmtInt,
+  fmtNum,
+  fmtPercent,
+  formatNetwork,
+  formatWhiteBox,
+  groupProfile,
+  percentDelta,
+  safe,
+  sumQueuePressure,
+} from './twcc_ab_report_helpers.mjs';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..', '..');
@@ -33,82 +48,6 @@ const outputPath = outputArg
   : path.resolve(repoRoot, DEFAULT_OUTPUT_REL);
 
 const report = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
-
-function isFiniteNumber(value) {
-  return typeof value === 'number' && Number.isFinite(value);
-}
-
-function fmtNum(value, digits = 2) {
-  return isFiniteNumber(value) ? value.toFixed(digits) : '-';
-}
-
-function fmtInt(value) {
-  return isFiniteNumber(value) ? `${Math.round(value)}` : '-';
-}
-
-function fmtPercent(value, digits = 2) {
-  return isFiniteNumber(value) ? `${value.toFixed(digits)}%` : '-';
-}
-
-function safe(value, fallback = '-') {
-  if (value == null) return fallback;
-  if (typeof value === 'string' && value.trim() === '') return fallback;
-  return String(value);
-}
-
-function average(values) {
-  const valid = values.filter(isFiniteNumber);
-  if (valid.length === 0) return null;
-  const total = valid.reduce((sum, v) => sum + v, 0);
-  return total / valid.length;
-}
-
-function percentDelta(baselineValue, candidateValue) {
-  if (!isFiniteNumber(baselineValue) || !isFiniteNumber(candidateValue)) return null;
-  if (baselineValue === 0) return null;
-  return ((candidateValue - baselineValue) / baselineValue) * 100;
-}
-
-function sumQueuePressure(queuePressure = {}) {
-  const fields = [
-    queuePressure.wouldBlockTotal,
-    queuePressure.queuedVideoRetentions,
-    queuePressure.audioDeadlineDrops,
-    queuePressure.retransmissionDrops,
-  ];
-  const valid = fields.filter(isFiniteNumber);
-  if (valid.length === 0) return null;
-  return valid.reduce((sum, value) => sum + value, 0);
-}
-
-function formatNetwork(network = {}) {
-  return [
-    `bw ${safe(network.bandwidthKbps, '-') }kbps`,
-    `rtt ${safe(network.rttMs, '-') }ms`,
-    `loss ${safe(network.lossRate, '-') }`,
-    `jitter ${safe(network.jitterMs, '-') }ms`,
-  ].join(' / ');
-}
-
-function formatWhiteBox(whiteBox = {}) {
-  const parts = [
-    `senderUsage=${fmtNum(whiteBox.senderUsageBps, 0)}`,
-    `estimate=${fmtNum(whiteBox.transportEstimateBps, 0)}`,
-    `pacing=${fmtNum(whiteBox.effectivePacingBps, 0)}`,
-    `fb=${fmtNum(whiteBox.feedbackReports, 0)}`,
-    `probePkts=${fmtNum(whiteBox.probePackets, 0)}`,
-    `probeStarts=${fmtNum(whiteBox.probeClusterStarts, 0)}`,
-    `probeDone=${fmtNum(whiteBox.probeClusterCompletes, 0)}`,
-    `probeEarlyStop=${fmtNum(whiteBox.probeClusterEarlyStops, 0)}`,
-    `probeBytes=${fmtNum(whiteBox.probeBytesSent, 0)}`,
-    `rtxSent=${fmtNum(whiteBox.retransmissionSent, 0)}`,
-    `qFresh=${fmtNum(whiteBox.queuedFreshVideoPackets, 0)}`,
-    `qAudio=${fmtNum(whiteBox.queuedAudioPackets, 0)}`,
-    `qRtx=${fmtNum(whiteBox.queuedRetransmissionPackets, 0)}`,
-    `probeActive=${whiteBox.probeActiveObserved === true ? 'yes' : whiteBox.probeActiveObserved === false ? 'no' : '-'}`,
-  ];
-  return parts.join(' / ');
-}
 
 const scenarios = Array.isArray(report.scenarios) ? report.scenarios : [];
 const gates = Array.isArray(report.gates) ? report.gates : [];
@@ -152,13 +91,67 @@ const candidateQueuePressure = average(
   scenarios.map(item => sumQueuePressure(item?.candidate?.queuePressure))
 );
 
+const baselineProfile = groupProfile(report?.baseline?.label);
+const candidateProfile = groupProfile(report?.candidate?.label);
+const takeaways = buildPairTakeaways({
+  report,
+  baselineGoodput,
+  candidateGoodput,
+  baselineLoss,
+  candidateLoss,
+  baselineRecovery,
+  candidateRecovery,
+  baselineFairness,
+  candidateFairness,
+});
+
 const lines = [];
 lines.push('# TWCC A/B 有效性评估结果');
 lines.push('');
-lines.push(`生成时间：\`${safe(report.generatedAt, '<unknown>')}\``);
+lines.push('> 文档性质');
+lines.push('>');
+lines.push('> 这是一份 pairwise TWCC A/B 报告。');
+lines.push('> 它回答的是：在当前一组预设 gate 下，candidate runtime mode 相对 baseline runtime mode 是否足够好。');
+lines.push('>');
+lines.push('> 这里的 overall `FAIL` 只表示“至少一条 gate 没过”，');
+lines.push('> 不自动等于 “TWCC 路径已经坏了” 或 “功能不可用”。');
 lines.push('');
 
-lines.push('## 1. 实验信息');
+lines.push('## 1. 先看这里');
+lines.push('');
+for (const takeaway of takeaways) {
+  lines.push(`- ${takeaway}`);
+}
+if (takeaways.length === 0) {
+  lines.push('- 本次报告没有可自动提炼的 reader-facing 结论，请直接看 gate 与场景级结果。');
+}
+lines.push('');
+
+lines.push('## 2. 比较对象');
+lines.push('');
+lines.push('| 角色 | 标签 | 运行模式 | 关键开关 |');
+lines.push('|---|---|---|---|');
+lines.push(
+  `| Baseline | \`${safe(report?.baseline?.label, '-')}\` | ${safe(baselineProfile.modeName)} | ${baselineProfile.toggles.length > 0 ? baselineProfile.toggles.map(item => `\`${item}\``).join('<br>') : '-'} |`
+);
+lines.push(
+  `| Candidate | \`${safe(report?.candidate?.label, '-')}\` | ${safe(candidateProfile.modeName)} | ${candidateProfile.toggles.length > 0 ? candidateProfile.toggles.map(item => `\`${item}\``).join('<br>') : '-'} |`
+);
+lines.push('');
+lines.push(`- 这组对比回答：${safe(report?.baseline?.label)} -> ${safe(report?.candidate?.label)} 是否满足当前 TWCC A/B 门槛。`);
+lines.push(`- Baseline 侧重点：${safe(baselineProfile.purpose)}`);
+lines.push(`- Candidate 侧重点：${safe(candidateProfile.purpose)}`);
+lines.push('');
+
+lines.push('## 3. 怎么读这份报告');
+lines.push('');
+lines.push('1. 先看“先看这里”和“汇总”，判断这次是 gate 没过，还是出现了明显的吞吐/恢复退化。');
+lines.push('2. 再看“判定门槛检查”，它直接解释 overall `PASS` / `FAIL` 的原因。');
+lines.push('3. 然后看“场景级结果”，判断问题主要落在稳态、拥塞、恢复还是多轨公平性。');
+lines.push('4. “逐场景明细”里的白盒字段只在定位原因时再看，不是第一次阅读的入口。');
+lines.push('');
+
+lines.push('## 4. 实验信息');
 lines.push('');
 lines.push('| 字段 | 内容 |');
 lines.push('|---|---|');
@@ -171,9 +164,35 @@ lines.push(`| 网络注入 | ${safe(report?.environment?.networkSetup, '-')} |`)
 lines.push(`| 输入素材 | ${safe(report?.environment?.inputMedia, '-')} |`);
 lines.push(`| 每场景重复次数 | ${safe(report?.runConfig?.repetitionsPerScenario, '-')} |`);
 lines.push(`| 场景数量 | ${scenarios.length}（PASS=${passedScenarios}, FAIL=${failedScenarios}） |`);
+if (
+  report?.baseline?.commit &&
+  report?.candidate?.commit &&
+  report.baseline.commit === report.candidate.commit
+) {
+  lines.push(`| 版本解读 | baseline 与 candidate 为同一提交；本次比较的是运行模式而不是两份不同代码 |`);
+}
 lines.push('');
 
-lines.push('## 2. 汇总');
+lines.push('## 5. 场景在测什么');
+lines.push('');
+lines.push('| 场景 | 含义 | 重点看什么 |');
+lines.push('|---|---|---|');
+for (const scenario of scenarios) {
+  const guide = AB_SCENARIO_GUIDE[scenario?.id] ?? {
+    label: safe(scenario?.name, '-'),
+    why: safe(scenario?.notes, '-'),
+    focus: '-',
+  };
+  lines.push(
+    `| ${safe(scenario?.id, scenario?.name)} ${guide.label} | ${guide.why} | ${guide.focus} |`
+  );
+}
+if (scenarios.length === 0) {
+  lines.push('| - | - | - |');
+}
+lines.push('');
+
+lines.push('## 6. 汇总');
 lines.push('');
 lines.push('| 指标 | Baseline | Candidate | 变化 |');
 lines.push('|---|---:|---:|---:|');
@@ -191,7 +210,7 @@ if (report?.overall?.summary) {
 }
 lines.push('');
 
-lines.push('## 3. 判定门槛检查');
+lines.push('## 7. 判定门槛检查');
 lines.push('');
 lines.push('| 规则 | 目标 | 实际 | 结论 |');
 lines.push('|---|---|---|---|');
@@ -206,7 +225,7 @@ if (gates.length === 0) {
 }
 lines.push('');
 
-lines.push('## 4. 场景级结果');
+lines.push('## 8. 场景级结果');
 lines.push('');
 lines.push('| 场景 | 网络形态 | Baseline | Candidate | 变化 | 结论 |');
 lines.push('|---|---|---|---|---|---|');
@@ -215,9 +234,8 @@ for (const scenario of scenarios) {
     `gp=${fmtNum(scenario?.baseline?.goodputKbps?.mean)}, loss=${fmtNum(scenario?.baseline?.lossPercent?.mean)}, rec=${fmtInt(scenario?.baseline?.recoveryTimeMs?.mean)}ms`;
   const candidateSummary =
     `gp=${fmtNum(scenario?.candidate?.goodputKbps?.mean)}, loss=${fmtNum(scenario?.candidate?.lossPercent?.mean)}, rec=${fmtInt(scenario?.candidate?.recoveryTimeMs?.mean)}ms`;
-  const deltaGoodput = scenario?.delta?.goodputPercent;
   lines.push(
-    `| ${safe(scenario?.id, scenario?.name)} | ${formatNetwork(scenario?.network)} | ${baselineSummary} | ${candidateSummary} | ${fmtPercent(deltaGoodput)} | \`${scenario?.pass === true ? 'PASS' : scenario?.pass === false ? 'FAIL' : '-'}\` |`
+    `| ${safe(scenario?.id, scenario?.name)} | ${formatNetwork(scenario?.network)} | ${baselineSummary} | ${candidateSummary} | ${fmtPercent(scenario?.delta?.goodputPercent)} | \`${scenario?.pass === true ? 'PASS' : scenario?.pass === false ? 'FAIL' : '-'}\` |`
   );
 }
 if (scenarios.length === 0) {
@@ -225,7 +243,7 @@ if (scenarios.length === 0) {
 }
 lines.push('');
 
-lines.push('## 5. 逐场景明细');
+lines.push('## 9. 逐场景明细');
 lines.push('');
 for (const scenario of scenarios) {
   lines.push(`### ${safe(scenario?.id, scenario?.name)}`);
@@ -234,6 +252,7 @@ for (const scenario of scenarios) {
   lines.push('|---|---|');
   lines.push(`| 场景名 | ${safe(scenario?.name, '-')} |`);
   lines.push(`| 网络形态 | ${formatNetwork(scenario?.network)} |`);
+  lines.push(`| 这场景在看什么 | ${safe(AB_SCENARIO_GUIDE[scenario?.id]?.why, '-')} |`);
   lines.push(`| Baseline Goodput (mean/p50/p90) | ${fmtNum(scenario?.baseline?.goodputKbps?.mean)} / ${fmtNum(scenario?.baseline?.goodputKbps?.p50)} / ${fmtNum(scenario?.baseline?.goodputKbps?.p90)} kbps |`);
   lines.push(`| Candidate Goodput (mean/p50/p90) | ${fmtNum(scenario?.candidate?.goodputKbps?.mean)} / ${fmtNum(scenario?.candidate?.goodputKbps?.p50)} / ${fmtNum(scenario?.candidate?.goodputKbps?.p90)} kbps |`);
   lines.push(`| Baseline Loss (mean/p50/p90) | ${fmtNum(scenario?.baseline?.lossPercent?.mean)} / ${fmtNum(scenario?.baseline?.lossPercent?.p50)} / ${fmtNum(scenario?.baseline?.lossPercent?.p90)} % |`);
@@ -250,7 +269,7 @@ for (const scenario of scenarios) {
   lines.push('');
 }
 
-lines.push('## 6. 产物链接');
+lines.push('## 10. 产物链接');
 lines.push('');
 lines.push(`- 原始指标 JSON：\`${safe(report?.artifacts?.rawMetricsPath, '-')}\``);
 lines.push(`- 聚合对比 JSON：\`${safe(report?.artifacts?.comparisonReportPath, '-')}\``);

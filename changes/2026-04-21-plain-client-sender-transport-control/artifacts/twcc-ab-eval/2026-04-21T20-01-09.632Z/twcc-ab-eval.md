@@ -36,8 +36,8 @@
 
 | Pair | 这组回答什么 | Overall | 这次意味着什么 | Markdown | JSON |
 |---|---|---|---|---|---|
-| G1 Controller-Only vs G2 Candidate | 这组对比用来隔离 transport estimate / TWCC 主路径本身的净收益。 | `FAIL` | 未通过全部 gate；goodput 基本持平；recovery 变慢 7.59%；阻塞项：AB-002 congestion loss proxy improves >=20%；AB-003 recovery time not worse, ideally >=15%。 | [twcc-ab-g1-vs-g2.md](twcc-ab-g1-vs-g2.md) | [twcc-ab-g1-vs-g2.json](twcc-ab-g1-vs-g2.json) |
-| G0 Legacy vs G2 Candidate | 这组对比用来看新整条发送路径相对旧路径的整体效果。 | `FAIL` | 未通过全部 gate；goodput 基本持平；recovery 改善 9.96%；阻塞项：AB-002 congestion loss proxy improves >=20%。 | [twcc-ab-g0-vs-g2.md](twcc-ab-g0-vs-g2.md) | [twcc-ab-g0-vs-g2.json](twcc-ab-g0-vs-g2.json) |
+| G1 Controller-Only vs G2 Candidate | 这组对比用来隔离 transport estimate / TWCC 主路径本身的净收益。 | `FAIL` | 未通过全部 gate；goodput 基本持平；recovery 变慢 7.59%；阻塞项：AB-002 congestion loss proxy improves >=20%；AB-003 recovery time not worse, ideally >=15%。 | [g1-vs-g2.md](g1-vs-g2.md) | [g1-vs-g2.json](g1-vs-g2.json) |
+| G0 Legacy vs G2 Candidate | 这组对比用来看新整条发送路径相对旧路径的整体效果。 | `FAIL` | 未通过全部 gate；goodput 基本持平；recovery 改善 9.96%；阻塞项：AB-002 congestion loss proxy improves >=20%。 | [g0-vs-g2.md](g0-vs-g2.md) | [g0-vs-g2.json](g0-vs-g2.json) |
 
 ## 5. 本次结果怎么理解
 
@@ -65,5 +65,5 @@
 
 ## 7. 原始产物
 
-- [twcc-ab-raw-groups.json](twcc-ab-raw-groups.json)
-- 原始 trace/log 目录：[changes/2026-04-21-plain-client-sender-transport-control/artifacts/twcc-ab-eval/2026-04-21T20-01-09.632Z/raw](../../changes/2026-04-21-plain-client-sender-transport-control/artifacts/twcc-ab-eval/2026-04-21T20-01-09.632Z/raw)
+- [raw-groups.json](raw-groups.json)
+- 原始 trace/log 目录：[changes/2026-04-21-plain-client-sender-transport-control/artifacts/twcc-ab-eval/2026-04-21T20-01-09.632Z/raw](raw)
