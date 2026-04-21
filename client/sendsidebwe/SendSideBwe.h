@@ -2,6 +2,8 @@
 
 #include "CongestionDetector.h"
 
+#include <tuple>
+
 namespace mediasoup::plainclient::sendsidebwe {
 
 class SendSideBwe {
@@ -63,6 +65,22 @@ public:
 
 	bool CanProbe() const { return congestionDetector_.CanProbe(); }
 	std::chrono::microseconds ProbeDuration() const { return congestionDetector_.ProbeDuration(); }
+	void ProbeClusterStarting(const mediasoup::ccutils::ProbeClusterInfo& probeClusterInfo)
+	{
+		congestionDetector_.ProbeClusterStarting(probeClusterInfo);
+	}
+	void ProbeClusterDone(const mediasoup::ccutils::ProbeClusterInfo& probeClusterInfo)
+	{
+		congestionDetector_.ProbeClusterDone(probeClusterInfo);
+	}
+	bool ProbeClusterIsGoalReached() const
+	{
+		return congestionDetector_.ProbeClusterIsGoalReached();
+	}
+	std::tuple<mediasoup::ccutils::ProbeSignal, int64_t, bool> ProbeClusterFinalize()
+	{
+		return congestionDetector_.ProbeClusterFinalize();
+	}
 
 private:
 	CongestionDetector congestionDetector_;
