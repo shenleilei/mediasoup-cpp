@@ -6,7 +6,9 @@
 #include "SenderTransportController.h"
 #include "TransportCcHelpers.h"
 #include "ThreadTypes.h"
+#include "ccutils/Prober.h"
 #include "sendsidebwe/SendSideBwe.h"
+#include "sendsidebwe/ProbeObserver.h"
 #include "media/rtp/H264Packetizer.h"
 
 #include <arpa/inet.h>
@@ -23,6 +25,7 @@
 #include <cstring>
 #include <deque>
 #include <functional>
+#include <mutex>
 #include <optional>
 #include <thread>
 #include <vector>
@@ -59,7 +62,9 @@ struct TrackNetState {
 // ═══════════════════════════════════════════════════════════
 // NetworkThread: owns UDP socket, all RTP/RTCP state
 // ═══════════════════════════════════════════════════════════
-class NetworkThread {
+class NetworkThread
+	: public mediasoup::ccutils::ProberListener
+	, public mediasoup::plainclient::sendsidebwe::ProbeObserverListener {
 public:
 	static constexpr uint32_t kDefaultMinTransportEstimateBps = 100000u;
 	static constexpr uint32_t kDefaultMaxTransportEstimateBps = std::numeric_limits<uint32_t>::max();
@@ -124,6 +129,8 @@ public:
 			}
 		});
 		transportController_.SetApplicationBitrateCapBps(cfg.applicationBitrateCapBps);
+		prober_.SetListener(this);
+		probeObserver_.SetListener(this);
 	}
 
 	~NetworkThread() { stop(); }
@@ -189,6 +196,7 @@ public:
 		running_ = false;
 		if (wakeupFd_ >= 0) { uint64_t v = 1; ::write(wakeupFd_, &v, sizeof(v)); }
 		if (thread_.joinable()) thread_.join();
+		prober_.Reset();
 		if (useTransportController_) {
 			transportController_.FlushForShutdown(steadyNowMs());
 		} else {
@@ -205,6 +213,30 @@ public:
 	// Call from producer threads after pushing AU to wake network thread
 	void wakeup() {
 		if (wakeupFd_ >= 0) { uint64_t v = 1; ::write(wakeupFd_, &v, sizeof(v)); }
+	}
+
+	void OnProbeClusterSwitch(const mediasoup::ccutils::ProbeClusterInfo& info) override
+	{
+		{
+			std::lock_guard<std::mutex> lock(probeEventMutex_);
+			probeEvents_.push_back(ProbeEvent{ProbeEventType::StartCluster, info, mediasoup::ccutils::ProbeClusterIdInvalid});
+		}
+		wakeup();
+	}
+
+	void OnSendProbe(int bytesToSend) override
+	{
+		pendingProbeBytes_.fetch_add(bytesToSend);
+		wakeup();
+	}
+
+	void OnProbeObserverClusterComplete(mediasoup::ccutils::ProbeClusterId clusterId) override
+	{
+		{
+			std::lock_guard<std::mutex> lock(probeEventMutex_);
+			probeEvents_.push_back(ProbeEvent{ProbeEventType::CompleteCluster, mediasoup::ccutils::ProbeClusterInfoInvalid, clusterId});
+		}
+		wakeup();
 	}
 
 	bool running() const { return running_.load(); }
@@ -306,6 +338,14 @@ private:
 		const auto result = mediasoup::plainclient::SendUdpDatagram(cfg_.udpFd, rewrittenPacket, rewrittenLen);
 		if (result.status == mediasoup::plainclient::SendStatus::Sent) {
 			transportCcRewrittenPacketsSent_++;
+			const auto activeProbeClusterId = probeObserver_.ActiveClusterId();
+			if (activeProbeClusterId != mediasoup::ccutils::ProbeClusterIdInvalid) {
+				probeObserver_.RecordPacket(
+					rewrittenLen,
+					isRtx,
+					activeProbeClusterId,
+					false);
+			}
 		}
 		return result;
 	}
@@ -578,6 +618,8 @@ private:
 	}
 
 	void drainQueues() {
+		DrainProbeEvents();
+
 		// Control commands first — pause/resume must take effect before draining new AUs.
 		if (controlQueue) {
 			mt::NetworkControlCommand cmd;
@@ -636,6 +678,32 @@ private:
 		}
 	}
 
+	void DrainProbeEvents()
+	{
+		std::deque<ProbeEvent> events;
+		{
+			std::lock_guard<std::mutex> lock(probeEventMutex_);
+			events.swap(probeEvents_);
+		}
+
+		for (const auto& event : events) {
+			switch (event.type) {
+				case ProbeEventType::StartCluster:
+					probeObserver_.StartProbeCluster(event.probeClusterInfo);
+					sendSideBwe_.ProbeClusterStarting(event.probeClusterInfo);
+					break;
+				case ProbeEventType::CompleteCluster: {
+					auto probeClusterInfo = probeObserver_.EndProbeCluster(event.clusterId);
+					if (probeClusterInfo.IsValid()) {
+						prober_.ClusterDone(probeClusterInfo);
+						sendSideBwe_.ProbeClusterDone(probeClusterInfo);
+					}
+					break;
+				}
+			}
+		}
+	}
+
 	void loop() {
 		constexpr int kMaxEvents = 8;
 		struct epoll_event events[kMaxEvents];
@@ -656,6 +724,9 @@ private:
 					for (auto& t : tracks_) pushStatsSnapshot(t);
 				} else if (fd == pacingTimerFd_) {
 					uint64_t v; ::read(pacingTimerFd_, &v, sizeof(v));
+					MaybeStartProbeCluster();
+					FlushPendingProbePackets();
+					MaybeFinalizeProbeCluster();
 					if (useTransportController_) {
 						transportController_.OnPacingTick(steadyNowMs());
 					} else {
@@ -728,6 +799,128 @@ private:
 		sendSideBwe_.HandleTransportFeedback(feedback, steadyNowUs());
 		RefreshPublishedTransportEstimate();
 		lastTransportFeedbackAtMs_ = steadyNowMs();
+	}
+
+	void MaybeStartProbeCluster()
+	{
+		if (!useTransportController_ || !useTransportEstimate_) {
+			return;
+		}
+		if (prober_.IsRunning() || !sendSideBwe_.CanProbe()) {
+			return;
+		}
+
+		const uint32_t aggregateTargetBps = transportController_.AggregateTargetBitrateBps();
+		if (aggregateTargetBps == 0) {
+			return;
+		}
+		const uint32_t availableBps = transportEstimatedBitrateBps_;
+		if (availableBps == 0 || aggregateTargetBps <= availableBps) {
+			return;
+		}
+		if (!FindProbeTrack()) {
+			return;
+		}
+
+		mediasoup::ccutils::ProbeClusterGoal goal;
+		goal.availableBandwidthBps = static_cast<int>(availableBps);
+		goal.expectedUsageBps = static_cast<int>(std::min(aggregateTargetBps, availableBps));
+		goal.desiredBps = static_cast<int>(aggregateTargetBps);
+		goal.duration = sendSideBwe_.ProbeDuration();
+		(void)prober_.AddCluster(mediasoup::ccutils::ProbeClusterMode::Uniform, goal);
+	}
+
+	const TrackNetState* FindProbeTrack() const
+	{
+		for (const auto& track : tracks_) {
+			if (!track.paused && track.transportCcExtensionId != 0) {
+				return &track;
+			}
+		}
+		return nullptr;
+	}
+
+	void FlushPendingProbePackets()
+	{
+		const TrackNetState* probeTrack = FindProbeTrack();
+		if (!probeTrack) {
+			pendingProbeBytes_.store(0);
+			return;
+		}
+		const auto activeProbeClusterId = probeObserver_.ActiveClusterId();
+		if (activeProbeClusterId == mediasoup::ccutils::ProbeClusterIdInvalid) {
+			pendingProbeBytes_.store(0);
+			return;
+		}
+
+		int64_t remainingBytes = pendingProbeBytes_.exchange(0);
+		while (remainingBytes > 0) {
+			const size_t packetBytes = static_cast<size_t>(std::min<int64_t>(
+				remainingBytes,
+				mediasoup::ccutils::Prober::kBytesPerProbe));
+			if (packetBytes <= 12) {
+				break;
+			}
+			const auto result = SendProbePacket(*probeTrack, packetBytes, activeProbeClusterId);
+			if (result.status != mediasoup::plainclient::SendStatus::Sent) {
+				pendingProbeBytes_.fetch_add(remainingBytes);
+				break;
+			}
+			remainingBytes -= static_cast<int64_t>(packetBytes);
+		}
+	}
+
+	mediasoup::plainclient::SendResult SendProbePacket(
+		const TrackNetState& track,
+		size_t packetBytes,
+		mediasoup::ccutils::ProbeClusterId probeClusterId)
+	{
+		const size_t totalBytes = std::clamp<size_t>(packetBytes, 64u, 1200u);
+		const size_t paddingBytes = totalBytes > 12 ? (totalBytes - 12) : 1u;
+		uint8_t packet[1600]{};
+		rtpHeader(packet, track.payloadType, const_cast<TrackNetState&>(track).seq++,
+			track.rtcpState.lastRtpTs, track.ssrc, false);
+		packet[0] |= 0x20; // P bit.
+		std::memset(packet + 12, 0, paddingBytes);
+		packet[12 + paddingBytes - 1] = static_cast<uint8_t>(paddingBytes);
+		size_t packetLen = 12 + paddingBytes;
+
+		const uint16_t transportSequence = sendSideBwe_.RecordPacketSendAndGetSequenceNumber(
+			steadyNowUs(),
+			packetLen,
+			false,
+			probeClusterId,
+			true);
+		uint8_t rewrittenPacket[1700];
+		size_t rewrittenLen = sizeof(rewrittenPacket);
+		if (!mediasoup::plainclient::RewriteRtpWithTransportCcSequence(
+				packet,
+				packetLen,
+				track.transportCcExtensionId,
+				transportSequence,
+				rewrittenPacket,
+				&rewrittenLen)) {
+			return {mediasoup::plainclient::SendStatus::HardError, EINVAL, 0};
+		}
+		const auto result = mediasoup::plainclient::SendUdpDatagram(cfg_.udpFd, rewrittenPacket, rewrittenLen);
+		if (result.status == mediasoup::plainclient::SendStatus::Sent) {
+			transportCcRewrittenPacketsSent_++;
+			rtcp_.onVideoRtpSent(rewrittenPacket, rewrittenLen);
+			probeObserver_.RecordPacket(rewrittenLen, false, probeClusterId, true);
+			prober_.ProbesSent(static_cast<int>(rewrittenLen));
+		}
+		return result;
+	}
+
+	void MaybeFinalizeProbeCluster()
+	{
+		const auto [probeSignal, estimatedCapacity, finalized] = sendSideBwe_.ProbeClusterFinalize();
+		if (!finalized) {
+			return;
+		}
+		(void)probeSignal;
+		(void)estimatedCapacity;
+		RefreshPublishedTransportEstimate();
 	}
 
 	uint32_t ClampConfiguredTransportEstimate(int64_t rawEstimateBps) const
@@ -838,6 +1031,20 @@ private:
 	uint64_t transportCcFeedbackLostCount_{ 0 };
 	uint64_t transportCcMalformedFeedbackCount_{ 0 };
 	uint64_t statsGeneration_ = 0;
+	enum class ProbeEventType {
+		StartCluster,
+		CompleteCluster
+	};
+	struct ProbeEvent {
+		ProbeEventType type;
+		mediasoup::ccutils::ProbeClusterInfo probeClusterInfo;
+		mediasoup::ccutils::ProbeClusterId clusterId;
+	};
+	mediasoup::ccutils::Prober prober_{this};
+	mediasoup::plainclient::sendsidebwe::ProbeObserver probeObserver_;
+	std::mutex probeEventMutex_;
+	std::deque<ProbeEvent> probeEvents_;
+	std::atomic<int64_t> pendingProbeBytes_{ 0 };
 	int epollFd_ = -1;
 	int wakeupFd_ = -1;
 	int srTimerFd_ = -1;

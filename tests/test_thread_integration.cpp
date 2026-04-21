@@ -1405,6 +1405,54 @@ TEST(NetworkThreadIntegration, AggregateTargetIncreaseRaisesEffectivePacingWitho
 	close(recvFd);
 }
 
+TEST(NetworkThreadIntegration, ProbeSendsPaddingRtpWhenTargetExceedsEstimate) {
+	int sendFd = -1, recvFd = -1;
+	uint16_t port = 0;
+	ASSERT_EQ(createConnectedUdpPair(sendFd, recvFd, port), 0);
+
+	NetworkThread::Config cfg;
+	cfg.udpFd = sendFd;
+	cfg.audioSsrc = 22222222;
+	cfg.audioPt = 111;
+	cfg.sendSideBweConfig = fastSendSideBweConfig();
+
+	NetworkThread net(cfg);
+	net.registerVideoTrack(0, 11111111u, 96, 5);
+	net.seedTransportEstimateForTest(300000u);
+
+	net.start();
+	std::this_thread::sleep_for(std::chrono::milliseconds(120));
+
+	bool sawProbePadding = false;
+	bool sawTransportCcSequence = false;
+	for (int attempt = 0; attempt < 32; ++attempt) {
+		uint8_t packet[1600];
+		const int bytes = recv(recvFd, packet, sizeof(packet), MSG_DONTWAIT);
+		if (bytes <= 0) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+			continue;
+		}
+		if ((packet[0] & 0x20) != 0) {
+			sawProbePadding = true;
+		}
+		uint16_t sequence = 0;
+		if (extractTransportCcSequence(packet, static_cast<size_t>(bytes), 5, &sequence)) {
+			sawTransportCcSequence = true;
+		}
+		if (sawProbePadding && sawTransportCcSequence) {
+			break;
+		}
+	}
+
+	net.stop();
+
+	EXPECT_TRUE(sawProbePadding);
+	EXPECT_TRUE(sawTransportCcSequence);
+
+	close(sendFd);
+	close(recvFd);
+}
+
 TEST(NetworkPause, PauseAckDropsQueuedRetransmissionsAndPreventsLateRtp) {
 	int sendFd = -1, recvFd = -1;
 	uint16_t port = 0;
