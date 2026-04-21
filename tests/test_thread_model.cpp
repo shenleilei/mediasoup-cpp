@@ -1096,6 +1096,76 @@ TEST(SendSideBwe, GoodProbeFinalizeKeepsHigherEstimatedCapacity) {
 	EXPECT_EQ(estimatedCapacity, bwe.EstimatedAvailableChannelCapacityBps());
 }
 
+TEST(SendSideBwe, CongestingProbeDoesNotRaiseEstimatedCapacity) {
+	SendSideBwe bwe;
+	bwe.SeedEstimatedAvailableChannelCapacityForTest(300000);
+
+	mediasoup::ccutils::ProbeClusterInfo probeClusterInfo;
+	probeClusterInfo.id = 8;
+	probeClusterInfo.createdAt = std::chrono::steady_clock::now();
+	probeClusterInfo.goal.desiredBps = 350000;
+	probeClusterInfo.goal.duration = std::chrono::milliseconds(100);
+	probeClusterInfo.goal.desiredBytes = 3000;
+
+	bwe.ProbeClusterStarting(probeClusterInfo);
+
+	std::vector<uint16_t> sequences;
+	for (int i = 0; i < 5; ++i) {
+		sequences.push_back(bwe.RecordPacketSendAndGetSequenceNumber(
+			1000000 + static_cast<int64_t>(i) * 10000,
+			1200,
+			false,
+			probeClusterInfo.id,
+			true));
+	}
+
+	std::vector<std::optional<int16_t>> deltas250us;
+	for (int i = 0; i < 5; ++i) {
+		deltas250us.emplace_back(static_cast<int16_t>(400));
+	}
+	const auto packet = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
+		deltas250us,
+		sequences.front(),
+		0x11111111u,
+		0x22222222u,
+		0x000000u,
+		0x41u);
+	mediasoup::plainclient::TransportCcFeedback feedback;
+	ASSERT_TRUE(mediasoup::plainclient::ParseTransportCcFeedback(
+		packet.data(),
+		packet.size(),
+		&feedback));
+	bwe.HandleTransportFeedback(feedback, 2000000);
+
+	probeClusterInfo.result.startTimeUs = 1000000;
+	probeClusterInfo.result.endTimeUs = 1100000;
+	probeClusterInfo.result.bytesProbe = 6000;
+	probeClusterInfo.result.isCompleted = true;
+	bwe.ProbeClusterDone(probeClusterInfo);
+
+	const auto [probeSignal, estimatedCapacity, finalized] = bwe.ProbeClusterFinalize();
+	EXPECT_TRUE(finalized);
+	EXPECT_EQ(probeSignal, mediasoup::ccutils::ProbeSignal::Congesting);
+	EXPECT_EQ(estimatedCapacity, 300000);
+	EXPECT_EQ(estimatedCapacity, bwe.EstimatedAvailableChannelCapacityBps());
+}
+
+TEST(SendSideBwe, ProbeFinalizeWaitsUntilClusterDone) {
+	SendSideBwe bwe;
+	mediasoup::ccutils::ProbeClusterInfo probeClusterInfo;
+	probeClusterInfo.id = 9;
+	probeClusterInfo.createdAt = std::chrono::steady_clock::now();
+	probeClusterInfo.goal.desiredBps = 200000;
+	probeClusterInfo.goal.duration = std::chrono::milliseconds(100);
+	probeClusterInfo.goal.desiredBytes = 3000;
+	bwe.ProbeClusterStarting(probeClusterInfo);
+
+	const auto [probeSignal, estimatedCapacity, finalized] = bwe.ProbeClusterFinalize();
+	EXPECT_FALSE(finalized);
+	EXPECT_EQ(probeSignal, mediasoup::ccutils::ProbeSignal::Inconclusive);
+	EXPECT_EQ(estimatedCapacity, 0);
+}
+
 namespace {
 
 struct BitrateAllocationScenarioResult {
