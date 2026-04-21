@@ -37,6 +37,7 @@ int PlainClientApp::RunThreadedMode()
 	networkConfig.audioPt = audioPt_;
 	networkConfig.audioTransportCcExtensionId = audioTransportCcExtensionId_;
 	networkConfig.enableTransportController = transportControllerEnabled_;
+	networkConfig.enableTransportEstimate = transportEstimateEnabled_;
 	NetworkThread netThread(networkConfig);
 	netThread.statsQueue = &statsQueue;
 	netThread.controlQueue = &networkControlQueue;

@@ -111,6 +111,7 @@ private:
 	bool threadedMode_{false};
 	bool threadedOwnsAllVideoInputs_{false};
 	bool transportControllerEnabled_{true};
+	bool transportEstimateEnabled_{true};
 
 	std::optional<mediasoup::ffmpeg::InputFormat> inputFormat_;
 	int vidIdx_{-1};
