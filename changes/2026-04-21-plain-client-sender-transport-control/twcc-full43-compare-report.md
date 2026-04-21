@@ -19,7 +19,7 @@
 
 这 43 个 case 来自：
 
-- [plain-client-qos-parity-checklist.md](/root/mediasoup-cpp/docs/plain-client-qos-parity-checklist.md)
+- [plain-client-qos-parity-checklist.md](../../docs/plain-client-qos-parity-checklist.md)
 - `tests/qos_harness/scenarios/sweep_cases.json`
 
 非 extended case 共 `43` 个：
@@ -52,9 +52,9 @@
 
 相关代码：
 
-- [run_cpp_client_matrix.mjs](/root/mediasoup-cpp/tests/qos_harness/run_cpp_client_matrix.mjs)
-- [cpp_client_runner.mjs](/root/mediasoup-cpp/tests/qos_harness/cpp_client_runner.mjs)
-- [PlainClientSupport.cpp](/root/mediasoup-cpp/client/PlainClientSupport.cpp)
+- [run_cpp_client_matrix.mjs](../../tests/qos_harness/run_cpp_client_matrix.mjs)
+- [cpp_client_runner.mjs](../../tests/qos_harness/cpp_client_runner.mjs)
+- [PlainClientSupport.cpp](../../client/PlainClientSupport.cpp)
 
 这意味着：
 
@@ -76,18 +76,18 @@
 - `QOS_MATRIX_SPEED=0.25`
 - 每组 `1` 次全量 43-case
 - worker 使用本地编译版：
-  - [mediasoup-worker](/root/mediasoup-cpp/src/mediasoup-worker-src/worker/out/Release/build/mediasoup-worker)
+  - `src/mediasoup-worker-src/worker/out/Release/build/mediasoup-worker`（本地构建产物路径）
 
 结果目录：
 
-- [full43-compare/2026-04-21T06-57-52Z](/root/mediasoup-cpp/changes/2026-04-21-plain-client-sender-transport-control/artifacts/full43-compare/2026-04-21T06-57-52Z)
+- [full43-compare/2026-04-21T06-57-52Z](./artifacts/full43-compare/2026-04-21T06-57-52Z)
 
 产物：
 
-- [g1.json](/root/mediasoup-cpp/changes/2026-04-21-plain-client-sender-transport-control/artifacts/full43-compare/2026-04-21T06-57-52Z/g1.json)
-- [g1.md](/root/mediasoup-cpp/changes/2026-04-21-plain-client-sender-transport-control/artifacts/full43-compare/2026-04-21T06-57-52Z/g1.md)
-- [g2.json](/root/mediasoup-cpp/changes/2026-04-21-plain-client-sender-transport-control/artifacts/full43-compare/2026-04-21T06-57-52Z/g2.json)
-- [g2.md](/root/mediasoup-cpp/changes/2026-04-21-plain-client-sender-transport-control/artifacts/full43-compare/2026-04-21T06-57-52Z/g2.md)
+- [g1.json](./artifacts/full43-compare/2026-04-21T06-57-52Z/g1.json)
+- [g1.md](./artifacts/full43-compare/2026-04-21T06-57-52Z/g1.md)
+- [g2.json](./artifacts/full43-compare/2026-04-21T06-57-52Z/g2.json)
+- [g2.md](./artifacts/full43-compare/2026-04-21T06-57-52Z/g2.md)
 
 ## 4. 实际结果
 
@@ -167,10 +167,10 @@
 
 虽然 43-case 没拉开收益差异，但今天修复有效这件事，已经由更直接的证据证明：
 
-- [ThreadedPlainPublishIntegrationTest.RealWorkerTWCCFeedbackObservedByPlainSender](/root/mediasoup-cpp/tests/test_thread_integration.cpp:2409)
-- [ThreadedPlainPublishIntegrationTest.RealWorkerTWCCFeedbackHonorsEstimateToggle](/root/mediasoup-cpp/tests/test_thread_integration.cpp:2841)
-- [PlainTransportDirect.WorkerDumpRegistersTransportCcHeaderExtension](/root/mediasoup-cpp/tests/test_thread_integration.cpp:983)
-- [PlainTransportDirect.WorkerEmitsTransportCcFeedbackForConnectedH264Socket](/root/mediasoup-cpp/tests/test_thread_integration.cpp:1180)
+- [ThreadedPlainPublishIntegrationTest.RealWorkerTWCCFeedbackObservedByPlainSender](../../tests/test_thread_integration.cpp#L2409)
+- [ThreadedPlainPublishIntegrationTest.RealWorkerTWCCFeedbackHonorsEstimateToggle](../../tests/test_thread_integration.cpp#L2841)
+- [PlainTransportDirect.WorkerDumpRegistersTransportCcHeaderExtension](../../tests/test_thread_integration.cpp#L983)
+- [PlainTransportDirect.WorkerEmitsTransportCcFeedbackForConnectedH264Socket](../../tests/test_thread_integration.cpp#L1180)
 
 其中最强的是：
 

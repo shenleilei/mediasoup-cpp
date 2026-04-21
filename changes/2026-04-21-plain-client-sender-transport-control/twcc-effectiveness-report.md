@@ -23,7 +23,7 @@
 
 ### 1. 真实 worker 路径 smoke 已通过
 
-- [ThreadedPlainPublishIntegrationTest.RealWorkerTWCCFeedbackObservedByPlainSender](/root/mediasoup-cpp/tests/test_thread_integration.cpp:2409)
+- [ThreadedPlainPublishIntegrationTest.RealWorkerTWCCFeedbackObservedByPlainSender](../../tests/test_thread_integration.cpp#L2409)
 
 该测试当前已经 `PASS`。
 
@@ -35,7 +35,7 @@
 
 ### 2. estimate 开关对真实 worker feedback 的作用已通过
 
-- [ThreadedPlainPublishIntegrationTest.RealWorkerTWCCFeedbackHonorsEstimateToggle](/root/mediasoup-cpp/tests/test_thread_integration.cpp:2841)
+- [ThreadedPlainPublishIntegrationTest.RealWorkerTWCCFeedbackHonorsEstimateToggle](../../tests/test_thread_integration.cpp#L2841)
 
 该测试当前已经 `PASS`。
 
@@ -54,9 +54,9 @@
 
 以下测试当前都已 `PASS`：
 
-- [PlainTransportDirect.WorkerDumpRegistersTransportCcHeaderExtension](/root/mediasoup-cpp/tests/test_thread_integration.cpp:983)
-- [PlainTransportDirect.WorkerReceivesTransportCcRtpButDoesNotYetEmitFeedback](/root/mediasoup-cpp/tests/test_thread_integration.cpp:1042)
-- [PlainTransportDirect.WorkerEmitsTransportCcFeedbackForConnectedH264Socket](/root/mediasoup-cpp/tests/test_thread_integration.cpp:1180)
+- [PlainTransportDirect.WorkerDumpRegistersTransportCcHeaderExtension](../../tests/test_thread_integration.cpp#L983)
+- [PlainTransportDirect.WorkerReceivesTransportCcRtpButDoesNotYetEmitFeedback](../../tests/test_thread_integration.cpp#L1042)
+- [PlainTransportDirect.WorkerEmitsTransportCcFeedbackForConnectedH264Socket](../../tests/test_thread_integration.cpp#L1180)
 
 它们分别证明：
 
@@ -74,13 +74,13 @@
 已生成 A/B/C 评估产物，路径如下：
 
 - 原始聚合输入：
-  - [raw-groups.json](/root/mediasoup-cpp/changes/2026-04-21-plain-client-sender-transport-control/artifacts/twcc-ab-eval/2026-04-21T06-39-19.638Z/raw-groups.json)
+  - [raw-groups.json](./artifacts/twcc-ab-eval/2026-04-21T06-39-19.638Z/raw-groups.json)
 - `G1 vs G2` 报告：
-  - [g1-vs-g2.md](/root/mediasoup-cpp/changes/2026-04-21-plain-client-sender-transport-control/artifacts/twcc-ab-eval/2026-04-21T06-39-19.638Z/g1-vs-g2.md)
-  - [g1-vs-g2.json](/root/mediasoup-cpp/changes/2026-04-21-plain-client-sender-transport-control/artifacts/twcc-ab-eval/2026-04-21T06-39-19.638Z/g1-vs-g2.json)
+  - [g1-vs-g2.md](./artifacts/twcc-ab-eval/2026-04-21T06-39-19.638Z/g1-vs-g2.md)
+  - [g1-vs-g2.json](./artifacts/twcc-ab-eval/2026-04-21T06-39-19.638Z/g1-vs-g2.json)
 - `G0 vs G2` 报告：
-  - [g0-vs-g2.md](/root/mediasoup-cpp/changes/2026-04-21-plain-client-sender-transport-control/artifacts/twcc-ab-eval/2026-04-21T06-39-19.638Z/g0-vs-g2.md)
-  - [g0-vs-g2.json](/root/mediasoup-cpp/changes/2026-04-21-plain-client-sender-transport-control/artifacts/twcc-ab-eval/2026-04-21T06-39-19.638Z/g0-vs-g2.json)
+  - [g0-vs-g2.md](./artifacts/twcc-ab-eval/2026-04-21T06-39-19.638Z/g0-vs-g2.md)
+  - [g0-vs-g2.json](./artifacts/twcc-ab-eval/2026-04-21T06-39-19.638Z/g0-vs-g2.json)
 
 ### 当前 A/B/C 读法
 
