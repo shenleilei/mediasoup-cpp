@@ -87,6 +87,9 @@ struct SenderStatsSnapshot {
 	double rrRttMs = -1.0;
 	double rrJitterMs = -1.0;
 	int64_t lastRrReceivedMs = 0;
+	uint32_t transportEstimatedBitrateBps = 0;
+	uint32_t effectivePacingBitrateBps = 0;
+	uint64_t transportCcFeedbackReports = 0;
 };
 
 // ═══════════════════════════════════════════════════════════

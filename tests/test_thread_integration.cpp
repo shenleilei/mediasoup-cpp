@@ -200,6 +200,27 @@ static void seedTransportCcPackets(
 	}
 }
 
+static mediasoup::plainclient::sendsidebwe::CongestionDetectorConfig fastSendSideBweConfig() {
+	using Config = mediasoup::plainclient::sendsidebwe::CongestionDetectorConfig;
+	Config config;
+	config.packetGroup.minPackets = 4;
+	config.packetGroup.maxWindowDuration = std::chrono::milliseconds(40);
+	config.queuingDelayEarlyWarningJqr = {1, std::chrono::milliseconds(1)};
+	config.queuingDelayEarlyWarningDqr = {1, std::chrono::milliseconds(1)};
+	config.lossEarlyWarningJqr = {1, std::chrono::milliseconds(1)};
+	config.lossEarlyWarningDqr = {1, std::chrono::milliseconds(1)};
+	config.queuingDelayCongestedJqr = {2, std::chrono::milliseconds(1)};
+	config.queuingDelayCongestedDqr = {1, std::chrono::milliseconds(1)};
+	config.lossCongestedJqr = {2, std::chrono::milliseconds(1)};
+	config.lossCongestedDqr = {1, std::chrono::milliseconds(1)};
+	config.jqrMinDelay = std::chrono::milliseconds(5);
+	config.dqrMaxDelay = std::chrono::milliseconds(2);
+	config.congestedPacketGroup.minPackets = 4;
+	config.congestedPacketGroup.maxWindowDuration = std::chrono::milliseconds(40);
+	config.estimationWindowDuration = std::chrono::milliseconds(40);
+	return config;
+}
+
 static std::vector<uint8_t> buildTwccKeyframeAnnexbSample() {
 	std::vector<uint8_t> sample = {
 		0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0x00, 0x1e,
@@ -735,12 +756,15 @@ TEST(NetworkThreadIntegration, TransportCcFeedbackGrowingDelayDecreasesEstimate)
 	cfg.audioSsrc = 22222222;
 	cfg.audioPt = 111;
 	cfg.audioTransportCcExtensionId = 5;
+	cfg.sendSideBweConfig = fastSendSideBweConfig();
 
 	NetworkThread net(cfg);
 	net.registerVideoTrack(0, 11111111u, 96, 5);
 
-	EXPECT_EQ(net.transportEstimatedBitrateBps(), 900000u);
+	EXPECT_GT(net.transportEstimatedBitrateBps(), 900000u);
 	EXPECT_EQ(net.effectivePacingBitrateBps(), 900000u);
+	net.seedTransportEstimateForTest(900000u);
+	EXPECT_EQ(net.transportEstimatedBitrateBps(), 900000u);
 
 	seedTransportCcPackets(net, 1000, 20, 0, 10000, 1200);
 	net.start();
@@ -767,7 +791,7 @@ TEST(NetworkThreadIntegration, TransportCcFeedbackGrowingDelayDecreasesEstimate)
 	close(recvFd);
 }
 
-TEST(NetworkThreadIntegration, TransportCcFeedbackStableDelayIncreasesEstimate) {
+TEST(NetworkThreadIntegration, TransportCcFeedbackStableDelayKeepsEstimateWithoutProbe) {
 	int sendFd = -1, recvFd = -1;
 	uint16_t port = 0;
 	ASSERT_EQ(createConnectedUdpPair(sendFd, recvFd, port), 0);
@@ -777,9 +801,11 @@ TEST(NetworkThreadIntegration, TransportCcFeedbackStableDelayIncreasesEstimate) 
 	cfg.audioSsrc = 22222222;
 	cfg.audioPt = 111;
 	cfg.audioTransportCcExtensionId = 5;
+	cfg.sendSideBweConfig = fastSendSideBweConfig();
 
 	NetworkThread net(cfg);
 	net.registerVideoTrack(0, 11111111u, 96, 5);
+	net.seedTransportEstimateForTest(900000u);
 	EXPECT_EQ(net.transportEstimatedBitrateBps(), 900000u);
 
 	seedTransportCcPackets(net, 1000, 20, 0, 10000, 1200);
@@ -795,7 +821,7 @@ TEST(NetworkThreadIntegration, TransportCcFeedbackStableDelayIncreasesEstimate) 
 
 	EXPECT_EQ(net.transportCcFeedbackReports(), 1u);
 	EXPECT_EQ(net.transportCcMalformedFeedbackCount(), 0u);
-	EXPECT_GT(net.transportEstimatedBitrateBps(), 900000u);
+	EXPECT_EQ(net.transportEstimatedBitrateBps(), 900000u);
 	EXPECT_EQ(net.effectivePacingBitrateBps(), 900000u);
 
 	close(sendFd);
@@ -813,11 +839,12 @@ TEST(NetworkThreadIntegration, TransportCcFeedbackDoesNotChangeEstimateWhenDisab
 	cfg.audioPt = 111;
 	cfg.audioTransportCcExtensionId = 5;
 	cfg.enableTransportEstimate = false;
+	cfg.sendSideBweConfig = fastSendSideBweConfig();
 
 	NetworkThread net(cfg);
 	net.registerVideoTrack(0, 11111111u, 96, 5);
 
-	EXPECT_EQ(net.transportEstimatedBitrateBps(), 900000u);
+	EXPECT_EQ(net.transportEstimatedBitrateBps(), 0u);
 	EXPECT_EQ(net.effectivePacingBitrateBps(), 900000u);
 
 	seedTransportCcPackets(net, 1000, 20, 0, 10000, 1200);
@@ -833,7 +860,7 @@ TEST(NetworkThreadIntegration, TransportCcFeedbackDoesNotChangeEstimateWhenDisab
 	net.stop();
 
 	EXPECT_EQ(net.transportCcFeedbackReports(), 1u);
-	EXPECT_EQ(net.transportEstimatedBitrateBps(), 900000u);
+	EXPECT_EQ(net.transportEstimatedBitrateBps(), 0u);
 	EXPECT_EQ(net.effectivePacingBitrateBps(), 900000u);
 
 	close(sendFd);
@@ -851,9 +878,11 @@ TEST(NetworkThreadIntegration, TransportCcFeedbackClampsToConfiguredMin) {
 	cfg.audioPt = 111;
 	cfg.audioTransportCcExtensionId = 5;
 	cfg.transportEstimateMinBps = 850000u;
+	cfg.sendSideBweConfig = fastSendSideBweConfig();
 
 	NetworkThread net(cfg);
 	net.registerVideoTrack(0, 11111111u, 96, 5);
+	net.seedTransportEstimateForTest(900000u);
 
 	seedTransportCcPackets(net, 1000, 20, 0, 10000, 800);
 	net.start();
@@ -890,6 +919,7 @@ TEST(NetworkThreadIntegration, TransportCcFeedbackClampsToConfiguredMax) {
 	cfg.audioPt = 111;
 	cfg.audioTransportCcExtensionId = 5;
 	cfg.transportEstimateMaxBps = 910000u;
+	cfg.sendSideBweConfig = fastSendSideBweConfig();
 
 	NetworkThread net(cfg);
 	net.registerVideoTrack(0, 11111111u, 96, 5);
@@ -923,9 +953,11 @@ TEST(NetworkThreadIntegration, TransportCcFeedbackMalformedPacketLeavesEstimateU
 	cfg.audioSsrc = 22222222;
 	cfg.audioPt = 111;
 	cfg.audioTransportCcExtensionId = 5;
+	cfg.sendSideBweConfig = fastSendSideBweConfig();
 
 	NetworkThread net(cfg);
 	net.registerVideoTrack(0, 11111111u, 96, 5);
+	net.seedTransportEstimateForTest(900000u);
 	EXPECT_EQ(net.transportEstimatedBitrateBps(), 900000u);
 
 	seedTransportCcPackets(net, 1000, 10, 0, 10000, 1200);
@@ -1330,7 +1362,7 @@ TEST(PlainTransportDirect, WorkerEmitsTransportCcFeedbackForConnectedH264Socket)
 	worker->close();
 }
 
-TEST(NetworkThreadIntegration, TransportEstimateRaisesWhenAggregateTargetIncreases) {
+TEST(NetworkThreadIntegration, AggregateTargetIncreaseRaisesEffectivePacingWithoutMutatingEstimate) {
 	int sendFd = -1, recvFd = -1;
 	uint16_t port = 0;
 	ASSERT_EQ(createConnectedUdpPair(sendFd, recvFd, port), 0);
@@ -1341,12 +1373,14 @@ TEST(NetworkThreadIntegration, TransportEstimateRaisesWhenAggregateTargetIncreas
 	cfg.udpFd = sendFd;
 	cfg.audioSsrc = 22222222;
 	cfg.audioPt = 111;
+	cfg.sendSideBweConfig = fastSendSideBweConfig();
 
 	NetworkThread net(cfg);
 	net.controlQueue = &controlQueue;
 	net.registerVideoTrack(0, 11111111u, 96, 5);
-
-	EXPECT_EQ(net.transportEstimatedBitrateBps(), 900000u);
+	net.seedTransportEstimateForTest(2000000u);
+	const uint32_t initialEstimateBps = net.transportEstimatedBitrateBps();
+	EXPECT_EQ(initialEstimateBps, 2000000u);
 	EXPECT_EQ(net.effectivePacingBitrateBps(), 900000u);
 
 	net.start();
@@ -1364,7 +1398,7 @@ TEST(NetworkThreadIntegration, TransportEstimateRaisesWhenAggregateTargetIncreas
 	std::this_thread::sleep_for(std::chrono::milliseconds(120));
 	net.stop();
 
-	EXPECT_EQ(net.transportEstimatedBitrateBps(), 1500000u);
+	EXPECT_EQ(net.transportEstimatedBitrateBps(), initialEstimateBps);
 	EXPECT_EQ(net.effectivePacingBitrateBps(), 1500000u);
 
 	close(sendFd);
@@ -2912,8 +2946,9 @@ TEST_F(ThreadedPlainPublishIntegrationTest, RealWorkerTWCCFeedbackHonorsEstimate
 
 	EXPECT_GT(reportsDisabled, 0u);
 	EXPECT_GT(reportsEnabled, 0u);
-	EXPECT_EQ(estimateDisabled, 900000u);
-	EXPECT_NE(estimateEnabled, 900000u);
+	EXPECT_EQ(estimateDisabled, 0u);
+	EXPECT_GT(estimateEnabled, 0u);
+	EXPECT_NE(estimateEnabled, estimateDisabled);
 }
 
 TEST_F(ThreadedPlainPublishIntegrationTest, AudioRtpAndStatsSmoke) {

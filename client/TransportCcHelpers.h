@@ -14,6 +14,7 @@ struct TransportCcPacketFeedback {
 	uint8_t symbol{ 0 };
 	bool received{ false };
 	bool deltaPresent{ false };
+	int64_t deltaUs{ 0 };
 	int64_t receiveTimeUs{ 0 };
 };
 
@@ -141,6 +142,8 @@ inline bool ParseTransportCcFeedback(
 				}
 				currentReceiveTimeUs += static_cast<int64_t>(
 					static_cast<int8_t>(packet[deltaOffset])) * 250;
+				packetFeedback.deltaUs = static_cast<int64_t>(
+					static_cast<int8_t>(packet[deltaOffset])) * 250;
 				deltaOffset += 1;
 				parsed.receivedPacketCount++;
 				packetFeedback.received = true;
@@ -152,6 +155,10 @@ inline bool ParseTransportCcFeedback(
 					return false;
 				}
 				currentReceiveTimeUs += static_cast<int64_t>(
+					static_cast<int16_t>(
+						static_cast<uint16_t>(packet[deltaOffset] << 8) |
+						static_cast<uint16_t>(packet[deltaOffset + 1]))) * 250;
+				packetFeedback.deltaUs = static_cast<int64_t>(
 					static_cast<int16_t>(
 						static_cast<uint16_t>(packet[deltaOffset] << 8) |
 						static_cast<uint16_t>(packet[deltaOffset + 1]))) * 250;
