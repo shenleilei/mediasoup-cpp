@@ -35,6 +35,7 @@ int PlainClientApp::RunThreadedMode()
 	networkConfig.udpFd = udpFd_;
 	networkConfig.audioSsrc = audioSsrc_;
 	networkConfig.audioPt = audioPt_;
+	networkConfig.enableTransportController = transportControllerEnabled_;
 	NetworkThread netThread(networkConfig);
 	netThread.statsQueue = &statsQueue;
 	netThread.controlQueue = &networkControlQueue;
@@ -49,6 +50,13 @@ int PlainClientApp::RunThreadedMode()
 		input.auQueue = &queues[i]->auQueue;
 		input.keyframeQueue = &queues[i]->netCmdQueue;
 		netThread.addSourceInput(input);
+		(void)mt::enqueueTrackTransportConfig(
+			static_cast<uint32_t>(i),
+			videoTracks_[i].ssrc,
+			videoTracks_[i].payloadType,
+			static_cast<uint32_t>(std::max(0, videoTracks_[i].encBitrate)),
+			videoTracks_[i].videoSuppressed,
+			networkControlQueue);
 	}
 
 	netThread.sendComediaProbe();
@@ -229,6 +237,18 @@ int PlainClientApp::RunThreadedMode()
 
 	std::vector<mt::ThreadedTrackStatsState> trackStats(videoTracks_.size());
 	int64_t lastPeerQosSampleMs = 0;
+	auto syncTransportHint = [&](size_t index) {
+		if (index >= videoTracks_.size()) return;
+		auto& track = videoTracks_[index];
+		(void)mt::enqueueTrackTransportConfig(
+			static_cast<uint32_t>(index),
+			track.ssrc,
+			track.payloadType,
+			static_cast<uint32_t>(std::max(0, track.encBitrate)),
+			track.videoSuppressed,
+			networkControlQueue);
+		netThread.wakeup();
+	};
 
 	while (running_.load()) {
 		ws_.dispatchNotifications();
@@ -253,6 +273,7 @@ int PlainClientApp::RunThreadedMode()
 			track.configuredVideoFps = trackState.configuredVideoFps;
 			track.scaleResolutionDownBy = trackState.scaleResolutionDownBy;
 			track.videoSuppressed = trackState.videoSuppressed;
+			syncTransportHint(networkAck.trackIndex);
 		}
 
 		for (size_t i = 0; i < queues.size(); ++i) {
@@ -268,6 +289,7 @@ int PlainClientApp::RunThreadedMode()
 				track.configuredVideoFps = trackState.configuredVideoFps;
 				track.scaleResolutionDownBy = trackState.scaleResolutionDownBy;
 				track.videoSuppressed = trackState.videoSuppressed;
+				syncTransportHint(ack.trackIndex);
 				if (!ack.applied && !ack.reason.empty()) {
 					std::printf("[QoS:%s] command %llu rejected: %s\n",
 						track.trackId.c_str(),

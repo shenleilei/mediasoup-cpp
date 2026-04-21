@@ -78,7 +78,7 @@ private:
 	static void OnSignal(int);
 	static void SendH264ViaSharedPacketizer(int fd, const uint8_t* data, int size,
 		uint8_t pt, uint32_t ts, uint32_t ssrc, uint16_t& seq);
-	static void SendOpus(int fd, const uint8_t* data, int size,
+	static bool SendOpus(int fd, const uint8_t* data, int size,
 		uint8_t pt, uint32_t ts, uint32_t ssrc, uint16_t& seq);
 	static int ResolveScaledDimension(int sourceDimension, double scaleDownBy);
 	static int ResolveVideoFps(const AVStream* stream, int fallbackFps = 25);
@@ -109,6 +109,7 @@ private:
 	bool threadedRequested_{false};
 	bool threadedMode_{false};
 	bool threadedOwnsAllVideoInputs_{false};
+	bool transportControllerEnabled_{true};
 
 	std::optional<mediasoup::ffmpeg::InputFormat> inputFormat_;
 	int vidIdx_{-1};

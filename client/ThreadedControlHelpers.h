@@ -97,6 +97,24 @@ inline bool enqueueNetworkTrackAction(
 	return true;
 }
 
+inline bool enqueueTrackTransportConfig(
+	uint32_t trackIndex,
+	uint32_t ssrc,
+	uint8_t payloadType,
+	uint32_t targetBitrateBps,
+	bool paused,
+	SpscQueue<NetworkControlCommand, kControlCommandQueueCapacity>& netQueue)
+{
+	NetworkControlCommand cmd;
+	cmd.type = NetworkControlCommand::TrackTransportConfig;
+	cmd.trackIndex = trackIndex;
+	cmd.ssrc = ssrc;
+	cmd.payloadType = payloadType;
+	cmd.targetBitrateBps = targetBitrateBps;
+	cmd.paused = paused;
+	return netQueue.tryPush(std::move(cmd));
+}
+
 inline bool shouldSampleTrack(bool statsFresh, bool hasServerStatsForTrack) {
 	return statsFresh || hasServerStatsForTrack;
 }

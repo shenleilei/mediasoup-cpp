@@ -132,6 +132,8 @@ struct NetworkControlCommand {
 	// TrackTransportConfig fields
 	uint32_t ssrc = 0;
 	uint8_t payloadType = 0;
+	uint32_t targetBitrateBps = 0;
+	bool paused = false;
 };
 
 // ═══════════════════════════════════════════════════════════

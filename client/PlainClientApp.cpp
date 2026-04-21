@@ -1,6 +1,7 @@
 #include "PlainClientApp.h"
 
 #include "NetworkThread.h"
+#include "UdpSendHelpers.h"
 #include "media/rtp/H264Packetizer.h"
 
 extern "C" {
@@ -15,6 +16,7 @@ extern "C" {
 #include <signal.h>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -39,14 +41,30 @@ public:
 
 	void OnPacket(const uint8_t* packet, size_t packetLen) override
 	{
-		send(fd_, packet, packetLen, 0);
-		if (PlainClientApp::RtcpContextSlot() && packetLen >= 12)
+		const auto result = mediasoup::plainclient::SendUdpDatagram(fd_, packet, packetLen);
+		if (result.status == mediasoup::plainclient::SendStatus::Sent &&
+			PlainClientApp::RtcpContextSlot() &&
+			packetLen >= 12)
 			PlainClientApp::RtcpContextSlot()->onVideoRtpSent(packet, packetLen);
 	}
 
 private:
 	int fd_{-1};
 };
+
+bool envFlagDefaultTrue(const char* name)
+{
+	const char* raw = std::getenv(name);
+	if (!raw || std::strlen(raw) == 0) return true;
+	std::string value(raw);
+	std::transform(value.begin(), value.end(), value.begin(),
+		[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+	if (value == "0" || value == "false" || value == "no" || value == "off")
+		return false;
+	if (value == "1" || value == "true" || value == "yes" || value == "on")
+		return true;
+	return true;
+}
 
 } // namespace
 
@@ -78,15 +96,16 @@ void PlainClientApp::SendH264ViaSharedPacketizer(
 		&sink);
 }
 
-void PlainClientApp::SendOpus(
+bool PlainClientApp::SendOpus(
 	int fd, const uint8_t* data, int size,
 	uint8_t pt, uint32_t ts, uint32_t ssrc, uint16_t& seq)
 {
-	if (size <= 0 || size > 4096) return;
+	if (size <= 0 || size > 4096) return false;
 	uint8_t pkt[12 + 4096];
 	rtpHeader(pkt, pt, seq++, ts, ssrc, true);
 	std::memcpy(pkt + 12, data, size);
-	send(fd, pkt, 12 + size, 0);
+	const auto result = mediasoup::plainclient::SendUdpDatagram(fd, pkt, 12 + size);
+	return result.status == mediasoup::plainclient::SendStatus::Sent;
 }
 
 int PlainClientApp::ResolveScaledDimension(int sourceDimension, double scaleDownBy)
@@ -178,11 +197,17 @@ bool PlainClientApp::ParseArguments(int argc, char* argv[])
 	threadedMode_ =
 		threadedRequested_ &&
 		(videoTrackCount_ == 1 || distinctSourceCount >= videoTrackCount_);
+	transportControllerEnabled_ =
+		envFlagDefaultTrue("PLAIN_CLIENT_ENABLE_TRANSPORT_CONTROLLER");
 	if (threadedRequested_ && !threadedMode_) {
 		std::printf(
 			"WARN: PLAIN_CLIENT_THREADED ignored — need %zu distinct PLAIN_CLIENT_VIDEO_SOURCES (got %zu), using legacy path\n",
 			videoTrackCount_,
 			distinctSourceCount);
+	}
+	if (threadedMode_ && !transportControllerEnabled_) {
+		std::printf(
+			"[threaded] transport controller disabled via PLAIN_CLIENT_ENABLE_TRANSPORT_CONTROLLER=0 (fallback pacing path)\n");
 	}
 	threadedOwnsAllVideoInputs_ = threadedMode_ && videoSourcePaths_.size() >= videoTrackCount_;
 	return true;

@@ -467,6 +467,71 @@ TEST(NetworkThreadIntegration, ComediaProbeCoversAllRegisteredTrackSsrcs) {
 	close(recvFd);
 }
 
+TEST(NetworkThreadIntegration, DisableTransportControllerUsesLegacyPacingFallback) {
+	int sendFd = -1, recvFd = -1;
+	uint16_t port = 0;
+	ASSERT_EQ(createConnectedUdpPair(sendFd, recvFd, port), 0);
+
+	mt::SpscQueue<mt::EncodedAccessUnit, mt::kEncodedAuQueueCapacity> auQueue;
+	mt::SpscQueue<mt::NetworkToSourceCommand, mt::kNetworkSourceQueueCapacity> netCmdQueue;
+
+	NetworkThread::Config cfg;
+	cfg.udpFd = sendFd;
+	cfg.enableTransportController = false;
+
+	NetworkThread net(cfg);
+	net.registerVideoTrack(0, 11111111, 96);
+
+	NetworkThread::SourceInput sourceInput;
+	sourceInput.auQueue = &auQueue;
+	sourceInput.keyframeQueue = &netCmdQueue;
+	net.addSourceInput(sourceInput);
+
+	mt::EncodedAccessUnit au;
+	au.trackIndex = 0;
+	au.ssrc = 11111111;
+	au.payloadType = 96;
+	au.rtpTimestamp = 90000;
+	au.isKeyframe = true;
+	std::vector<uint8_t> bigNal(10000, 0xAB);
+	bigNal[0] = 0x00; bigNal[1] = 0x00; bigNal[2] = 0x00; bigNal[3] = 0x01;
+	bigNal[4] = 0x65;
+	au.assign(bigNal.data(), bigNal.size());
+	ASSERT_TRUE(auQueue.tryPush(std::move(au)));
+
+	net.start();
+	net.wakeup();
+	std::this_thread::sleep_for(std::chrono::milliseconds(120));
+	net.stop();
+
+	int rtpCount = 0;
+	uint8_t buf[1500];
+	while (recv(recvFd, buf, sizeof(buf), MSG_DONTWAIT) > 0) {
+		if ((buf[0] & 0xC0) == 0x80) {
+			rtpCount++;
+		}
+	}
+	EXPECT_GT(rtpCount, 0) << "legacy pacing fallback should still transmit RTP packets";
+
+	const auto& metrics = net.transportMetrics();
+	uint64_t sentTotal = 0;
+	uint64_t wouldBlockTotal = 0;
+	uint64_t hardErrorTotal = 0;
+	for (size_t i = 0; i < metrics.sentByClass.size(); ++i) {
+		sentTotal += metrics.sentByClass[i];
+		wouldBlockTotal += metrics.wouldBlockByClass[i];
+		hardErrorTotal += metrics.hardErrorByClass[i];
+	}
+	EXPECT_EQ(sentTotal, 0u);
+	EXPECT_EQ(wouldBlockTotal, 0u);
+	EXPECT_EQ(hardErrorTotal, 0u);
+	EXPECT_EQ(net.queuedAudioPackets(), 0u);
+	EXPECT_EQ(net.queuedRetransmissionPackets(), 0u);
+
+	close(sendFd);
+	close(recvFd);
+}
+
 // ═══════════════════════════════════════════════════════════
 // End-to-end: SourceWorker → NetworkThread → stats
 // ═══════════════════════════════════════════════════════════

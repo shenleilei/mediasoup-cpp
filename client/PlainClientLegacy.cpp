@@ -1,6 +1,7 @@
 #include "PlainClientApp.h"
 
 #include "NetworkThread.h"
+#include "UdpSendHelpers.h"
 
 #include <limits>
 #include <map>
@@ -60,7 +61,7 @@ int PlainClientApp::RunLegacyMode()
 			uint8_t dummy[12 + 1];
 			rtpHeader(dummy, track.payloadType, track.seq++, 0, track.ssrc, false);
 			dummy[12] = 0;
-			send(udpFd_, dummy, 13, 0);
+			(void)mediasoup::plainclient::SendUdpDatagram(udpFd_, dummy, 13);
 			std::this_thread::sleep_for(std::chrono::milliseconds(20));
 		}
 	}
@@ -434,18 +435,19 @@ int PlainClientApp::RunLegacyMode()
 			while (audioDecoder_->ReceiveFrame(audioFrame_.get())) {
 				audioEncoder_->SendFrame(audioFrame_.get());
 				auto encodedPacket = msff::MakePacket();
-				while (audioEncoder_->ReceivePacket(encodedPacket.get())) {
-					SendOpus(
-						udpFd_,
-						encodedPacket->data,
-						encodedPacket->size,
-						audioPt_,
-						(uint32_t)(pts * 48000),
-						audioSsrc_,
-						audioSeq_);
-					rtcp.onAudioRtpSent(encodedPacket->size, (uint32_t)(pts * 48000));
-					msff::PacketUnref(encodedPacket.get());
-				}
+					while (audioEncoder_->ReceivePacket(encodedPacket.get())) {
+						if (SendOpus(
+							udpFd_,
+							encodedPacket->data,
+							encodedPacket->size,
+							audioPt_,
+							(uint32_t)(pts * 48000),
+							audioSsrc_,
+							audioSeq_)) {
+							rtcp.onAudioRtpSent(encodedPacket->size, (uint32_t)(pts * 48000));
+						}
+						msff::PacketUnref(encodedPacket.get());
+					}
 			}
 		}
 
