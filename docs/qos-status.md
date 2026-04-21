@@ -18,6 +18,8 @@
 
 - browser uplink 主 gate：`43 / 43 PASS`
 - Linux plain-client matrix：`43 / 43 PASS`
+- Linux plain-client threaded 主路径已纳入 send-side transport control + TWCC send-side BWE
+- 默认 full QoS 回归会刷新 stable TWCC A/B 报告
 - downlink 当前范围：subscriber receive control + zero-demand publisher pause/resume coordination
 - `dynacast` 与 room-level global bitrate budgeting 仍是后续能力，不计入当前已完成口径
 
@@ -38,6 +40,10 @@
   [plain-client-qos-status.md](./plain-client-qos-status.md)
 - Linux client 架构：
   [linux-client-architecture_cn.md](./linux-client-architecture_cn.md)
+- TWCC 变更汇总：
+  [plain-client-twcc-change-summary.md](./plain-client-twcc-change-summary.md)
+- TWCC A/B 稳定报告：
+  [generated/twcc-ab-report.md](./generated/twcc-ab-report.md)
 - 对位清单：
   [plain-client-qos-parity-checklist.md](./plain-client-qos-parity-checklist.md)
 - full matrix：

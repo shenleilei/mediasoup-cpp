@@ -193,12 +193,21 @@ flowchart TB
 - 薄入口：`client/main.cpp`
 - shared orchestration / session bootstrap：`client/PlainClientApp.*`
 - threaded / legacy runtime orchestration：`client/PlainClientThreaded.cpp`, `client/PlainClientLegacy.cpp`
+- transport execution：`client/NetworkThread.h`, `client/SenderTransportController.h`, `client/TransportCcHelpers.h`
+- send-side BWE / probe：`client/sendsidebwe/*`, `client/ccutils/*`
 - RTCP：`client/RtcpHandler.h`
 - QoS：`client/qos/*`
 
 它不属于服务端进程内部线程模型的一部分，但它是当前 `plainPublish`、`clientStats`、`qosPolicy`、`qosOverride`、`cpp-client-harness`、`cpp-client-matrix` 这些链路的重要一端。
 
-从职责上看，它可以拆成 4 层：
+当前支持的主路径是 threaded plain-client runtime：
+
+- control/main thread 负责 session、QoS 和命令路由
+- `NetworkThread` 是唯一 transport owner
+- source worker / audio worker 只产出 encoded access unit
+- legacy 单线程发送路径只作为 fallback 保留
+
+从职责上看，它可以拆成 5 层：
 
 1. `WsClient`
    - `join`
@@ -206,21 +215,27 @@ flowchart TB
    - `clientStats`
    - `getStats`
    - 异步 response / notification 分发
-2. FFmpeg / RTP 数据面
-   - MP4 demux
-   - H264 copy 或 `decode -> x264 re-encode`
-   - Opus 音频转码
-   - RTP packetize + UDP
-3. RTCP
-   - SR / RR
-   - RTT / jitter
-   - NACK / PLI / FIR
-   - per-SSRC retransmission / keyframe cache
-4. QoS runtime
+2. control / QoS runtime
    - 每 video track 一个 `PublisherQosController`
    - peer 内多 track budget 协调
+   - source / network command routing
    - `clientStats` snapshot 上报
    - `qosPolicy` / `qosOverride` 消费
+3. source workers / audio worker
+   - MP4 / camera 输入
+   - H264 copy 或 `decode -> x264 re-encode`
+   - Opus 音频转码
+   - encoded AU 生产
+4. transport execution
+   - `NetworkThread`
+   - `SenderTransportController`
+   - RTP / RTCP / transport-cc rewrite
+   - pacing / retransmission / queue metrics
+5. send-side BWE / probe
+   - TWCC feedback handling
+   - transport estimate publishing
+   - probe lifecycle
+   - white-box sender observability
 
 当前主架构文档只保留这一层摘要；完整细节见 [linux-client-architecture_cn.md](./linux-client-architecture_cn.md)。
 
@@ -586,23 +601,26 @@ uWS 主线程 timer
 Linux `PlainTransport C++ client` 走的是另一条链路：
 
 ```text
-plain-client
+PlainClientApp / plain-client
   -> WebSocket join
   -> plainPublish(videoSsrcs, audioSsrc)
   -> RoomService::plainPublish()
   -> Router::createPlainTransport()
   -> Transport::produce() for N video tracks + 1 audio track
-  -> 返回 {ip, port, videoTracks[], audioPt}
+  -> 返回 {ip, port, videoTracks[], audioPt, transportCcExtId...}
   -> client 建立 UDP socket
-  -> 发送 comedia 探测 RTP
+  -> threaded 主路径创建 NetworkThread
+  -> registerVideoTrack(...) / sendComediaProbe()
+  -> SourceWorker / audio worker 产出 AU
+  -> NetworkThread 统一执行 RTP/RTCP/TWCC/pacing/send-side BWE
   -> 按 producerId / trackId / ssrc 建立本地 runtime
 ```
 
 这条链路的几个关键差异：
 
 - 服务端不做 WebRTC 协商
-- 客户端自己维护 RTP / RTCP 状态
-- `clientStats` 不是浏览器 `getStats()`，而是 `RTCP + 本地计数 + server getStats` 的组合
+- 客户端自己维护 RTP / RTCP / transport-cc / send-side estimate 主路径
+- `clientStats` 不是浏览器 `getStats()`，而是 `本地 transport 指标 + RTCP + server getStats` 的组合
 - `qosPolicy` / `qosOverride` 仍然通过同一个 WebSocket 通知通道进入
 
 ## 8. 多节点与 Redis 架构

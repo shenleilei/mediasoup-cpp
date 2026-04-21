@@ -274,52 +274,54 @@ Redis Key 设计:
 ## 8. Linux PlainTransport C++ client 与 PlainTransport 发布路径
 
 ```text
-plain-client(main.cpp)
+PlainClientApp / plain-client
   -> WsClient.connect()
   -> join(roomId, peerId)
   -> plainPublish(videoSsrcs, audioSsrc)
-  -> 服务端返回 {ip, port, videoTracks[], audioPt}
+  -> 服务端返回 {ip, port, videoTracks[], audioPt, transportCcExtId...}
   -> 本地 UDP connect 到 PlainTransport
+  -> threaded 主路径创建 NetworkThread
+  -> registerVideoTrack(ssrc, pt, transportCcExtId)
   -> 发送 comedia probe RTP
-  -> registerVideoStream(ssrc, pt, seqPtr)
-  -> 进入主发送循环
+  -> 启动 SourceWorker / audio worker
+  -> 进入 control-thread + network-thread 主循环
 
-主发送循环:
-  MP4 demux
-    -> video:
-       copy path
-       或 decode -> x264 per-track encode
-       -> RTP packetize -> UDP send
-    -> audio:
-       AAC decode -> Opus encode -> RTP send
-    -> processIncomingRtcp()
-    -> maybeSendSR()
-    -> QoS sampling
+threaded 数据面:
+  SourceWorker / audio worker
+    -> encoded AU
+    -> NetworkThread
+       -> SenderTransportController
+       -> transport-cc rewrite
+       -> RTP / RTCP / NACK / PLI / FIR
+       -> TWCC feedback -> send-side BWE -> transport estimate
+       -> probe start / send / early-stop / finalize
+       -> UDP send
 ```
 
 QoS 侧链路：
 
 ```text
-RTCP RR + local counters + async getStats
+local transport counters + RTCP RR + async getStats
   -> RawSenderSnapshot
   -> PublisherQosController (per video track)
   -> actionSink
-     - setEncodingParameters
-     - enter/exitAudioOnly
-     - pause/resumeUpstream
+     - source worker encoding command
+     - network transport hint
   -> serializeSnapshot()
   -> clientStats
 
 notification:
   qosPolicy / qosOverride
-    -> plain-client main thread
+    -> plain-client control thread
     -> handlePolicy / handleOverride
 ```
 
 关键点：
 
 - Linux client 不走 WebRTC sender，但仍走同一套 QoS schema 和通知协议。
-- 多 video track 共享同一个 peer 级采样窗口，但每个 track 有独立的 encoder / RTCP / controller state。
+- 多 video track 共享同一个 peer 级采样窗口，但每个 track 有独立的 controller / source pipeline / SSRC。
+- `NetworkThread` 是当前 threaded plain-client 的唯一 transport owner。
+- threaded 主路径已经把 transport-cc、TWCC feedback、send-side estimate 和 probe 生命周期接进发送链路。
 - `pauseUpstream` / `audio-only` 不只停止主发送路径，也会阻止 RTCP 触发的视频重传 / keyframe 补发。
 
 ## 9. QoS 控制链路
