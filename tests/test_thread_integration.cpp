@@ -34,6 +34,69 @@ static bool plainClientBinaryExists() {
 	return access("client/build/plain-client", X_OK) == 0;
 }
 
+static bool extractTransportCcSequence(
+	const uint8_t* packet,
+	size_t packetLen,
+	uint8_t extensionId,
+	uint16_t* sequenceOut) {
+	if (!packet || packetLen < 12 || !sequenceOut || extensionId == 0 || extensionId > 14) {
+		return false;
+	}
+
+	if ((packet[0] >> 6) != 2 || (packet[0] & 0x10) == 0) {
+		return false;
+	}
+
+	const size_t csrcCount = static_cast<size_t>(packet[0] & 0x0F);
+	const size_t headerLen = 12 + csrcCount * 4;
+	if (packetLen < headerLen + 4) {
+		return false;
+	}
+
+	const uint16_t extensionProfile =
+		static_cast<uint16_t>((packet[headerLen] << 8) | packet[headerLen + 1]);
+	if (extensionProfile != 0xBEDE) {
+		return false;
+	}
+
+	const size_t extensionWords =
+		static_cast<size_t>((packet[headerLen + 2] << 8) | packet[headerLen + 3]);
+	const size_t extensionDataLen = extensionWords * 4;
+	const size_t extensionDataOffset = headerLen + 4;
+	if (packetLen < extensionDataOffset + extensionDataLen) {
+		return false;
+	}
+
+	size_t elementOffset = 0;
+	while (elementOffset < extensionDataLen) {
+		const uint8_t headerByte = packet[extensionDataOffset + elementOffset];
+		if (headerByte == 0) {
+			elementOffset++;
+			continue;
+		}
+
+		const uint8_t id = static_cast<uint8_t>(headerByte >> 4);
+		if (id == 15) {
+			break;
+		}
+		const size_t valueLen = static_cast<size_t>(headerByte & 0x0F) + 1;
+		if (elementOffset + 1 + valueLen > extensionDataLen) {
+			return false;
+		}
+
+		if (id == extensionId && valueLen == 2) {
+			*sequenceOut = static_cast<uint16_t>(
+				(packet[extensionDataOffset + elementOffset + 1] << 8) |
+				packet[extensionDataOffset + elementOffset + 2]);
+			return true;
+		}
+
+		elementOffset += 1 + valueLen;
+	}
+
+	return false;
+}
+
 static bool logContainsWithin(const std::string& path, const std::string& needle, int timeoutMs) {
 	const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
 	while (std::chrono::steady_clock::now() < deadline) {
@@ -374,9 +437,10 @@ TEST(NetworkThreadIntegration, SendsRtpFromEncodedAU) {
 	cfg.udpFd = sendFd;
 	cfg.audioSsrc = 22222222;
 	cfg.audioPt = 111;
+	cfg.audioTransportCcExtensionId = 5;
 
 	NetworkThread net(cfg);
-	net.registerVideoTrack(0, 11111111, 96);
+	net.registerVideoTrack(0, 11111111, 96, 5);
 	net.statsQueue = &statsQueue;
 
 	NetworkThread::SourceInput si;
@@ -405,14 +469,22 @@ TEST(NetworkThreadIntegration, SendsRtpFromEncodedAU) {
 
 	// Read RTP packets from recv socket
 	int rtpCount = 0;
+	int transportCcTaggedCount = 0;
 	uint8_t buf[1500];
 	while (true) {
 		int n = recv(recvFd, buf, sizeof(buf), MSG_DONTWAIT);
 		if (n <= 0) break;
-		if (n >= 12 && (buf[0] & 0xC0) == 0x80) rtpCount++;
+		if (n >= 12 && (buf[0] & 0xC0) == 0x80) {
+			rtpCount++;
+			uint16_t twccSeq = 0;
+			if (extractTransportCcSequence(buf, static_cast<size_t>(n), 5, &twccSeq)) {
+				transportCcTaggedCount++;
+			}
+		}
 	}
 
 	EXPECT_GT(rtpCount, 0) << "should have received RTP packets";
+	EXPECT_GT(transportCcTaggedCount, 0) << "RTP packets should carry transport-cc extension";
 	printf("[test] received %d RTP packets\n", rtpCount);
 
 	// Check stats were pushed

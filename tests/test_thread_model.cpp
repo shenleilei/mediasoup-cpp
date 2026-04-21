@@ -6,6 +6,7 @@
 #include "../client/ThreadTypes.h"
 #include "../client/NetworkThread.h"
 #include "../client/ThreadedControlHelpers.h"
+#include "../client/TransportCcHelpers.h"
 #include "../client/qos/QosController.h"
 
 #include <thread>
@@ -788,6 +789,121 @@ TEST(RtcpHandler, SenderReportsUpdateAttemptTimeBeforeSuccessTime) {
 
 TEST(UdpSendHelpers, EnobufsIsWouldBlock) {
 	EXPECT_TRUE(mediasoup::plainclient::IsWouldBlockErrno(ENOBUFS));
+}
+
+TEST(TransportCcHelpers, RewriteRtpAddsTransportWideCcExtension) {
+	uint8_t input[20]{};
+	input[0] = 0x80;
+	input[1] = 96;
+	input[2] = 0x12;
+	input[3] = 0x34;
+	input[4] = 0x00;
+	input[5] = 0x00;
+	input[6] = 0x03;
+	input[7] = 0xE8;
+	input[8] = 0x01;
+	input[9] = 0x02;
+	input[10] = 0x03;
+	input[11] = 0x04;
+	for (size_t i = 12; i < sizeof(input); ++i) {
+		input[i] = static_cast<uint8_t>(i);
+	}
+
+	uint8_t output[64]{};
+	size_t outputLen = sizeof(output);
+	ASSERT_TRUE(mediasoup::plainclient::RewriteRtpWithTransportCcSequence(
+		input,
+		sizeof(input),
+		5,
+		0xBEEF,
+		output,
+		&outputLen));
+	ASSERT_EQ(outputLen, sizeof(input) + 8);
+
+	EXPECT_EQ(output[0] & 0x10, 0x10); // extension bit enabled
+	EXPECT_EQ(output[12], 0xBE);
+	EXPECT_EQ(output[13], 0xDE);
+	EXPECT_EQ(output[14], 0x00);
+	EXPECT_EQ(output[15], 0x01);
+	EXPECT_EQ(output[16], static_cast<uint8_t>((5 << 4) | 0x01));
+	EXPECT_EQ(output[17], 0xBE);
+	EXPECT_EQ(output[18], 0xEF);
+	EXPECT_EQ(output[19], 0x00);
+	EXPECT_EQ(std::memcmp(output + 20, input + 12, sizeof(input) - 12), 0);
+}
+
+TEST(TransportCcHelpers, RewriteRtpUpdatesExistingTransportWideCcExtension) {
+	uint8_t input[24]{};
+	input[0] = 0x90; // V=2, X=1
+	input[1] = 96;
+	input[2] = 0x12;
+	input[3] = 0x34;
+	input[8] = 0x01;
+	input[9] = 0x02;
+	input[10] = 0x03;
+	input[11] = 0x04;
+	input[12] = 0xBE;
+	input[13] = 0xDE;
+	input[14] = 0x00;
+	input[15] = 0x01;
+	input[16] = static_cast<uint8_t>((5 << 4) | 0x01);
+	input[17] = 0x00;
+	input[18] = 0x01;
+	input[19] = 0x00;
+	input[20] = 0xAA;
+	input[21] = 0xBB;
+	input[22] = 0xCC;
+	input[23] = 0xDD;
+
+	uint8_t output[64]{};
+	size_t outputLen = sizeof(output);
+	ASSERT_TRUE(mediasoup::plainclient::RewriteRtpWithTransportCcSequence(
+		input,
+		sizeof(input),
+		5,
+		0x1234,
+		output,
+		&outputLen));
+	ASSERT_EQ(outputLen, sizeof(input));
+	EXPECT_EQ(output[17], 0x12);
+	EXPECT_EQ(output[18], 0x34);
+	EXPECT_EQ(output[20], 0xAA);
+	EXPECT_EQ(output[23], 0xDD);
+}
+
+TEST(TransportCcHelpers, ParseTransportFeedbackSummaryHandlesRunLengthAndLoss) {
+	// RTPFB(TCC): fmt=15, pt=205, len=28 bytes => lengthWords=6
+	uint8_t packet[28]{};
+	packet[0] = 0x8F;
+	packet[1] = 205;
+	packet[2] = 0x00;
+	packet[3] = 0x06;
+	packet[4] = 0x11; packet[5] = 0x22; packet[6] = 0x33; packet[7] = 0x44; // sender ssrc
+	packet[8] = 0x55; packet[9] = 0x66; packet[10] = 0x77; packet[11] = 0x88; // media ssrc
+	packet[12] = 0x03; packet[13] = 0xE8; // base seq 1000
+	packet[14] = 0x00; packet[15] = 0x06; // packet status count 6
+	packet[16] = 0x00; packet[17] = 0x00; packet[18] = 0x01; // reference time
+	packet[19] = 0x10; // feedback packet count
+	// 2-bit vector chunk: [1,0,2,0,1,2]
+	packet[20] = 0xD2;
+	packet[21] = 0x18;
+	// deltas for symbols 1,2,1,2 => 1 + 2 + 1 + 2 = 6 bytes
+	packet[22] = 0x05;             // small
+	packet[23] = 0x00; packet[24] = 0x0A; // large
+	packet[25] = 0x06;             // small
+	packet[26] = 0x00; packet[27] = 0x0B; // large
+
+	mediasoup::plainclient::TransportCcFeedbackSummary summary;
+	ASSERT_TRUE(mediasoup::plainclient::ParseTransportCcFeedbackSummary(
+		packet,
+		sizeof(packet),
+		&summary));
+	EXPECT_EQ(summary.senderSsrc, 0x11223344u);
+	EXPECT_EQ(summary.mediaSsrc, 0x55667788u);
+	EXPECT_EQ(summary.baseSequenceNumber, 1000u);
+	EXPECT_EQ(summary.packetStatusCount, 6u);
+	EXPECT_EQ(summary.receivedPacketCount, 4u);
+	EXPECT_EQ(summary.lostPacketCount, 2u);
 }
 
 TEST(SenderTransportControllerTest, ControlSendBypassesMediaBacklog) {

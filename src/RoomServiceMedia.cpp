@@ -8,6 +8,8 @@ namespace mediasoup {
 namespace {
 
 constexpr const char* kPlainClientH264BaselineProfileLevelId = "42e01f";
+constexpr const char* kTransportCcExtensionUri =
+	"http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01";
 
 struct RemovedPeerEntries {
 	std::unordered_map<std::string, std::shared_ptr<Producer>> producers;
@@ -54,6 +56,23 @@ bool IsPlainClientBaselineH264Codec(const RtpCodecCapability& codec)
 
 	return packetizationMode == 1 &&
 		profileLevelId == kPlainClientH264BaselineProfileLevelId;
+}
+
+uint8_t FindTransportCcExtensionId(const RtpCapabilities& caps, const std::string& kind)
+{
+	for (const auto& extension : caps.headerExtensions) {
+		if (extension.kind != kind) {
+			continue;
+		}
+		if (extension.uri != kTransportCcExtensionUri) {
+			continue;
+		}
+		if (extension.preferredId == 0) {
+			continue;
+		}
+		return extension.preferredId;
+	}
+	return 0;
 }
 
 } // namespace
@@ -228,11 +247,15 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 	auto caps = room->router()->rtpCapabilities();
 
 	std::optional<RtpCodecCapability> videoCodec;
+	std::optional<RtpCodecCapability> audioCodec;
 	uint8_t audioPt = 0;
 	for (auto& c : caps.codecs) {
 		if (!videoCodec.has_value() && IsPlainClientBaselineH264Codec(c))
 			videoCodec = c;
-		if (c.mimeType == "audio/opus" && audioPt == 0) audioPt = c.preferredPayloadType;
+		if (c.mimeType == "audio/opus" && audioPt == 0) {
+			audioPt = c.preferredPayloadType;
+			audioCodec = c;
+		}
 	}
 	if (!videoCodec.has_value())
 		return {false, {}, "", "router has no H264 Baseline codec"};
@@ -240,6 +263,8 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 
 	const uint8_t videoPt = videoCodec->preferredPayloadType;
 	json videoCodecParameters = videoCodec->parameters;
+	const uint8_t videoTransportCcExtId = FindTransportCcExtensionId(caps, "video");
+	const uint8_t audioTransportCcExtId = FindTransportCcExtensionId(caps, "audio");
 
 	std::vector<std::shared_ptr<Producer>> videoProducers;
 	videoProducers.reserve(videoSsrcs.size());
@@ -249,11 +274,22 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 			{"codecs", {{
 				{"mimeType", "video/H264"}, {"payloadType", videoPt},
 				{"clockRate", 90000},
-				{"parameters", videoCodecParameters}
+				{"parameters", videoCodecParameters},
+				{"rtcpFeedback", videoCodec->rtcpFeedback}
 			}}},
 			{"encodings", {{{"ssrc", videoSsrc}}}},
 			{"rtcp", {{"cname", peerId + "-video-" + std::to_string(index)}}}
 		};
+		if (videoTransportCcExtId != 0) {
+			videoRtpParams["headerExtensions"] = json::array({
+				{
+					{"uri", kTransportCcExtensionUri},
+					{"id", videoTransportCcExtId},
+					{"encrypt", false},
+					{"parameters", json::object()}
+				}
+			});
+		}
 		json videoProdOpts = {
 			{"kind", "video"}, {"rtpParameters", videoRtpParams},
 			{"routerRtpCapabilities", caps}
@@ -268,11 +304,22 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 		{"codecs", {{
 			{"mimeType", "audio/opus"}, {"payloadType", audioPt},
 			{"clockRate", 48000}, {"channels", 2},
-			{"parameters", {{"useinbandfec", 1}}}
+			{"parameters", {{"useinbandfec", 1}}},
+			{"rtcpFeedback", audioCodec.has_value() ? audioCodec->rtcpFeedback : std::vector<RtcpFeedback>{}}
 		}}},
 		{"encodings", {{{"ssrc", audioSsrc}}}},
 		{"rtcp", {{"cname", peerId + "-audio"}}}
 	};
+	if (audioTransportCcExtId != 0) {
+		audioRtpParams["headerExtensions"] = json::array({
+			{
+				{"uri", kTransportCcExtensionUri},
+				{"id", audioTransportCcExtId},
+				{"encrypt", false},
+				{"parameters", json::object()}
+			}
+		});
+	}
 	json audioProdOpts = {
 		{"kind", "audio"}, {"rtpParameters", audioRtpParams},
 		{"routerRtpCapabilities", caps}
@@ -297,7 +344,8 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 			{"index", index},
 			{"pt", videoPt},
 			{"ssrc", videoSsrcs[index]},
-			{"producerId", videoProducers[index]->id()}
+			{"producerId", videoProducers[index]->id()},
+			{"transportCcExtId", videoTransportCcExtId}
 		});
 	}
 	return {true, {
@@ -306,8 +354,10 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 		{"videoPt", videoPt}, {"videoSsrc", videoSsrcs.front()},
 		{"videoProdId", videoProducers.front()->id()},
 		{"videoTracks", videoTracks},
+		{"videoTransportCcExtId", videoTransportCcExtId},
 		{"audioPt", audioPt}, {"audioSsrc", audioSsrc},
-		{"audioProdId", audioProd->id()}
+		{"audioProdId", audioProd->id()},
+		{"audioTransportCcExtId", audioTransportCcExtId}
 	}};
 }
 
