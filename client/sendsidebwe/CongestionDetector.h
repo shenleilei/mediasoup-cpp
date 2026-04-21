@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <tuple>
 #include <vector>
 
 namespace mediasoup::plainclient::sendsidebwe {
@@ -427,6 +428,64 @@ public:
 	std::chrono::microseconds ProbeDuration() const
 	{
 		return probeRegulator_.ProbeDuration();
+	}
+
+	void ProbeClusterStarting(const mediasoup::ccutils::ProbeClusterInfo& probeClusterInfo)
+	{
+		probePacketGroup_.emplace(config_.probePacketGroup, config_.weightedLoss, probeClusterInfo);
+		packetTracker_.ProbeClusterStarting(probeClusterInfo.id);
+	}
+
+	void ProbeClusterDone(const mediasoup::ccutils::ProbeClusterInfo& probeClusterInfo)
+	{
+		packetTracker_.ProbeClusterDone(probeClusterInfo.id);
+		if (probePacketGroup_) {
+			probePacketGroup_->ProbeClusterDone(probeClusterInfo);
+		}
+	}
+
+	bool ProbeClusterIsGoalReached() const
+	{
+		if (!probePacketGroup_ || congestionState_ != CongestionState::None) {
+			return false;
+		}
+		const auto& probeClusterInfo = probePacketGroup_->ProbeClusterInfoValue();
+		if (!config_.probeSignal.IsValid(probeClusterInfo)) {
+			return false;
+		}
+		auto [probeSignal, estimatedCapacity] = config_.probeSignal.ProbeSignalForGroup(*probePacketGroup_);
+		return probeSignal != mediasoup::ccutils::ProbeSignal::NotCongesting &&
+			estimatedCapacity > probeClusterInfo.goal.desiredBps;
+	}
+
+	std::tuple<mediasoup::ccutils::ProbeSignal, int64_t, bool> ProbeClusterFinalize()
+	{
+		if (!probePacketGroup_) {
+			return {mediasoup::ccutils::ProbeSignal::Inconclusive, 0, false};
+		}
+
+		mediasoup::ccutils::ProbeClusterInfo probeClusterInfo;
+		const bool isFinalized =
+			probePacketGroup_->MaybeFinalizeProbe(packetTracker_.ProbeMaxSequenceNumber(), rttSeconds_, &probeClusterInfo);
+		if (!isFinalized) {
+			return {mediasoup::ccutils::ProbeSignal::Inconclusive, 0, false};
+		}
+
+		if (congestionState_ != CongestionState::None) {
+			const auto probeSignal = mediasoup::ccutils::ProbeSignal::Congesting;
+			probeRegulator_.ProbeSignalReceived(probeSignal, probeClusterInfo.createdAt);
+			probePacketGroup_.reset();
+			return {probeSignal, estimatedAvailableChannelCapacityBps_, true};
+		}
+
+		auto [probeSignal, estimatedCapacity] = config_.probeSignal.ProbeSignalForGroup(*probePacketGroup_);
+		if (probeSignal == mediasoup::ccutils::ProbeSignal::NotCongesting &&
+			estimatedCapacity > estimatedAvailableChannelCapacityBps_) {
+			estimatedAvailableChannelCapacityBps_ = estimatedCapacity;
+		}
+		probeRegulator_.ProbeSignalReceived(probeSignal, probeClusterInfo.createdAt);
+		probePacketGroup_.reset();
+		return {probeSignal, estimatedAvailableChannelCapacityBps_, true};
 	}
 
 private:

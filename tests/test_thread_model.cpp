@@ -6,7 +6,9 @@
 #include "TransportCcTestHelpers.h"
 
 #include "../client/ccutils/TrendDetector.h"
+#include "../client/ccutils/ProbeTypes.h"
 #include "../client/sendsidebwe/PacketTracker.h"
+#include "../client/sendsidebwe/SendSideBwe.h"
 #include "../client/sendsidebwe/TwccFeedbackTracker.h"
 #include "../client/ThreadTypes.h"
 #include "../client/NetworkThread.h"
@@ -25,6 +27,7 @@ using mediasoup::plainclient::SendResult;
 using mediasoup::plainclient::SendStatus;
 using mediasoup::plainclient::SenderTransportController;
 using mediasoup::plainclient::sendsidebwe::PacketTracker;
+using mediasoup::plainclient::sendsidebwe::SendSideBwe;
 using mediasoup::plainclient::sendsidebwe::TwccFeedbackTracker;
 
 // ═══════════════════════════════════════════════════════════
@@ -1034,6 +1037,63 @@ TEST(PacketTracker, RecordsSendsAndReceivedIndicationsUsingRelativeClocks) {
 	auto lost = tracker.RecordPacketIndicationFromRemote(seq2, 0);
 	EXPECT_TRUE(lost.valid);
 	EXPECT_EQ(lost.packetInfo.recvTimeUs, 0);
+}
+
+TEST(SendSideBwe, CanProbeUsesProbeRegulatorDefaults) {
+	SendSideBwe bwe;
+	EXPECT_TRUE(bwe.CanProbe());
+	EXPECT_GT(bwe.ProbeDuration().count(), 0);
+}
+
+TEST(SendSideBwe, GoodProbeFinalizeKeepsHigherEstimatedCapacity) {
+	SendSideBwe bwe;
+	bwe.SeedEstimatedAvailableChannelCapacityForTest(100000);
+
+	mediasoup::ccutils::ProbeClusterInfo probeClusterInfo;
+	probeClusterInfo.id = 7;
+	probeClusterInfo.createdAt = std::chrono::steady_clock::now();
+	probeClusterInfo.goal.desiredBps = 200000;
+	probeClusterInfo.goal.duration = std::chrono::milliseconds(100);
+	probeClusterInfo.goal.desiredBytes = 3000;
+
+	bwe.ProbeClusterStarting(probeClusterInfo);
+	EXPECT_FALSE(bwe.CanProbe());
+
+	std::vector<uint16_t> sequences;
+	for (int i = 0; i < 5; ++i) {
+		sequences.push_back(bwe.RecordPacketSendAndGetSequenceNumber(
+			1000000 + static_cast<int64_t>(i) * 10000,
+			1200,
+			false,
+			probeClusterInfo.id,
+			true));
+	}
+
+	const auto packet = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
+		std::vector<std::optional<int16_t>>(5, int16_t{40}),
+		sequences.front(),
+		0x11111111u,
+		0x22222222u,
+		0x000000u,
+		0x40u);
+	mediasoup::plainclient::TransportCcFeedback feedback;
+	ASSERT_TRUE(mediasoup::plainclient::ParseTransportCcFeedback(
+		packet.data(),
+		packet.size(),
+		&feedback));
+	bwe.HandleTransportFeedback(feedback, 2000000);
+
+	probeClusterInfo.result.startTimeUs = 1000000;
+	probeClusterInfo.result.endTimeUs = 1100000;
+	probeClusterInfo.result.bytesProbe = 6000;
+	probeClusterInfo.result.isCompleted = true;
+	bwe.ProbeClusterDone(probeClusterInfo);
+
+	const auto [probeSignal, estimatedCapacity, finalized] = bwe.ProbeClusterFinalize();
+	EXPECT_TRUE(finalized);
+	EXPECT_EQ(probeSignal, mediasoup::ccutils::ProbeSignal::NotCongesting);
+	EXPECT_GT(estimatedCapacity, 100000);
+	EXPECT_EQ(estimatedCapacity, bwe.EstimatedAvailableChannelCapacityBps());
 }
 
 namespace {
