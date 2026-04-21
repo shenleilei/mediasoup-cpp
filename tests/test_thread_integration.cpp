@@ -672,6 +672,48 @@ TEST(NetworkThreadIntegration, TransportCcFeedbackUpdatesEstimatedBitrate) {
 	close(recvFd);
 }
 
+TEST(NetworkThreadIntegration, TransportCcFeedbackDoesNotChangeEstimateWhenDisabled) {
+	int sendFd = -1, recvFd = -1;
+	uint16_t port = 0;
+	ASSERT_EQ(createConnectedUdpPair(sendFd, recvFd, port), 0);
+
+	NetworkThread::Config cfg;
+	cfg.udpFd = sendFd;
+	cfg.audioSsrc = 22222222;
+	cfg.audioPt = 111;
+	cfg.audioTransportCcExtensionId = 5;
+	cfg.enableTransportEstimate = false;
+
+	NetworkThread net(cfg);
+	net.registerVideoTrack(0, 11111111u, 96, 5);
+
+	EXPECT_EQ(net.transportEstimatedBitrateBps(), 900000u);
+	EXPECT_EQ(net.effectivePacingBitrateBps(), 900000u);
+
+	net.start();
+
+	const std::array<uint8_t, 24> tccFeedback{
+		0x8F, 205, 0x00, 0x05,
+		0x11, 0x22, 0x33, 0x44,
+		0x55, 0x66, 0x77, 0x88,
+		0x03, 0xE8, 0x00, 0x0A,
+		0x00, 0x00, 0x01, 0x10,
+		0x00, 0x0A, 0x00, 0x00
+	};
+	ASSERT_TRUE(sendDatagramToLocalAddressOfFd(
+		recvFd, sendFd, tccFeedback.data(), tccFeedback.size()));
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(120));
+	net.stop();
+
+	EXPECT_EQ(net.transportCcFeedbackReports(), 1u);
+	EXPECT_EQ(net.transportEstimatedBitrateBps(), 900000u);
+	EXPECT_EQ(net.effectivePacingBitrateBps(), 900000u);
+
+	close(sendFd);
+	close(recvFd);
+}
+
 TEST(NetworkThreadIntegration, TransportEstimateRaisesWhenAggregateTargetIncreases) {
 	int sendFd = -1, recvFd = -1;
 	uint16_t port = 0;

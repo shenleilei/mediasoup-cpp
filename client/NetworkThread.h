@@ -66,6 +66,7 @@ public:
 		uint8_t audioTransportCcExtensionId = 0;
 		uint32_t applicationBitrateCapBps = 0;
 		bool enableTransportController = true;
+		bool enableTransportEstimate = true;
 	};
 
 	// Per-source input queue (one per source worker)
@@ -89,6 +90,7 @@ public:
 	explicit NetworkThread(const Config& cfg)
 		: cfg_(cfg)
 		, useTransportController_(cfg.enableTransportController)
+		, useTransportEstimate_(cfg.enableTransportEstimate)
 	{
 		rtcp_.audioSsrc = cfg.audioSsrc;
 		transportController_.SetSendFn([this](
@@ -693,6 +695,9 @@ private:
 		if (!useTransportController_ || summary.packetStatusCount == 0) {
 			return;
 		}
+		if (!useTransportEstimate_) {
+			return;
+		}
 
 		uint32_t estimateBps = transportEstimatedBitrateBps_;
 		if (estimateBps == 0) {
@@ -779,6 +784,7 @@ public:
 private:
 	Config cfg_;
 	bool useTransportController_{ true };
+	bool useTransportEstimate_{ true };
 	RtcpContext rtcp_;
 	mediasoup::plainclient::SenderTransportController transportController_;
 	std::vector<TrackNetState> tracks_;

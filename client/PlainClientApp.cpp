@@ -199,6 +199,8 @@ bool PlainClientApp::ParseArguments(int argc, char* argv[])
 		(videoTrackCount_ == 1 || distinctSourceCount >= videoTrackCount_);
 	transportControllerEnabled_ =
 		envFlagDefaultTrue("PLAIN_CLIENT_ENABLE_TRANSPORT_CONTROLLER");
+	transportEstimateEnabled_ =
+		envFlagDefaultTrue("PLAIN_CLIENT_ENABLE_TRANSPORT_ESTIMATE");
 	if (threadedRequested_ && !threadedMode_) {
 		std::printf(
 			"WARN: PLAIN_CLIENT_THREADED ignored — need %zu distinct PLAIN_CLIENT_VIDEO_SOURCES (got %zu), using legacy path\n",
@@ -208,6 +210,9 @@ bool PlainClientApp::ParseArguments(int argc, char* argv[])
 	if (threadedMode_ && !transportControllerEnabled_) {
 		std::printf(
 			"[threaded] transport controller disabled via PLAIN_CLIENT_ENABLE_TRANSPORT_CONTROLLER=0 (fallback pacing path)\n");
+	} else if (threadedMode_ && !transportEstimateEnabled_) {
+		std::printf(
+			"[threaded] transport estimate disabled via PLAIN_CLIENT_ENABLE_TRANSPORT_ESTIMATE=0 (controller still enabled)\n");
 	}
 	threadedOwnsAllVideoInputs_ = threadedMode_ && videoSourcePaths_.size() >= videoTrackCount_;
 	return true;
