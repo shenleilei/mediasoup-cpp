@@ -2,6 +2,7 @@
 // Phase 2 of linux-client-multi-source-thread-model migration.
 #pragma once
 
+#include "DelayBasedBwe.h"
 #include "RtcpHandler.h"
 #include "SenderTransportController.h"
 #include "TransportCcHelpers.h"
@@ -96,6 +97,10 @@ public:
 		: cfg_(cfg)
 		, useTransportController_(cfg.enableTransportController)
 		, useTransportEstimate_(cfg.enableTransportEstimate)
+		, delayBasedBwe_(mediasoup::plainclient::DelayBasedBwe::Config{
+			cfg.transportEstimateMinBps,
+			cfg.transportEstimateMaxBps
+		})
 	{
 		rtcp_.audioSsrc = cfg.audioSsrc;
 		transportController_.SetSendFn([this](
@@ -229,6 +234,11 @@ private:
 			std::chrono::steady_clock::now().time_since_epoch()).count();
 	}
 
+	static int64_t steadyNowUs() {
+		return std::chrono::duration_cast<std::chrono::microseconds>(
+			std::chrono::steady_clock::now().time_since_epoch()).count();
+	}
+
 	static bool isTransportCcPacketClass(mediasoup::plainclient::PacketClass packetClass) {
 		return
 			packetClass == mediasoup::plainclient::PacketClass::AudioRtp ||
@@ -283,11 +293,13 @@ private:
 			return mediasoup::plainclient::SendUdpDatagram(cfg_.udpFd, data, len);
 		}
 
-		const auto result = mediasoup::plainclient::SendUdpDatagram(cfg_.udpFd, rewrittenPacket, rewrittenLen);
-		if (result.status == mediasoup::plainclient::SendStatus::Sent) {
-			nextTransportWideCcSequence_++;
-			transportCcRewrittenPacketsSent_++;
-		}
+			const uint16_t transportSequence = nextTransportWideCcSequence_;
+			const auto result = mediasoup::plainclient::SendUdpDatagram(cfg_.udpFd, rewrittenPacket, rewrittenLen);
+			if (result.status == mediasoup::plainclient::SendStatus::Sent) {
+				delayBasedBwe_.OnPacketSent(transportSequence, rewrittenLen, steadyNowUs());
+				nextTransportWideCcSequence_++;
+				transportCcRewrittenPacketsSent_++;
+			}
 		return result;
 	}
 
@@ -415,18 +427,18 @@ private:
 						}
 					}
 				} else if (pt == RTCP_PT_RTPFB && fmt == mediasoup::plainclient::RTCP_RTPFB_FMT_TRANSPORT_CC) {
-					mediasoup::plainclient::TransportCcFeedbackSummary summary;
-					if (mediasoup::plainclient::ParseTransportCcFeedbackSummary(
-							buf + offset,
-							pktLen,
-							&summary)) {
-						transportCcFeedbackReports_++;
-						transportCcFeedbackPacketCount_ += summary.packetStatusCount;
-						transportCcFeedbackLostCount_ += summary.lostPacketCount;
-						UpdateTransportEstimateFromFeedback(summary);
-					} else {
-						transportCcMalformedFeedbackCount_++;
-					}
+						mediasoup::plainclient::TransportCcFeedback feedback;
+						if (mediasoup::plainclient::ParseTransportCcFeedback(
+								buf + offset,
+								pktLen,
+								&feedback)) {
+							transportCcFeedbackReports_++;
+							transportCcFeedbackPacketCount_ += feedback.packetStatusCount;
+							transportCcFeedbackLostCount_ += feedback.lostPacketCount;
+							UpdateTransportEstimateFromFeedback(feedback);
+						} else {
+							transportCcMalformedFeedbackCount_++;
+						}
 				} else if (pt == RTCP_PT_RTPFB && fmt == 1) {
 					// NACK — handle locally in network thread
 					auto* track = findTrackBySsrc(mediaSsrc);
@@ -695,51 +707,21 @@ private:
 	}
 
 	void UpdateTransportEstimateFromFeedback(
-		const mediasoup::plainclient::TransportCcFeedbackSummary& summary)
+		const mediasoup::plainclient::TransportCcFeedback& feedback)
 	{
-		if (!useTransportController_ || summary.packetStatusCount == 0) {
+		if (!useTransportController_ || feedback.packetStatusCount == 0) {
 			return;
 		}
 		if (!useTransportEstimate_) {
 			return;
 		}
 
-		const uint32_t minTransportEstimateBps = std::min(
-			cfg_.transportEstimateMinBps,
-			cfg_.transportEstimateMaxBps);
-		const uint32_t maxTransportEstimateBps = std::max(
-			cfg_.transportEstimateMinBps,
-			cfg_.transportEstimateMaxBps);
-
-		uint32_t estimateBps = transportEstimatedBitrateBps_;
-		if (estimateBps == 0) {
-			estimateBps = transportController_.AggregateTargetBitrateBps();
-		}
-		if (estimateBps == 0) {
+		delayBasedBwe_.SetEstimateBps(transportEstimatedBitrateBps_);
+		const auto result = delayBasedBwe_.OnTransportFeedback(feedback);
+		if (result.estimateBps == 0) {
 			return;
 		}
-
-		const double lossRatio =
-			static_cast<double>(summary.lostPacketCount) /
-			static_cast<double>(summary.packetStatusCount);
-		if (lossRatio >= 0.10) {
-			estimateBps = static_cast<uint32_t>(
-				static_cast<uint64_t>(estimateBps) * 80u / 100u);
-		} else if (lossRatio >= 0.02) {
-			estimateBps = static_cast<uint32_t>(
-				static_cast<uint64_t>(estimateBps) * 92u / 100u);
-		} else {
-			const uint32_t additiveStep = std::max<uint32_t>(20000u, estimateBps / 20u);
-			estimateBps = estimateBps > maxTransportEstimateBps - additiveStep
-				? maxTransportEstimateBps
-				: (estimateBps + additiveStep);
-		}
-
-		estimateBps = std::clamp<uint32_t>(
-			estimateBps,
-			minTransportEstimateBps,
-			maxTransportEstimateBps);
-		transportEstimatedBitrateBps_ = estimateBps;
+		transportEstimatedBitrateBps_ = result.estimateBps;
 		lastTransportFeedbackAtMs_ = steadyNowMs();
 		transportController_.SetTransportEstimatedBitrateBps(transportEstimatedBitrateBps_);
 	}
@@ -755,6 +737,7 @@ private:
 		}
 		if (transportEstimatedBitrateBps_ == 0 || aggregateTargetBps > transportEstimatedBitrateBps_) {
 			transportEstimatedBitrateBps_ = aggregateTargetBps;
+			delayBasedBwe_.SetEstimateBps(transportEstimatedBitrateBps_);
 			transportController_.SetTransportEstimatedBitrateBps(transportEstimatedBitrateBps_);
 		}
 	}
@@ -797,11 +780,20 @@ public:
 		return useTransportController_ ? transportController_.EffectivePacingBitrateBps() : 0;
 	}
 
+	void recordTransportCcPacketForTest(
+		uint16_t sequenceNumber,
+		size_t sizeBytes,
+		int64_t sendTimeUs)
+	{
+		delayBasedBwe_.OnPacketSent(sequenceNumber, sizeBytes, sendTimeUs);
+	}
+
 private:
 	Config cfg_;
 	bool useTransportController_{ true };
 	bool useTransportEstimate_{ true };
 	RtcpContext rtcp_;
+	mediasoup::plainclient::DelayBasedBwe delayBasedBwe_;
 	mediasoup::plainclient::SenderTransportController transportController_;
 	std::vector<TrackNetState> tracks_;
 	std::vector<SourceInput> sourceInputs_;

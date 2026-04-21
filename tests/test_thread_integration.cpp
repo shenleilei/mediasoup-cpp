@@ -10,6 +10,7 @@
 #include "../src/Router.h"
 #include "../src/Worker.h"
 #include "../src/PlainTransport.h"
+#include "TransportCcTestHelpers.h"
 #include "TestWsClient.h"
 #include "TestProcessUtils.h"
 
@@ -174,61 +175,47 @@ static std::vector<uint8_t> buildTransportCcFeedbackPacket(
 	uint32_t referenceTime = 0x000110u,
 	uint8_t feedbackPacketCount = 0x10)
 {
-	std::vector<uint8_t> packet(20, 0);
-	packet[0] = 0x8F;
-	packet[1] = 205;
-	packet[4] = static_cast<uint8_t>(senderSsrc >> 24);
-	packet[5] = static_cast<uint8_t>(senderSsrc >> 16);
-	packet[6] = static_cast<uint8_t>(senderSsrc >> 8);
-	packet[7] = static_cast<uint8_t>(senderSsrc & 0xFF);
-	packet[8] = static_cast<uint8_t>(mediaSsrc >> 24);
-	packet[9] = static_cast<uint8_t>(mediaSsrc >> 16);
-	packet[10] = static_cast<uint8_t>(mediaSsrc >> 8);
-	packet[11] = static_cast<uint8_t>(mediaSsrc & 0xFF);
-	packet[12] = static_cast<uint8_t>(baseSequenceNumber >> 8);
-	packet[13] = static_cast<uint8_t>(baseSequenceNumber & 0xFF);
-	packet[16] = static_cast<uint8_t>((referenceTime >> 16) & 0xFF);
-	packet[17] = static_cast<uint8_t>((referenceTime >> 8) & 0xFF);
-	packet[18] = static_cast<uint8_t>(referenceTime & 0xFF);
-	packet[19] = feedbackPacketCount;
+	return transportcc_test::BuildTransportCcFeedbackPacketFromRuns(
+		runs,
+		baseSequenceNumber,
+		senderSsrc,
+		mediaSsrc,
+		referenceTime,
+		feedbackPacketCount);
+}
 
-	uint32_t totalStatusCount = 0;
-	std::vector<uint8_t> chunks;
-	std::vector<uint8_t> deltas;
-	for (const auto& run : runs) {
-		const uint8_t symbol = run.first;
-		const uint16_t runLength = run.second;
-		totalStatusCount += runLength;
-
-		const uint16_t chunk = static_cast<uint16_t>(
-			((static_cast<uint16_t>(symbol) & 0x03u) << 13) | (runLength & 0x1FFFu));
-		chunks.push_back(static_cast<uint8_t>(chunk >> 8));
-		chunks.push_back(static_cast<uint8_t>(chunk & 0xFF));
-
-		if (symbol == 1) {
-			for (uint16_t i = 0; i < runLength; ++i) {
-				deltas.push_back(0x01);
-			}
-		} else if (symbol == 2) {
-			for (uint16_t i = 0; i < runLength; ++i) {
-				deltas.push_back(0x00);
-				deltas.push_back(0x01);
-			}
-		}
+static void seedTransportCcPackets(
+	NetworkThread& net,
+	uint16_t baseSequenceNumber,
+	size_t packetCount,
+	int64_t firstSendTimeUs,
+	int64_t sendIntervalUs,
+	size_t packetSizeBytes = 1200)
+{
+	for (size_t i = 0; i < packetCount; ++i) {
+		net.recordTransportCcPacketForTest(
+			static_cast<uint16_t>(baseSequenceNumber + static_cast<uint16_t>(i)),
+			packetSizeBytes,
+			firstSendTimeUs + static_cast<int64_t>(i) * sendIntervalUs);
 	}
+}
 
-	packet[14] = static_cast<uint8_t>((totalStatusCount >> 8) & 0xFF);
-	packet[15] = static_cast<uint8_t>(totalStatusCount & 0xFF);
-	packet.insert(packet.end(), chunks.begin(), chunks.end());
-	packet.insert(packet.end(), deltas.begin(), deltas.end());
-	while ((packet.size() % 4) != 0) {
-		packet.push_back(0x00);
-	}
+static std::vector<uint8_t> buildTwccKeyframeAnnexbSample() {
+	std::vector<uint8_t> sample = {
+		0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0x00, 0x1e,
+		0x00, 0x00, 0x00, 0x01, 0x68, 0xce, 0x06, 0xe2,
+		0x00, 0x00, 0x00, 0x01, 0x65
+	};
+	sample.insert(sample.end(), 1800, 0x88);
+	return sample;
+}
 
-	const uint16_t lengthWords = static_cast<uint16_t>((packet.size() / 4) - 1);
-	packet[2] = static_cast<uint8_t>(lengthWords >> 8);
-	packet[3] = static_cast<uint8_t>(lengthWords & 0xFF);
-	return packet;
+static std::vector<uint8_t> buildTwccDeltaAnnexbSample() {
+	std::vector<uint8_t> sample = {
+		0x00, 0x00, 0x00, 0x01, 0x41
+	};
+	sample.insert(sample.end(), 1600, 0x9a);
+	return sample;
 }
 
 class ThreadedPlainPublishIntegrationTest : public ::testing::Test {
@@ -738,7 +725,7 @@ TEST(NetworkThreadIntegration, DisableTransportControllerUsesLegacyPacingFallbac
 	close(recvFd);
 }
 
-TEST(NetworkThreadIntegration, TransportCcFeedbackUpdatesEstimatedBitrate) {
+TEST(NetworkThreadIntegration, TransportCcFeedbackGrowingDelayDecreasesEstimate) {
 	int sendFd = -1, recvFd = -1;
 	uint16_t port = 0;
 	ASSERT_EQ(createConnectedUdpPair(sendFd, recvFd, port), 0);
@@ -755,17 +742,17 @@ TEST(NetworkThreadIntegration, TransportCcFeedbackUpdatesEstimatedBitrate) {
 	EXPECT_EQ(net.transportEstimatedBitrateBps(), 900000u);
 	EXPECT_EQ(net.effectivePacingBitrateBps(), 900000u);
 
+	seedTransportCcPackets(net, 1000, 20, 0, 10000, 1200);
 	net.start();
 
-	// fmt=15 transport-cc feedback with run-length chunk: 10 lost packets.
-	const std::array<uint8_t, 24> tccFeedback{
-		0x8F, 205, 0x00, 0x05,
-		0x11, 0x22, 0x33, 0x44,
-		0x55, 0x66, 0x77, 0x88,
-		0x03, 0xE8, 0x00, 0x0A,
-		0x00, 0x00, 0x01, 0x10,
-		0x00, 0x0A, 0x00, 0x00
-	};
+	std::vector<std::optional<int16_t>> deltas250us;
+	deltas250us.reserve(20);
+	for (int i = 0; i < 20; ++i) {
+		deltas250us.emplace_back(static_cast<int16_t>(40 + i * 20));
+	}
+	const auto tccFeedback = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
+		deltas250us,
+		1000);
 	ASSERT_TRUE(sendDatagramToLocalAddressOfFd(
 		recvFd, sendFd, tccFeedback.data(), tccFeedback.size()));
 
@@ -773,14 +760,14 @@ TEST(NetworkThreadIntegration, TransportCcFeedbackUpdatesEstimatedBitrate) {
 	net.stop();
 
 	EXPECT_EQ(net.transportCcFeedbackReports(), 1u);
-	EXPECT_EQ(net.transportEstimatedBitrateBps(), 720000u);
-	EXPECT_EQ(net.effectivePacingBitrateBps(), 720000u);
+	EXPECT_LT(net.transportEstimatedBitrateBps(), 900000u);
+	EXPECT_LT(net.effectivePacingBitrateBps(), 900000u);
 
 	close(sendFd);
 	close(recvFd);
 }
 
-TEST(NetworkThreadIntegration, TransportCcFeedbackModerateLossUpdatesEstimatedBitrate) {
+TEST(NetworkThreadIntegration, TransportCcFeedbackStableDelayIncreasesEstimate) {
 	int sendFd = -1, recvFd = -1;
 	uint16_t port = 0;
 	ASSERT_EQ(createConnectedUdpPair(sendFd, recvFd, port), 0);
@@ -795,8 +782,11 @@ TEST(NetworkThreadIntegration, TransportCcFeedbackModerateLossUpdatesEstimatedBi
 	net.registerVideoTrack(0, 11111111u, 96, 5);
 	EXPECT_EQ(net.transportEstimatedBitrateBps(), 900000u);
 
+	seedTransportCcPackets(net, 1000, 20, 0, 10000, 1200);
 	net.start();
-	const auto feedback = buildTransportCcFeedbackPacket({{0, 5}, {1, 95}});
+	const auto feedback = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
+		std::vector<std::optional<int16_t>>(20, int16_t{40}),
+		1000);
 	ASSERT_TRUE(sendDatagramToLocalAddressOfFd(
 		recvFd, sendFd, feedback.data(), feedback.size()));
 
@@ -805,38 +795,7 @@ TEST(NetworkThreadIntegration, TransportCcFeedbackModerateLossUpdatesEstimatedBi
 
 	EXPECT_EQ(net.transportCcFeedbackReports(), 1u);
 	EXPECT_EQ(net.transportCcMalformedFeedbackCount(), 0u);
-	EXPECT_EQ(net.transportEstimatedBitrateBps(), 828000u);
-	EXPECT_EQ(net.effectivePacingBitrateBps(), 828000u);
-
-	close(sendFd);
-	close(recvFd);
-}
-
-TEST(NetworkThreadIntegration, TransportCcFeedbackAdditiveIncreaseUpdatesEstimatedBitrate) {
-	int sendFd = -1, recvFd = -1;
-	uint16_t port = 0;
-	ASSERT_EQ(createConnectedUdpPair(sendFd, recvFd, port), 0);
-
-	NetworkThread::Config cfg;
-	cfg.udpFd = sendFd;
-	cfg.audioSsrc = 22222222;
-	cfg.audioPt = 111;
-	cfg.audioTransportCcExtensionId = 5;
-
-	NetworkThread net(cfg);
-	net.registerVideoTrack(0, 11111111u, 96, 5);
-	EXPECT_EQ(net.transportEstimatedBitrateBps(), 900000u);
-
-	net.start();
-	const auto feedback = buildTransportCcFeedbackPacket({{1, 100}});
-	ASSERT_TRUE(sendDatagramToLocalAddressOfFd(
-		recvFd, sendFd, feedback.data(), feedback.size()));
-
-	std::this_thread::sleep_for(std::chrono::milliseconds(120));
-	net.stop();
-
-	EXPECT_EQ(net.transportCcFeedbackReports(), 1u);
-	EXPECT_EQ(net.transportEstimatedBitrateBps(), 945000u);
+	EXPECT_GT(net.transportEstimatedBitrateBps(), 900000u);
 	EXPECT_EQ(net.effectivePacingBitrateBps(), 900000u);
 
 	close(sendFd);
@@ -861,16 +820,12 @@ TEST(NetworkThreadIntegration, TransportCcFeedbackDoesNotChangeEstimateWhenDisab
 	EXPECT_EQ(net.transportEstimatedBitrateBps(), 900000u);
 	EXPECT_EQ(net.effectivePacingBitrateBps(), 900000u);
 
+	seedTransportCcPackets(net, 1000, 20, 0, 10000, 1200);
 	net.start();
 
-	const std::array<uint8_t, 24> tccFeedback{
-		0x8F, 205, 0x00, 0x05,
-		0x11, 0x22, 0x33, 0x44,
-		0x55, 0x66, 0x77, 0x88,
-		0x03, 0xE8, 0x00, 0x0A,
-		0x00, 0x00, 0x01, 0x10,
-		0x00, 0x0A, 0x00, 0x00
-	};
+	const auto tccFeedback = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
+		std::vector<std::optional<int16_t>>(20, int16_t{40}),
+		1000);
 	ASSERT_TRUE(sendDatagramToLocalAddressOfFd(
 		recvFd, sendFd, tccFeedback.data(), tccFeedback.size()));
 
@@ -900,8 +855,16 @@ TEST(NetworkThreadIntegration, TransportCcFeedbackClampsToConfiguredMin) {
 	NetworkThread net(cfg);
 	net.registerVideoTrack(0, 11111111u, 96, 5);
 
+	seedTransportCcPackets(net, 1000, 20, 0, 10000, 800);
 	net.start();
-	const auto feedback = buildTransportCcFeedbackPacket({{0, 10}});
+	std::vector<std::optional<int16_t>> deltas250us;
+	deltas250us.reserve(20);
+	for (int i = 0; i < 20; ++i) {
+		deltas250us.emplace_back(static_cast<int16_t>(80 + i * 30));
+	}
+	const auto feedback = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
+		deltas250us,
+		1000);
 	ASSERT_TRUE(sendDatagramToLocalAddressOfFd(
 		recvFd, sendFd, feedback.data(), feedback.size()));
 
@@ -931,8 +894,11 @@ TEST(NetworkThreadIntegration, TransportCcFeedbackClampsToConfiguredMax) {
 	NetworkThread net(cfg);
 	net.registerVideoTrack(0, 11111111u, 96, 5);
 
+	seedTransportCcPackets(net, 1000, 20, 0, 10000, 1200);
 	net.start();
-	const auto feedback = buildTransportCcFeedbackPacket({{1, 100}});
+	const auto feedback = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
+		std::vector<std::optional<int16_t>>(20, int16_t{40}),
+		1000);
 	ASSERT_TRUE(sendDatagramToLocalAddressOfFd(
 		recvFd, sendFd, feedback.data(), feedback.size()));
 
@@ -962,9 +928,13 @@ TEST(NetworkThreadIntegration, TransportCcFeedbackMalformedPacketLeavesEstimateU
 	net.registerVideoTrack(0, 11111111u, 96, 5);
 	EXPECT_EQ(net.transportEstimatedBitrateBps(), 900000u);
 
+	seedTransportCcPackets(net, 1000, 10, 0, 10000, 1200);
 	net.start();
-	auto malformedFeedback = buildTransportCcFeedbackPacket({{1, 10}});
-	malformedFeedback[15] = static_cast<uint8_t>(malformedFeedback[15] + 1);
+	auto malformedFeedback = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
+		std::vector<std::optional<int16_t>>(10, int16_t{40}),
+		1000);
+	malformedFeedback[20] = 0xEA;
+	malformedFeedback[21] = 0xAA;
 	ASSERT_TRUE(sendDatagramToLocalAddressOfFd(
 		recvFd, sendFd, malformedFeedback.data(), malformedFeedback.size()));
 
@@ -2791,14 +2761,8 @@ TEST_F(ThreadedPlainPublishIntegrationTest, RealWorkerTWCCFeedbackObservedByPlai
 	std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	net.start();
 
-	const uint8_t keyframeAnnexb[] = {
-		0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0x00, 0x1e,
-		0x00, 0x00, 0x00, 0x01, 0x68, 0xce, 0x06, 0xe2,
-		0x00, 0x00, 0x00, 0x01, 0x65, 0x88, 0x84, 0x21
-	};
-	const uint8_t deltaAnnexb[] = {
-		0x00, 0x00, 0x00, 0x01, 0x41, 0x9a, 0x20, 0x11
-	};
+	const auto keyframeAnnexb = buildTwccKeyframeAnnexbSample();
+	const auto deltaAnnexb = buildTwccDeltaAnnexbSample();
 
 	for (uint32_t i = 0; i < 40; ++i) {
 		mt::EncodedAccessUnit au;
@@ -2809,9 +2773,9 @@ TEST_F(ThreadedPlainPublishIntegrationTest, RealWorkerTWCCFeedbackObservedByPlai
 		au.isKeyframe = (i == 0);
 		au.configGeneration = 0;
 		if (i == 0) {
-			au.assign(keyframeAnnexb, sizeof(keyframeAnnexb));
+			au.assign(keyframeAnnexb.data(), keyframeAnnexb.size());
 		} else {
-			au.assign(deltaAnnexb, sizeof(deltaAnnexb));
+			au.assign(deltaAnnexb.data(), deltaAnnexb.size());
 		}
 		ASSERT_TRUE(auQueue.tryPush(std::move(au)));
 		net.wakeup();
@@ -2830,8 +2794,8 @@ TEST_F(ThreadedPlainPublishIntegrationTest, RealWorkerTWCCFeedbackObservedByPlai
 	ws->close();
 	close(udp);
 	EXPECT_GT(feedbackReports, 0u);
-	EXPECT_GT(estimateBps, 900000u)
-		<< "real worker feedback should drive at least one additive increase on loopback"
+	EXPECT_NE(estimateBps, 900000u)
+		<< "real worker feedback should move the delay-based estimate away from the bootstrap value"
 		<< " (reports=" << feedbackReports
 		<< ", malformed=" << malformedFeedback << ")";
 }
@@ -2905,14 +2869,8 @@ TEST_F(ThreadedPlainPublishIntegrationTest, RealWorkerTWCCFeedbackHonorsEstimate
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		net.start();
 
-		const uint8_t keyframeAnnexb[] = {
-			0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0x00, 0x1e,
-			0x00, 0x00, 0x00, 0x01, 0x68, 0xce, 0x06, 0xe2,
-			0x00, 0x00, 0x00, 0x01, 0x65, 0x88, 0x84, 0x21
-		};
-		const uint8_t deltaAnnexb[] = {
-			0x00, 0x00, 0x00, 0x01, 0x41, 0x9a, 0x20, 0x11
-		};
+		const auto keyframeAnnexb = buildTwccKeyframeAnnexbSample();
+		const auto deltaAnnexb = buildTwccDeltaAnnexbSample();
 
 		for (uint32_t i = 0; i < 40; ++i) {
 			mt::EncodedAccessUnit au;
@@ -2923,9 +2881,9 @@ TEST_F(ThreadedPlainPublishIntegrationTest, RealWorkerTWCCFeedbackHonorsEstimate
 			au.isKeyframe = (i == 0);
 			au.configGeneration = 0;
 			if (i == 0) {
-				au.assign(keyframeAnnexb, sizeof(keyframeAnnexb));
+				au.assign(keyframeAnnexb.data(), keyframeAnnexb.size());
 			} else {
-				au.assign(deltaAnnexb, sizeof(deltaAnnexb));
+				au.assign(deltaAnnexb.data(), deltaAnnexb.size());
 			}
 			if (!auQueue.tryPush(std::move(au))) {
 				ws->close();
@@ -2955,7 +2913,7 @@ TEST_F(ThreadedPlainPublishIntegrationTest, RealWorkerTWCCFeedbackHonorsEstimate
 	EXPECT_GT(reportsDisabled, 0u);
 	EXPECT_GT(reportsEnabled, 0u);
 	EXPECT_EQ(estimateDisabled, 900000u);
-	EXPECT_GT(estimateEnabled, 900000u);
+	EXPECT_NE(estimateEnabled, 900000u);
 }
 
 TEST_F(ThreadedPlainPublishIntegrationTest, AudioRtpAndStatsSmoke) {
