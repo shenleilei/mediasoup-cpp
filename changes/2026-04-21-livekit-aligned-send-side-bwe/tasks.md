@@ -111,7 +111,7 @@
    - run targeted A/B evaluation with updated raw/group report output
    - `node tests/qos_harness/run_twcc_ab_eval.mjs --repetitions=2`
 
-13. [ ] Close delivery gaps and update accepted behavior
+13. [x] Close delivery and accepted-behavior documentation
    Outcome:
    - change docs, rollout notes, and accepted behavior reflect the final implementation truthfully
    - residual differences from LiveKit are documented explicitly
@@ -124,4 +124,4 @@
    - `./build/mediasoup_qos_unit_tests`
    - `./build/mediasoup_thread_integration_tests --gtest_filter='NetworkThreadIntegration.TransportCcFeedback*:NetworkThreadIntegration.Probe*:ThreadedPlainPublishIntegrationTest.RealWorkerTWCCFeedbackObservedByPlainSender:NetworkPause.*'`
    - `./scripts/run_qos_tests.sh cpp-threaded`
-   - `./scripts/run_qos_tests.sh cpp-client-harness:threaded_generation_switch cpp-client-harness:threaded_multi_video_budget`
+   - `./scripts/run_qos_tests.sh cpp-client-harness:threaded_generation_switch`

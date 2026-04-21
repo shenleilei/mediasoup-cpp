@@ -28,7 +28,11 @@ The repository already has the main LiveKit-inspired module split in place:
 - congestion state and available-channel-capacity estimation
 - probe-related data structures and lifecycle types
 
-That porting work is done. The remaining work is not another estimator rewrite. It is finishing the sender-path semantics around that estimator so the runtime behavior actually matches the model that the port assumes.
+That porting work is done. The runtime sender semantics and probe behavior are now also aligned on the supported main path. Remaining work is operational closeout:
+
+- white-box observability depth improvements beyond the currently exposed fields
+- final accepted-behavior/spec updates
+- residual-difference documentation where the uplink sender intentionally differs from LiveKit's downlink allocator context
 
 ## Main-Path Alignment Status
 
@@ -39,7 +43,16 @@ The main-path sender semantics that previously blocked truthful LiveKit alignmen
 3. probe early-stop wiring on the network-thread path
 4. probe-trigger math aligned to LiveKit's default padding-probe policy through a sender-side equivalent mapping
 
-The remaining work is no longer on the transport-control main path itself. It is on observability, report-pipeline support, and final accepted-behavior documentation.
+The remaining work is no longer on the transport-control main path itself. It is on observability refinement, report-pipeline depth, and final accepted-behavior documentation.
+
+## Explicit Residual Differences
+
+The following differences remain explicit and out of scope for this change:
+
+- the plain-client sender does not implement a LiveKit-style downlink allocator or layer-transition model
+- aggregate-constrained multi-track send fairness is still governed by the existing sender/runtime behavior rather than a new weight-aware media scheduler
+
+That means this change aligns the plain-client send-side BWE and padding-probe path, but it does not claim a new weighted multi-track pacing/fairness model.
 
 ## NetworkThread Role
 
@@ -148,7 +161,7 @@ The plain client uplink sender has no deficient-track / next-higher-layer transi
 For the plain client, the default aligned padding-probe policy is:
 
 - `availableBandwidthBps = transportEstimatedBitrateBps_`
-- `expectedUsageBps = effectivePacingBitrateBps()`
+- `expectedUsageBps = current sender usage`
 - `transitionDeltaBps = max(aggregateTargetBitrateBps - expectedUsageBps, 0)`
 - `desiredIncreaseBps = max(transitionDeltaBps * ProbeOveragePct / 100, ProbeMinBps)`
 - `desiredBps = expectedUsageBps + desiredIncreaseBps`
@@ -252,7 +265,16 @@ To prove the transport-layer behavior directly, the following white-box values a
 - retransmission counts
 - queued fresh-video / retransmission / audio pressure counters
 
-At the time of this design update, only the first three values are already exposed through `SenderStatsSnapshot` on the main path. The remaining white-box values require explicit instrumentation and report-pipeline support before they can be used in an automated A/B evidence document.
+At the time of this design update, the main path already exposes:
+
+- `transportEstimatedBitrateBps`
+- `effectivePacingBitrateBps`
+- `transportCcFeedbackReports`
+- sender-usage bitrate
+- queue and retransmission counters
+- probe activity and probe packet counts
+
+Further follow-up may still expose richer probe lifecycle counts and byte accounting in more polished report formats, but the main observability path is already sufficient for targeted effectiveness review.
 
 ### Report-Pipeline Boundary
 

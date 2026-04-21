@@ -98,6 +98,10 @@ struct SenderStatsSnapshot {
 	uint64_t audioDeadlineDrops = 0;
 	uint64_t retransmissionDrops = 0;
 	uint64_t retransmissionSent = 0;
+	uint64_t probeClusterStartCount = 0;
+	uint64_t probeClusterCompleteCount = 0;
+	uint64_t probeClusterEarlyStopCount = 0;
+	uint64_t probeBytesSent = 0;
 	uint32_t queuedFreshVideoPackets = 0;
 	uint32_t queuedAudioPackets = 0;
 	uint32_t queuedRetransmissionPackets = 0;

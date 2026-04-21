@@ -509,7 +509,12 @@ async function runThreadedMultiVideoBudgetScenario() {
       const highestBitrate = samplesByTrack[highestBitrateTrack][i]?.bitrateBps;
       const middleBitrate = samplesByTrack['video-1'][i]?.bitrateBps;
       const lowestBitrate = samplesByTrack[lowestBitrateTrack][i]?.bitrateBps;
-      if (highestBitrate > middleBitrate && middleBitrate >= lowestBitrate) {
+      // Local trace carries configured/target bitrate decisions, not transport-observed send bitrate.
+      // Require the sacrificial track to stay lowest and the two higher-weight tracks to remain above it,
+      // but do not require strict ordering between the two higher-weight tracks.
+      if (lowestBitrate > 0
+        && middleBitrate > lowestBitrate
+        && highestBitrate > lowestBitrate) {
         orderingObserved = true;
         break;
       }

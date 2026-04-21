@@ -247,6 +247,25 @@ public:
 		metrics_.retransmissionDrops += dropped;
 	}
 
+	void ClearQueuedProbeClusterAssociation(uint32_t probeClusterId)
+	{
+		if (probeClusterId == 0) {
+			return;
+		}
+
+		for (auto& packet : audioQueue_) {
+			ClearProbeClusterAssociation(packet.transportMetadata, probeClusterId);
+		}
+		for (auto& packet : videoRetransmissionQueue_) {
+			ClearProbeClusterAssociation(packet.transportMetadata, probeClusterId);
+		}
+		for (auto& trackState : trackStates_) {
+			for (auto& packet : trackState.videoQueue) {
+				ClearProbeClusterAssociation(packet.transportMetadata, probeClusterId);
+			}
+		}
+	}
+
 	size_t QueuedFreshVideoPackets() const
 	{
 		return queuedFreshVideoPackets_;
@@ -509,6 +528,18 @@ private:
 	int64_t NowMs() const
 	{
 		return nowFn_ ? nowFn_() : 0;
+	}
+
+	static void ClearProbeClusterAssociation(
+		PacketTransportMetadata& transportMetadata,
+		uint32_t probeClusterId)
+	{
+		if (transportMetadata.isProbe) {
+			return;
+		}
+		if (transportMetadata.probeClusterId == probeClusterId) {
+			transportMetadata.probeClusterId = 0;
+		}
 	}
 
 	size_t PendingPacketCount() const
