@@ -325,7 +325,7 @@ write_report() {
     echo
     echo "| Report | Scope | Link | Updated |"
     echo "|---|---|---|---|"
-    append_report_link_row "$ROOT_DIR/docs/uplink-qos-test-results-summary.md" "Uplink Summary" "Uplink QoS summary"
+    append_report_link_row "$ROOT_DIR/docs/qos/uplink/test-results-summary.md" "Uplink Summary" "Uplink QoS summary"
     append_report_link_row "$ROOT_DIR/docs/uplink-qos-case-results.md" "Uplink Cases" "Browser uplink per-case report"
     append_report_link_row "$ROOT_DIR/docs/plain-client-qos-case-results.md" "Plain Client Cases" "PlainTransport C++ client per-case report"
     append_report_link_row "$ROOT_DIR/docs/downlink-qos-test-results-summary.md" "Downlink Summary" "Downlink QoS summary"
