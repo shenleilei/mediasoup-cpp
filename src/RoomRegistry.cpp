@@ -48,10 +48,9 @@ size_t RoomRegistry::knownNodeCount() const
 	return cache_.knownNodeCount();
 }
 
-bool RoomRegistry::isReady()
+bool RoomRegistry::isReady() const
 {
-	std::lock_guard<std::mutex> lock(command_.mutex);
-	return command_.connected();
+	return commandReady_.load(std::memory_order_relaxed);
 }
 
 void RoomRegistry::heartbeat()

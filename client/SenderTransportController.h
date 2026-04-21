@@ -196,7 +196,24 @@ public:
 
 	void FlushForShutdown(int64_t nowMs)
 	{
-		OnPacingTick(nowMs);
+		// Try to drain pending packets on shutdown before dropping leftovers.
+		// Use an effectively unbounded budget so we are not limited by pacing target.
+		constexpr size_t kMaxDrainPasses = 64;
+		for (size_t pass = 0; pass < kMaxDrainPasses; ++pass) {
+			const size_t pendingBefore = PendingPacketCount();
+			if (pendingBefore == 0) {
+				break;
+			}
+			DropExpiredAudioPackets(nowMs);
+			mediaBudgetBytes_ = std::numeric_limits<int64_t>::max() / 4;
+			FlushAudioQueue();
+			FlushRetransmissionQueue();
+			FlushFreshVideoQueues();
+			if (PendingPacketCount() >= pendingBefore) {
+				break;
+			}
+		}
+
 		DropExpiredAudioPackets(nowMs);
 		ClearQueues();
 	}
@@ -213,6 +230,19 @@ public:
 		queuedFreshVideoPackets_ = dropped > queuedFreshVideoPackets_
 			? 0
 			: (queuedFreshVideoPackets_ - dropped);
+	}
+
+	void DropQueuedRetransmissionForTrack(uint32_t ssrc)
+	{
+		const auto previousSize = videoRetransmissionQueue_.size();
+		videoRetransmissionQueue_.erase(
+			std::remove_if(
+				videoRetransmissionQueue_.begin(),
+				videoRetransmissionQueue_.end(),
+				[ssrc](const auto& packet) { return packet.ssrc == ssrc; }),
+			videoRetransmissionQueue_.end());
+		const size_t dropped = previousSize - videoRetransmissionQueue_.size();
+		metrics_.retransmissionDrops += dropped;
 	}
 
 	size_t QueuedFreshVideoPackets() const
@@ -476,6 +506,11 @@ private:
 		return nowFn_ ? nowFn_() : 0;
 	}
 
+	size_t PendingPacketCount() const
+	{
+		return queuedFreshVideoPackets_ + videoRetransmissionQueue_.size() + audioQueue_.size();
+	}
+
 	void ClearQueues()
 	{
 		queuedFreshVideoPackets_ = 0;
@@ -487,19 +522,6 @@ private:
 		audioQueue_.clear();
 		metrics_.retransmissionDrops += videoRetransmissionQueue_.size();
 		videoRetransmissionQueue_.clear();
-	}
-
-	void DropQueuedRetransmissionForTrack(uint32_t ssrc)
-	{
-		const auto previousSize = videoRetransmissionQueue_.size();
-		videoRetransmissionQueue_.erase(
-			std::remove_if(
-				videoRetransmissionQueue_.begin(),
-				videoRetransmissionQueue_.end(),
-				[ssrc](const Packet& packet) { return packet.ssrc == ssrc; }),
-			videoRetransmissionQueue_.end());
-		const size_t dropped = previousSize - videoRetransmissionQueue_.size();
-		metrics_.retransmissionDrops += dropped;
 	}
 
 	Config config_;

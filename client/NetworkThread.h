@@ -17,6 +17,7 @@
 
 #include <atomic>
 #include <algorithm>
+#include <limits>
 #include <cstdio>
 #include <cstring>
 #include <deque>
@@ -130,10 +131,7 @@ public:
 		// Note: rtcp_ registration deferred to start() to avoid dangling pointers from vector realloc
 		if (useTransportController_) {
 			transportController_.RegisterVideoTrack(trackIndex, ssrc);
-			if (transportEstimatedBitrateBps_ == 0) {
-				transportEstimatedBitrateBps_ = transportController_.AggregateTargetBitrateBps();
-				transportController_.SetTransportEstimatedBitrateBps(transportEstimatedBitrateBps_);
-			}
+			SyncTransportEstimateToAggregateTarget();
 		}
 	}
 
@@ -353,6 +351,7 @@ private:
 			}
 			if (useTransportController_) {
 				transportController_.DropQueuedFreshVideoForTrack(au.ssrc);
+				transportController_.DropQueuedRetransmissionForTrack(au.ssrc);
 			}
 		}
 
@@ -559,10 +558,7 @@ private:
 					if (useTransportController_) {
 						transportController_.UpdateTrackTransportHint(
 							cmd.trackIndex, cmd.ssrc, cmd.targetBitrateBps, cmd.paused);
-						if (transportEstimatedBitrateBps_ == 0) {
-							transportEstimatedBitrateBps_ = transportController_.AggregateTargetBitrateBps();
-							transportController_.SetTransportEstimatedBitrateBps(transportEstimatedBitrateBps_);
-						}
+						SyncTransportEstimateToAggregateTarget();
 					}
 					break;
 				case mt::NetworkControlCommand::PauseTrack:
@@ -730,6 +726,21 @@ private:
 		lastTransportFeedbackAtMs_ = steadyNowMs();
 		transportController_.SetTransportEstimatedBitrateBps(transportEstimatedBitrateBps_);
 	}
+
+	void SyncTransportEstimateToAggregateTarget()
+	{
+		if (!useTransportController_) {
+			return;
+		}
+		const uint32_t aggregateTargetBps = transportController_.AggregateTargetBitrateBps();
+		if (aggregateTargetBps == 0) {
+			return;
+		}
+		if (transportEstimatedBitrateBps_ == 0 || aggregateTargetBps > transportEstimatedBitrateBps_) {
+			transportEstimatedBitrateBps_ = aggregateTargetBps;
+			transportController_.SetTransportEstimatedBitrateBps(transportEstimatedBitrateBps_);
+		}
+	}
 public:
 	const mediasoup::plainclient::SenderTransportController::Metrics& transportMetrics() const {
 		return transportController_.GetMetrics();
@@ -784,8 +795,8 @@ private:
 	uint64_t transportCcFeedbackPacketCount_{ 0 };
 	uint64_t transportCcFeedbackLostCount_{ 0 };
 	uint64_t transportCcMalformedFeedbackCount_{ 0 };
-	static constexpr uint32_t kMinTransportEstimateBps = 30000u;
-	static constexpr uint32_t kMaxTransportEstimateBps = 8000000u;
+	static constexpr uint32_t kMinTransportEstimateBps = 100000u;
+	static constexpr uint32_t kMaxTransportEstimateBps = std::numeric_limits<uint32_t>::max();
 	uint64_t statsGeneration_ = 0;
 	int epollFd_ = -1;
 	int wakeupFd_ = -1;

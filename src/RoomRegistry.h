@@ -46,7 +46,7 @@ public:
 	std::string claimRoom(const std::string& roomId, const std::string& clientIp = "");
 	void refreshRoom(const std::string& roomId);
 	void unregisterRoom(const std::string& roomId);
-	bool isReady();
+	bool isReady() const;
 
 	const std::string& nodeId() const { return nodeId_; }
 	const std::string& nodeAddress() const { return nodeAddress_; }
@@ -216,6 +216,7 @@ private:
 
 	CommandConnection command_;
 	CacheView cache_;
+	std::atomic<bool> commandReady_{false};
 
 	std::thread subThread_;
 	std::atomic<bool> subStop_{false};
