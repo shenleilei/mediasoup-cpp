@@ -4,17 +4,32 @@
 
 当前收录：
 
+## Browser uplink
+
 - [uplink-qos-matrix-report.json](./uplink-qos-matrix-report.json)
+- [uplink-qos-matrix-report.targeted.json](./uplink-qos-matrix-report.targeted.json)
+- [uplink-qos-case-results.targeted.md](./uplink-qos-case-results.targeted.md)
+
+## PlainTransport C++ client uplink
+
 - [uplink-qos-cpp-client-matrix-report.json](./uplink-qos-cpp-client-matrix-report.json)
 - [uplink-qos-cpp-client-matrix-report.targeted.json](./uplink-qos-cpp-client-matrix-report.targeted.json)
 - [uplink-qos-cpp-client-case-results.targeted.md](./uplink-qos-cpp-client-case-results.targeted.md)
+
+## Downlink
+
+- [downlink-qos-matrix-report.json](./downlink-qos-matrix-report.json)
+- [downlink-qos-matrix-report.targeted.json](./downlink-qos-matrix-report.targeted.json)
+- [downlink-qos-case-results.targeted.md](./downlink-qos-case-results.targeted.md)
+
+## TWCC A/B
+
 - [twcc-ab-report.md](./twcc-ab-report.md)
 - [twcc-ab-g1-vs-g2.md](./twcc-ab-g1-vs-g2.md)
 - [twcc-ab-g1-vs-g2.json](./twcc-ab-g1-vs-g2.json)
 - [twcc-ab-g0-vs-g2.md](./twcc-ab-g0-vs-g2.md)
 - [twcc-ab-g0-vs-g2.json](./twcc-ab-g0-vs-g2.json)
 - [twcc-ab-raw-groups.json](./twcc-ab-raw-groups.json)
-- downlink-qos-matrix-report.json（由 `run_downlink_matrix.mjs` 生成）
 
 说明：
 
