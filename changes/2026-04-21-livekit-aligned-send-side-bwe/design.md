@@ -273,8 +273,10 @@ At the time of this design update, the main path already exposes:
 - sender-usage bitrate
 - queue and retransmission counters
 - probe activity and probe packet counts
+- probe cluster start / completion / early-stop counts
+- probe bytes sent
 
-Further follow-up may still expose richer probe lifecycle counts and byte accounting in more polished report formats, but the main observability path is already sufficient for targeted effectiveness review.
+Further follow-up may still improve report presentation, but the main observability path is already sufficient for targeted effectiveness review.
 
 ### Report-Pipeline Boundary
 

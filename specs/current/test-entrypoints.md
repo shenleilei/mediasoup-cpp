@@ -25,6 +25,9 @@
 - It SHALL record failed tasks in `tests/qos_harness/artifacts/last-failures.txt`.
 - After an actual execution, it SHALL rewrite `docs/downlink-qos-test-results-summary.md`.
 - When matrix-style groups run, it SHALL regenerate the corresponding QoS Markdown reports documented in `README.md`.
+- Its default `cpp-client-harness` group SHALL include the threaded plain-client harness regressions that cover:
+  - `threaded_generation_switch`
+  - `threaded_multi_video_budget`
 
 ## `scripts/nightly_full_regression.py`
 

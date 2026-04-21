@@ -726,6 +726,7 @@ run_cpp_client_harness() {
     manual_clear
     multi_video_budget
     multi_track_snapshot
+    threaded_generation_switch
     threaded_quick
   )
 
