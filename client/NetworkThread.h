@@ -59,6 +59,9 @@ struct TrackNetState {
 // ═══════════════════════════════════════════════════════════
 class NetworkThread {
 public:
+	static constexpr uint32_t kDefaultMinTransportEstimateBps = 100000u;
+	static constexpr uint32_t kDefaultMaxTransportEstimateBps = std::numeric_limits<uint32_t>::max();
+
 	struct Config {
 		int udpFd = -1;                // pre-created connected UDP socket
 		uint32_t audioSsrc = 0;
@@ -67,6 +70,8 @@ public:
 		uint32_t applicationBitrateCapBps = 0;
 		bool enableTransportController = true;
 		bool enableTransportEstimate = true;
+		uint32_t transportEstimateMinBps = kDefaultMinTransportEstimateBps;
+		uint32_t transportEstimateMaxBps = kDefaultMaxTransportEstimateBps;
 	};
 
 	// Per-source input queue (one per source worker)
@@ -699,6 +704,13 @@ private:
 			return;
 		}
 
+		const uint32_t minTransportEstimateBps = std::min(
+			cfg_.transportEstimateMinBps,
+			cfg_.transportEstimateMaxBps);
+		const uint32_t maxTransportEstimateBps = std::max(
+			cfg_.transportEstimateMinBps,
+			cfg_.transportEstimateMaxBps);
+
 		uint32_t estimateBps = transportEstimatedBitrateBps_;
 		if (estimateBps == 0) {
 			estimateBps = transportController_.AggregateTargetBitrateBps();
@@ -718,15 +730,15 @@ private:
 				static_cast<uint64_t>(estimateBps) * 92u / 100u);
 		} else {
 			const uint32_t additiveStep = std::max<uint32_t>(20000u, estimateBps / 20u);
-			estimateBps = estimateBps > kMaxTransportEstimateBps - additiveStep
-				? kMaxTransportEstimateBps
+			estimateBps = estimateBps > maxTransportEstimateBps - additiveStep
+				? maxTransportEstimateBps
 				: (estimateBps + additiveStep);
 		}
 
 		estimateBps = std::clamp<uint32_t>(
 			estimateBps,
-			kMinTransportEstimateBps,
-			kMaxTransportEstimateBps);
+			minTransportEstimateBps,
+			maxTransportEstimateBps);
 		transportEstimatedBitrateBps_ = estimateBps;
 		lastTransportFeedbackAtMs_ = steadyNowMs();
 		transportController_.SetTransportEstimatedBitrateBps(transportEstimatedBitrateBps_);
@@ -777,6 +789,10 @@ public:
 		return transportCcFeedbackReports_;
 	}
 
+	uint64_t transportCcMalformedFeedbackCount() const {
+		return transportCcMalformedFeedbackCount_;
+	}
+
 	uint32_t effectivePacingBitrateBps() const {
 		return useTransportController_ ? transportController_.EffectivePacingBitrateBps() : 0;
 	}
@@ -801,8 +817,6 @@ private:
 	uint64_t transportCcFeedbackPacketCount_{ 0 };
 	uint64_t transportCcFeedbackLostCount_{ 0 };
 	uint64_t transportCcMalformedFeedbackCount_{ 0 };
-	static constexpr uint32_t kMinTransportEstimateBps = 100000u;
-	static constexpr uint32_t kMaxTransportEstimateBps = std::numeric_limits<uint32_t>::max();
 	uint64_t statsGeneration_ = 0;
 	int epollFd_ = -1;
 	int wakeupFd_ = -1;

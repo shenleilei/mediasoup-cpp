@@ -367,6 +367,24 @@ WorkerSettings BuildWorkerSettings(const RuntimeOptions& options)
 {
 	WorkerSettings workerSettings;
 	workerSettings.logLevel = "warn";
+	if (const char* envWorkerLogLevel = std::getenv("MEDIASOUP_WORKER_LOG_LEVEL")) {
+		if (*envWorkerLogLevel != '\0') {
+			workerSettings.logLevel = envWorkerLogLevel;
+		}
+	}
+	if (const char* envWorkerLogTags = std::getenv("MEDIASOUP_WORKER_LOG_TAGS")) {
+		if (*envWorkerLogTags != '\0') {
+			std::stringstream ss(envWorkerLogTags);
+			std::string tag;
+			while (std::getline(ss, tag, ',')) {
+				tag.erase(0, tag.find_first_not_of(" \t"));
+				tag.erase(tag.find_last_not_of(" \t") + 1);
+				if (!tag.empty()) {
+					workerSettings.logTags.push_back(tag);
+				}
+			}
+		}
+	}
 	workerSettings.rtcMinPort = 10000;
 	workerSettings.rtcMaxPort = 59999;
 	if (!options.workerBin.empty()) workerSettings.workerBin = options.workerBin;

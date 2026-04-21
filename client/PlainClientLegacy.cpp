@@ -354,17 +354,21 @@ int PlainClientApp::RunLegacyMode()
 							false
 						});
 
-						std::printf("[QOS_TRACE] tsMs=%lld track=%s state=%s level=%d mode=%s sample=%s bitrateBps=%d sendBps=%.0f packetsLost=%llu rttMs=%.1f jitterMs=%.1f width=%d height=%d fps=%d suppressed=%d\n",
-							static_cast<long long>(wallNowMs()),
-							track.trackId.c_str(),
-							qos::stateStr(track.qosCtrl->currentState()),
-							track.qosCtrl->currentLevel(),
+							const double traceLossRate = track.qosCtrl->lastSignals().has_value()
+								? track.qosCtrl->lastSignals()->lossRate
+								: 0.0;
+							std::printf("[QOS_TRACE] tsMs=%lld track=%s state=%s level=%d mode=%s sample=%s bitrateBps=%d sendBps=%.0f lossRate=%.6f packetsLost=%llu rttMs=%.1f jitterMs=%.1f width=%d height=%d fps=%d suppressed=%d\n",
+								static_cast<long long>(wallNowMs()),
+								track.trackId.c_str(),
+								qos::stateStr(track.qosCtrl->currentState()),
+								track.qosCtrl->currentLevel(),
 							track.videoSuppressed ? "audio-only" : "audio-video",
-							usingMatrixTestProfile ? "matrix" : (usingServerStats ? "server" : "local"),
-							track.encBitrate,
-							observedBitrateBps > 0.0 ? observedBitrateBps : snap.targetBitrateBps,
-							static_cast<unsigned long long>(snap.packetsLost),
-							snap.roundTripTimeMs,
+								usingMatrixTestProfile ? "matrix" : (usingServerStats ? "server" : "local"),
+								track.encBitrate,
+								observedBitrateBps > 0.0 ? observedBitrateBps : snap.targetBitrateBps,
+								traceLossRate,
+								static_cast<unsigned long long>(snap.packetsLost),
+								snap.roundTripTimeMs,
 							snap.jitterMs,
 							track.encoder.has_value() ? track.encoder->get()->width : 0,
 							track.encoder.has_value() ? track.encoder->get()->height : 0,

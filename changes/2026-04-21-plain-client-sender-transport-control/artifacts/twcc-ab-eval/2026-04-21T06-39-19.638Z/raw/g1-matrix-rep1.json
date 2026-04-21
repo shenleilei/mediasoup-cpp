@@ -1,0 +1,3972 @@
+{
+  "generatedAt": "2026-04-21T06:43:08.592Z",
+  "runner": "cpp_client",
+  "signalingPort": 15121,
+  "durationScale": 0.25,
+  "includeExtended": false,
+  "selectedCaseIds": [
+    "B1",
+    "T3",
+    "R4"
+  ],
+  "includedCaseIds": [
+    "B1",
+    "R4",
+    "T3"
+  ],
+  "summary": {
+    "total": 3,
+    "executed": 3,
+    "passed": 2,
+    "failed": 1,
+    "errors": 0,
+    "byGroup": {
+      "baseline": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0
+      },
+      "rtt_sweep": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0
+      },
+      "transition": {
+        "total": 1,
+        "passed": 0,
+        "failed": 1
+      }
+    }
+  },
+  "cases": [
+    {
+      "runner": "cpp_client",
+      "caseId": "B1",
+      "group": "baseline",
+      "priority": "P0",
+      "roomId": "cpp_matrix_B1_1776753723215",
+      "peerId": "cpp_bot_B1",
+      "startTime": "2026-04-21T06:42:03.216Z",
+      "baseline": {
+        "startMs": 1776753725693,
+        "endMs": 1776753729444,
+        "durationMs": 3750,
+        "netem": {
+          "bandwidth": 4000,
+          "rtt": 25,
+          "loss": 0.1,
+          "jitter": 5
+        },
+        "state": {
+          "state": "stable",
+          "level": 0
+        }
+      },
+      "impairment": {
+        "startMs": 1776753729458,
+        "endMs": 1776753734459,
+        "durationMs": 5000,
+        "netem": {
+          "bandwidth": 4000,
+          "rtt": 25,
+          "loss": 0.1,
+          "jitter": 5
+        },
+        "state": {
+          "state": "stable",
+          "level": 0
+        }
+      },
+      "recovery": {
+        "startMs": 1776753734486,
+        "endMs": 1776753741987,
+        "durationMs": 7500,
+        "netem": {
+          "bandwidth": 4000,
+          "rtt": 25,
+          "loss": 0.1,
+          "jitter": 5
+        },
+        "state": {
+          "state": "stable",
+          "level": 0
+        }
+      },
+      "phaseSummary": {
+        "baseline": {
+          "current": {
+            "state": "stable",
+            "level": 0
+          },
+          "peak": {
+            "state": "stable",
+            "level": 0
+          },
+          "best": {
+            "state": "stable",
+            "level": 0
+          },
+          "entries": [
+            {
+              "tsMs": 1776753726676,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753727676,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753728676,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            }
+          ]
+        },
+        "impairment": {
+          "current": {
+            "state": "stable",
+            "level": 0
+          },
+          "peak": {
+            "state": "stable",
+            "level": 0
+          },
+          "best": {
+            "state": "stable",
+            "level": 0
+          },
+          "entries": [
+            {
+              "tsMs": 1776753729678,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753730715,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753731715,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753732715,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753733715,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            }
+          ]
+        },
+        "recovery": {
+          "current": {
+            "state": "stable",
+            "level": 0
+          },
+          "peak": {
+            "state": "stable",
+            "level": 0
+          },
+          "best": {
+            "state": "stable",
+            "level": 0
+          },
+          "entries": [
+            {
+              "tsMs": 1776753734715,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753735715,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753736715,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753737715,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753738715,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753739715,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753740715,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753741715,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            }
+          ]
+        }
+      },
+      "timing": {
+        "impairment": {
+          "t_detect_warning": null,
+          "t_detect_recovering": null,
+          "t_detect_stable": 220,
+          "t_detect_congested": null,
+          "t_first_action": null,
+          "t_level_0": null,
+          "t_level_1": null,
+          "t_level_2": null,
+          "t_level_3": null,
+          "t_level_4": null,
+          "t_audio_only": null
+        },
+        "recovery": {
+          "t_detect_warning": null,
+          "t_detect_recovering": null,
+          "t_detect_stable": 229,
+          "t_detect_congested": null,
+          "t_first_action": null,
+          "t_level_0": null,
+          "t_level_1": null,
+          "t_level_2": null,
+          "t_level_3": null,
+          "t_level_4": null,
+          "t_audio_only": null
+        }
+      },
+      "analysis": {
+        "expectedStates": [
+          "stable",
+          "early_warning"
+        ],
+        "expectedMinLevel": 0,
+        "expectedMaxLevel": 1,
+        "actualBaselineState": "stable",
+        "actualBaselineLevel": 0,
+        "actualImpairedState": "stable",
+        "actualImpairedLevel": 0,
+        "actualRecoveredState": "stable",
+        "actualRecoveredLevel": 0,
+        "verdict": "符合"
+      },
+      "actionCount": 0,
+      "actionTypes": [],
+      "trace": [
+        {
+          "tsMs": 1776753723637,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "server",
+            "bitrateBps": 900000,
+            "sendBps": 42,
+            "lossRate": 0,
+            "packetsLost": 0,
+            "rttMs": 0,
+            "jitterMs": 0,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753724641,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "server",
+            "bitrateBps": 900000,
+            "sendBps": 42,
+            "lossRate": 0,
+            "packetsLost": 0,
+            "rttMs": 0,
+            "jitterMs": 0,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753725675,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753726676,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753727676,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753728676,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753729678,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753730715,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753731715,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753732715,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753733715,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753734715,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753735715,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753736715,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753737715,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753738715,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753739715,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753740715,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753741715,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        }
+      ],
+      "samples": [
+        {
+          "tsMs": 1776753723637,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "server",
+          "bitrateBps": 900000,
+          "sendBps": 42,
+          "lossRate": 0,
+          "packetsLost": 0,
+          "rttMs": 0,
+          "jitterMs": 0,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753723637 track=video state=stable level=0 mode=audio-video sample=server bitrateBps=900000 sendBps=42 lossRate=0.000000 packetsLost=0 rttMs=0.0 jitterMs=0.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753724641,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "server",
+          "bitrateBps": 900000,
+          "sendBps": 42,
+          "lossRate": 0,
+          "packetsLost": 0,
+          "rttMs": 0,
+          "jitterMs": 0,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753724641 track=video state=stable level=0 mode=audio-video sample=server bitrateBps=900000 sendBps=42 lossRate=0.000000 packetsLost=0 rttMs=0.0 jitterMs=0.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753725675,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753725675 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753726676,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753726676 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753727676,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753727676 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753728676,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753728676 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753729678,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753729678 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753730715,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753730715 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753731715,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753731715 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753732715,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753732715 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753733715,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753733715 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753734715,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753734715 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753735715,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753735715 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753736715,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753736715 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753737715,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753737715 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753738715,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753738715 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753739715,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753739715 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753740715,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753740715 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753741715,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753741715 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        }
+      ],
+      "testProfile": {
+        "warmupMs": 2000,
+        "phases": [
+          {
+            "name": "baseline",
+            "durationMs": 3750,
+            "sendCeilingBps": 880650,
+            "lossRate": 0.001,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "qualityLimitationReason": "none"
+          },
+          {
+            "name": "impairment",
+            "durationMs": 5000,
+            "sendCeilingBps": 880650,
+            "lossRate": 0.001,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "qualityLimitationReason": "none"
+          },
+          {
+            "name": "recovery",
+            "durationMs": 7500,
+            "sendCeilingBps": 880650,
+            "lossRate": 0.001,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "qualityLimitationReason": "none"
+          }
+        ]
+      },
+      "verdict": {
+        "passed": true,
+        "reason": "expectation satisfied",
+        "expectation": {
+          "states": [
+            "stable",
+            "early_warning"
+          ],
+          "maxLevel": 1
+        }
+      },
+      "endTime": "2026-04-21T06:42:21.993Z"
+    },
+    {
+      "runner": "cpp_client",
+      "caseId": "R4",
+      "group": "rtt_sweep",
+      "priority": "P0",
+      "roomId": "cpp_matrix_R4_1776753745009",
+      "peerId": "cpp_bot_R4",
+      "startTime": "2026-04-21T06:42:25.009Z",
+      "baseline": {
+        "startMs": 1776753747497,
+        "endMs": 1776753751248,
+        "durationMs": 3750,
+        "netem": {
+          "bandwidth": 4000,
+          "rtt": 25,
+          "loss": 0.1,
+          "jitter": 5
+        },
+        "state": {
+          "state": "stable",
+          "level": 0
+        }
+      },
+      "impairment": {
+        "startMs": 1776753751265,
+        "endMs": 1776753756265,
+        "durationMs": 5000,
+        "netem": {
+          "bandwidth": 4000,
+          "rtt": 180,
+          "loss": 0.1,
+          "jitter": 5
+        },
+        "state": {
+          "state": "early_warning",
+          "level": 1
+        }
+      },
+      "recovery": {
+        "startMs": 1776753756288,
+        "endMs": 1776753763790,
+        "durationMs": 7500,
+        "netem": {
+          "bandwidth": 4000,
+          "rtt": 25,
+          "loss": 0.1,
+          "jitter": 5
+        },
+        "state": {
+          "state": "stable",
+          "level": 0
+        }
+      },
+      "phaseSummary": {
+        "baseline": {
+          "current": {
+            "state": "stable",
+            "level": 0
+          },
+          "peak": {
+            "state": "stable",
+            "level": 0
+          },
+          "best": {
+            "state": "stable",
+            "level": 0
+          },
+          "entries": [
+            {
+              "tsMs": 1776753748498,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753749498,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753750499,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            }
+          ]
+        },
+        "impairment": {
+          "current": {
+            "state": "early_warning",
+            "level": 1
+          },
+          "peak": {
+            "state": "early_warning",
+            "level": 1
+          },
+          "best": {
+            "state": "stable",
+            "level": 0
+          },
+          "entries": [
+            {
+              "tsMs": 1776753751538,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 751050,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 280,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753752539,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 751050,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 280,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753753539,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 751050,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 280,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753754578,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 751050,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 280,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753755583,
+              "stateAfter": "early_warning",
+              "plannedAction": {
+                "type": "setEncodingParameters",
+                "level": 1
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 850000,
+                "sendBps": 751050,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 280,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 24,
+                "suppressed": false
+              }
+            }
+          ]
+        },
+        "recovery": {
+          "current": {
+            "state": "stable",
+            "level": 0
+          },
+          "peak": {
+            "state": "early_warning",
+            "level": 1
+          },
+          "best": {
+            "state": "stable",
+            "level": 0
+          },
+          "entries": [
+            {
+              "tsMs": 1776753756618,
+              "stateAfter": "early_warning",
+              "plannedAction": {
+                "type": "noop",
+                "level": 1
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 850000,
+                "sendBps": 850000,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 24,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753757658,
+              "stateAfter": "early_warning",
+              "plannedAction": {
+                "type": "noop",
+                "level": 1
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 850000,
+                "sendBps": 850000,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 24,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753758698,
+              "stateAfter": "early_warning",
+              "plannedAction": {
+                "type": "noop",
+                "level": 1
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 850000,
+                "sendBps": 850000,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 24,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753759748,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "setEncodingParameters",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 850000,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 30,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753760780,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 30,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753761818,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 30,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753762818,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 30,
+                "suppressed": false
+              }
+            }
+          ]
+        }
+      },
+      "timing": {
+        "impairment": {
+          "t_detect_warning": 4318,
+          "t_detect_recovering": null,
+          "t_detect_stable": 273,
+          "t_detect_congested": null,
+          "t_first_action": 4318,
+          "t_level_0": null,
+          "t_level_1": 4318,
+          "t_level_2": null,
+          "t_level_3": null,
+          "t_level_4": null,
+          "t_audio_only": null
+        },
+        "recovery": {
+          "t_detect_warning": 330,
+          "t_detect_recovering": null,
+          "t_detect_stable": 3460,
+          "t_detect_congested": null,
+          "t_first_action": 3460,
+          "t_level_0": 3460,
+          "t_level_1": null,
+          "t_level_2": null,
+          "t_level_3": null,
+          "t_level_4": null,
+          "t_audio_only": null
+        }
+      },
+      "analysis": {
+        "expectedStates": [
+          "early_warning",
+          "congested"
+        ],
+        "expectedMinLevel": 1,
+        "expectedMaxLevel": 2,
+        "actualBaselineState": "stable",
+        "actualBaselineLevel": 0,
+        "actualImpairedState": "early_warning",
+        "actualImpairedLevel": 1,
+        "actualRecoveredState": "stable",
+        "actualRecoveredLevel": 0,
+        "verdict": "符合"
+      },
+      "actionCount": 2,
+      "actionTypes": [
+        "setEncodingParameters",
+        "setEncodingParameters"
+      ],
+      "trace": [
+        {
+          "tsMs": 1776753745422,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "server",
+            "bitrateBps": 900000,
+            "sendBps": 42,
+            "lossRate": 0,
+            "packetsLost": 0,
+            "rttMs": 0,
+            "jitterMs": 0,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753746423,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "server",
+            "bitrateBps": 900000,
+            "sendBps": 42,
+            "lossRate": 0,
+            "packetsLost": 0,
+            "rttMs": 0,
+            "jitterMs": 0,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753747459,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753748498,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753749498,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753750499,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753751538,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 751050,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 280,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753752539,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 751050,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 280,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753753539,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 751050,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 280,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753754578,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 751050,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 280,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753755583,
+          "stateAfter": "early_warning",
+          "plannedAction": {
+            "type": "setEncodingParameters",
+            "level": 1
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 850000,
+            "sendBps": 751050,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 280,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 24,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753756618,
+          "stateAfter": "early_warning",
+          "plannedAction": {
+            "type": "noop",
+            "level": 1
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 850000,
+            "sendBps": 850000,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 24,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753757658,
+          "stateAfter": "early_warning",
+          "plannedAction": {
+            "type": "noop",
+            "level": 1
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 850000,
+            "sendBps": 850000,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 24,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753758698,
+          "stateAfter": "early_warning",
+          "plannedAction": {
+            "type": "noop",
+            "level": 1
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 850000,
+            "sendBps": 850000,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 24,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753759748,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "setEncodingParameters",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 850000,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 30,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753760780,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 30,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753761818,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 30,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753762818,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 30,
+            "suppressed": false
+          }
+        }
+      ],
+      "samples": [
+        {
+          "tsMs": 1776753745422,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "server",
+          "bitrateBps": 900000,
+          "sendBps": 42,
+          "lossRate": 0,
+          "packetsLost": 0,
+          "rttMs": 0,
+          "jitterMs": 0,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753745422 track=video state=stable level=0 mode=audio-video sample=server bitrateBps=900000 sendBps=42 lossRate=0.000000 packetsLost=0 rttMs=0.0 jitterMs=0.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753746423,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "server",
+          "bitrateBps": 900000,
+          "sendBps": 42,
+          "lossRate": 0,
+          "packetsLost": 0,
+          "rttMs": 0,
+          "jitterMs": 0,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753746423 track=video state=stable level=0 mode=audio-video sample=server bitrateBps=900000 sendBps=42 lossRate=0.000000 packetsLost=0 rttMs=0.0 jitterMs=0.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753747459,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753747459 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753748498,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753748498 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753749498,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753749498 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753750499,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753750499 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753751538,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 751050,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 280,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753751538 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=751050 lossRate=0.000000 packetsLost=65536 rttMs=280.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753752539,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 751050,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 280,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753752539 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=751050 lossRate=0.000000 packetsLost=65536 rttMs=280.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753753539,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 751050,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 280,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753753539 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=751050 lossRate=0.000000 packetsLost=65536 rttMs=280.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753754578,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 751050,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 280,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753754578 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=751050 lossRate=0.000000 packetsLost=65536 rttMs=280.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753755583,
+          "trackId": "video",
+          "state": "early_warning",
+          "level": 1,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 850000,
+          "sendBps": 751050,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 280,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 24,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753755583 track=video state=early_warning level=1 mode=audio-video sample=matrix bitrateBps=850000 sendBps=751050 lossRate=0.000000 packetsLost=65536 rttMs=280.0 jitterMs=5.0 width=640 height=480 fps=24 suppressed=0"
+        },
+        {
+          "tsMs": 1776753756618,
+          "trackId": "video",
+          "state": "early_warning",
+          "level": 1,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 850000,
+          "sendBps": 850000,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 24,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753756618 track=video state=early_warning level=1 mode=audio-video sample=matrix bitrateBps=850000 sendBps=850000 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=24 suppressed=0"
+        },
+        {
+          "tsMs": 1776753757658,
+          "trackId": "video",
+          "state": "early_warning",
+          "level": 1,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 850000,
+          "sendBps": 850000,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 24,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753757658 track=video state=early_warning level=1 mode=audio-video sample=matrix bitrateBps=850000 sendBps=850000 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=24 suppressed=0"
+        },
+        {
+          "tsMs": 1776753758698,
+          "trackId": "video",
+          "state": "early_warning",
+          "level": 1,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 850000,
+          "sendBps": 850000,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 24,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753758698 track=video state=early_warning level=1 mode=audio-video sample=matrix bitrateBps=850000 sendBps=850000 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=24 suppressed=0"
+        },
+        {
+          "tsMs": 1776753759748,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 850000,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 30,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753759748 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=850000 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=30 suppressed=0"
+        },
+        {
+          "tsMs": 1776753760780,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 30,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753760780 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=30 suppressed=0"
+        },
+        {
+          "tsMs": 1776753761818,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 30,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753761818 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=30 suppressed=0"
+        },
+        {
+          "tsMs": 1776753762818,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 30,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753762818 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=30 suppressed=0"
+        }
+      ],
+      "testProfile": {
+        "warmupMs": 2000,
+        "phases": [
+          {
+            "name": "baseline",
+            "durationMs": 3750,
+            "sendCeilingBps": 880650,
+            "lossRate": 0.001,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "qualityLimitationReason": "none"
+          },
+          {
+            "name": "impairment",
+            "durationMs": 5000,
+            "sendCeilingBps": 751050,
+            "lossRate": 0.001,
+            "rttMs": 280,
+            "jitterMs": 5,
+            "qualityLimitationReason": "none"
+          },
+          {
+            "name": "recovery",
+            "durationMs": 7500,
+            "sendCeilingBps": 880650,
+            "lossRate": 0.001,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "qualityLimitationReason": "none"
+          }
+        ]
+      },
+      "verdict": {
+        "passed": true,
+        "reason": "expectation satisfied",
+        "expectation": {
+          "states": [
+            "early_warning",
+            "congested"
+          ],
+          "minLevel": 1,
+          "maxLevel": 2
+        }
+      },
+      "endTime": "2026-04-21T06:42:43.796Z"
+    },
+    {
+      "runner": "cpp_client",
+      "caseId": "T3",
+      "group": "transition",
+      "priority": "P1",
+      "roomId": "cpp_matrix_T3_1776753766808",
+      "peerId": "cpp_bot_T3",
+      "startTime": "2026-04-21T06:42:46.809Z",
+      "baseline": {
+        "startMs": 1776753769269,
+        "endMs": 1776753773020,
+        "durationMs": 3750,
+        "netem": {
+          "bandwidth": 4000,
+          "rtt": 25,
+          "loss": 0.1,
+          "jitter": 5
+        },
+        "state": {
+          "state": "stable",
+          "level": 0
+        }
+      },
+      "impairment": {
+        "startMs": 1776753773042,
+        "endMs": 1776753778044,
+        "durationMs": 5000,
+        "netem": {
+          "bandwidth": 500,
+          "rtt": 25,
+          "loss": 0.1,
+          "jitter": 5
+        },
+        "state": {
+          "state": "congested",
+          "level": 4
+        }
+      },
+      "recovery": {
+        "startMs": 1776753778058,
+        "endMs": 1776753785558,
+        "durationMs": 7500,
+        "netem": {
+          "bandwidth": 4000,
+          "rtt": 25,
+          "loss": 0.1,
+          "jitter": 5
+        },
+        "state": {
+          "state": "stable",
+          "level": 3
+        }
+      },
+      "phaseSummary": {
+        "baseline": {
+          "current": {
+            "state": "stable",
+            "level": 0
+          },
+          "peak": {
+            "state": "stable",
+            "level": 0
+          },
+          "best": {
+            "state": "stable",
+            "level": 0
+          },
+          "entries": [
+            {
+              "tsMs": 1776753770248,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753771248,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753772286,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 880650,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            }
+          ]
+        },
+        "impairment": {
+          "current": {
+            "state": "congested",
+            "level": 4
+          },
+          "peak": {
+            "state": "congested",
+            "level": 4
+          },
+          "best": {
+            "state": "stable",
+            "level": 0
+          },
+          "entries": [
+            {
+              "tsMs": 1776753773286,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 0
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 900000,
+                "sendBps": 283500,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 25,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753774293,
+              "stateAfter": "early_warning",
+              "plannedAction": {
+                "type": "setEncodingParameters",
+                "level": 1
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 850000,
+                "sendBps": 283500,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 640,
+                "height": 480,
+                "fps": 24,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753775330,
+              "stateAfter": "congested",
+              "plannedAction": {
+                "type": "setEncodingParameters",
+                "level": 2
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 700000,
+                "sendBps": 283500,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 426,
+                "height": 320,
+                "fps": 20,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753776338,
+              "stateAfter": "congested",
+              "plannedAction": {
+                "type": "setEncodingParameters",
+                "level": 3
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 450000,
+                "sendBps": 283500,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 320,
+                "height": 240,
+                "fps": 12,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753777367,
+              "stateAfter": "congested",
+              "plannedAction": {
+                "type": "enterAudioOnly",
+                "level": 4
+              },
+              "sample": {
+                "mode": "audio-only",
+                "source": "matrix",
+                "bitrateBps": 450000,
+                "sendBps": 283500,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 320,
+                "height": 240,
+                "fps": 12,
+                "suppressed": true
+              }
+            }
+          ]
+        },
+        "recovery": {
+          "current": {
+            "state": "stable",
+            "level": 3
+          },
+          "peak": {
+            "state": "congested",
+            "level": 4
+          },
+          "best": {
+            "state": "stable",
+            "level": 3
+          },
+          "entries": [
+            {
+              "tsMs": 1776753778405,
+              "stateAfter": "congested",
+              "plannedAction": {
+                "type": "noop",
+                "level": 4
+              },
+              "sample": {
+                "mode": "audio-only",
+                "source": "matrix",
+                "bitrateBps": 450000,
+                "sendBps": 450000,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 320,
+                "height": 240,
+                "fps": 12,
+                "suppressed": true
+              }
+            },
+            {
+              "tsMs": 1776753779405,
+              "stateAfter": "congested",
+              "plannedAction": {
+                "type": "noop",
+                "level": 4
+              },
+              "sample": {
+                "mode": "audio-only",
+                "source": "matrix",
+                "bitrateBps": 450000,
+                "sendBps": 450000,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 320,
+                "height": 240,
+                "fps": 12,
+                "suppressed": true
+              }
+            },
+            {
+              "tsMs": 1776753780405,
+              "stateAfter": "congested",
+              "plannedAction": {
+                "type": "noop",
+                "level": 4
+              },
+              "sample": {
+                "mode": "audio-only",
+                "source": "matrix",
+                "bitrateBps": 450000,
+                "sendBps": 450000,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 320,
+                "height": 240,
+                "fps": 12,
+                "suppressed": true
+              }
+            },
+            {
+              "tsMs": 1776753781405,
+              "stateAfter": "congested",
+              "plannedAction": {
+                "type": "noop",
+                "level": 4
+              },
+              "sample": {
+                "mode": "audio-only",
+                "source": "matrix",
+                "bitrateBps": 450000,
+                "sendBps": 450000,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 320,
+                "height": 240,
+                "fps": 12,
+                "suppressed": true
+              }
+            },
+            {
+              "tsMs": 1776753782405,
+              "stateAfter": "congested",
+              "plannedAction": {
+                "type": "noop",
+                "level": 4
+              },
+              "sample": {
+                "mode": "audio-only",
+                "source": "matrix",
+                "bitrateBps": 450000,
+                "sendBps": 450000,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 320,
+                "height": 240,
+                "fps": 12,
+                "suppressed": true
+              }
+            },
+            {
+              "tsMs": 1776753783405,
+              "stateAfter": "recovering",
+              "plannedAction": {
+                "type": "exitAudioOnly",
+                "level": 3
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 450000,
+                "sendBps": 450000,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 320,
+                "height": 240,
+                "fps": 12,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753784405,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 3
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 450000,
+                "sendBps": 450000,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 320,
+                "height": 240,
+                "fps": 12,
+                "suppressed": false
+              }
+            },
+            {
+              "tsMs": 1776753785406,
+              "stateAfter": "stable",
+              "plannedAction": {
+                "type": "noop",
+                "level": 3
+              },
+              "sample": {
+                "mode": "audio-video",
+                "source": "matrix",
+                "bitrateBps": 450000,
+                "sendBps": 450000,
+                "lossRate": 0,
+                "packetsLost": 65536,
+                "rttMs": 50,
+                "jitterMs": 5,
+                "width": 320,
+                "height": 240,
+                "fps": 12,
+                "suppressed": false
+              }
+            }
+          ]
+        }
+      },
+      "timing": {
+        "impairment": {
+          "t_detect_warning": 1251,
+          "t_detect_recovering": null,
+          "t_detect_stable": 244,
+          "t_detect_congested": 2288,
+          "t_first_action": 1251,
+          "t_level_0": null,
+          "t_level_1": 1251,
+          "t_level_2": 2288,
+          "t_level_3": 3296,
+          "t_level_4": 4325,
+          "t_audio_only": 4325
+        },
+        "recovery": {
+          "t_detect_warning": null,
+          "t_detect_recovering": 5347,
+          "t_detect_stable": 6347,
+          "t_detect_congested": 347,
+          "t_first_action": 5347,
+          "t_level_0": null,
+          "t_level_1": null,
+          "t_level_2": null,
+          "t_level_3": 5347,
+          "t_level_4": null,
+          "t_audio_only": null
+        }
+      },
+      "analysis": {
+        "expectedStates": [
+          "congested"
+        ],
+        "expectedMinLevel": 0,
+        "expectedMaxLevel": 4,
+        "actualBaselineState": "stable",
+        "actualBaselineLevel": 0,
+        "actualImpairedState": "congested",
+        "actualImpairedLevel": 4,
+        "actualRecoveredState": "stable",
+        "actualRecoveredLevel": 3,
+        "verdict": "恢复过慢"
+      },
+      "actionCount": 5,
+      "actionTypes": [
+        "setEncodingParameters",
+        "setEncodingParameters",
+        "setEncodingParameters",
+        "enterAudioOnly",
+        "exitAudioOnly"
+      ],
+      "trace": [
+        {
+          "tsMs": 1776753767209,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "server",
+            "bitrateBps": 900000,
+            "sendBps": 42,
+            "lossRate": 0,
+            "packetsLost": 0,
+            "rttMs": 0,
+            "jitterMs": 0,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753768247,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "server",
+            "bitrateBps": 900000,
+            "sendBps": 42,
+            "lossRate": 0,
+            "packetsLost": 0,
+            "rttMs": 0,
+            "jitterMs": 0,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753769247,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753770248,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753771248,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753772286,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 880650,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753773286,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 0
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 900000,
+            "sendBps": 283500,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 25,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753774293,
+          "stateAfter": "early_warning",
+          "plannedAction": {
+            "type": "setEncodingParameters",
+            "level": 1
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 850000,
+            "sendBps": 283500,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 640,
+            "height": 480,
+            "fps": 24,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753775330,
+          "stateAfter": "congested",
+          "plannedAction": {
+            "type": "setEncodingParameters",
+            "level": 2
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 700000,
+            "sendBps": 283500,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 426,
+            "height": 320,
+            "fps": 20,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753776338,
+          "stateAfter": "congested",
+          "plannedAction": {
+            "type": "setEncodingParameters",
+            "level": 3
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 450000,
+            "sendBps": 283500,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 320,
+            "height": 240,
+            "fps": 12,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753777367,
+          "stateAfter": "congested",
+          "plannedAction": {
+            "type": "enterAudioOnly",
+            "level": 4
+          },
+          "sample": {
+            "mode": "audio-only",
+            "source": "matrix",
+            "bitrateBps": 450000,
+            "sendBps": 283500,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 320,
+            "height": 240,
+            "fps": 12,
+            "suppressed": true
+          }
+        },
+        {
+          "tsMs": 1776753778405,
+          "stateAfter": "congested",
+          "plannedAction": {
+            "type": "noop",
+            "level": 4
+          },
+          "sample": {
+            "mode": "audio-only",
+            "source": "matrix",
+            "bitrateBps": 450000,
+            "sendBps": 450000,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 320,
+            "height": 240,
+            "fps": 12,
+            "suppressed": true
+          }
+        },
+        {
+          "tsMs": 1776753779405,
+          "stateAfter": "congested",
+          "plannedAction": {
+            "type": "noop",
+            "level": 4
+          },
+          "sample": {
+            "mode": "audio-only",
+            "source": "matrix",
+            "bitrateBps": 450000,
+            "sendBps": 450000,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 320,
+            "height": 240,
+            "fps": 12,
+            "suppressed": true
+          }
+        },
+        {
+          "tsMs": 1776753780405,
+          "stateAfter": "congested",
+          "plannedAction": {
+            "type": "noop",
+            "level": 4
+          },
+          "sample": {
+            "mode": "audio-only",
+            "source": "matrix",
+            "bitrateBps": 450000,
+            "sendBps": 450000,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 320,
+            "height": 240,
+            "fps": 12,
+            "suppressed": true
+          }
+        },
+        {
+          "tsMs": 1776753781405,
+          "stateAfter": "congested",
+          "plannedAction": {
+            "type": "noop",
+            "level": 4
+          },
+          "sample": {
+            "mode": "audio-only",
+            "source": "matrix",
+            "bitrateBps": 450000,
+            "sendBps": 450000,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 320,
+            "height": 240,
+            "fps": 12,
+            "suppressed": true
+          }
+        },
+        {
+          "tsMs": 1776753782405,
+          "stateAfter": "congested",
+          "plannedAction": {
+            "type": "noop",
+            "level": 4
+          },
+          "sample": {
+            "mode": "audio-only",
+            "source": "matrix",
+            "bitrateBps": 450000,
+            "sendBps": 450000,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 320,
+            "height": 240,
+            "fps": 12,
+            "suppressed": true
+          }
+        },
+        {
+          "tsMs": 1776753783405,
+          "stateAfter": "recovering",
+          "plannedAction": {
+            "type": "exitAudioOnly",
+            "level": 3
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 450000,
+            "sendBps": 450000,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 320,
+            "height": 240,
+            "fps": 12,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753784405,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 3
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 450000,
+            "sendBps": 450000,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 320,
+            "height": 240,
+            "fps": 12,
+            "suppressed": false
+          }
+        },
+        {
+          "tsMs": 1776753785406,
+          "stateAfter": "stable",
+          "plannedAction": {
+            "type": "noop",
+            "level": 3
+          },
+          "sample": {
+            "mode": "audio-video",
+            "source": "matrix",
+            "bitrateBps": 450000,
+            "sendBps": 450000,
+            "lossRate": 0,
+            "packetsLost": 65536,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "width": 320,
+            "height": 240,
+            "fps": 12,
+            "suppressed": false
+          }
+        }
+      ],
+      "samples": [
+        {
+          "tsMs": 1776753767209,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "server",
+          "bitrateBps": 900000,
+          "sendBps": 42,
+          "lossRate": 0,
+          "packetsLost": 0,
+          "rttMs": 0,
+          "jitterMs": 0,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753767209 track=video state=stable level=0 mode=audio-video sample=server bitrateBps=900000 sendBps=42 lossRate=0.000000 packetsLost=0 rttMs=0.0 jitterMs=0.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753768247,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "server",
+          "bitrateBps": 900000,
+          "sendBps": 42,
+          "lossRate": 0,
+          "packetsLost": 0,
+          "rttMs": 0,
+          "jitterMs": 0,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753768247 track=video state=stable level=0 mode=audio-video sample=server bitrateBps=900000 sendBps=42 lossRate=0.000000 packetsLost=0 rttMs=0.0 jitterMs=0.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753769247,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753769247 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753770248,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753770248 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753771248,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753771248 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753772286,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 880650,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753772286 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=880650 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753773286,
+          "trackId": "video",
+          "state": "stable",
+          "level": 0,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 900000,
+          "sendBps": 283500,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 25,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753773286 track=video state=stable level=0 mode=audio-video sample=matrix bitrateBps=900000 sendBps=283500 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=25 suppressed=0"
+        },
+        {
+          "tsMs": 1776753774293,
+          "trackId": "video",
+          "state": "early_warning",
+          "level": 1,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 850000,
+          "sendBps": 283500,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 640,
+          "height": 480,
+          "fps": 24,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753774293 track=video state=early_warning level=1 mode=audio-video sample=matrix bitrateBps=850000 sendBps=283500 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=640 height=480 fps=24 suppressed=0"
+        },
+        {
+          "tsMs": 1776753775330,
+          "trackId": "video",
+          "state": "congested",
+          "level": 2,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 700000,
+          "sendBps": 283500,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 426,
+          "height": 320,
+          "fps": 20,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753775330 track=video state=congested level=2 mode=audio-video sample=matrix bitrateBps=700000 sendBps=283500 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=426 height=320 fps=20 suppressed=0"
+        },
+        {
+          "tsMs": 1776753776338,
+          "trackId": "video",
+          "state": "congested",
+          "level": 3,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 450000,
+          "sendBps": 283500,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 320,
+          "height": 240,
+          "fps": 12,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753776338 track=video state=congested level=3 mode=audio-video sample=matrix bitrateBps=450000 sendBps=283500 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=320 height=240 fps=12 suppressed=0"
+        },
+        {
+          "tsMs": 1776753777367,
+          "trackId": "video",
+          "state": "congested",
+          "level": 4,
+          "mode": "audio-only",
+          "sample": "matrix",
+          "bitrateBps": 450000,
+          "sendBps": 283500,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 320,
+          "height": 240,
+          "fps": 12,
+          "suppressed": true,
+          "line": "[QOS_TRACE] tsMs=1776753777367 track=video state=congested level=4 mode=audio-only sample=matrix bitrateBps=450000 sendBps=283500 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=320 height=240 fps=12 suppressed=1"
+        },
+        {
+          "tsMs": 1776753778405,
+          "trackId": "video",
+          "state": "congested",
+          "level": 4,
+          "mode": "audio-only",
+          "sample": "matrix",
+          "bitrateBps": 450000,
+          "sendBps": 450000,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 320,
+          "height": 240,
+          "fps": 12,
+          "suppressed": true,
+          "line": "[QOS_TRACE] tsMs=1776753778405 track=video state=congested level=4 mode=audio-only sample=matrix bitrateBps=450000 sendBps=450000 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=320 height=240 fps=12 suppressed=1"
+        },
+        {
+          "tsMs": 1776753779405,
+          "trackId": "video",
+          "state": "congested",
+          "level": 4,
+          "mode": "audio-only",
+          "sample": "matrix",
+          "bitrateBps": 450000,
+          "sendBps": 450000,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 320,
+          "height": 240,
+          "fps": 12,
+          "suppressed": true,
+          "line": "[QOS_TRACE] tsMs=1776753779405 track=video state=congested level=4 mode=audio-only sample=matrix bitrateBps=450000 sendBps=450000 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=320 height=240 fps=12 suppressed=1"
+        },
+        {
+          "tsMs": 1776753780405,
+          "trackId": "video",
+          "state": "congested",
+          "level": 4,
+          "mode": "audio-only",
+          "sample": "matrix",
+          "bitrateBps": 450000,
+          "sendBps": 450000,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 320,
+          "height": 240,
+          "fps": 12,
+          "suppressed": true,
+          "line": "[QOS_TRACE] tsMs=1776753780405 track=video state=congested level=4 mode=audio-only sample=matrix bitrateBps=450000 sendBps=450000 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=320 height=240 fps=12 suppressed=1"
+        },
+        {
+          "tsMs": 1776753781405,
+          "trackId": "video",
+          "state": "congested",
+          "level": 4,
+          "mode": "audio-only",
+          "sample": "matrix",
+          "bitrateBps": 450000,
+          "sendBps": 450000,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 320,
+          "height": 240,
+          "fps": 12,
+          "suppressed": true,
+          "line": "[QOS_TRACE] tsMs=1776753781405 track=video state=congested level=4 mode=audio-only sample=matrix bitrateBps=450000 sendBps=450000 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=320 height=240 fps=12 suppressed=1"
+        },
+        {
+          "tsMs": 1776753782405,
+          "trackId": "video",
+          "state": "congested",
+          "level": 4,
+          "mode": "audio-only",
+          "sample": "matrix",
+          "bitrateBps": 450000,
+          "sendBps": 450000,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 320,
+          "height": 240,
+          "fps": 12,
+          "suppressed": true,
+          "line": "[QOS_TRACE] tsMs=1776753782405 track=video state=congested level=4 mode=audio-only sample=matrix bitrateBps=450000 sendBps=450000 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=320 height=240 fps=12 suppressed=1"
+        },
+        {
+          "tsMs": 1776753783405,
+          "trackId": "video",
+          "state": "recovering",
+          "level": 3,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 450000,
+          "sendBps": 450000,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 320,
+          "height": 240,
+          "fps": 12,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753783405 track=video state=recovering level=3 mode=audio-video sample=matrix bitrateBps=450000 sendBps=450000 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=320 height=240 fps=12 suppressed=0"
+        },
+        {
+          "tsMs": 1776753784405,
+          "trackId": "video",
+          "state": "stable",
+          "level": 3,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 450000,
+          "sendBps": 450000,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 320,
+          "height": 240,
+          "fps": 12,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753784405 track=video state=stable level=3 mode=audio-video sample=matrix bitrateBps=450000 sendBps=450000 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=320 height=240 fps=12 suppressed=0"
+        },
+        {
+          "tsMs": 1776753785406,
+          "trackId": "video",
+          "state": "stable",
+          "level": 3,
+          "mode": "audio-video",
+          "sample": "matrix",
+          "bitrateBps": 450000,
+          "sendBps": 450000,
+          "lossRate": 0,
+          "packetsLost": 65536,
+          "rttMs": 50,
+          "jitterMs": 5,
+          "width": 320,
+          "height": 240,
+          "fps": 12,
+          "suppressed": false,
+          "line": "[QOS_TRACE] tsMs=1776753785406 track=video state=stable level=3 mode=audio-video sample=matrix bitrateBps=450000 sendBps=450000 lossRate=0.000000 packetsLost=65536 rttMs=50.0 jitterMs=5.0 width=320 height=240 fps=12 suppressed=0"
+        }
+      ],
+      "testProfile": {
+        "warmupMs": 2000,
+        "phases": [
+          {
+            "name": "baseline",
+            "durationMs": 3750,
+            "sendCeilingBps": 880650,
+            "lossRate": 0.001,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "qualityLimitationReason": "none"
+          },
+          {
+            "name": "impairment",
+            "durationMs": 5000,
+            "sendCeilingBps": 283500,
+            "lossRate": 0.001,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "qualityLimitationReason": "bandwidth"
+          },
+          {
+            "name": "recovery",
+            "durationMs": 7500,
+            "sendCeilingBps": 880650,
+            "lossRate": 0.001,
+            "rttMs": 50,
+            "jitterMs": 5,
+            "qualityLimitationReason": "none"
+          }
+        ]
+      },
+      "verdict": {
+        "passed": false,
+        "reason": "stateMatch=true, levelMatch=true, recoveryPassed=false, analysis=恢复过慢",
+        "expectation": {
+          "state": "congested",
+          "maxLevel": 4
+        }
+      },
+      "endTime": "2026-04-21T06:43:05.564Z"
+    }
+  ],
+  "exitStatus": 1,
+  "stderr": "running cpp-client case B1\n[B1] PASS baseline=stable/L0 impairment(peak=stable/L0, current=stable/L0) recovery(best=stable/L0, current=stable/L0)\nrunning cpp-client case R4\n[R4] PASS baseline=stable/L0 impairment(peak=early_warning/L1, current=early_warning/L1) recovery(best=stable/L0, current=stable/L0)\nrunning cpp-client case T3\n[T3] FAIL baseline=stable/L0 impairment(peak=congested/L4, current=congested/L4) recovery(best=stable/L3, current=stable/L3)\n[T3] verdict reason=stateMatch=true, levelMatch=true, recoveryPassed=false, analysis=恢复过慢 analysis=恢复过慢\ncpp-client matrix summary: passed=2 failed=1 errors=0 total=3\ncpp-client matrix report written to /root/mediasoup-cpp/docs/generated/uplink-qos-cpp-client-matrix-report.targeted.json\n"
+}

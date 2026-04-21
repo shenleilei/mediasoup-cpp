@@ -42,6 +42,8 @@ Router::Router(const std::string& id, Channel* channel,
 		for (auto& mc : mediaCodecs)
 			codecs.push_back(mc.get<RtpCodecCapability>());
 		rtpCapabilities_ = ortc::generateRouterRtpCapabilities(codecs);
+	} else {
+		rtpCapabilities_ = getSupportedRtpCapabilities();
 	}
 }
 

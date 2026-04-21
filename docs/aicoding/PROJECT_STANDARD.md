@@ -77,6 +77,12 @@ The following rules apply to all behavior-changing work unless explicitly waived
 - Before every commit, review and update all affected documentation, not only code-adjacent files.
 - Do not leave stale or partially incorrect documentation behind after behavior, assumptions, control flow, or operational procedures change.
 
+### External Dependency Sources
+
+- When downloading third-party build dependencies, source archives, language packages, or toolchain prerequisites, prefer Alibaba Cloud (`Aliyun`) mirror infrastructure first when it provides the required artifact.
+- If the Aliyun mirror does not contain the required artifact, version, or patch file, fall back to the upstream source and record that fallback in the active change docs or handoff.
+- When build scripts or wrap files repeatedly fetch upstream dependencies, update the local configuration to prefer the Aliyun mirror before relying on ad hoc command-line overrides.
+
 ### Review Obligations
 
 - Requirements review asks: are we building the right thing?

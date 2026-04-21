@@ -420,7 +420,10 @@ int PlainClientApp::RunThreadedMode()
 						track.lossCounterSource = lossCounterSource;
 
 					track.qosCtrl->onSample(qSnap);
-					std::printf("[QOS_TRACE] tsMs=%lld track=%s state=%s level=%d mode=%s sample=%s bitrateBps=%d sendBps=%.0f packetsLost=%llu rttMs=%.1f jitterMs=%.1f width=%d height=%d fps=%d suppressed=%d\n",
+					const double traceLossRate = track.qosCtrl->lastSignals().has_value()
+						? track.qosCtrl->lastSignals()->lossRate
+						: 0.0;
+					std::printf("[QOS_TRACE] tsMs=%lld track=%s state=%s level=%d mode=%s sample=%s bitrateBps=%d sendBps=%.0f lossRate=%.6f packetsLost=%llu rttMs=%.1f jitterMs=%.1f width=%d height=%d fps=%d suppressed=%d\n",
 						static_cast<long long>(wallNowMs()),
 						track.trackId.c_str(),
 						qos::stateStr(track.qosCtrl->currentState()),
@@ -430,6 +433,7 @@ int PlainClientApp::RunThreadedMode()
 							(serverStats.has_value() ? "server" : (statsFresh ? "local" : "stale")),
 						track.encBitrate,
 						observedBitrateBps > 0.0 ? observedBitrateBps : qSnap.targetBitrateBps,
+						traceLossRate,
 						static_cast<unsigned long long>(qSnap.packetsLost),
 						qSnap.roundTripTimeMs,
 						qSnap.jitterMs,
