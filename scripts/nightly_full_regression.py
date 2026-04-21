@@ -73,6 +73,7 @@ class ParsedTaskBlock(object):
         self.fail_case_lines = 0
         self.child_count = 0
         self.status = None
+        self.duration = None
 
 
 class ReportSummary(object):
@@ -90,6 +91,7 @@ class ReportSummary(object):
         group_rows,
         task_case_rows,
         group_case_rows,
+        delegated_qos_task_rows,
     ):
         self.generated_at = generated_at
         self.overall_status = overall_status
@@ -103,6 +105,7 @@ class ReportSummary(object):
         self.group_rows = group_rows
         self.task_case_rows = task_case_rows
         self.group_case_rows = group_case_rows
+        self.delegated_qos_task_rows = delegated_qos_task_rows
 
 
 class MailResult(object):
@@ -654,7 +657,17 @@ def parse_report_summary(report_path):
         group_rows=group_rows,
         task_case_rows=[],
         group_case_rows=[],
+        delegated_qos_task_rows=[],
     )
+
+
+def parse_elapsed_duration(raw_value):
+    if not raw_value:
+        return None
+    match = re.search(r"(\d+)s", raw_value)
+    if not match:
+        return None
+    return "{0}s".format(match.group(1))
 
 
 def parse_tests_line_counts(raw_value):
@@ -695,14 +708,16 @@ def parse_task_blocks(log_path, report_summary):
             continue
 
         close_match = re.match(
-            r"^<==\s+(?:\[(?P<bracket>[^\]]+)\]|(?P<plain>\S+))\s+(?P<status>PASS|FAIL)(?:\s+.*)?$",
+            r"^<==\s+(?:\[(?P<bracket>[^\]]+)\]|(?P<plain>\S+))\s+(?P<status>PASS|FAIL)(?:\s+\((?P<detail>[^)]*)\))?(?:\s+.*)?$",
             line,
         )
         if close_match:
             label = close_match.group("bracket") or close_match.group("plain")
             while stack:
                 block = stack.pop()
-                block.status = close_match.group("status") if block.label == label else block.status
+                if block.label == label:
+                    block.status = close_match.group("status")
+                    block.duration = parse_elapsed_duration(close_match.group("detail"))
                 blocks.append(block)
                 if block.label == label:
                     break
@@ -844,6 +859,45 @@ def build_group_case_summaries(task_case_rows):
     return results
 
 
+def build_delegated_qos_task_rows(log_path, report_summary):
+    blocks = parse_task_blocks(log_path, report_summary)
+    if not blocks:
+        return []
+
+    top_level_labels = {row.label for row in report_summary.task_rows} if report_summary else set()
+    helper_labels = {
+        "case-report",
+        "cpp-client-case-report",
+        "downlink-case-report",
+        "downlink-report",
+    }
+
+    results = []
+    seen = set()
+    for block in blocks:
+        if block.group != "qos":
+            continue
+        if not block.label or block.label in top_level_labels:
+            continue
+        if block.label in helper_labels or block.label.startswith("system:") or block.label.startswith("build:"):
+            continue
+        if block.status not in {"PASS", "FAIL"}:
+            continue
+        if block.label in seen:
+            continue
+        seen.add(block.label)
+        results.append(
+            TaskResult(
+                label=block.label,
+                group=block.group,
+                status=block.status,
+                duration=block.duration or "-",
+            )
+        )
+
+    return results
+
+
 def parse_failed_cases(log_path):
     if not log_path.exists():
         return []
@@ -968,6 +1022,22 @@ def render_failed_task_lines(report_summary):
     return lines
 
 
+def render_delegated_qos_task_lines(report_summary):
+    if not report_summary or not report_summary.delegated_qos_task_rows:
+        return ["- 无"]
+
+    lines = []
+    for row in report_summary.delegated_qos_task_rows:
+        lines.append(
+            "- {label}：{status}（耗时 {duration}）".format(
+                label=row.label,
+                status=task_status_cn(row.status),
+                duration=row.duration,
+            )
+        )
+    return lines
+
+
 def render_failed_case_lines(failed_cases):
     if not failed_cases:
         return ["- 无"]
@@ -1015,6 +1085,7 @@ def render_email_html(
     status_cn = overall_status_cn(overall_status)
     group_rows = report_summary.group_case_rows if report_summary else []
     failed_task_rows = report_summary.failed_task_rows if report_summary else []
+    delegated_qos_rows = report_summary.delegated_qos_task_rows if report_summary else []
     limited_failed_cases = failed_cases[:MAX_FAILED_CASES_IN_EMAIL]
     attachment_names = [path.name for path in sorted(run_context.attachments_dir.glob("*.md"))]
 
@@ -1089,6 +1160,32 @@ def render_email_html(
                 )
             )
         html_parts.append("</ul>")
+    else:
+        html_parts.append("<p>无。</p>")
+
+    html_parts.append("<h3 style=\"margin:20px 0 8px 0;\">QoS 委托子任务</h3>")
+    if delegated_qos_rows:
+        html_parts.append("<table style=\"border-collapse:collapse;min-width:640px;\">")
+        html_parts.append(
+            "<tr>"
+            "<th style=\"border:1px solid #d1d5db;padding:8px 12px;background:#eef2ff;text-align:left;\">任务</th>"
+            "<th style=\"border:1px solid #d1d5db;padding:8px 12px;background:#eef2ff;text-align:left;\">状态</th>"
+            "<th style=\"border:1px solid #d1d5db;padding:8px 12px;background:#eef2ff;text-align:left;\">耗时</th>"
+            "</tr>"
+        )
+        for row in delegated_qos_rows:
+            html_parts.append(
+                "<tr>"
+                "<td style=\"border:1px solid #d1d5db;padding:8px 12px;\">{label}</td>"
+                "<td style=\"border:1px solid #d1d5db;padding:8px 12px;\">{status}</td>"
+                "<td style=\"border:1px solid #d1d5db;padding:8px 12px;\">{duration}</td>"
+                "</tr>".format(
+                    label=esc(row.label),
+                    status=esc(task_status_cn(row.status)),
+                    duration=esc(row.duration),
+                )
+            )
+        html_parts.append("</table>")
     else:
         html_parts.append("<p>无。</p>")
 
@@ -1213,6 +1310,10 @@ def render_email_body(
     lines.append("")
     lines.append("失败任务")
     lines.extend(render_failed_task_lines(report_summary))
+
+    lines.append("")
+    lines.append("QoS 委托子任务")
+    lines.extend(render_delegated_qos_task_lines(report_summary))
 
     lines.append("")
     lines.append("失败 case（按原始日志尽力提取）")
@@ -1435,6 +1536,10 @@ def handle_run(args):
     if report_summary:
         report_summary.task_case_rows = build_task_case_summaries(run_context.log_path, report_summary)
         report_summary.group_case_rows = build_group_case_summaries(report_summary.task_case_rows)
+        report_summary.delegated_qos_task_rows = build_delegated_qos_task_rows(
+            run_context.log_path,
+            report_summary,
+        )
     if args.skip_tests and exit_code == 0 and report_summary and report_summary.overall_status == "FAIL":
         exit_code = 1
     failed_cases = parse_failed_cases(run_context.log_path)
@@ -1530,6 +1635,15 @@ def handle_run(args):
                     "duration": row.duration,
                 }
                 for row in report_summary.failed_task_rows
+            ],
+            "delegatedQosTaskRows": [
+                {
+                    "label": row.label,
+                    "group": row.group,
+                    "status": row.status,
+                    "duration": row.duration,
+                }
+                for row in report_summary.delegated_qos_task_rows
             ],
         },
     }
