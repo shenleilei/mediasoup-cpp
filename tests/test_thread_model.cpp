@@ -1840,6 +1840,88 @@ TEST(SenderTransportControllerTest, BitrateAllocationFreshVideoAvailabilityIncre
 	EXPECT_GT(freshVideoPackets.back(), freshVideoPackets.front());
 }
 
+TEST(SenderTransportControllerTest, AudioPastDeadlineIsDroppedAndCounted) {
+	SenderTransportController::Config config;
+	config.audioQueueDeadlineMs = 40;
+	SenderTransportController controller(config);
+	int64_t nowMs = 1000;
+	controller.SetNowFn([&nowMs] { return nowMs; });
+	// sendFn always succeeds — expired packets should never reach it
+	size_t sendCallCount = 0;
+	controller.SetSendFn([&sendCallCount](
+		PacketClass,
+		mediasoup::plainclient::PacketTransportMetadata*,
+		const uint8_t*,
+		size_t len) {
+		sendCallCount++;
+		return SendResult{SendStatus::Sent, 0, len};
+	});
+	controller.RegisterVideoTrack(0, 5555, 500000);
+	controller.UpdateTrackTransportHint(0, 5555, 500000, false);
+	controller.SetTransportEstimatedBitrateBps(500000);
+
+	// Enqueue 3 audio packets at nowMs = 1000, deadline = 1040
+	uint8_t audio[120] = {};
+	for (int i = 0; i < 3; ++i) {
+		ASSERT_TRUE(controller.EnqueueAudioPacket(
+			31337u,
+			960u * static_cast<uint32_t>(i),
+			audio,
+			sizeof(audio)));
+	}
+	ASSERT_EQ(controller.QueuedAudioPackets(), 3u);
+
+	// Advance time past the deadline
+	nowMs = 1050;
+	controller.OnPacingTick(nowMs);
+
+	// All 3 audio packets should have been dropped (not sent)
+	EXPECT_EQ(controller.QueuedAudioPackets(), 0u);
+	EXPECT_EQ(controller.GetMetrics().audioDeadlineDrops, 3u);
+	// No audio send should have been attempted for expired packets
+	EXPECT_EQ(
+		controller.GetMetrics().sentByClass[
+			mediasoup::plainclient::PacketClassIndex(PacketClass::AudioRtp)],
+		0u);
+}
+
+TEST(SenderTransportControllerTest, AudioDeadlineDropsMixedWithFreshPackets) {
+	SenderTransportController::Config config;
+	config.audioQueueDeadlineMs = 40;
+	SenderTransportController controller(config);
+	int64_t nowMs = 1000;
+	controller.SetNowFn([&nowMs] { return nowMs; });
+	controller.SetSendFn([](
+		PacketClass,
+		mediasoup::plainclient::PacketTransportMetadata*,
+		const uint8_t*,
+		size_t len) {
+		return SendResult{SendStatus::Sent, 0, len};
+	});
+	controller.RegisterVideoTrack(0, 5555, 500000);
+	controller.UpdateTrackTransportHint(0, 5555, 500000, false);
+	controller.SetTransportEstimatedBitrateBps(500000);
+
+	// Enqueue 2 old audio packets at nowMs = 1000 (deadline = 1040)
+	uint8_t audio[120] = {};
+	ASSERT_TRUE(controller.EnqueueAudioPacket(31337u, 0, audio, sizeof(audio)));
+	ASSERT_TRUE(controller.EnqueueAudioPacket(31337u, 960, audio, sizeof(audio)));
+
+	// Advance time past the deadline, then enqueue a fresh packet
+	nowMs = 1050;
+	ASSERT_TRUE(controller.EnqueueAudioPacket(31337u, 1920, audio, sizeof(audio)));
+
+	// Tick: should drop 2 expired packets, send the fresh one
+	controller.OnPacingTick(nowMs);
+
+	EXPECT_EQ(controller.GetMetrics().audioDeadlineDrops, 2u);
+	EXPECT_EQ(
+		controller.GetMetrics().sentByClass[
+			mediasoup::plainclient::PacketClassIndex(PacketClass::AudioRtp)],
+		1u);
+	EXPECT_EQ(controller.QueuedAudioPackets(), 0u);
+}
+
 TEST(SenderTransportControllerTest, EffectivePacingBitrateUsesMinOfTargetEstimateAndCap) {
 	SenderTransportController controller;
 	int64_t nowMs = 1000;
