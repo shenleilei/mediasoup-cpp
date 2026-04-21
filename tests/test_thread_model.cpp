@@ -14,6 +14,10 @@
 #include <numeric>
 
 using namespace mt;
+using mediasoup::plainclient::PacketClass;
+using mediasoup::plainclient::SendResult;
+using mediasoup::plainclient::SendStatus;
+using mediasoup::plainclient::SenderTransportController;
 
 // ═══════════════════════════════════════════════════════════
 // SpscQueue unit tests
@@ -729,6 +733,309 @@ TEST(RtcpHandler, RtpPacketStoreEvictsOldEntries) {
 	const uint8_t* data; size_t len;
 	EXPECT_FALSE(store.get(0, data, len)) << "seq 0 should be evicted";
 	EXPECT_TRUE(store.get(RtpPacketStore::kMaxPackets + 99, data, len)) << "newest should exist";
+}
+
+TEST(RtcpHandler, HandleNackWithSenderCountsOnlySuccessfulSends) {
+	RtpPacketStore store;
+	for (uint16_t seq = 100; seq <= 104; ++seq) {
+		uint8_t pkt[20];
+		memset(pkt, 0, sizeof(pkt));
+		pkt[0] = 0x80; pkt[1] = 96;
+		pkt[2] = seq >> 8; pkt[3] = seq & 0xFF;
+		store.store(seq, pkt, sizeof(pkt));
+	}
+
+	uint8_t nack[16];
+	nack[0] = 0x81; nack[1] = 205;
+	nack[2] = 0; nack[3] = 3;
+	memset(nack + 4, 0, 8);
+	nack[12] = 0; nack[13] = 101;
+	nack[14] = 0x00; nack[15] = 0x05;
+
+	int callCount = 0;
+	int retransmitted = handleNackWithSender(
+		nack,
+		sizeof(nack),
+		store,
+		[&callCount](const uint8_t*, size_t) {
+			++callCount;
+			return callCount == 2
+				? SendResult{SendStatus::WouldBlock, EAGAIN, 0}
+				: SendResult{SendStatus::Sent, 0, 20};
+		});
+
+	EXPECT_EQ(callCount, 3);
+	EXPECT_EQ(retransmitted, 2);
+}
+
+TEST(RtcpHandler, SenderReportsUpdateAttemptTimeBeforeSuccessTime) {
+	RtcpContext rtcp;
+	uint32_t ssrc = 0x12345678;
+	uint16_t seq = 3456;
+	rtcp.registerVideoStream(ssrc, 96, &seq);
+	auto* stream = rtcp.getVideoStream(ssrc);
+	ASSERT_NE(stream, nullptr);
+	stream->packetCount = 5;
+	stream->octetCount = 500;
+	stream->lastRtpTs = 90000;
+
+	rtcp.maybeSendSR(-1);
+
+	EXPECT_GT(rtcp.lastSrAttemptMs, 0);
+	EXPECT_EQ(rtcp.lastSrSentMs, 0);
+	EXPECT_TRUE(stream->srNtpToSendTime.empty());
+}
+
+TEST(UdpSendHelpers, EnobufsIsWouldBlock) {
+	EXPECT_TRUE(mediasoup::plainclient::IsWouldBlockErrno(ENOBUFS));
+}
+
+TEST(SenderTransportControllerTest, ControlSendBypassesMediaBacklog) {
+	SenderTransportController controller;
+	std::vector<PacketClass> sentClasses;
+	controller.SetNowFn([] { return int64_t{1000}; });
+	controller.SetSendFn([&sentClasses](PacketClass packetClass, const uint8_t*, size_t len) {
+		sentClasses.push_back(packetClass);
+		return SendResult{SendStatus::Sent, 0, len};
+	});
+	controller.RegisterVideoTrack(0, 1111, 800000);
+	controller.UpdateTrackTransportHint(0, 1111, 800000, false);
+
+	uint8_t video[1200] = {};
+	ASSERT_TRUE(controller.EnqueueVideoMediaPacket(1111, video, sizeof(video)));
+	EXPECT_EQ(controller.QueuedFreshVideoPackets(), 1u);
+
+	uint8_t control[16] = {};
+	auto result = controller.SendControlPacket(control, sizeof(control));
+	EXPECT_EQ(result.status, SendStatus::Sent);
+	ASSERT_EQ(sentClasses.size(), 1u);
+	EXPECT_EQ(sentClasses[0], PacketClass::Control);
+	EXPECT_EQ(controller.QueuedFreshVideoPackets(), 1u);
+}
+
+TEST(SenderTransportControllerTest, AudioIsSentBeforeFreshVideo) {
+	SenderTransportController controller;
+	std::vector<PacketClass> sentClasses;
+	int64_t nowMs = 1000;
+	controller.SetNowFn([&nowMs] { return nowMs; });
+	controller.SetSendFn([&sentClasses](PacketClass packetClass, const uint8_t*, size_t len) {
+		sentClasses.push_back(packetClass);
+		return SendResult{SendStatus::Sent, 0, len};
+	});
+	controller.RegisterVideoTrack(0, 2222, 800000);
+	controller.UpdateTrackTransportHint(0, 2222, 800000, false);
+
+	uint8_t video[1000] = {};
+	uint8_t audio[120] = {};
+	ASSERT_TRUE(controller.EnqueueVideoMediaPacket(2222, video, sizeof(video)));
+	ASSERT_TRUE(controller.EnqueueAudioPacket(3333, 960, audio, sizeof(audio)));
+
+	controller.OnPacingTick(nowMs);
+	nowMs += 20;
+	controller.OnPacingTick(nowMs);
+
+	ASSERT_GE(sentClasses.size(), 2u);
+	EXPECT_EQ(sentClasses[0], PacketClass::AudioRtp);
+	EXPECT_EQ(sentClasses[1], PacketClass::VideoMedia);
+}
+
+TEST(SenderTransportControllerTest, RetransmissionIsSentBeforeFreshVideo) {
+	SenderTransportController controller;
+	std::vector<PacketClass> sentClasses;
+	int64_t nowMs = 1000;
+	controller.SetNowFn([&nowMs] { return nowMs; });
+	controller.SetSendFn([&sentClasses](PacketClass packetClass, const uint8_t*, size_t len) {
+		sentClasses.push_back(packetClass);
+		return SendResult{SendStatus::Sent, 0, len};
+	});
+	controller.RegisterVideoTrack(0, 4444, 800000);
+	controller.UpdateTrackTransportHint(0, 4444, 800000, false);
+
+	uint8_t freshVideo[1000] = {};
+	uint8_t rtx[300] = {};
+	ASSERT_TRUE(controller.EnqueueVideoMediaPacket(4444, freshVideo, sizeof(freshVideo)));
+	ASSERT_TRUE(controller.EnqueueVideoRetransmissionPacket(4444, rtx, sizeof(rtx)));
+
+	controller.OnPacingTick(nowMs);
+	nowMs += 20;
+	controller.OnPacingTick(nowMs);
+
+	ASSERT_GE(sentClasses.size(), 2u);
+	EXPECT_EQ(sentClasses[0], PacketClass::VideoRetransmission);
+	EXPECT_EQ(sentClasses[1], PacketClass::VideoMedia);
+}
+
+TEST(SenderTransportControllerTest, WouldBlockKeepsFreshVideoQueuedAndSkipsAccounting) {
+	SenderTransportController controller;
+	int64_t nowMs = 1000;
+	int videoSentCallbacks = 0;
+	controller.SetNowFn([&nowMs] { return nowMs; });
+	controller.SetSendFn([](PacketClass, const uint8_t*, size_t) {
+		return SendResult{SendStatus::WouldBlock, EAGAIN, 0};
+	});
+	controller.SetOnVideoMediaSent([&videoSentCallbacks](const uint8_t*, size_t) {
+		++videoSentCallbacks;
+	});
+	controller.RegisterVideoTrack(0, 5555, 800000);
+	controller.UpdateTrackTransportHint(0, 5555, 800000, false);
+
+	uint8_t video[1000] = {};
+	ASSERT_TRUE(controller.EnqueueVideoMediaPacket(5555, video, sizeof(video)));
+	controller.OnPacingTick(nowMs);
+	nowMs += 20;
+	controller.OnPacingTick(nowMs);
+
+	EXPECT_EQ(videoSentCallbacks, 0);
+	EXPECT_EQ(controller.QueuedFreshVideoPackets(), 1u);
+	EXPECT_EQ(
+		controller.GetMetrics().wouldBlockByClass[mediasoup::plainclient::PacketClassIndex(PacketClass::VideoMedia)],
+		1u);
+	EXPECT_EQ(controller.GetMetrics().queuedVideoRetentions, 1u);
+}
+
+TEST(SenderTransportControllerTest, ControlHardErrorTracksErrnoAndCount) {
+	SenderTransportController controller;
+	controller.SetSendFn([](PacketClass, const uint8_t*, size_t) {
+		return SendResult{SendStatus::HardError, ENOTCONN, 0};
+	});
+
+	uint8_t control[16] = {};
+	const auto result = controller.SendControlPacket(control, sizeof(control));
+	EXPECT_EQ(result.status, SendStatus::HardError);
+	EXPECT_EQ(
+		controller.GetMetrics().hardErrorByClass[mediasoup::plainclient::PacketClassIndex(PacketClass::Control)],
+		1u);
+	EXPECT_EQ(
+		controller.GetMetrics().lastHardErrorByClass[mediasoup::plainclient::PacketClassIndex(PacketClass::Control)],
+		ENOTCONN);
+}
+
+TEST(SenderTransportControllerTest, AudioWouldBlockKeepsQueueAndUpdatesMetrics) {
+	SenderTransportController controller;
+	int64_t nowMs = 1000;
+	controller.SetNowFn([&nowMs] { return nowMs; });
+	controller.SetSendFn([](PacketClass packetClass, const uint8_t*, size_t) {
+		if (packetClass == PacketClass::AudioRtp) {
+			return SendResult{SendStatus::WouldBlock, EAGAIN, 0};
+		}
+		return SendResult{SendStatus::Sent, 0, 120};
+	});
+
+	uint8_t audio[120] = {};
+	ASSERT_TRUE(controller.EnqueueAudioPacket(3333, 960, audio, sizeof(audio)));
+	controller.OnPacingTick(nowMs);
+	nowMs += 20;
+	controller.OnPacingTick(nowMs);
+
+	EXPECT_EQ(controller.QueuedAudioPackets(), 1u);
+	EXPECT_EQ(
+		controller.GetMetrics().wouldBlockByClass[mediasoup::plainclient::PacketClassIndex(PacketClass::AudioRtp)],
+		2u);
+}
+
+TEST(SenderTransportControllerTest, RetransmissionHardErrorDropsAndCounts) {
+	SenderTransportController controller;
+	int64_t nowMs = 1000;
+	controller.SetNowFn([&nowMs] { return nowMs; });
+	controller.SetSendFn([](PacketClass packetClass, const uint8_t*, size_t) {
+		if (packetClass == PacketClass::VideoRetransmission) {
+			return SendResult{SendStatus::HardError, EINVAL, 0};
+		}
+		return SendResult{SendStatus::Sent, 0, 300};
+	});
+
+	uint8_t rtx[300] = {};
+	ASSERT_TRUE(controller.EnqueueVideoRetransmissionPacket(4444, rtx, sizeof(rtx)));
+	controller.OnPacingTick(nowMs);
+	nowMs += 20;
+	controller.OnPacingTick(nowMs);
+
+	EXPECT_EQ(controller.QueuedRetransmissionPackets(), 0u);
+	EXPECT_EQ(controller.GetMetrics().retransmissionDrops, 1u);
+	EXPECT_EQ(
+		controller.GetMetrics().hardErrorByClass[
+			mediasoup::plainclient::PacketClassIndex(PacketClass::VideoRetransmission)],
+		1u);
+	EXPECT_EQ(
+		controller.GetMetrics().lastHardErrorByClass[
+			mediasoup::plainclient::PacketClassIndex(PacketClass::VideoRetransmission)],
+		EINVAL);
+}
+
+TEST(SenderTransportControllerTest, FreshVideoHardErrorDropsAndCounts) {
+	SenderTransportController controller;
+	int64_t nowMs = 1000;
+	controller.SetNowFn([&nowMs] { return nowMs; });
+	controller.SetSendFn([](PacketClass packetClass, const uint8_t*, size_t) {
+		if (packetClass == PacketClass::VideoMedia) {
+			return SendResult{SendStatus::HardError, EMSGSIZE, 0};
+		}
+		return SendResult{SendStatus::Sent, 0, 1000};
+	});
+	controller.RegisterVideoTrack(0, 5555, 800000);
+	controller.UpdateTrackTransportHint(0, 5555, 800000, false);
+
+	uint8_t video[1000] = {};
+	ASSERT_TRUE(controller.EnqueueVideoMediaPacket(5555, video, sizeof(video)));
+	controller.OnPacingTick(nowMs);
+	nowMs += 20;
+	controller.OnPacingTick(nowMs);
+
+	EXPECT_EQ(controller.QueuedFreshVideoPackets(), 0u);
+	EXPECT_EQ(controller.GetMetrics().queuedVideoDiscards, 1u);
+	EXPECT_EQ(
+		controller.GetMetrics().hardErrorByClass[mediasoup::plainclient::PacketClassIndex(PacketClass::VideoMedia)],
+		1u);
+	EXPECT_EQ(
+		controller.GetMetrics().lastHardErrorByClass[mediasoup::plainclient::PacketClassIndex(PacketClass::VideoMedia)],
+		EMSGSIZE);
+}
+
+TEST(SenderTransportControllerTest, FreshVideoQueueIsBounded) {
+	SenderTransportController::Config config;
+	config.maxFreshVideoPacketsTotal = 2;
+	SenderTransportController controller(config);
+	controller.RegisterVideoTrack(0, 6666, 800000);
+	controller.UpdateTrackTransportHint(0, 6666, 800000, false);
+
+	uint8_t video[100] = {};
+	EXPECT_TRUE(controller.EnqueueVideoMediaPacket(6666, video, sizeof(video)));
+	EXPECT_TRUE(controller.EnqueueVideoMediaPacket(6666, video, sizeof(video)));
+	EXPECT_FALSE(controller.EnqueueVideoMediaPacket(6666, video, sizeof(video)));
+
+	EXPECT_EQ(controller.QueuedFreshVideoPackets(), 2u);
+	EXPECT_EQ(controller.GetMetrics().freshVideoQueueDrops, 1u);
+}
+
+TEST(SenderTransportControllerTest, RetransmissionQueueIsBounded) {
+	SenderTransportController::Config config;
+	config.maxRetransmissionPackets = 1;
+	SenderTransportController controller(config);
+
+	uint8_t rtx[200] = {};
+	EXPECT_TRUE(controller.EnqueueVideoRetransmissionPacket(7777, rtx, sizeof(rtx)));
+	EXPECT_FALSE(controller.EnqueueVideoRetransmissionPacket(7777, rtx, sizeof(rtx)));
+
+	EXPECT_EQ(controller.QueuedRetransmissionPackets(), 1u);
+	EXPECT_EQ(controller.GetMetrics().retransmissionQueueDrops, 1u);
+}
+
+TEST(SenderTransportControllerTest, PauseDropsQueuedRetransmissionsForTrack) {
+	SenderTransportController controller;
+	controller.RegisterVideoTrack(0, 8888, 800000);
+	controller.UpdateTrackTransportHint(0, 8888, 800000, false);
+
+	uint8_t freshVideo[200] = {};
+	uint8_t rtx[120] = {};
+	ASSERT_TRUE(controller.EnqueueVideoMediaPacket(8888, freshVideo, sizeof(freshVideo)));
+	ASSERT_TRUE(controller.EnqueueVideoRetransmissionPacket(8888, rtx, sizeof(rtx)));
+
+	controller.SetTrackPaused(8888, true);
+
+	EXPECT_EQ(controller.QueuedFreshVideoPackets(), 0u);
+	EXPECT_EQ(controller.QueuedRetransmissionPackets(), 0u);
+	EXPECT_EQ(controller.GetMetrics().queuedVideoDiscards, 1u);
+	EXPECT_EQ(controller.GetMetrics().retransmissionDrops, 1u);
 }
 
 // ═══════════════════════════════════════════════════════════

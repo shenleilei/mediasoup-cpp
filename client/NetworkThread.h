@@ -3,6 +3,7 @@
 #pragma once
 
 #include "RtcpHandler.h"
+#include "SenderTransportController.h"
 #include "ThreadTypes.h"
 #include "media/rtp/H264Packetizer.h"
 
@@ -59,6 +60,7 @@ public:
 		int udpFd = -1;                // pre-created connected UDP socket
 		uint32_t audioSsrc = 0;
 		uint8_t audioPt = 0;
+		bool enableTransportController = true;
 	};
 
 	// Per-source input queue (one per source worker)
@@ -79,8 +81,30 @@ public:
 	// Audio AU input queue (optional, for threaded audio path)
 	mt::SpscQueue<mt::EncodedAccessUnit, mt::kEncodedAuQueueCapacity>* audioAuQueue = nullptr;
 
-	explicit NetworkThread(const Config& cfg) : cfg_(cfg) {
+	explicit NetworkThread(const Config& cfg)
+		: cfg_(cfg)
+		, useTransportController_(cfg.enableTransportController)
+	{
 		rtcp_.audioSsrc = cfg.audioSsrc;
+		transportController_.SetSendFn([this](
+			mediasoup::plainclient::PacketClass packetClass,
+			const uint8_t* data,
+			size_t len) {
+			return mediasoup::plainclient::SendUdpDatagram(cfg_.udpFd, data, len);
+		});
+		transportController_.SetNowFn([this] { return steadyNowMs(); });
+		transportController_.SetOnVideoMediaSent([this](const uint8_t* packet, size_t packetLen) {
+			rtcp_.onVideoRtpSent(packet, packetLen);
+		});
+		transportController_.SetOnAudioSent([this](size_t payloadLen, uint32_t rtpTs) {
+			rtcp_.onAudioRtpSent(payloadLen, rtpTs);
+		});
+		transportController_.SetOnVideoRetransmissionSent([this](uint32_t ssrc) {
+			rtcp_.nackRetransmitted++;
+			if (auto* stream = rtcp_.getVideoStream(ssrc)) {
+				stream->nackRetransmitted++;
+			}
+		});
 	}
 
 	~NetworkThread() { stop(); }
@@ -94,6 +118,9 @@ public:
 		t.rtcpState.payloadType = pt;
 		tracks_.push_back(std::move(t));
 		// Note: rtcp_ registration deferred to start() to avoid dangling pointers from vector realloc
+		if (useTransportController_) {
+			transportController_.RegisterVideoTrack(trackIndex, ssrc);
+		}
 	}
 
 	void addSourceInput(SourceInput input) { sourceInputs_.push_back(input); }
@@ -104,7 +131,11 @@ public:
 				uint8_t dummy[13];
 				rtpHeader(dummy, t.payloadType, t.seq++, 0, t.ssrc, false);
 				dummy[12] = 0;
-				send(cfg_.udpFd, dummy, 13, 0);
+				if (useTransportController_) {
+					(void)transportController_.SendControlPacket(dummy, 13);
+				} else {
+					(void)mediasoup::plainclient::SendUdpDatagram(cfg_.udpFd, dummy, 13);
+				}
 				std::this_thread::sleep_for(std::chrono::milliseconds(20));
 			}
 		}
@@ -133,8 +164,12 @@ public:
 		running_ = false;
 		if (wakeupFd_ >= 0) { uint64_t v = 1; ::write(wakeupFd_, &v, sizeof(v)); }
 		if (thread_.joinable()) thread_.join();
-		// Flush remaining paced packets before closing
-		while (!pacingQueue_.empty()) pacingFlush();
+		if (useTransportController_) {
+			transportController_.FlushForShutdown(steadyNowMs());
+		} else {
+			// Flush remaining paced packets before closing
+			while (!pacingQueue_.empty()) pacingFlush();
+		}
 		if (epollFd_ >= 0) { ::close(epollFd_); epollFd_ = -1; }
 		if (wakeupFd_ >= 0) { ::close(wakeupFd_); wakeupFd_ = -1; }
 		if (srTimerFd_ >= 0) { ::close(srTimerFd_); srTimerFd_ = -1; }
@@ -185,7 +220,11 @@ private:
 			}
 
 			void OnPacket(const uint8_t* packet, size_t packetLen) override {
-				owner_->pacingEnqueue(packet, packetLen, ssrc_);
+				if (owner_->useTransportController_) {
+					(void)owner_->transportController_.EnqueueVideoMediaPacket(ssrc_, packet, packetLen);
+				} else {
+					owner_->pacingEnqueue(packet, packetLen, ssrc_);
+				}
 			}
 
 		private:
@@ -209,8 +248,14 @@ private:
 		uint8_t pkt[12 + 4096];
 		rtpHeader(pkt, pt, seq++, ts, ssrc, true);
 		memcpy(pkt + 12, data, size);
-		send(cfg_.udpFd, pkt, 12 + size, 0);
-		rtcp_.onAudioRtpSent(size, ts);
+		if (useTransportController_) {
+			(void)transportController_.EnqueueAudioPacket(ssrc, ts, pkt, 12 + size);
+		} else {
+			const auto result = mediasoup::plainclient::SendUdpDatagram(cfg_.udpFd, pkt, 12 + size);
+			if (result.status == mediasoup::plainclient::SendStatus::Sent) {
+				rtcp_.onAudioRtpSent(size, ts);
+			}
+		}
 	}
 
 	void processEncodedAU(mt::EncodedAccessUnit& au) {
@@ -226,6 +271,9 @@ private:
 			if (stream) {
 				stream->lastKeyframe.clear();
 				stream->store = RtpPacketStore{};
+			}
+			if (useTransportController_) {
+				transportController_.DropQueuedFreshVideoForTrack(au.ssrc);
 			}
 		}
 
@@ -290,9 +338,20 @@ private:
 					}
 					auto* stream = mediaSsrc != 0 ? rtcp_.getVideoStream(mediaSsrc) : rtcp_.getFirstVideoStream();
 					if (stream) {
-						int ret = handleNack(buf + offset, pktLen, stream->store, cfg_.udpFd);
-						rtcp_.nackRetransmitted += ret;
-						stream->nackRetransmitted += ret;
+						if (useTransportController_) {
+							(void)enqueueNackPackets(
+								buf + offset,
+								pktLen,
+								stream->store,
+								[this, mediaSsrc](const uint8_t* packet, size_t packetLen) {
+									return transportController_.EnqueueVideoRetransmissionPacket(
+										mediaSsrc, packet, packetLen);
+								});
+						} else {
+							int ret = handleNack(buf + offset, pktLen, stream->store, cfg_.udpFd);
+							rtcp_.nackRetransmitted += ret;
+							stream->nackRetransmitted += ret;
+						}
 					}
 				} else if (pt == RTCP_PT_RR && pktLen >= 32) {
 					// RR — parse into per-track stats (reuse RtcpContext logic)
@@ -404,10 +463,20 @@ private:
 			mt::NetworkControlCommand cmd;
 			while (controlQueue->tryPop(cmd)) {
 				switch (cmd.type) {
+				case mt::NetworkControlCommand::TrackTransportConfig:
+					if (useTransportController_) {
+						transportController_.UpdateTrackTransportHint(
+							cmd.trackIndex, cmd.ssrc, cmd.targetBitrateBps, cmd.paused);
+					}
+					break;
 				case mt::NetworkControlCommand::PauseTrack:
 					if (auto* t = findTrackByIndex(cmd.trackIndex)) {
 						t->paused = true;
-						dropQueuedPacketsForTrack(t->ssrc);
+						if (useTransportController_) {
+							transportController_.SetTrackPaused(t->ssrc, true);
+						} else {
+							dropQueuedPacketsForTrack(t->ssrc);
+						}
 						dispatchSourceControl(cmd.trackIndex, mt::NetworkToSourceCommand::PauseTrack);
 						sendCommandAck(cmd.trackIndex, mt::TrackCommandType::PauseTrack, cmd.commandId, true, "");
 					}
@@ -415,6 +484,9 @@ private:
 				case mt::NetworkControlCommand::ResumeTrack:
 					if (auto* t = findTrackByIndex(cmd.trackIndex)) {
 						t->paused = false;
+						if (useTransportController_) {
+							transportController_.SetTrackPaused(t->ssrc, false);
+						}
 						dispatchSourceControl(cmd.trackIndex, mt::NetworkToSourceCommand::ResumeTrack);
 						sendCommandAck(cmd.trackIndex, mt::TrackCommandType::ResumeTrack, cmd.commandId, true, "");
 					}
@@ -422,7 +494,6 @@ private:
 				case mt::NetworkControlCommand::Shutdown:
 					running_ = false;
 					break;
-				case mt::NetworkControlCommand::TrackTransportConfig:
 				default:
 					break;
 				}
@@ -464,7 +535,11 @@ private:
 					for (auto& t : tracks_) pushStatsSnapshot(t);
 				} else if (fd == pacingTimerFd_) {
 					uint64_t v; ::read(pacingTimerFd_, &v, sizeof(v));
-					pacingFlush();
+					if (useTransportController_) {
+						transportController_.OnPacingTick(steadyNowMs());
+					} else {
+						pacingFlush();
+					}
 				}
 				// fd == cfg_.udpFd is handled below
 			}
@@ -514,8 +589,34 @@ private:
 			pacingQueue_.pop_front();
 		}
 	}
+public:
+	const mediasoup::plainclient::SenderTransportController::Metrics& transportMetrics() const {
+		return transportController_.GetMetrics();
+	}
+
+	size_t queuedFreshVideoPackets() const {
+		return useTransportController_
+			? transportController_.QueuedFreshVideoPackets()
+			: pacingQueue_.size();
+	}
+
+	size_t queuedAudioPackets() const {
+		return useTransportController_ ? transportController_.QueuedAudioPackets() : 0;
+	}
+
+	size_t queuedRetransmissionPackets() const {
+		return useTransportController_ ? transportController_.QueuedRetransmissionPackets() : 0;
+	}
+
+	int64_t mediaBudgetBytes() const {
+		return useTransportController_ ? transportController_.MediaBudgetBytes() : 0;
+	}
+
+private:
 	Config cfg_;
+	bool useTransportController_{ true };
 	RtcpContext rtcp_;
+	mediasoup::plainclient::SenderTransportController transportController_;
 	std::vector<TrackNetState> tracks_;
 	std::vector<SourceInput> sourceInputs_;
 	std::atomic<bool> running_{false};

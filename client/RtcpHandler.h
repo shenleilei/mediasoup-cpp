@@ -2,6 +2,8 @@
 // Modeled after mediasoup-worker's RTCP implementation.
 #pragma once
 
+#include "UdpSendHelpers.h"
+
 #include <arpa/inet.h>
 #include <sys/time.h>
 #include <algorithm>
@@ -105,40 +107,74 @@ inline size_t buildSenderReport(uint8_t* buf, uint32_t ssrc,
 // ═══════════════════════════════════════════════════════════
 // RTCP NACK parser + retransmitter
 // ═══════════════════════════════════════════════════════════
-// Parse NACK items from RTPFB (PT=205, fmt=1) and retransmit from store.
-// Returns number of packets retransmitted.
-inline int handleNack(const uint8_t* rtcpData, size_t rtcpLen,
-	const RtpPacketStore& store, int udpFd)
+template<typename PacketFn>
+inline void forEachNackPacket(const uint8_t* rtcpData, size_t rtcpLen,
+	const RtpPacketStore& store, PacketFn&& packetFn)
 {
-	// RTPFB header: 4 bytes common + 4 bytes sender SSRC + 4 bytes media SSRC = 12 bytes
-	// Then NACK items: each 4 bytes (PID + BLP)
-	if (rtcpLen < 12) return 0;
+	if (rtcpLen < 12) return;
 
-	int retransmitted = 0;
-	size_t offset = 12; // skip header + sender SSRC + media SSRC
+	size_t offset = 12;
 	while (offset + 4 <= rtcpLen) {
 		uint16_t pid = (rtcpData[offset] << 8) | rtcpData[offset + 1];
 		uint16_t blp = (rtcpData[offset + 2] << 8) | rtcpData[offset + 3];
 		offset += 4;
 
-		// Retransmit PID
-		const uint8_t* pkt; size_t len;
-		if (store.get(pid, pkt, len)) {
-			send(udpFd, pkt, len, 0);
-			retransmitted++;
-		}
-		// Retransmit each bit in BLP
+		const uint8_t* pkt = nullptr;
+		size_t len = 0;
+		if (store.get(pid, pkt, len))
+			packetFn(pid, pkt, len);
 		for (int i = 0; i < 16; i++) {
-			if (blp & (1 << i)) {
-				uint16_t seq = pid + 1 + i;
-				if (store.get(seq, pkt, len)) {
-					send(udpFd, pkt, len, 0);
-					retransmitted++;
-				}
-			}
+			if (!(blp & (1 << i))) continue;
+			uint16_t seq = pid + 1 + i;
+			if (store.get(seq, pkt, len))
+				packetFn(seq, pkt, len);
 		}
 	}
+}
+
+// Parse NACK items from RTPFB (PT=205, fmt=1) and retransmit from store.
+// Returns number of packets retransmitted.
+inline int handleNack(const uint8_t* rtcpData, size_t rtcpLen,
+	const RtpPacketStore& store, int udpFd)
+{
+	int retransmitted = 0;
+	forEachNackPacket(rtcpData, rtcpLen, store,
+		[udpFd, &retransmitted](uint16_t /*seq*/, const uint8_t* pkt, size_t len) {
+			const auto result = mediasoup::plainclient::SendUdpDatagram(udpFd, pkt, len);
+			if (result.status == mediasoup::plainclient::SendStatus::Sent) {
+				retransmitted++;
+			}
+		});
 	return retransmitted;
+}
+
+template<typename SendFn>
+inline int handleNackWithSender(const uint8_t* rtcpData, size_t rtcpLen,
+	const RtpPacketStore& store, SendFn&& sendFn)
+{
+	int retransmitted = 0;
+	forEachNackPacket(rtcpData, rtcpLen, store,
+		[&retransmitted, &sendFn](uint16_t /*seq*/, const uint8_t* pkt, size_t len) {
+			const auto result = sendFn(pkt, len);
+			if (result.status == mediasoup::plainclient::SendStatus::Sent) {
+				retransmitted++;
+			}
+		});
+	return retransmitted;
+}
+
+template<typename EnqueueFn>
+inline int enqueueNackPackets(const uint8_t* rtcpData, size_t rtcpLen,
+	const RtpPacketStore& store, EnqueueFn&& enqueueFn)
+{
+	int queued = 0;
+	forEachNackPacket(rtcpData, rtcpLen, store,
+		[&queued, &enqueueFn](uint16_t /*seq*/, const uint8_t* pkt, size_t len) {
+			if (enqueueFn(pkt, len)) {
+				queued++;
+			}
+		});
+	return queued;
 }
 
 inline int32_t parseSignedRtcpTotalLost(const uint8_t* data)
@@ -194,6 +230,7 @@ struct RtcpContext {
 
 	std::unordered_map<uint32_t, VideoStreamRtcpState> videoStreams;
 
+	int64_t lastSrAttemptMs = 0;
 	int64_t lastSrSentMs = 0;
 	static constexpr int64_t kSrIntervalMs = 1000;
 
@@ -262,18 +299,23 @@ struct RtcpContext {
 	}
 
 	void maybeSendSR(int udpFd) {
-		auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+		const int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
 			std::chrono::steady_clock::now().time_since_epoch()).count();
-		if (now - lastSrSentMs < kSrIntervalMs) return;
-		lastSrSentMs = now;
+		if (now - lastSrAttemptMs < kSrIntervalMs) return;
+		lastSrAttemptMs = now;
 
 		uint8_t buf[64];
+		bool anySent = false;
 		for (auto& entry : videoStreams) {
 			auto& stream = entry.second;
 			if (stream.packetCount == 0) continue;
 			size_t len = buildSenderReport(buf, stream.ssrc, stream.lastRtpTs,
 				stream.packetCount, stream.octetCount);
-			send(udpFd, buf, len, 0);
+			const auto result = mediasoup::plainclient::SendUdpDatagram(udpFd, buf, len);
+			if (result.status != mediasoup::plainclient::SendStatus::Sent) {
+				continue;
+			}
+			anySent = true;
 			uint32_t ntpMid = ((uint32_t)buf[10] << 24) | ((uint32_t)buf[11] << 16)
 				| ((uint32_t)buf[12] << 8) | buf[13];
 			if (stream.srNtpToSendTime.find(ntpMid) == stream.srNtpToSendTime.end())
@@ -288,7 +330,13 @@ struct RtcpContext {
 		if (audioPacketCount > 0) {
 			size_t len = buildSenderReport(buf, audioSsrc, lastAudioRtpTs,
 				audioPacketCount, audioOctetCount);
-			send(udpFd, buf, len, 0);
+			if (mediasoup::plainclient::SendUdpDatagram(udpFd, buf, len).status ==
+				mediasoup::plainclient::SendStatus::Sent) {
+				anySent = true;
+			}
+		}
+		if (anySent) {
+			lastSrSentMs = now;
 		}
 	}
 
