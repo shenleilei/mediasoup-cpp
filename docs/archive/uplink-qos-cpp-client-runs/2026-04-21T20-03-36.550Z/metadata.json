@@ -1,0 +1,18 @@
+{
+  "generatedAt": "2026-04-21T20:03:36.550Z",
+  "updatedAt": "2026-04-21T20:03:36.552Z",
+  "runTypes": [
+    "targeted"
+  ],
+  "sourceScripts": [
+    "tests/qos_harness/run_cpp_client_matrix.mjs"
+  ],
+  "selectedCaseIds": [
+    "B1",
+    "T3",
+    "R4"
+  ],
+  "artifacts": {
+    "matrixJson": "docs/generated/uplink-qos-cpp-client-matrix-report.targeted.json"
+  }
+}
