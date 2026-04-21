@@ -95,8 +95,9 @@ void RoomRegistry::syncNodesUnlocked()
 	auto nodeKeys = scanKeys("sfu:node:*");
 	if (!nodeKeys.empty()) {
 		std::vector<std::string> nodeIds;
-		for (auto& key : nodeKeys)
+		for (auto& key : nodeKeys) {
 			nodeIds.push_back(key.substr(9));
+		}
 		auto* reply = mgetArgv(nodeKeys);
 		if (reply && reply->type == REDIS_REPLY_ARRAY) {
 			for (size_t i = 0; i < reply->elements && i < nodeIds.size(); ++i) {
@@ -119,8 +120,9 @@ void RoomRegistry::syncAllUnlocked()
 	auto nodeKeys = scanKeys("sfu:node:*");
 	if (!nodeKeys.empty()) {
 		std::vector<std::string> nodeIds;
-		for (auto& key : nodeKeys)
+		for (auto& key : nodeKeys) {
 			nodeIds.push_back(key.substr(9));
+		}
 		auto* reply = mgetArgv(nodeKeys);
 		if (reply && reply->type == REDIS_REPLY_ARRAY) {
 			for (size_t i = 0; i < reply->elements && i < nodeIds.size(); ++i) {
@@ -137,8 +139,9 @@ void RoomRegistry::syncAllUnlocked()
 	auto roomKeys = scanKeys("sfu:room:*");
 	if (!roomKeys.empty()) {
 		std::vector<std::string> roomIds;
-		for (auto& key : roomKeys)
+		for (auto& key : roomKeys) {
 			roomIds.push_back(key.substr(9));
+		}
 		auto* reply = mgetArgv(roomKeys);
 		if (reply && reply->type == REDIS_REPLY_ARRAY) {
 			for (size_t i = 0; i < reply->elements && i < roomIds.size(); ++i) {
