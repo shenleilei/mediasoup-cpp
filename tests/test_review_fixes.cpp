@@ -199,6 +199,47 @@ TEST(SocketPendingJoinStateTest, PendingJoinDoesNotCommitSessionState) {
 	EXPECT_TRUE(socketData.pendingPeerId.empty());
 }
 
+TEST(DownlinkRateLimitStateTest, PendingSequenceDoesNotAdvanceAcceptedBaselineUntilMarked) {
+	DownlinkStatsRateLimitState state;
+	MarkAcceptedDownlinkSeq(state, 10);
+
+	state.pending = true;
+	state.pendingSeq = 11;
+	state.pendingSinceMs = 1234;
+
+	EXPECT_EQ(state.lastAcceptedSeq, 10u);
+	EXPECT_TRUE(state.hasAcceptedSeq);
+	EXPECT_FALSE(IsAdvancingDownlinkSeq(state, 10))
+		<< "pending seq should be the temporary advancing baseline";
+	EXPECT_TRUE(IsAdvancingDownlinkSeq(state, 12));
+
+	ClearPendingDownlinkSeqIfMatches(state, 11);
+	EXPECT_FALSE(state.pending);
+	EXPECT_EQ(state.lastAcceptedSeq, 10u)
+		<< "clearing pending must not mutate the accepted sequence";
+	EXPECT_FALSE(IsAdvancingDownlinkSeq(state, 10));
+	EXPECT_TRUE(IsAdvancingDownlinkSeq(state, 11));
+}
+
+TEST(DownlinkRateLimitStateTest, AcceptedSequenceMovesOnlyWhenExplicitlyMarked) {
+	DownlinkStatsRateLimitState state;
+	state.pending = true;
+	state.pendingSeq = 77;
+	state.pendingSinceMs = 500;
+
+	EXPECT_EQ(state.lastAcceptedSeq, 0u);
+	EXPECT_FALSE(state.hasAcceptedSeq);
+
+	ClearPendingDownlinkSeqIfMatches(state, 77);
+	EXPECT_FALSE(state.pending);
+	EXPECT_EQ(state.lastAcceptedSeq, 0u);
+	EXPECT_FALSE(state.hasAcceptedSeq);
+
+	MarkAcceptedDownlinkSeq(state, 77);
+	EXPECT_TRUE(state.hasAcceptedSeq);
+	EXPECT_EQ(state.lastAcceptedSeq, 77u);
+}
+
 TEST(RoomRegistrySelectionTest, NoGeoComparatorPreservesStrictWeakOrderingForSelf) {
 	mediasoup::roomregistry::LoadCandidate self{"ws://self", 3, 0};
 	mediasoup::roomregistry::LoadCandidate peer{"ws://peer", 3, 0};

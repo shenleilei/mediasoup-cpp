@@ -55,12 +55,16 @@ RoomService::Result RoomService::setDownlinkClientStats(
 	qos::DownlinkSnapshot stats)
 {
 	auto room = roomManager_.getRoom(roomId);
-	if (!room)
+	if (!room) {
+		MS_DEBUG(logger_, "[{} {}] downlink stats rejected: room missing", roomId, peerId);
 		return {false, json::object(), "", "room missing during downlinkClientStats"};
+	}
 
 	auto peer = room->getPeer(peerId);
-	if (!peer)
+	if (!peer) {
+		MS_DEBUG(logger_, "[{} {}] downlink stats rejected: peer missing", roomId, peerId);
 		return {false, json::object(), "", "peer missing during downlinkClientStats"};
+	}
 
 	if (stats.subscriberPeerId != peerId) {
 		MS_WARN(logger_, "[{} {}] downlink subscriberPeerId mismatch: {}", roomId, peerId, stats.subscriberPeerId);
