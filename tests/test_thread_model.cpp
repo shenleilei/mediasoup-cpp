@@ -6,6 +6,7 @@
 #include "TransportCcTestHelpers.h"
 
 #include "../client/ccutils/TrendDetector.h"
+#include "../client/ccutils/Prober.h"
 #include "../client/ccutils/ProbeTypes.h"
 #include "../client/sendsidebwe/PacketTracker.h"
 #include "../client/sendsidebwe/SendSideBwe.h"
@@ -16,8 +17,11 @@
 #include "../client/TransportCcHelpers.h"
 #include "../client/qos/QosController.h"
 
+#include <atomic>
 #include <thread>
+#include <condition_variable>
 #include <chrono>
+#include <mutex>
 #include <vector>
 #include <numeric>
 
@@ -29,6 +33,44 @@ using mediasoup::plainclient::SenderTransportController;
 using mediasoup::plainclient::sendsidebwe::PacketTracker;
 using mediasoup::plainclient::sendsidebwe::SendSideBwe;
 using mediasoup::plainclient::sendsidebwe::TwccFeedbackTracker;
+
+namespace {
+
+class BlockingProberListener final : public mediasoup::ccutils::ProberListener {
+public:
+	void OnProbeClusterSwitch(const mediasoup::ccutils::ProbeClusterInfo&) override
+	{
+	}
+
+	void OnSendProbe(int) override
+	{
+		std::unique_lock<std::mutex> lock(mutex_);
+		callbackEntered_ = true;
+		cv_.notify_all();
+		cv_.wait(lock, [this] { return allowReturn_; });
+	}
+
+	bool WaitForSendCallback(std::chrono::milliseconds timeout = std::chrono::seconds(2))
+	{
+		std::unique_lock<std::mutex> lock(mutex_);
+		return cv_.wait_for(lock, timeout, [this] { return callbackEntered_; });
+	}
+
+	void AllowReturn()
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		allowReturn_ = true;
+		cv_.notify_all();
+	}
+
+private:
+	std::mutex mutex_;
+	std::condition_variable cv_;
+	bool callbackEntered_{ false };
+	bool allowReturn_{ false };
+};
+
+} // namespace
 
 // ═══════════════════════════════════════════════════════════
 // SpscQueue unit tests
@@ -1623,6 +1665,36 @@ TEST(SenderTransportControllerTest, AudioWouldBlockKeepsQueueAndUpdatesMetrics) 
 		2u);
 }
 
+TEST(SenderTransportControllerTest, AudioDeadlineDropRemovesExpiredPacketAndCountsMetric) {
+	SenderTransportController::Config config;
+	config.audioQueueDeadlineMs = 10;
+	SenderTransportController controller(config);
+	int64_t nowMs = 1000;
+	int sendAttempts = 0;
+	controller.SetNowFn([&nowMs] { return nowMs; });
+	controller.SetSendFn([&sendAttempts](
+		PacketClass,
+		mediasoup::plainclient::PacketTransportMetadata*,
+		const uint8_t*,
+		size_t len) {
+		sendAttempts++;
+		return SendResult{SendStatus::Sent, 0, len};
+	});
+
+	uint8_t audio[120] = {};
+	ASSERT_TRUE(controller.EnqueueAudioPacket(3333, 960, audio, sizeof(audio)));
+
+	nowMs += 11;
+	controller.OnPacingTick(nowMs);
+
+	EXPECT_EQ(sendAttempts, 0);
+	EXPECT_EQ(controller.QueuedAudioPackets(), 0u);
+	EXPECT_EQ(controller.GetMetrics().audioDeadlineDrops, 1u);
+	EXPECT_EQ(
+		controller.GetMetrics().sentByClass[mediasoup::plainclient::PacketClassIndex(PacketClass::AudioRtp)],
+		0u);
+}
+
 TEST(SenderTransportControllerTest, RetransmissionHardErrorDropsAndCounts) {
 	SenderTransportController controller;
 	int64_t nowMs = 1000;
@@ -1771,11 +1843,11 @@ TEST(SenderTransportControllerTest, BitrateAllocationControlBypassesBacklogAcros
 		SenderTransportController controller;
 		std::vector<PacketClass> sentClasses;
 		controller.SetNowFn([] { return int64_t{1000}; });
-			controller.SetSendFn([&sentClasses](
-				PacketClass packetClass,
-				mediasoup::plainclient::PacketTransportMetadata*,
-				const uint8_t*,
-				size_t len) {
+		controller.SetSendFn([&sentClasses](
+			PacketClass packetClass,
+			mediasoup::plainclient::PacketTransportMetadata*,
+			const uint8_t*,
+			size_t len) {
 			sentClasses.push_back(packetClass);
 			return SendResult{SendStatus::Sent, 0, len};
 		});
@@ -1868,6 +1940,35 @@ TEST(SenderTransportControllerTest, EffectivePacingBitrateUsesMinOfTargetEstimat
 	controller.OnPacingTick(nowMs);
 
 	EXPECT_EQ(controller.MediaBudgetBytes(), 6250); // 500000 bps * 100ms / 8000
+}
+
+TEST(Prober, SetListenerWaitsForInFlightCallback) {
+	BlockingProberListener listener;
+	mediasoup::ccutils::Prober prober(&listener);
+	mediasoup::ccutils::ProbeClusterGoal goal;
+	goal.availableBandwidthBps = 100000;
+	goal.expectedUsageBps = 0;
+	goal.desiredBps = 300000;
+	goal.duration = std::chrono::milliseconds(100);
+
+	const auto info = prober.AddCluster(mediasoup::ccutils::ProbeClusterMode::Uniform, goal);
+	ASSERT_TRUE(info.IsValid());
+	ASSERT_TRUE(listener.WaitForSendCallback());
+
+	std::atomic<bool> setListenerReturned{ false };
+	std::thread clearThread([&]() {
+		prober.SetListener(nullptr);
+		setListenerReturned.store(true, std::memory_order_release);
+	});
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(20));
+	EXPECT_FALSE(setListenerReturned.load(std::memory_order_acquire));
+
+	listener.AllowReturn();
+	clearThread.join();
+
+	EXPECT_TRUE(setListenerReturned.load(std::memory_order_acquire));
+	prober.Reset();
 }
 
 // ═══════════════════════════════════════════════════════════

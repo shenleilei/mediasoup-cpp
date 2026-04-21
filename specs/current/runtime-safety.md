@@ -21,6 +21,7 @@
 - `Channel` send/close paths SHALL not write through a stale producer fd during concurrent shutdown.
 - Non-threaded `Channel` message pumping SHALL tolerate notification callbacks that re-enter `requestWait()` without replaying the same buffered message.
 - `WorkerThread` event loop SHALL handle `epoll_wait` error paths explicitly; `EINTR` retries and unrecoverable errors are logged and break the loop to avoid silent degraded spinning.
+- `Prober` listener replacement and shutdown SHALL drain in-flight listener callbacks before teardown returns.
 
 ## Operational Logging
 

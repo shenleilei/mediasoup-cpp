@@ -201,6 +201,8 @@ public:
 		running_ = false;
 		if (wakeupFd_ >= 0) { uint64_t v = 1; ::write(wakeupFd_, &v, sizeof(v)); }
 		if (thread_.joinable()) thread_.join();
+		prober_.SetListener(nullptr);
+		probeObserver_.SetListener(nullptr);
 		prober_.Reset();
 		if (useTransportController_) {
 			transportController_.FlushForShutdown(steadyNowMs());

@@ -393,12 +393,12 @@ private:
 
 	void FlushAudioQueue()
 	{
-			while (!audioQueue_.empty()) {
-				auto& packet = audioQueue_.front();
-				const auto result = SendPacket(PacketClass::AudioRtp, packet);
-				if (result.status == SendStatus::Sent) {
-					mediaBudgetBytes_ -= static_cast<int64_t>(packet.len);
-					if (onAudioSent_) {
+		while (!audioQueue_.empty()) {
+			auto& packet = audioQueue_.front();
+			const auto result = SendPacket(PacketClass::AudioRtp, packet);
+			if (result.status == SendStatus::Sent) {
+				mediaBudgetBytes_ -= static_cast<int64_t>(packet.len);
+				if (onAudioSent_) {
 					onAudioSent_(packet.len > 12 ? packet.len - 12 : 0, packet.rtpTimestamp);
 				}
 				audioQueue_.pop_front();
@@ -413,12 +413,12 @@ private:
 
 	void FlushRetransmissionQueue()
 	{
-			while (!videoRetransmissionQueue_.empty()) {
-				auto& packet = videoRetransmissionQueue_.front();
-				const auto result = SendPacket(PacketClass::VideoRetransmission, packet);
-				if (result.status == SendStatus::Sent) {
-					mediaBudgetBytes_ -= static_cast<int64_t>(packet.len);
-					metrics_.retransmissionSent++;
+		while (!videoRetransmissionQueue_.empty()) {
+			auto& packet = videoRetransmissionQueue_.front();
+			const auto result = SendPacket(PacketClass::VideoRetransmission, packet);
+			if (result.status == SendStatus::Sent) {
+				mediaBudgetBytes_ -= static_cast<int64_t>(packet.len);
+				metrics_.retransmissionSent++;
 				if (onVideoRetransmissionSent_) {
 					onVideoRetransmissionSent_(packet.ssrc);
 				}
@@ -449,13 +449,13 @@ private:
 					continue;
 				}
 				auto& packet = trackState.videoQueue.front();
-					if (static_cast<int64_t>(packet.len) > mediaBudgetBytes_) {
-						continue;
-					}
-					const auto result = SendPacket(PacketClass::VideoMedia, packet);
-					if (result.status == SendStatus::Sent) {
-						mediaBudgetBytes_ -= static_cast<int64_t>(packet.len);
-						if (onVideoMediaSent_) {
+				if (static_cast<int64_t>(packet.len) > mediaBudgetBytes_) {
+					continue;
+				}
+				const auto result = SendPacket(PacketClass::VideoMedia, packet);
+				if (result.status == SendStatus::Sent) {
+					mediaBudgetBytes_ -= static_cast<int64_t>(packet.len);
+					if (onVideoMediaSent_) {
 						onVideoMediaSent_(packet.data, packet.len);
 					}
 					trackState.videoQueue.pop_front();
@@ -488,16 +488,16 @@ private:
 		}
 	}
 
-		SendResult SendPacket(PacketClass packetClass, Packet& packet)
-		{
-			if (!sendFn_) {
-				return {SendStatus::HardError, EINVAL, 0};
-			}
-			const auto result =
-				sendFn_(packetClass, &packet.transportMetadata, packet.data, packet.len);
-			RecordSendResult(packetClass, result);
-			return result;
+	SendResult SendPacket(PacketClass packetClass, Packet& packet)
+	{
+		if (!sendFn_) {
+			return {SendStatus::HardError, EINVAL, 0};
 		}
+		const auto result =
+			sendFn_(packetClass, &packet.transportMetadata, packet.data, packet.len);
+		RecordSendResult(packetClass, result);
+		return result;
+	}
 
 	void RecordSendResult(PacketClass packetClass, const SendResult& result)
 	{

@@ -46,7 +46,8 @@ public:
 
 	void SetListener(ProberListener* listener)
 	{
-		std::lock_guard<std::mutex> lock(mutex_);
+		std::unique_lock<std::mutex> lock(mutex_);
+		WaitForListenerCallbacksToDrain(lock);
 		listener_ = listener;
 	}
 
@@ -71,7 +72,11 @@ public:
 		if (worker_.joinable()) {
 			worker_.join();
 		}
-		stopRequested_ = false;
+		{
+			std::unique_lock<std::mutex> lock(mutex_);
+			WaitForListenerCallbacksToDrain(lock);
+			stopRequested_ = false;
+		}
 	}
 
 	ProbeClusterInfo AddCluster(ProbeClusterMode mode, ProbeClusterGoal goal)
@@ -85,24 +90,12 @@ public:
 			mode,
 			goal,
 			[this](const ProbeClusterInfo& info) {
-				ProberListener* listener = nullptr;
-				{
-					std::lock_guard<std::mutex> lock(mutex_);
-					listener = listener_;
-				}
-				if (listener) {
-					listener->OnProbeClusterSwitch(info);
-				}
+				DispatchListenerCallback(
+					[&info](ProberListener* listener) { listener->OnProbeClusterSwitch(info); });
 			},
 			[this](int bytesToSend) {
-				ProberListener* listener = nullptr;
-				{
-					std::lock_guard<std::mutex> lock(mutex_);
-					listener = listener_;
-				}
-				if (listener) {
-					listener->OnSendProbe(bytesToSend);
-				}
+				DispatchListenerCallback(
+					[bytesToSend](ProberListener* listener) { listener->OnSendProbe(bytesToSend); });
 			});
 
 		{
@@ -377,16 +370,59 @@ private:
 		if (worker_.joinable()) {
 			worker_.join();
 		}
+		{
+			std::unique_lock<std::mutex> lock(mutex_);
+			WaitForListenerCallbacksToDrain(lock);
+		}
+	}
+
+	template<typename CallbackFn>
+	void DispatchListenerCallback(CallbackFn&& callback)
+	{
+		ProberListener* listener = nullptr;
+		{
+			std::lock_guard<std::mutex> lock(mutex_);
+			if (!listener_) {
+				return;
+			}
+			listener = listener_;
+			activeListenerCallbacks_++;
+		}
+
+		try {
+			callback(listener);
+		} catch (...) {
+			FinishListenerCallback();
+			throw;
+		}
+
+		FinishListenerCallback();
+	}
+
+	void FinishListenerCallback()
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		if (activeListenerCallbacks_ > 0) {
+			activeListenerCallbacks_--;
+		}
+		listenerCallbackCv_.notify_all();
+	}
+
+	void WaitForListenerCallbacksToDrain(std::unique_lock<std::mutex>& lock)
+	{
+		listenerCallbackCv_.wait(lock, [this] { return activeListenerCallbacks_ == 0; });
 	}
 
 	mutable std::mutex mutex_;
 	std::condition_variable cv_;
+	std::condition_variable listenerCallbackCv_;
 	ProberListener* listener_{ nullptr };
 	std::atomic<uint32_t> clusterId_{ 0 };
 	std::deque<std::shared_ptr<Cluster>> clusters_;
 	std::shared_ptr<Cluster> activeCluster_;
 	mutable std::unordered_set<ProbeClusterId> startedClusters_;
 	std::thread worker_;
+	size_t activeListenerCallbacks_{ 0 };
 	bool stopRequested_{ false };
 };
 
