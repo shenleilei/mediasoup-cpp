@@ -9,6 +9,7 @@
 - It SHALL also cover the full QoS regression surface defined by `scripts/run_qos_tests.sh`.
 - After an actual test execution, it SHALL rewrite `docs/full-regression-test-results.md`.
 - When its selected groups delegate to `scripts/run_qos_tests.sh`, the QoS-specific reports owned by that script SHALL be refreshed according to that script's contract.
+- When the selected groups include `qos`, the generated Markdown report SHALL link the latest stable TWCC A/B summary from `docs/generated/twcc-ab-report.md`.
 - The generated Markdown report SHALL include:
   - generation time
   - selected groups for that run
@@ -25,6 +26,7 @@
 - It SHALL record failed tasks in `tests/qos_harness/artifacts/last-failures.txt`.
 - After an actual execution, it SHALL rewrite `docs/downlink-qos-test-results-summary.md`.
 - When matrix-style groups run, it SHALL regenerate the corresponding QoS Markdown reports documented in `README.md`.
+- Its default full QoS surface SHALL include `cpp-client-ab`, which SHALL refresh `docs/generated/twcc-ab-report.md`.
 - Its default `cpp-client-harness` group SHALL include the threaded plain-client harness regressions that cover:
   - `threaded_generation_switch`
   - `threaded_multi_video_budget`

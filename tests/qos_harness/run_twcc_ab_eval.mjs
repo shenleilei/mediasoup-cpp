@@ -12,6 +12,7 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..', '..');
 const changeDir = path.join(repoRoot, 'changes', '2026-04-21-plain-client-sender-transport-control');
 const artifactRoot = path.join(changeDir, 'artifacts', 'twcc-ab-eval');
+const docsGeneratedDir = path.join(repoRoot, 'docs', 'generated');
 
 const args = process.argv.slice(2);
 const repetitionsArg = args.find(arg => arg.startsWith('--repetitions='));
@@ -306,6 +307,123 @@ function writeJson(filePath, value) {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
+function relativeMarkdownPath(fromFilePath, targetPath) {
+  return path.relative(path.dirname(fromFilePath), targetPath).split(path.sep).join('/');
+}
+
+function markdownLink(fromFilePath, label, targetPath) {
+  return `[${label}](${relativeMarkdownPath(fromFilePath, targetPath)})`;
+}
+
+function writeLatestSummaryReport({
+  outputPath,
+  generatedAt,
+  runDirPath,
+  rawGroupsPath,
+  pairings,
+  selectedCases,
+  repetitionsPerScenario,
+  matrixSpeedFactor,
+}) {
+  const lines = [];
+  lines.push('# TWCC A/B 最新报告');
+  lines.push('');
+  lines.push(`生成时间：\`${generatedAt}\``);
+  lines.push('');
+  lines.push('## 1. 本次运行');
+  lines.push('');
+  lines.push(`- 脚本：\`node tests/qos_harness/run_twcc_ab_eval.mjs\``);
+  lines.push(`- 重复次数：\`${repetitionsPerScenario}\``);
+  lines.push(`- matrix speed：\`${matrixSpeedFactor}\``);
+  lines.push(`- 场景：\`${selectedCases.join(',')}\``);
+  lines.push(`- 原始产物目录：\`${path.relative(repoRoot, runDirPath)}\``);
+  lines.push('');
+  lines.push('## 2. Pairwise 结果');
+  lines.push('');
+  lines.push('| Pair | Overall | Summary | Markdown | JSON |');
+  lines.push('|---|---|---|---|---|');
+  for (const pairing of pairings) {
+    lines.push(
+      `| ${pairing.label} | \`${pairing.pass ? 'PASS' : 'FAIL'}\` | ${pairing.summary} | ${markdownLink(outputPath, path.basename(pairing.markdownPath), pairing.markdownPath)} | ${markdownLink(outputPath, path.basename(pairing.metricsPath), pairing.metricsPath)} |`
+    );
+  }
+  lines.push('');
+  lines.push('## 3. 原始产物');
+  lines.push('');
+  lines.push(`- ${markdownLink(outputPath, 'raw-groups.json', rawGroupsPath)}`);
+  lines.push(`- 原始 trace/log 目录：\`${path.relative(repoRoot, path.join(runDirPath, 'raw'))}\``);
+  lines.push('');
+  lines.push('## 4. 说明');
+  lines.push('');
+  lines.push('- `G1 vs G2` 用来隔离 transport estimate / TWCC 主路径本身的净收益。');
+  lines.push('- `G0 vs G2` 用来看新发送路径相对旧路径的整体效果。');
+  lines.push('- `docs/generated/twcc-ab-report.md` 是最新稳定入口；时间戳目录下保留该次运行的原始产物。');
+  lines.push('');
+
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, `${lines.join('\n')}\n`);
+}
+
+function publishLatestDocsArtifacts({
+  generatedAt,
+  runDirPath,
+  rawGroupsPath,
+  pairings,
+  selectedCases,
+  repetitionsPerScenario,
+  matrixSpeedFactor,
+}) {
+  const stableSummaryPath = path.join(docsGeneratedDir, 'twcc-ab-report.md');
+  const stableArtifacts = [
+    {
+      source: rawGroupsPath,
+      target: path.join(docsGeneratedDir, 'twcc-ab-raw-groups.json'),
+    },
+  ];
+
+  for (const pairing of pairings) {
+    stableArtifacts.push({
+      source: pairing.metricsPath,
+      target: path.join(docsGeneratedDir, `twcc-ab-${pairing.name}.json`),
+    });
+    stableArtifacts.push({
+      source: pairing.markdownPath,
+      target: path.join(docsGeneratedDir, `twcc-ab-${pairing.name}.md`),
+    });
+  }
+
+  for (const artifact of stableArtifacts) {
+    fs.mkdirSync(path.dirname(artifact.target), { recursive: true });
+    fs.copyFileSync(artifact.source, artifact.target);
+  }
+
+  writeLatestSummaryReport({
+    outputPath: path.join(runDirPath, 'twcc-ab-eval.md'),
+    generatedAt,
+    runDirPath,
+    rawGroupsPath,
+    pairings,
+    selectedCases,
+    repetitionsPerScenario,
+    matrixSpeedFactor,
+  });
+
+  writeLatestSummaryReport({
+    outputPath: stableSummaryPath,
+    generatedAt,
+    runDirPath,
+    rawGroupsPath,
+    pairings: pairings.map(pairing => ({
+      ...pairing,
+      metricsPath: path.join(docsGeneratedDir, `twcc-ab-${pairing.name}.json`),
+      markdownPath: path.join(docsGeneratedDir, `twcc-ab-${pairing.name}.md`),
+    })),
+    selectedCases,
+    repetitionsPerScenario,
+    matrixSpeedFactor,
+  });
+}
+
 function runHardRegressionSuite() {
   const result = {
     commands: [],
@@ -421,6 +539,7 @@ async function main() {
     { baseline: 'G1', candidate: 'G2', name: 'g1-vs-g2', baselineLabel: 'G1 Controller-Only', candidateLabel: 'G2 Candidate' },
     { baseline: 'G0', candidate: 'G2', name: 'g0-vs-g2', baselineLabel: 'G0 Legacy', candidateLabel: 'G2 Candidate' },
   ];
+  const renderedPairings = [];
 
   for (const pairing of pairings) {
     const baselineGroup = raw.groups[pairing.baseline];
@@ -683,13 +802,32 @@ async function main() {
       : `${pairing.candidateLabel} did not meet every configured gate over ${pairing.baselineLabel}.`;
 
     const metricsPath = path.join(runDir, `${pairing.name}.json`);
+    const markdownPath = path.join(runDir, `${pairing.name}.md`);
     writeJson(metricsPath, metrics);
     runCommand('node', [
       path.join(repoRoot, 'tests', 'qos_harness', 'render_twcc_ab_report.mjs'),
       `--input=${metricsPath}`,
-      `--output=${path.join(runDir, `${pairing.name}.md`)}`,
+      `--output=${markdownPath}`,
     ]);
+    renderedPairings.push({
+      name: pairing.name,
+      label: `${pairing.baselineLabel} vs ${pairing.candidateLabel}`,
+      pass: metrics.overall.pass,
+      summary: metrics.overall.summary,
+      metricsPath,
+      markdownPath,
+    });
   }
+
+  publishLatestDocsArtifacts({
+    generatedAt,
+    runDirPath: runDir,
+    rawGroupsPath: path.join(runDir, 'raw-groups.json'),
+    pairings: renderedPairings,
+    selectedCases: selectedAbIds,
+    repetitionsPerScenario: repetitions,
+    matrixSpeedFactor: matrixSpeed,
+  });
 
   console.log(`twcc ab evaluation written to ${runDir}`);
 }

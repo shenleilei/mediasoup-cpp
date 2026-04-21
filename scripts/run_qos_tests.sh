@@ -22,6 +22,7 @@ ALL_GROUPS=(
   cpp-accuracy
   cpp-recording
   cpp-client-matrix
+  cpp-client-ab
   cpp-client-harness
   cpp-threaded
   node-harness
@@ -66,6 +67,7 @@ Available groups:
   cpp-accuracy      QoS accuracy 测试
   cpp-recording     QoS recording accuracy 测试
   cpp-client-matrix PlainTransport C++ client weak-network matrix（run_cpp_client_matrix.mjs）
+  cpp-client-ab     PlainTransport C++ client TWCC A/B effectiveness report（run_twcc_ab_eval.mjs）
   cpp-client-harness PlainTransport C++ client signaling / publish snapshot / override harness
   cpp-threaded      PlainTransport C++ client threaded gtest / threaded harness regression
   node-harness      Node QoS harness 场景
@@ -80,6 +82,7 @@ Notes:
   - `--matrix-cases=...` 会把 matrix 切为 targeted 运行，并产出 targeted 报告。
   - 失败任务会记录到 tests/qos_harness/artifacts/last-failures.txt
   - full matrix 当前主报告写入 docs/generated/ 和 docs/；每次新结果都会按生成时间归档到 docs/archive/uplink-qos-runs/
+  - 默认全量 QoS 入口还会运行 `cpp-client-ab`，刷新 `docs/generated/twcc-ab-report.md`
 EOF
 }
 
@@ -565,7 +568,7 @@ normalize_groups() {
   elif ((SKIP_MATRIX)); then
     local filtered=()
     for group in "${requested[@]}"; do
-      [[ "$group" == "matrix" || "$group" == "downlink-matrix" ]] && continue
+      [[ "$group" == "matrix" || "$group" == "downlink-matrix" || "$group" == "cpp-client-matrix" || "$group" == "cpp-client-ab" ]] && continue
       filtered+=("$group")
     done
     requested=("${filtered[@]}")
@@ -705,6 +708,44 @@ run_cpp_client_matrix() {
     "cpp-client-matrix" \
     --cwd "$ROOT_DIR" \
     node "$ROOT_DIR/tests/qos_harness/run_cpp_client_matrix.mjs" "${matrix_args[@]}"
+}
+
+run_cpp_client_ab() {
+  require_file "$BUILD_DIR/mediasoup-sfu"
+  require_file "$BUILD_DIR/mediasoup_qos_unit_tests"
+  require_file "$BUILD_DIR/mediasoup_thread_integration_tests"
+  ensure_target_built \
+    mediasoup-sfu \
+    "$BUILD_DIR/mediasoup-sfu" \
+    "$ROOT_DIR/src/main.cpp" \
+    "$ROOT_DIR/src/SignalingServer.cpp" \
+    "$ROOT_DIR/src/RoomService.cpp"
+  ensure_target_built \
+    mediasoup_qos_unit_tests \
+    "$BUILD_DIR/mediasoup_qos_unit_tests" \
+    "$ROOT_DIR/tests/test_thread_model.cpp" \
+    "$ROOT_DIR/client/ThreadedControlHelpers.h" \
+    "$ROOT_DIR/client/NetworkThread.h"
+  ensure_target_built \
+    mediasoup_thread_integration_tests \
+    "$BUILD_DIR/mediasoup_thread_integration_tests" \
+    "$ROOT_DIR/tests/test_thread_integration.cpp" \
+    "$ROOT_DIR/client/ThreadTypes.h" \
+    "$ROOT_DIR/client/ThreadedControlHelpers.h" \
+    "$ROOT_DIR/client/NetworkThread.h"
+  ensure_plain_client_built
+
+  local repetitions="${TWCC_AB_REPETITIONS:-1}"
+  local matrix_speed="${TWCC_AB_MATRIX_SPEED:-0.1}"
+  local cases="${TWCC_AB_CASES:-AB-001,AB-002,AB-003,AB-004,AB-005}"
+
+  run_cmd \
+    "cpp-client-ab" \
+    --cwd "$ROOT_DIR" \
+    node "$ROOT_DIR/tests/qos_harness/run_twcc_ab_eval.mjs" \
+    "--repetitions=$repetitions" \
+    "--matrix-speed=$matrix_speed" \
+    "--cases=$cases"
 }
 
 run_cpp_client_harness() {
@@ -886,6 +927,7 @@ run_group() {
     cpp-accuracy) run_cpp_accuracy ;;
     cpp-recording) run_cpp_recording ;;
     cpp-client-matrix) run_cpp_client_matrix ;;
+    cpp-client-ab) run_cpp_client_ab ;;
     cpp-client-harness) run_cpp_client_harness ;;
     cpp-threaded) run_cpp_threaded ;;
     node-harness) run_node_harness ;;
@@ -899,7 +941,7 @@ run_group() {
 run_target() {
   local target="$1"
   case "$target" in
-    client-js|cpp-unit|cpp-integration|cpp-accuracy|cpp-recording|cpp-client-matrix|cpp-client-harness|cpp-threaded|node-harness|browser-harness|matrix|downlink-matrix)
+    client-js|cpp-unit|cpp-integration|cpp-accuracy|cpp-recording|cpp-client-matrix|cpp-client-ab|cpp-client-harness|cpp-threaded|node-harness|browser-harness|matrix|downlink-matrix)
       run_group "$target"
       ;;
     cpp-client-harness:*)
