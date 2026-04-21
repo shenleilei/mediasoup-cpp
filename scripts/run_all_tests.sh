@@ -25,6 +25,94 @@ TASK_ORDER=()
 declare -A TASK_RESULTS=()
 declare -A TASK_DURATIONS=()
 
+relative_markdown_path() {
+  local target_path="$1"
+  python3 - "$REPORT_FILE" "$target_path" <<'PY'
+import os, sys
+report = os.path.abspath(sys.argv[1])
+target = os.path.abspath(sys.argv[2])
+print(os.path.relpath(target, os.path.dirname(report)))
+PY
+}
+
+markdown_link_or_dash() {
+  local path="$1"
+  local label="$2"
+  if [[ -f "$path" ]]; then
+    local rel
+    rel="$(relative_markdown_path "$path")"
+    printf '[%s](%s)' "$label" "$rel"
+  else
+    printf '%s' '-'
+  fi
+}
+
+file_mtime_or_dash() {
+  local path="$1"
+  if [[ -f "$path" ]]; then
+    stat -c '%y' "$path" 2>/dev/null | cut -d'.' -f1
+  else
+    printf '%s' '-'
+  fi
+}
+
+append_report_link_row() {
+  local file="$1"
+  local label="$2"
+  local description="$3"
+  printf '| %s | %s | %s | %s |\n' \
+    "$label" \
+    "$description" \
+    "$(markdown_link_or_dash "$file" "$(basename "$file")")" \
+    "$(file_mtime_or_dash "$file")"
+}
+
+append_latest_artifact_row() {
+  local pattern="$1"
+  local label="$2"
+  local description="$3"
+  local latest
+  latest="$(find "$ROOT_DIR"/$pattern -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort | tail -1 || true)"
+  if [[ -n "$latest" ]]; then
+    local report_md="$latest/$(basename "$pattern").md"
+    if [[ ! -f "$report_md" ]]; then
+      report_md="$(find "$latest" -maxdepth 1 -type f -name '*.md' | sort | head -1 || true)"
+    fi
+    if [[ -n "$report_md" && -f "$report_md" ]]; then
+      printf '| %s | %s | %s | %s |\n' \
+        "$label" \
+        "$description" \
+        "$(markdown_link_or_dash "$report_md" "$(basename "$report_md")")" \
+        "$(file_mtime_or_dash "$report_md")"
+      return
+    fi
+  fi
+  printf '| %s | %s | - | - |\n' "$label" "$description"
+}
+
+duration_seconds() {
+  local duration="$1"
+  if [[ "$duration" =~ ^([0-9]+)s$ ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+  else
+    printf '0'
+  fi
+}
+
+duration_bar() {
+  local seconds="$1"
+  local max_seconds="$2"
+  if (( max_seconds <= 0 || seconds <= 0 )); then
+    printf '%s' '-'
+    return
+  fi
+  local width=$(( seconds * 20 / max_seconds ))
+  if (( width < 1 )); then
+    width=1
+  fi
+  printf '%*s' "$width" '' | tr ' ' '#'
+}
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -145,7 +233,7 @@ write_report() {
   local attempted=0
   local passed=0
   local failed=0
-  local label status duration group
+  local label status duration group duration_seconds_value max_duration_seconds=0
   local -a failed_tasks=()
 
   generated_at="$(date '+%Y-%m-%d %H:%M:%S %Z')"
@@ -156,6 +244,11 @@ write_report() {
 
   for label in "${TASK_ORDER[@]}"; do
     status="${TASK_RESULTS[$label]:-NOT_RUN}"
+    duration="${TASK_DURATIONS[$label]:--}"
+    duration_seconds_value="$(duration_seconds "$duration")"
+    if (( duration_seconds_value > max_duration_seconds )); then
+      max_duration_seconds=$duration_seconds_value
+    fi
     case "$status" in
       PASS)
         ((attempted += 1))
@@ -213,6 +306,35 @@ write_report() {
         echo "| \`$label\` | \`$group\` | \`$status\` | \`$duration\` |"
       done
     fi
+    echo
+    echo "## Task Duration View"
+    echo
+    if ((${#TASK_ORDER[@]} == 0)); then
+      echo "- No duration data."
+    else
+      echo "| Task | Duration | Visual |"
+      echo "|---|---:|---|"
+      for label in "${TASK_ORDER[@]}"; do
+        duration="${TASK_DURATIONS[$label]:--}"
+        duration_seconds_value="$(duration_seconds "$duration")"
+        echo "| \`$label\` | \`$duration\` | $(duration_bar "$duration_seconds_value" "$max_duration_seconds") |"
+      done
+    fi
+    echo
+    echo "## Detailed Reports"
+    echo
+    echo "| Report | Scope | Link | Updated |"
+    echo "|---|---|---|---|"
+    append_report_link_row "$ROOT_DIR/docs/uplink-qos-test-results-summary.md" "Uplink Summary" "Uplink QoS summary"
+    append_report_link_row "$ROOT_DIR/docs/uplink-qos-case-results.md" "Uplink Cases" "Browser uplink per-case report"
+    append_report_link_row "$ROOT_DIR/docs/plain-client-qos-case-results.md" "Plain Client Cases" "PlainTransport C++ client per-case report"
+    append_report_link_row "$ROOT_DIR/docs/downlink-qos-test-results-summary.md" "Downlink Summary" "Downlink QoS summary"
+    append_report_link_row "$ROOT_DIR/docs/downlink-qos-case-results.md" "Downlink Cases" "Downlink per-case report"
+    append_report_link_row "$ROOT_DIR/docs/generated/uplink-qos-matrix-report.json" "Uplink Matrix JSON" "Latest browser uplink matrix artifact"
+    append_report_link_row "$ROOT_DIR/docs/generated/uplink-qos-cpp-client-matrix-report.json" "Plain Client Matrix JSON" "Latest C++ client matrix artifact"
+    append_report_link_row "$ROOT_DIR/docs/generated/downlink-qos-matrix-report.json" "Downlink Matrix JSON" "Latest downlink matrix artifact"
+    append_latest_artifact_row "changes/2026-04-21-livekit-aligned-send-side-bwe/artifacts/full43-compare" "LiveKit 43-Case Compare" "Latest livekit-aligned 43-case comparison"
+    append_latest_artifact_row "changes/2026-04-21-plain-client-sender-transport-control/artifacts/twcc-ab-eval" "TWCC A/B Eval" "Latest TWCC A/B effectiveness report"
   } > "$REPORT_FILE"
 }
 
