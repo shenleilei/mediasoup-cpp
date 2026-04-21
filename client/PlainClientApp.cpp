@@ -594,6 +594,10 @@ bool PlainClientApp::InitializeSession()
 	const uint16_t serverPort = pub["port"];
 	const uint8_t defaultVideoPt = pub["videoPt"];
 	audioPt_ = pub["audioPt"];
+	const uint8_t defaultVideoTransportCcExtensionId =
+		static_cast<uint8_t>(pub.value("videoTransportCcExtId", 0));
+	audioTransportCcExtensionId_ =
+		static_cast<uint8_t>(pub.value("audioTransportCcExtId", 0));
 	std::printf("Publish → %s:%d (announced=%s) videoTracks=%zu videoPt=%d aPt=%d\n",
 		serverIp_.c_str(),
 		serverPort,
@@ -621,6 +625,8 @@ bool PlainClientApp::InitializeSession()
 			: json::object();
 		videoTracks_[i].ssrc = trackJson.value("ssrc", videoSsrcs[i]);
 		videoTracks_[i].payloadType = static_cast<uint8_t>(trackJson.value("pt", defaultVideoPt));
+		videoTracks_[i].transportCcExtensionId = static_cast<uint8_t>(
+			trackJson.value("transportCcExtId", defaultVideoTransportCcExtensionId));
 		videoTracks_[i].producerId = trackJson.value("producerId", i == 0 ? pub.value("videoProdId", "") : "");
 	}
 

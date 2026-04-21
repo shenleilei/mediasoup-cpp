@@ -35,6 +35,7 @@ int PlainClientApp::RunThreadedMode()
 	networkConfig.udpFd = udpFd_;
 	networkConfig.audioSsrc = audioSsrc_;
 	networkConfig.audioPt = audioPt_;
+	networkConfig.audioTransportCcExtensionId = audioTransportCcExtensionId_;
 	networkConfig.enableTransportController = transportControllerEnabled_;
 	NetworkThread netThread(networkConfig);
 	netThread.statsQueue = &statsQueue;
@@ -45,7 +46,8 @@ int PlainClientApp::RunThreadedMode()
 		netThread.registerVideoTrack(
 			static_cast<uint32_t>(i),
 			videoTracks_[i].ssrc,
-			videoTracks_[i].payloadType);
+			videoTracks_[i].payloadType,
+			videoTracks_[i].transportCcExtensionId);
 		NetworkThread::SourceInput input;
 		input.auQueue = &queues[i]->auQueue;
 		input.keyframeQueue = &queues[i]->netCmdQueue;

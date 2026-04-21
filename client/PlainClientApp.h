@@ -39,6 +39,7 @@ private:
 		std::string producerId;
 		uint32_t ssrc = 0;
 		uint8_t payloadType = 0;
+		uint8_t transportCcExtensionId = 0;
 		uint16_t seq = 0;
 		double weight = 1.0;
 		bool lossBaseInitialized = false;
@@ -128,6 +129,7 @@ private:
 	int udpFd_{-1};
 	uint32_t audioSsrc_{22222222u};
 	uint8_t audioPt_{0};
+	uint8_t audioTransportCcExtensionId_{0};
 	uint16_t audioSeq_{0};
 
 	std::shared_ptr<CachedServerStatsResponse> cachedServerStatsResponse_;

@@ -20,8 +20,9 @@
 // ═══════════════════════════════════════════════════════════
 static constexpr uint8_t RTCP_PT_SR   = 200;
 static constexpr uint8_t RTCP_PT_RR   = 201;
-static constexpr uint8_t RTCP_PT_RTPFB = 205; // NACK (fmt=1)
+static constexpr uint8_t RTCP_PT_RTPFB = 205; // NACK (fmt=1), transport-cc (fmt=15)
 static constexpr uint8_t RTCP_PT_PSFB  = 206; // PLI (fmt=1), FIR (fmt=4)
+static constexpr uint8_t RTCP_RTPFB_FMT_NACK = 1;
 
 // ═══════════════════════════════════════════════════════════
 // NTP helpers

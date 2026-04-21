@@ -4,6 +4,7 @@
 
 #include "RtcpHandler.h"
 #include "SenderTransportController.h"
+#include "TransportCcHelpers.h"
 #include "ThreadTypes.h"
 #include "media/rtp/H264Packetizer.h"
 
@@ -43,6 +44,7 @@ struct TrackNetState {
 	uint32_t trackIndex = 0;
 	uint32_t ssrc = 0;
 	uint8_t payloadType = 0;
+	uint8_t transportCcExtensionId = 0;
 	uint16_t seq = 0;
 	bool paused = false;
 	int64_t lastPliForwardedMs = 0;
@@ -60,6 +62,7 @@ public:
 		int udpFd = -1;                // pre-created connected UDP socket
 		uint32_t audioSsrc = 0;
 		uint8_t audioPt = 0;
+		uint8_t audioTransportCcExtensionId = 0;
 		bool enableTransportController = true;
 	};
 
@@ -90,7 +93,7 @@ public:
 			mediasoup::plainclient::PacketClass packetClass,
 			const uint8_t* data,
 			size_t len) {
-			return mediasoup::plainclient::SendUdpDatagram(cfg_.udpFd, data, len);
+			return sendMediaPacketWithTransportCc(packetClass, data, len);
 		});
 		transportController_.SetNowFn([this] { return steadyNowMs(); });
 		transportController_.SetOnVideoMediaSent([this](const uint8_t* packet, size_t packetLen) {
@@ -109,11 +112,16 @@ public:
 
 	~NetworkThread() { stop(); }
 
-	void registerVideoTrack(uint32_t trackIndex, uint32_t ssrc, uint8_t pt) {
+	void registerVideoTrack(
+		uint32_t trackIndex,
+		uint32_t ssrc,
+		uint8_t pt,
+		uint8_t transportCcExtensionId = 0) {
 		TrackNetState t;
 		t.trackIndex = trackIndex;
 		t.ssrc = ssrc;
 		t.payloadType = pt;
+		t.transportCcExtensionId = transportCcExtensionId;
 		t.rtcpState.ssrc = ssrc;
 		t.rtcpState.payloadType = pt;
 		tracks_.push_back(std::move(t));
@@ -210,6 +218,68 @@ private:
 			std::chrono::steady_clock::now().time_since_epoch()).count();
 	}
 
+	static bool isTransportCcPacketClass(mediasoup::plainclient::PacketClass packetClass) {
+		return
+			packetClass == mediasoup::plainclient::PacketClass::AudioRtp ||
+			packetClass == mediasoup::plainclient::PacketClass::VideoMedia ||
+			packetClass == mediasoup::plainclient::PacketClass::VideoRetransmission;
+	}
+
+	uint8_t transportCcExtensionIdForSsrc(uint32_t ssrc) const
+	{
+		if (ssrc == cfg_.audioSsrc) {
+			return cfg_.audioTransportCcExtensionId;
+		}
+
+		for (const auto& track : tracks_) {
+			if (track.ssrc == ssrc) {
+				return track.transportCcExtensionId;
+			}
+		}
+
+		return 0;
+	}
+
+	mediasoup::plainclient::SendResult sendMediaPacketWithTransportCc(
+		mediasoup::plainclient::PacketClass packetClass,
+		const uint8_t* data,
+		size_t len)
+	{
+		if (!isTransportCcPacketClass(packetClass) || !data || len < 12) {
+			return mediasoup::plainclient::SendUdpDatagram(cfg_.udpFd, data, len);
+		}
+
+		const uint32_t ssrc =
+			(static_cast<uint32_t>(data[8]) << 24) |
+			(static_cast<uint32_t>(data[9]) << 16) |
+			(static_cast<uint32_t>(data[10]) << 8) |
+			static_cast<uint32_t>(data[11]);
+		const uint8_t extensionId = transportCcExtensionIdForSsrc(ssrc);
+		if (extensionId == 0) {
+			return mediasoup::plainclient::SendUdpDatagram(cfg_.udpFd, data, len);
+		}
+
+		uint8_t rewrittenPacket[1600];
+		size_t rewrittenLen = sizeof(rewrittenPacket);
+		if (!mediasoup::plainclient::RewriteRtpWithTransportCcSequence(
+				data,
+				len,
+				extensionId,
+				nextTransportWideCcSequence_,
+				rewrittenPacket,
+				&rewrittenLen)) {
+			transportCcRewriteFailures_++;
+			return mediasoup::plainclient::SendUdpDatagram(cfg_.udpFd, data, len);
+		}
+
+		const auto result = mediasoup::plainclient::SendUdpDatagram(cfg_.udpFd, rewrittenPacket, rewrittenLen);
+		if (result.status == mediasoup::plainclient::SendStatus::Sent) {
+			nextTransportWideCcSequence_++;
+			transportCcRewrittenPacketsSent_++;
+		}
+		return result;
+	}
+
 	void sendH264(const uint8_t* data, int size, uint8_t pt, uint32_t ts, uint32_t ssrc, uint16_t& seq) {
 		class NetworkPacingSink final : public mediasoup::media::rtp::H264PacketSink {
 		public:
@@ -251,7 +321,10 @@ private:
 		if (useTransportController_) {
 			(void)transportController_.EnqueueAudioPacket(ssrc, ts, pkt, 12 + size);
 		} else {
-			const auto result = mediasoup::plainclient::SendUdpDatagram(cfg_.udpFd, pkt, 12 + size);
+			const auto result = sendMediaPacketWithTransportCc(
+				mediasoup::plainclient::PacketClass::AudioRtp,
+				pkt,
+				12 + size);
 			if (result.status == mediasoup::plainclient::SendStatus::Sent) {
 				rtcp_.onAudioRtpSent(size, ts);
 			}
@@ -328,6 +401,18 @@ private:
 							rtcp_.pliResponded++;
 							stream->pliResponded++;
 						}
+					}
+				} else if (pt == RTCP_PT_RTPFB && fmt == mediasoup::plainclient::RTCP_RTPFB_FMT_TRANSPORT_CC) {
+					mediasoup::plainclient::TransportCcFeedbackSummary summary;
+					if (mediasoup::plainclient::ParseTransportCcFeedbackSummary(
+							buf + offset,
+							pktLen,
+							&summary)) {
+						transportCcFeedbackReports_++;
+						transportCcFeedbackPacketCount_ += summary.packetStatusCount;
+						transportCcFeedbackLostCount_ += summary.lostPacketCount;
+					} else {
+						transportCcMalformedFeedbackCount_++;
 					}
 				} else if (pt == RTCP_PT_RTPFB && fmt == 1) {
 					// NACK — handle locally in network thread
@@ -584,8 +669,13 @@ private:
 		constexpr int kBurstLimit = 8;
 		for (int i = 0; i < kBurstLimit && !pacingQueue_.empty(); ++i) {
 			auto& e = pacingQueue_.front();
-			send(cfg_.udpFd, e.data, e.len, 0);
-			if (e.len >= 12) rtcp_.onVideoRtpSent(e.data, e.len);
+			const auto result = sendMediaPacketWithTransportCc(
+				mediasoup::plainclient::PacketClass::VideoMedia,
+				e.data,
+				e.len);
+			if (result.status == mediasoup::plainclient::SendStatus::Sent && e.len >= 12) {
+				rtcp_.onVideoRtpSent(e.data, e.len);
+			}
 			pacingQueue_.pop_front();
 		}
 	}
@@ -622,6 +712,13 @@ private:
 	std::atomic<bool> running_{false};
 	std::thread thread_;
 	uint16_t audioSeq_ = 0;
+	uint16_t nextTransportWideCcSequence_{ 0 };
+	uint64_t transportCcRewrittenPacketsSent_{ 0 };
+	uint64_t transportCcRewriteFailures_{ 0 };
+	uint64_t transportCcFeedbackReports_{ 0 };
+	uint64_t transportCcFeedbackPacketCount_{ 0 };
+	uint64_t transportCcFeedbackLostCount_{ 0 };
+	uint64_t transportCcMalformedFeedbackCount_{ 0 };
 	uint64_t statsGeneration_ = 0;
 	int epollFd_ = -1;
 	int wakeupFd_ = -1;
