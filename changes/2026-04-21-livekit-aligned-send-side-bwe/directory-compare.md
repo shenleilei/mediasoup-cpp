@@ -37,5 +37,6 @@ Integration status:
 - packet tracker: ported
 - packet group / traffic stats: ported
 - congestion detector shell/core: ported into C++ module
-- `NetworkThread` glue migration: pending
+- `NetworkThread` glue migration: completed
+- probe lifecycle and RTP padding probe sends: completed
 - old `DelayBasedBwe` removal/replacement: completed
