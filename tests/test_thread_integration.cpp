@@ -1453,6 +1453,153 @@ TEST(NetworkThreadIntegration, ProbeSendsPaddingRtpWhenTargetExceedsEstimate) {
 	close(recvFd);
 }
 
+TEST(NetworkThreadIntegration, ProbeReusesLatestMediaTimestamp) {
+	int sendFd = -1, recvFd = -1;
+	uint16_t port = 0;
+	ASSERT_EQ(createConnectedUdpPair(sendFd, recvFd, port), 0);
+
+	mt::SpscQueue<mt::EncodedAccessUnit, mt::kEncodedAuQueueCapacity> auQueue;
+	mt::SpscQueue<mt::NetworkToSourceCommand, mt::kNetworkSourceQueueCapacity> netCmdQueue;
+
+	NetworkThread::Config cfg;
+	cfg.udpFd = sendFd;
+	cfg.audioSsrc = 22222222;
+	cfg.audioPt = 111;
+	cfg.sendSideBweConfig = fastSendSideBweConfig();
+
+	NetworkThread net(cfg);
+	net.registerVideoTrack(0, 11111111u, 96, 5);
+	net.seedTransportEstimateForTest(2000000u);
+
+	NetworkThread::SourceInput sourceInput;
+	sourceInput.auQueue = &auQueue;
+	sourceInput.keyframeQueue = &netCmdQueue;
+	net.addSourceInput(sourceInput);
+
+	mt::EncodedAccessUnit au;
+	au.trackIndex = 0;
+	au.ssrc = 11111111u;
+	au.payloadType = 96;
+	au.rtpTimestamp = 90000u;
+	au.isKeyframe = true;
+	uint8_t h264[] = {0x00, 0x00, 0x00, 0x01, 0x65, 0xAA, 0xBB, 0xCC};
+	au.assign(h264, sizeof(h264));
+	ASSERT_TRUE(auQueue.tryPush(std::move(au)));
+
+	net.start();
+	net.wakeup();
+	std::this_thread::sleep_for(std::chrono::milliseconds(120));
+
+	uint32_t mediaTimestamp = 0;
+	for (int attempt = 0; attempt < 32 && mediaTimestamp == 0; ++attempt) {
+		uint8_t packet[1600];
+		const int bytes = recv(recvFd, packet, sizeof(packet), MSG_DONTWAIT);
+		if (bytes <= 0) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+			continue;
+		}
+		if ((packet[0] & 0x20) == 0 && bytes >= 12) {
+			mediaTimestamp =
+				(static_cast<uint32_t>(packet[4]) << 24) |
+				(static_cast<uint32_t>(packet[5]) << 16) |
+				(static_cast<uint32_t>(packet[6]) << 8) |
+				static_cast<uint32_t>(packet[7]);
+		}
+	}
+	ASSERT_NE(mediaTimestamp, 0u);
+
+	net.seedTransportEstimateForTest(300000u);
+	std::this_thread::sleep_for(std::chrono::milliseconds(120));
+
+	uint32_t probeTimestamp = 0;
+	for (int attempt = 0; attempt < 32 && probeTimestamp == 0; ++attempt) {
+		uint8_t packet[1600];
+		const int bytes = recv(recvFd, packet, sizeof(packet), MSG_DONTWAIT);
+		if (bytes <= 0) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+			continue;
+		}
+		if ((packet[0] & 0x20) != 0 && bytes >= 12) {
+			probeTimestamp =
+				(static_cast<uint32_t>(packet[4]) << 24) |
+				(static_cast<uint32_t>(packet[5]) << 16) |
+				(static_cast<uint32_t>(packet[6]) << 8) |
+				static_cast<uint32_t>(packet[7]);
+		}
+	}
+
+	net.stop();
+
+	ASSERT_NE(probeTimestamp, 0u);
+	EXPECT_EQ(probeTimestamp, mediaTimestamp);
+
+	close(sendFd);
+	close(recvFd);
+}
+
+TEST(NetworkThreadIntegration, TransportCcSequenceStaysStableAcrossWouldBlockRetries) {
+	int sendFd = -1, recvFd = -1;
+	uint16_t port = 0;
+	ASSERT_EQ(createConnectedUdpPair(sendFd, recvFd, port), 0);
+
+	mt::SpscQueue<mt::EncodedAccessUnit, mt::kEncodedAuQueueCapacity> auQueue;
+	mt::SpscQueue<mt::NetworkToSourceCommand, mt::kNetworkSourceQueueCapacity> netCmdQueue;
+
+	NetworkThread::Config cfg;
+	cfg.udpFd = sendFd;
+	cfg.audioSsrc = 22222222;
+	cfg.audioPt = 111;
+	cfg.audioTransportCcExtensionId = 5;
+
+	NetworkThread net(cfg);
+	net.registerVideoTrack(0, 11111111u, 96, 5);
+
+	NetworkThread::SourceInput sourceInput;
+	sourceInput.auQueue = &auQueue;
+	sourceInput.keyframeQueue = &netCmdQueue;
+	net.addSourceInput(sourceInput);
+
+	std::vector<uint16_t> transportSequences;
+	int attemptCount = 0;
+	net.SetUdpSendFnForTest([&](
+		int,
+		const uint8_t* packet,
+		size_t packetLen) -> mediasoup::plainclient::SendResult {
+		uint16_t transportSequence = 0;
+		if (extractTransportCcSequence(packet, packetLen, 5, &transportSequence)) {
+			transportSequences.push_back(transportSequence);
+		}
+		attemptCount++;
+		if (attemptCount < 3) {
+			return {mediasoup::plainclient::SendStatus::WouldBlock, EAGAIN, 0};
+		}
+		return {mediasoup::plainclient::SendStatus::Sent, 0, packetLen};
+	});
+
+	mt::EncodedAccessUnit au;
+	au.trackIndex = 0;
+	au.ssrc = 11111111u;
+	au.payloadType = 96;
+	au.rtpTimestamp = 90000;
+	au.isKeyframe = true;
+	uint8_t h264[] = {0x00, 0x00, 0x00, 0x01, 0x65, 0xAA, 0xBB, 0xCC};
+	au.assign(h264, sizeof(h264));
+	ASSERT_TRUE(auQueue.tryPush(std::move(au)));
+
+	net.start();
+	net.wakeup();
+	std::this_thread::sleep_for(std::chrono::milliseconds(120));
+	net.stop();
+
+	ASSERT_GE(transportSequences.size(), 3u);
+	for (size_t i = 1; i < transportSequences.size(); ++i) {
+		EXPECT_EQ(transportSequences[i], transportSequences[0]);
+	}
+
+	close(sendFd);
+	close(recvFd);
+}
+
 TEST(NetworkPause, PauseAckDropsQueuedRetransmissionsAndPreventsLateRtp) {
 	int sendFd = -1, recvFd = -1;
 	uint16_t port = 0;

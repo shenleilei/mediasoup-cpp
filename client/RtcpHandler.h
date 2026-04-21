@@ -205,6 +205,7 @@ struct VideoStreamRtcpState {
 	uint32_t ssrc = 0;
 	uint8_t payloadType = 0;
 	uint32_t packetCount = 0;
+	uint32_t probePacketCount = 0;
 	uint32_t octetCount = 0;
 	uint32_t lastRtpTs = 0;
 	RtpPacketStore store;
@@ -284,6 +285,15 @@ struct RtcpContext {
 		stream->packetCount++;
 		stream->octetCount += (len > 12) ? (len - 12) : 0;
 		stream->lastRtpTs = rtpTs;
+	}
+
+	void onVideoProbeRtpSent(const uint8_t* pkt, size_t len) {
+		if (len < 12) return;
+		uint32_t ssrc = ((uint32_t)pkt[8] << 24) | ((uint32_t)pkt[9] << 16)
+			| ((uint32_t)pkt[10] << 8) | pkt[11];
+		auto* stream = getVideoStream(ssrc);
+		if (!stream) return;
+		stream->probePacketCount++;
 	}
 
 	void onAudioRtpSent(size_t payloadLen, uint32_t rtpTs) {

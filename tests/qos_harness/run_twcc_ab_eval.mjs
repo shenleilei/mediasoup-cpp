@@ -25,6 +25,7 @@ const selectedAbIds = casesArg
   : ['AB-001', 'AB-002', 'AB-003', 'AB-004', 'AB-005'];
 
 const workerBin = process.env.QOS_CPP_CLIENT_WORKER_BIN || './mediasoup-worker';
+const harnessMp4 = ensureHarnessMp4();
 const generatedAt = new Date().toISOString();
 const runId = generatedAt.replace(/:/g, '-');
 const runDir = path.join(artifactRoot, runId);
@@ -162,6 +163,28 @@ function phaseStability(result, phaseName) {
   return p90 - p50;
 }
 
+function phaseCounterDelta(result, phaseName, fieldName) {
+  const samples = phaseSamples(result, phaseName)
+    .map(sample => sample?.[fieldName])
+    .filter(value => Number.isFinite(value));
+  if (samples.length < 2) return null;
+  const delta = samples[samples.length - 1] - samples[0];
+  return delta >= 0 ? delta : null;
+}
+
+function phaseLastValue(result, phaseName, fieldName) {
+  const samples = phaseSamples(result, phaseName)
+    .map(sample => sample?.[fieldName])
+    .filter(value => Number.isFinite(value));
+  if (samples.length === 0) return null;
+  return samples[samples.length - 1];
+}
+
+function phaseAnyTrue(result, phaseName, fieldName) {
+  const samples = phaseSamples(result, phaseName);
+  return samples.some(sample => sample?.[fieldName] === true);
+}
+
 function recoveryTimingValue(result) {
   const stable = result?.timing?.recovery?.t_detect_stable;
   if (Number.isFinite(stable)) return stable;
@@ -181,6 +204,24 @@ function buildAbScenarioMetrics(result, abId) {
     lossPercent: phaseLossStats(result, config.phase),
     recoveryTimeMs: summarizeValues([abId === 'AB-003' ? recoveryTimingValue(result) : null]),
     stabilityKbpsP90MinusP50: phaseStability(result, config.phase),
+    queuePressure: {
+      wouldBlockTotal: phaseCounterDelta(result, config.phase, 'wouldBlockTotal'),
+      queuedVideoRetentions: phaseCounterDelta(result, config.phase, 'queuedVideoRetentions'),
+      audioDeadlineDrops: phaseCounterDelta(result, config.phase, 'audioDeadlineDrops'),
+      retransmissionDrops: phaseCounterDelta(result, config.phase, 'retransmissionDrops'),
+    },
+    whiteBox: {
+      senderUsageBps: phaseLastValue(result, config.phase, 'senderUsageBps'),
+      transportEstimateBps: phaseLastValue(result, config.phase, 'transportEstimateBps'),
+      effectivePacingBps: phaseLastValue(result, config.phase, 'effectivePacingBps'),
+      feedbackReports: phaseCounterDelta(result, config.phase, 'feedbackReports'),
+      retransmissionSent: phaseCounterDelta(result, config.phase, 'retransmissionSent'),
+      probePackets: phaseCounterDelta(result, config.phase, 'probePackets'),
+      probeActiveObserved: phaseAnyTrue(result, config.phase, 'probeActive'),
+      queuedFreshVideoPackets: phaseLastValue(result, config.phase, 'queuedFreshVideoPackets'),
+      queuedAudioPackets: phaseLastValue(result, config.phase, 'queuedAudioPackets'),
+      queuedRetransmissionPackets: phaseLastValue(result, config.phase, 'queuedRetransmissionPackets'),
+    },
   };
 }
 
@@ -345,6 +386,9 @@ async function main() {
           QOS_MATRIX_SPEED: String(matrixSpeed),
           QOS_CPP_CLIENT_MATRIX_PORT: String(signalingPort),
           QOS_CPP_CLIENT_WORKER_BIN: workerBin,
+          PLAIN_CLIENT_THREADED: '1',
+          PLAIN_CLIENT_VIDEO_TRACK_COUNT: '1',
+          PLAIN_CLIENT_VIDEO_SOURCES: harnessMp4,
           ...group.env,
         },
       );
@@ -485,6 +529,46 @@ async function main() {
       const candidateRecovery = aggregateMetric(candidateMetrics, item => item?.recoveryTimeMs?.mean);
       const baselineStability = summarizeValues(baselineMetrics.map(item => item?.stabilityKbpsP90MinusP50));
       const candidateStability = summarizeValues(candidateMetrics.map(item => item?.stabilityKbpsP90MinusP50));
+      const aggregateRawMetric = (items, accessor) =>
+        summarizeValues(items.map(item => accessor(item)).filter(value => Number.isFinite(value)));
+      const aggregateBoolMetric = (items, accessor) =>
+        items.some(item => accessor(item) === true);
+      const baselineQueuePressure = {
+        wouldBlockTotal: aggregateRawMetric(baselineMetrics, item => item?.queuePressure?.wouldBlockTotal).mean,
+        queuedVideoRetentions: aggregateRawMetric(baselineMetrics, item => item?.queuePressure?.queuedVideoRetentions).mean,
+        audioDeadlineDrops: aggregateRawMetric(baselineMetrics, item => item?.queuePressure?.audioDeadlineDrops).mean,
+        retransmissionDrops: aggregateRawMetric(baselineMetrics, item => item?.queuePressure?.retransmissionDrops).mean,
+      };
+      const candidateQueuePressure = {
+        wouldBlockTotal: aggregateRawMetric(candidateMetrics, item => item?.queuePressure?.wouldBlockTotal).mean,
+        queuedVideoRetentions: aggregateRawMetric(candidateMetrics, item => item?.queuePressure?.queuedVideoRetentions).mean,
+        audioDeadlineDrops: aggregateRawMetric(candidateMetrics, item => item?.queuePressure?.audioDeadlineDrops).mean,
+        retransmissionDrops: aggregateRawMetric(candidateMetrics, item => item?.queuePressure?.retransmissionDrops).mean,
+      };
+      const baselineWhiteBox = {
+        senderUsageBps: aggregateRawMetric(baselineMetrics, item => item?.whiteBox?.senderUsageBps).mean,
+        transportEstimateBps: aggregateRawMetric(baselineMetrics, item => item?.whiteBox?.transportEstimateBps).mean,
+        effectivePacingBps: aggregateRawMetric(baselineMetrics, item => item?.whiteBox?.effectivePacingBps).mean,
+        feedbackReports: aggregateRawMetric(baselineMetrics, item => item?.whiteBox?.feedbackReports).mean,
+        retransmissionSent: aggregateRawMetric(baselineMetrics, item => item?.whiteBox?.retransmissionSent).mean,
+        probePackets: aggregateRawMetric(baselineMetrics, item => item?.whiteBox?.probePackets).mean,
+        probeActiveObserved: aggregateBoolMetric(baselineMetrics, item => item?.whiteBox?.probeActiveObserved),
+        queuedFreshVideoPackets: aggregateRawMetric(baselineMetrics, item => item?.whiteBox?.queuedFreshVideoPackets).mean,
+        queuedAudioPackets: aggregateRawMetric(baselineMetrics, item => item?.whiteBox?.queuedAudioPackets).mean,
+        queuedRetransmissionPackets: aggregateRawMetric(baselineMetrics, item => item?.whiteBox?.queuedRetransmissionPackets).mean,
+      };
+      const candidateWhiteBox = {
+        senderUsageBps: aggregateRawMetric(candidateMetrics, item => item?.whiteBox?.senderUsageBps).mean,
+        transportEstimateBps: aggregateRawMetric(candidateMetrics, item => item?.whiteBox?.transportEstimateBps).mean,
+        effectivePacingBps: aggregateRawMetric(candidateMetrics, item => item?.whiteBox?.effectivePacingBps).mean,
+        feedbackReports: aggregateRawMetric(candidateMetrics, item => item?.whiteBox?.feedbackReports).mean,
+        retransmissionSent: aggregateRawMetric(candidateMetrics, item => item?.whiteBox?.retransmissionSent).mean,
+        probePackets: aggregateRawMetric(candidateMetrics, item => item?.whiteBox?.probePackets).mean,
+        probeActiveObserved: aggregateBoolMetric(candidateMetrics, item => item?.whiteBox?.probeActiveObserved),
+        queuedFreshVideoPackets: aggregateRawMetric(candidateMetrics, item => item?.whiteBox?.queuedFreshVideoPackets).mean,
+        queuedAudioPackets: aggregateRawMetric(candidateMetrics, item => item?.whiteBox?.queuedAudioPackets).mean,
+        queuedRetransmissionPackets: aggregateRawMetric(candidateMetrics, item => item?.whiteBox?.queuedRetransmissionPackets).mean,
+      };
 
       const caseDef = caseById.get(config.caseId);
       metrics.scenarios.push({
@@ -501,12 +585,8 @@ async function main() {
           lossPercent: baselineLoss,
           recoveryTimeMs: baselineRecovery,
           stabilityKbpsP90MinusP50: baselineStability.mean,
-          queuePressure: {
-            wouldBlockTotal: null,
-            queuedVideoRetentions: null,
-            audioDeadlineDrops: null,
-            retransmissionDrops: null,
-          },
+          queuePressure: baselineQueuePressure,
+          whiteBox: baselineWhiteBox,
           fairnessDeviation: null,
         },
         candidate: {
@@ -514,12 +594,8 @@ async function main() {
           lossPercent: candidateLoss,
           recoveryTimeMs: candidateRecovery,
           stabilityKbpsP90MinusP50: candidateStability.mean,
-          queuePressure: {
-            wouldBlockTotal: null,
-            queuedVideoRetentions: null,
-            audioDeadlineDrops: null,
-            retransmissionDrops: null,
-          },
+          queuePressure: candidateQueuePressure,
+          whiteBox: candidateWhiteBox,
           fairnessDeviation: null,
         },
         delta: {

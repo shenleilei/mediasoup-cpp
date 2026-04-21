@@ -27,6 +27,14 @@ struct SendResult {
 	size_t bytesSent{0};
 };
 
+struct PacketTransportMetadata {
+	bool retryable{ false };
+	bool hasTransportSequence{ false };
+	uint16_t transportSequence{ 0 };
+	uint32_t probeClusterId{ 0 };
+	bool isProbe{ false };
+};
+
 inline bool IsWouldBlockErrno(int error)
 {
 	return error == EAGAIN || error == EWOULDBLOCK || error == ENOBUFS;
@@ -54,7 +62,8 @@ inline SendResult SendUdpDatagram(int fd, const uint8_t* data, size_t len)
 	}
 }
 
-using DatagramSendFn = std::function<SendResult(PacketClass, const uint8_t*, size_t)>;
+using DatagramSendFn =
+	std::function<SendResult(PacketClass, PacketTransportMetadata*, const uint8_t*, size_t)>;
 
 inline size_t PacketClassIndex(PacketClass packetClass)
 {

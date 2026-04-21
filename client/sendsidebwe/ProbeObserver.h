@@ -91,6 +91,12 @@ public:
 		return isInProbe_ ? probeClusterInfo_.id : mediasoup::ccutils::ProbeClusterIdInvalid;
 	}
 
+	mediasoup::ccutils::ProbeClusterInfo CurrentProbeClusterInfo() const
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		return isInProbe_ ? probeClusterInfo_ : mediasoup::ccutils::ProbeClusterInfoInvalid;
+	}
+
 private:
 	static int64_t NowUs()
 	{

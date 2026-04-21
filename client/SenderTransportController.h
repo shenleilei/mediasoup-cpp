@@ -171,6 +171,7 @@ public:
 		packet.deadlineMs = NowMs() + config_.audioQueueDeadlineMs;
 		std::memcpy(packet.data, data, len);
 		packet.len = len;
+		packet.transportMetadata.retryable = true;
 		audioQueue_.push_back(std::move(packet));
 		return true;
 	}
@@ -180,7 +181,8 @@ public:
 		if (!sendFn_) {
 			return {SendStatus::HardError, EINVAL, 0};
 		}
-		const auto result = sendFn_(PacketClass::Control, data, len);
+		PacketTransportMetadata transportMetadata;
+		const auto result = sendFn_(PacketClass::Control, &transportMetadata, data, len);
 		RecordSendResult(PacketClass::Control, result);
 		return result;
 	}
@@ -288,6 +290,7 @@ private:
 		uint32_t ssrc{ 0 };
 		uint8_t data[kMaxPacketBytes]{};
 		size_t len{ 0 };
+		PacketTransportMetadata transportMetadata{};
 	};
 
 	struct AudioPacket : public Packet {
@@ -312,6 +315,7 @@ private:
 		packet.ssrc = ssrc;
 		std::memcpy(packet.data, data, len);
 		packet.len = len;
+		packet.transportMetadata.retryable = true;
 		queue.push_back(std::move(packet));
 		return true;
 	}
@@ -370,12 +374,12 @@ private:
 
 	void FlushAudioQueue()
 	{
-		while (!audioQueue_.empty()) {
-			auto& packet = audioQueue_.front();
-			const auto result = SendPacket(PacketClass::AudioRtp, packet.data, packet.len);
-			if (result.status == SendStatus::Sent) {
-				mediaBudgetBytes_ -= static_cast<int64_t>(packet.len);
-				if (onAudioSent_) {
+			while (!audioQueue_.empty()) {
+				auto& packet = audioQueue_.front();
+				const auto result = SendPacket(PacketClass::AudioRtp, packet);
+				if (result.status == SendStatus::Sent) {
+					mediaBudgetBytes_ -= static_cast<int64_t>(packet.len);
+					if (onAudioSent_) {
 					onAudioSent_(packet.len > 12 ? packet.len - 12 : 0, packet.rtpTimestamp);
 				}
 				audioQueue_.pop_front();
@@ -390,12 +394,12 @@ private:
 
 	void FlushRetransmissionQueue()
 	{
-		while (!videoRetransmissionQueue_.empty()) {
-			auto& packet = videoRetransmissionQueue_.front();
-			const auto result = SendPacket(PacketClass::VideoRetransmission, packet.data, packet.len);
-			if (result.status == SendStatus::Sent) {
-				mediaBudgetBytes_ -= static_cast<int64_t>(packet.len);
-				metrics_.retransmissionSent++;
+			while (!videoRetransmissionQueue_.empty()) {
+				auto& packet = videoRetransmissionQueue_.front();
+				const auto result = SendPacket(PacketClass::VideoRetransmission, packet);
+				if (result.status == SendStatus::Sent) {
+					mediaBudgetBytes_ -= static_cast<int64_t>(packet.len);
+					metrics_.retransmissionSent++;
 				if (onVideoRetransmissionSent_) {
 					onVideoRetransmissionSent_(packet.ssrc);
 				}
@@ -426,13 +430,13 @@ private:
 					continue;
 				}
 				auto& packet = trackState.videoQueue.front();
-				if (static_cast<int64_t>(packet.len) > mediaBudgetBytes_) {
-					continue;
-				}
-				const auto result = SendPacket(PacketClass::VideoMedia, packet.data, packet.len);
-				if (result.status == SendStatus::Sent) {
-					mediaBudgetBytes_ -= static_cast<int64_t>(packet.len);
-					if (onVideoMediaSent_) {
+					if (static_cast<int64_t>(packet.len) > mediaBudgetBytes_) {
+						continue;
+					}
+					const auto result = SendPacket(PacketClass::VideoMedia, packet);
+					if (result.status == SendStatus::Sent) {
+						mediaBudgetBytes_ -= static_cast<int64_t>(packet.len);
+						if (onVideoMediaSent_) {
 						onVideoMediaSent_(packet.data, packet.len);
 					}
 					trackState.videoQueue.pop_front();
@@ -465,15 +469,16 @@ private:
 		}
 	}
 
-	SendResult SendPacket(PacketClass packetClass, const uint8_t* data, size_t len)
-	{
-		if (!sendFn_) {
-			return {SendStatus::HardError, EINVAL, 0};
+		SendResult SendPacket(PacketClass packetClass, Packet& packet)
+		{
+			if (!sendFn_) {
+				return {SendStatus::HardError, EINVAL, 0};
+			}
+			const auto result =
+				sendFn_(packetClass, &packet.transportMetadata, packet.data, packet.len);
+			RecordSendResult(packetClass, result);
+			return result;
 		}
-		const auto result = sendFn_(packetClass, data, len);
-		RecordSendResult(packetClass, result);
-		return result;
-	}
 
 	void RecordSendResult(PacketClass packetClass, const SendResult& result)
 	{

@@ -24,9 +24,26 @@ public:
 		bool isRtx = false,
 		mediasoup::ccutils::ProbeClusterId probeClusterId = mediasoup::ccutils::ProbeClusterIdInvalid,
 		bool isProbe = false)
+		{
+			return congestionDetector_.RecordPacketSendAndGetSequenceNumber(
+				atUs, size, isRtx, probeClusterId, isProbe);
+		}
+
+	uint16_t GetNextSequenceNumber()
 	{
-		return congestionDetector_.RecordPacketSendAndGetSequenceNumber(
-			atUs, size, isRtx, probeClusterId, isProbe);
+		return congestionDetector_.GetNextSequenceNumber();
+	}
+
+	void RecordPacketSent(
+		uint16_t sequenceNumber,
+		int64_t atUs,
+		size_t size,
+		bool isRtx = false,
+		mediasoup::ccutils::ProbeClusterId probeClusterId = mediasoup::ccutils::ProbeClusterIdInvalid,
+		bool isProbe = false)
+	{
+		congestionDetector_.RecordPacketSent(
+			sequenceNumber, atUs, size, isRtx, probeClusterId, isProbe);
 	}
 
 	void SeedSentPacketForTest(
@@ -73,9 +90,10 @@ public:
 	{
 		congestionDetector_.ProbeClusterDone(probeClusterInfo);
 	}
-	bool ProbeClusterIsGoalReached() const
+	bool ProbeClusterIsGoalReached(
+		const mediasoup::ccutils::ProbeClusterInfo& probeClusterInfo) const
 	{
-		return congestionDetector_.ProbeClusterIsGoalReached();
+		return congestionDetector_.ProbeClusterIsGoalReached(probeClusterInfo);
 	}
 	std::tuple<mediasoup::ccutils::ProbeSignal, int64_t, bool> ProbeClusterFinalize()
 	{
