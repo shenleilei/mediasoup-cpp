@@ -6,7 +6,7 @@
 >
 > 这是 `2026-04-08` 的历史静态 code review 记录。
 > 它反映的是 review 当时的发现，不等于当前仓库状态。
-> 如需看当前结论，请优先参考 [DEVELOPMENT.md](../DEVELOPMENT.md) 和相关专项最终报告。
+> 如需看当前结论，请优先参考 [DEVELOPMENT.md](../platform/README.md) 和相关专项最终报告。
 
 ## 范围与方法
 

@@ -107,12 +107,12 @@ RTCP side path
 
 Current architecture docs:
 
-- [docs/dependencies_cn.md](./docs/dependencies_cn.md)
-- [docs/linux-client-architecture_cn.md](./docs/linux-client-architecture_cn.md)
-- [docs/linux-client-multi-source-thread-model_cn.md](./docs/linux-client-multi-source-thread-model_cn.md)
-- [docs/linux-client-threaded-implementation-checklist_cn.md](./docs/linux-client-threaded-implementation-checklist_cn.md)
-- [docs/architecture_cn.md](./docs/architecture_cn.md)
-- [docs/plain-client-qos-parity-checklist.md](./docs/plain-client-qos-parity-checklist.md)
+- [docs/platform/dependencies_cn.md](docs/platform/dependencies_cn.md)
+- [docs/qos/plain-client/architecture_cn.md](docs/qos/plain-client/architecture_cn.md)
+- [docs/qos/plain-client/multi-source-thread-model_cn.md](docs/qos/plain-client/multi-source-thread-model_cn.md)
+- [docs/qos/plain-client/threaded-implementation-checklist_cn.md](docs/qos/plain-client/threaded-implementation-checklist_cn.md)
+- [docs/platform/architecture_cn.md](docs/platform/architecture_cn.md)
+- [docs/qos/plain-client/parity-checklist.md](docs/qos/plain-client/parity-checklist.md)
 
 ## Multi-Node Routing Architecture
 
@@ -185,16 +185,16 @@ Current scope note:
 
 Source-of-truth links:
 
-- QoS overall status: [docs/qos-status.md](./docs/qos-status.md)
-- final summary: [docs/uplink-qos-final-report.md](./docs/uplink-qos-final-report.md)
-- result summary: [docs/uplink-qos-test-results-summary.md](./docs/uplink-qos-test-results-summary.md)
+- QoS overall status: [docs/qos/README.md](docs/qos/README.md)
+- final summary: [docs/qos/uplink/README.md](docs/qos/uplink/README.md)
+- result summary: [docs/qos/uplink/test-results-summary.md](docs/qos/uplink/test-results-summary.md)
 - per-case final result: [docs/uplink-qos-case-results.md](./docs/uplink-qos-case-results.md)
-- plain-client current status: [docs/plain-client-qos-status.md](./docs/plain-client-qos-status.md)
-- plain-client parity checklist: [docs/plain-client-qos-parity-checklist.md](./docs/plain-client-qos-parity-checklist.md)
+- plain-client current status: [docs/qos/plain-client/README.md](docs/qos/plain-client/README.md)
+- plain-client parity checklist: [docs/qos/plain-client/parity-checklist.md](docs/qos/plain-client/parity-checklist.md)
 - plain-client matrix result: [docs/plain-client-qos-case-results.md](./docs/plain-client-qos-case-results.md)
-- downlink current status: [docs/downlink-qos-status.md](./docs/downlink-qos-status.md)
-- linux client architecture: [docs/linux-client-architecture_cn.md](./docs/linux-client-architecture_cn.md)
-- test coverage map: [docs/qos-test-coverage_cn.md](./docs/qos-test-coverage_cn.md)
+- downlink current status: [docs/qos/downlink/README.md](docs/qos/downlink/README.md)
+- linux client architecture: [docs/qos/plain-client/architecture_cn.md](docs/qos/plain-client/architecture_cn.md)
+- test coverage map: [docs/qos/shared/test-coverage_cn.md](docs/qos/shared/test-coverage_cn.md)
 - generated matrix artifact: [docs/generated/uplink-qos-matrix-report.json](./docs/generated/uplink-qos-matrix-report.json)
 
 ## Core Runtime Model
@@ -485,7 +485,7 @@ Recorder responsibilities include:
 
 Dependency reference:
 
-- [docs/dependencies_cn.md](./docs/dependencies_cn.md)
+- [docs/platform/dependencies_cn.md](docs/platform/dependencies_cn.md)
 
 - Linux
 - CMake 3.16+
@@ -665,7 +665,7 @@ cp .nightly-full-regression.env.example .nightly-full-regression.env
 The nightly wrapper stores a timestamped run directory under
 `artifacts/nightly-full-regression/`, refreshes `/var/log/run_all_tests.log` by default,
 and emails the pass-rate / failed-case summary with selected Markdown report attachments.
-See [docs/nightly-full-regression.md](./docs/nightly-full-regression.md).
+See [docs/operations/nightly-full-regression.md](docs/operations/nightly-full-regression.md).
 
 When the run includes `qos`, it delegates that slice to `./scripts/run_qos_tests.sh`, so the
 QoS-specific summaries and matrix artifacts owned by that script are refreshed as part of the run.
@@ -749,9 +749,9 @@ Behavior:
 - `Cannot find source file ... third_party/ip2region/binding/c/xdb_searcher.c`  
   Ensure you are on the latest branch and the bundled `third_party/ip2region` directory exists.
 - `Could NOT find ... avformat/avcodec/avutil`  
-  Install FFmpeg development packages (for example `libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libavdevice-dev` on Debian/Ubuntu), or see [docs/dependencies_cn.md](./docs/dependencies_cn.md).
+  Install FFmpeg development packages (for example `libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libavdevice-dev` on Debian/Ubuntu), or see [docs/platform/dependencies_cn.md](docs/platform/dependencies_cn.md).
 - `hiredis not found` or link errors for Redis symbols  
-  Install the hiredis development package (`libhiredis-dev` / `hiredis-devel`), or see [docs/dependencies_cn.md](./docs/dependencies_cn.md).
+  Install the hiredis development package (`libhiredis-dev` / `hiredis-devel`), or see [docs/platform/dependencies_cn.md](docs/platform/dependencies_cn.md).
 
 ## Monitoring
 
@@ -838,7 +838,7 @@ MIT — see [LICENSE](LICENSE).
 
 - [mediasoup](https://mediasoup.org/)
 - [uWebSockets](https://github.com/uNetworking/uWebSockets)
-- [FlatBuffers](https://google.github.io/flatbuffers/)
+- [FlatBuffers](https://flatbuffers.dev/)
 - [nlohmann/json](https://github.com/nlohmann/json)
 - [spdlog](https://github.com/gabime/spdlog)
 - [FFmpeg](https://ffmpeg.org/)

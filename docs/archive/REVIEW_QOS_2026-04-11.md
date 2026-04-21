@@ -14,7 +14,7 @@
 > - **第一～十章**：原始 review 发现（历史快照），记录初次 review 时的问题和建议。部分问题在后续迭代中已被修复或缓解，以 `[已缓解]` / `[已失效]` 标注。
 > - **第十一～十二章**：截至当前代码的有效项判定，以此为准确定实施优先级。
 >
-> 如需了解当前 QoS 总口径，请优先看 `docs/qos-status.md`。
+> 如需了解当前 QoS 总口径，请优先看 `docs/qos/README.md`。
 
 ---
 
@@ -358,7 +358,7 @@ MakeOverride("server_room_pressure", 8000u, 1u, ...);   // 8秒, level 1
 
 ## 五、测试覆盖评估 `[历史快照 — 见 uplink-qos-final-report.md 获取最新状态]`
 
-> **注意**: 以下数据为初次 review 时的快照。后续已大幅补充服务端单测、集成测试、客户端 JS 单测、Node/browser harness 及 browser matrix。最新测试覆盖状态请参考 `docs/uplink-qos-final-report.md`。
+> **注意**: 以下数据为初次 review 时的快照。后续已大幅补充服务端单测、集成测试、客户端 JS 单测、Node/browser harness 及 browser matrix。最新测试覆盖状态请参考 `docs/qos/uplink/README.md`。
 
 ### 5.1 现有测试（初次 review 时）
 
@@ -709,7 +709,7 @@ TEST_F(QosIntegrationTest, ConcurrentClientStats) {
 
 | 原意见 | 当前状态 | 对应章节标注 |
 |--------|----------|-------------|
-| 测试覆盖 5/10 | **已过时** — 已补充服务端单测、集成测试、client JS 单测、Node/browser harness、browser matrix。见 `docs/uplink-qos-final-report.md` | 第五章标注 `[历史快照]` |
+| 测试覆盖 5/10 | **已过时** — 已补充服务端单测、集成测试、client JS 单测、Node/browser harness、browser matrix。见 `docs/qos/uplink/README.md` | 第五章标注 `[历史快照]` |
 | audio-only 恢复 hack (§3.4) | **已缓解** — `getTransitionSignals()` 增加 `networkRecovered` 前置检查和 jitter 修正，回归测试已覆盖 | §3.4 标注 `[已缓解]` |
 | `handlePolicy()` 未消费 profiles (§8.7) | **已修复** — `handlePolicy()` 已接入 `policy.profiles[source]`，并通过 `resolveProfileByName()` 切换真实 profile；回归测试已覆盖 | §8.7 更新为“已修复” |
 | override clear / TTL clear 行为 | **已修复** — 客户端已支持按 reason 前缀清理自动 override，`server_ttl_expired` 可清空全部 active overrides，回归测试已覆盖 | controller override merge/clear 相关用例 |
