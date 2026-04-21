@@ -2,6 +2,8 @@
 
 The implementation follows the structure of `/root/livekit/pkg/sfu/bwe/sendsidebwe` as directly as practical in C++.
 
+This change supersedes the earlier local-only experiment under `changes/2026-04-21-plain-client-delay-based-twcc-bwe`. The repository now keeps only the livekit-aligned path as the supported send-side BWE direction.
+
 Planned module mapping:
 
 - `client/sendsidebwe/TwccFeedbackTracker.h`
