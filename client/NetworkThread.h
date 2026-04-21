@@ -2,11 +2,11 @@
 // Phase 2 of linux-client-multi-source-thread-model migration.
 #pragma once
 
-#include "DelayBasedBwe.h"
 #include "RtcpHandler.h"
 #include "SenderTransportController.h"
 #include "TransportCcHelpers.h"
 #include "ThreadTypes.h"
+#include "sendsidebwe/SendSideBwe.h"
 #include "media/rtp/H264Packetizer.h"
 
 #include <arpa/inet.h>
@@ -23,6 +23,7 @@
 #include <cstring>
 #include <deque>
 #include <functional>
+#include <optional>
 #include <thread>
 #include <vector>
 
@@ -73,6 +74,7 @@ public:
 		bool enableTransportEstimate = true;
 		uint32_t transportEstimateMinBps = kDefaultMinTransportEstimateBps;
 		uint32_t transportEstimateMaxBps = kDefaultMaxTransportEstimateBps;
+		std::optional<mediasoup::plainclient::sendsidebwe::CongestionDetectorConfig> sendSideBweConfig;
 	};
 
 	// Per-source input queue (one per source worker)
@@ -97,10 +99,9 @@ public:
 		: cfg_(cfg)
 		, useTransportController_(cfg.enableTransportController)
 		, useTransportEstimate_(cfg.enableTransportEstimate)
-		, delayBasedBwe_(mediasoup::plainclient::DelayBasedBwe::Config{
-			cfg.transportEstimateMinBps,
-			cfg.transportEstimateMaxBps
-		})
+		, sendSideBwe_(cfg.sendSideBweConfig.has_value()
+			? mediasoup::plainclient::sendsidebwe::SendSideBwe(*cfg.sendSideBweConfig)
+			: mediasoup::plainclient::sendsidebwe::SendSideBwe())
 	{
 		rtcp_.audioSsrc = cfg.audioSsrc;
 		transportController_.SetSendFn([this](
@@ -143,7 +144,7 @@ public:
 		// Note: rtcp_ registration deferred to start() to avoid dangling pointers from vector realloc
 		if (useTransportController_) {
 			transportController_.RegisterVideoTrack(trackIndex, ssrc);
-			SyncTransportEstimateToAggregateTarget();
+			RefreshPublishedTransportEstimate();
 		}
 	}
 
@@ -225,6 +226,9 @@ public:
 		snap.rrRttMs = stream->rrRttMs;
 		snap.rrJitterMs = stream->rrJitterMs;
 		snap.lastRrReceivedMs = stream->lastRrReceivedMs;
+		snap.transportEstimatedBitrateBps = transportEstimatedBitrateBps_;
+		snap.effectivePacingBitrateBps = effectivePacingBitrateBps();
+		snap.transportCcFeedbackReports = transportCcFeedbackReports_;
 		statsQueue->tryPush(std::move(snap));
 	}
 
@@ -282,24 +286,27 @@ private:
 
 		uint8_t rewrittenPacket[1600];
 		size_t rewrittenLen = sizeof(rewrittenPacket);
+		const bool isRtx =
+			packetClass == mediasoup::plainclient::PacketClass::VideoRetransmission;
+		const uint16_t transportSequence = sendSideBwe_.RecordPacketSendAndGetSequenceNumber(
+			steadyNowUs(),
+			len,
+			isRtx);
 		if (!mediasoup::plainclient::RewriteRtpWithTransportCcSequence(
 				data,
 				len,
 				extensionId,
-				nextTransportWideCcSequence_,
+				transportSequence,
 				rewrittenPacket,
 				&rewrittenLen)) {
 			transportCcRewriteFailures_++;
 			return mediasoup::plainclient::SendUdpDatagram(cfg_.udpFd, data, len);
 		}
 
-			const uint16_t transportSequence = nextTransportWideCcSequence_;
-			const auto result = mediasoup::plainclient::SendUdpDatagram(cfg_.udpFd, rewrittenPacket, rewrittenLen);
-			if (result.status == mediasoup::plainclient::SendStatus::Sent) {
-				delayBasedBwe_.OnPacketSent(transportSequence, rewrittenLen, steadyNowUs());
-				nextTransportWideCcSequence_++;
-				transportCcRewrittenPacketsSent_++;
-			}
+		const auto result = mediasoup::plainclient::SendUdpDatagram(cfg_.udpFd, rewrittenPacket, rewrittenLen);
+		if (result.status == mediasoup::plainclient::SendStatus::Sent) {
+			transportCcRewrittenPacketsSent_++;
+		}
 		return result;
 	}
 
@@ -499,6 +506,9 @@ private:
 					stream->rrRttMs = std::max(0.0, elapsed - dlsrMs);
 				}
 			}
+			if (stream->rrRttMs > 0.0) {
+				sendSideBwe_.UpdateRtt(stream->rrRttMs / 1000.0);
+			}
 			stream->lastRrReceivedMs = steadyNowMs();
 			rbOff += 24;
 		}
@@ -577,7 +587,7 @@ private:
 					if (useTransportController_) {
 						transportController_.UpdateTrackTransportHint(
 							cmd.trackIndex, cmd.ssrc, cmd.targetBitrateBps, cmd.paused);
-						SyncTransportEstimateToAggregateTarget();
+						RefreshPublishedTransportEstimate();
 					}
 					break;
 				case mt::NetworkControlCommand::PauseTrack:
@@ -715,31 +725,44 @@ private:
 		if (!useTransportEstimate_) {
 			return;
 		}
-
-		delayBasedBwe_.SetEstimateBps(transportEstimatedBitrateBps_);
-		const auto result = delayBasedBwe_.OnTransportFeedback(feedback);
-		if (result.estimateBps == 0) {
-			return;
-		}
-		transportEstimatedBitrateBps_ = result.estimateBps;
+		sendSideBwe_.HandleTransportFeedback(feedback, steadyNowUs());
+		RefreshPublishedTransportEstimate();
 		lastTransportFeedbackAtMs_ = steadyNowMs();
-		transportController_.SetTransportEstimatedBitrateBps(transportEstimatedBitrateBps_);
 	}
 
-	void SyncTransportEstimateToAggregateTarget()
+	uint32_t ClampConfiguredTransportEstimate(int64_t rawEstimateBps) const
+	{
+		if (rawEstimateBps <= 0) {
+			return 0;
+		}
+		const uint32_t minTransportEstimateBps = std::min(
+			cfg_.transportEstimateMinBps,
+			cfg_.transportEstimateMaxBps);
+		const uint32_t maxTransportEstimateBps = std::max(
+			cfg_.transportEstimateMinBps,
+			cfg_.transportEstimateMaxBps);
+		const uint64_t capped = static_cast<uint64_t>(std::min<int64_t>(
+			rawEstimateBps,
+			static_cast<int64_t>(std::numeric_limits<uint32_t>::max())));
+		return std::clamp<uint32_t>(
+			static_cast<uint32_t>(capped),
+			minTransportEstimateBps,
+			maxTransportEstimateBps);
+	}
+
+	void RefreshPublishedTransportEstimate()
 	{
 		if (!useTransportController_) {
 			return;
 		}
-		const uint32_t aggregateTargetBps = transportController_.AggregateTargetBitrateBps();
-		if (aggregateTargetBps == 0) {
+		if (!useTransportEstimate_) {
+			transportEstimatedBitrateBps_ = 0;
+			transportController_.SetTransportEstimatedBitrateBps(0);
 			return;
 		}
-		if (transportEstimatedBitrateBps_ == 0 || aggregateTargetBps > transportEstimatedBitrateBps_) {
-			transportEstimatedBitrateBps_ = aggregateTargetBps;
-			delayBasedBwe_.SetEstimateBps(transportEstimatedBitrateBps_);
-			transportController_.SetTransportEstimatedBitrateBps(transportEstimatedBitrateBps_);
-		}
+		transportEstimatedBitrateBps_ = ClampConfiguredTransportEstimate(
+			sendSideBwe_.EstimatedAvailableChannelCapacityBps());
+		transportController_.SetTransportEstimatedBitrateBps(transportEstimatedBitrateBps_);
 	}
 public:
 	const mediasoup::plainclient::SenderTransportController::Metrics& transportMetrics() const {
@@ -785,7 +808,13 @@ public:
 		size_t sizeBytes,
 		int64_t sendTimeUs)
 	{
-		delayBasedBwe_.OnPacketSent(sequenceNumber, sizeBytes, sendTimeUs);
+		sendSideBwe_.SeedSentPacketForTest(sequenceNumber, sendTimeUs, sizeBytes);
+	}
+
+	void seedTransportEstimateForTest(int64_t capacityBps)
+	{
+		sendSideBwe_.SeedEstimatedAvailableChannelCapacityForTest(capacityBps);
+		RefreshPublishedTransportEstimate();
 	}
 
 private:
@@ -793,14 +822,13 @@ private:
 	bool useTransportController_{ true };
 	bool useTransportEstimate_{ true };
 	RtcpContext rtcp_;
-	mediasoup::plainclient::DelayBasedBwe delayBasedBwe_;
+	mediasoup::plainclient::sendsidebwe::SendSideBwe sendSideBwe_;
 	mediasoup::plainclient::SenderTransportController transportController_;
 	std::vector<TrackNetState> tracks_;
 	std::vector<SourceInput> sourceInputs_;
 	std::atomic<bool> running_{false};
 	std::thread thread_;
 	uint16_t audioSeq_ = 0;
-	uint16_t nextTransportWideCcSequence_{ 0 };
 	uint32_t transportEstimatedBitrateBps_{ 0 };
 	int64_t lastTransportFeedbackAtMs_{ 0 };
 	uint64_t transportCcRewrittenPacketsSent_{ 0 };

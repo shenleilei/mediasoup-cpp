@@ -5,7 +5,9 @@
 
 #include "TransportCcTestHelpers.h"
 
-#include "../client/DelayBasedBwe.h"
+#include "../client/ccutils/TrendDetector.h"
+#include "../client/sendsidebwe/PacketTracker.h"
+#include "../client/sendsidebwe/TwccFeedbackTracker.h"
 #include "../client/ThreadTypes.h"
 #include "../client/NetworkThread.h"
 #include "../client/ThreadedControlHelpers.h"
@@ -19,10 +21,11 @@
 
 using namespace mt;
 using mediasoup::plainclient::PacketClass;
-using mediasoup::plainclient::DelayBasedBwe;
 using mediasoup::plainclient::SendResult;
 using mediasoup::plainclient::SendStatus;
 using mediasoup::plainclient::SenderTransportController;
+using mediasoup::plainclient::sendsidebwe::PacketTracker;
+using mediasoup::plainclient::sendsidebwe::TwccFeedbackTracker;
 
 // ═══════════════════════════════════════════════════════════
 // SpscQueue unit tests
@@ -954,92 +957,83 @@ TEST(TransportCcHelpers, ParseTransportFeedbackReconstructsDetailedTimestamps) {
 	EXPECT_EQ(feedback.packets[3].receiveTimeUs, 45000);
 }
 
-TEST(DelayBasedBwe, StableDelayFeedbackIncreasesEstimate) {
-	DelayBasedBwe bwe;
-	bwe.SetEstimateBps(700000u);
-	for (uint16_t i = 0; i < 20; ++i) {
-		bwe.OnPacketSent(static_cast<uint16_t>(1000u + i), 1200, static_cast<int64_t>(i) * 10000);
-	}
+TEST(TwccFeedbackTracker, ExpandsReferenceTimeCyclesAndDetectsOutOfOrderReports) {
+	TwccFeedbackTracker tracker;
 
-	const auto packet = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
-		std::vector<std::optional<int16_t>>(20, int16_t{40}),
+	auto firstPacket = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
+		{40},
 		1000,
 		0x11111111u,
 		0x22222222u,
-		0x000000u,
-		0x30u);
-	mediasoup::plainclient::TransportCcFeedback feedback;
+		0xFFFFFEu,
+		0x20u);
+	mediasoup::plainclient::TransportCcFeedback firstFeedback;
 	ASSERT_TRUE(mediasoup::plainclient::ParseTransportCcFeedback(
-		packet.data(),
-		packet.size(),
-		&feedback));
+		firstPacket.data(),
+		firstPacket.size(),
+		&firstFeedback));
+	const auto [firstRefUs, firstOutOfOrder] = tracker.ProcessReport(firstFeedback, 1000000);
+	EXPECT_FALSE(firstOutOfOrder);
+	EXPECT_EQ(firstRefUs, static_cast<int64_t>(0xFFFFFEu) * 64000);
 
-	const auto result = bwe.OnTransportFeedback(feedback);
-	EXPECT_EQ(result.state, DelayBasedBwe::TrendState::Normal);
-	EXPECT_GT(result.correlatedPacketCount, 0u);
-	EXPECT_GT(result.ackedBitrateBps, 900000u);
-	EXPECT_GT(result.estimateBps, 700000u);
-}
-
-TEST(DelayBasedBwe, GrowingDelayFeedbackDecreasesEstimate) {
-	DelayBasedBwe bwe;
-	bwe.SetEstimateBps(900000u);
-	for (uint16_t i = 0; i < 20; ++i) {
-		bwe.OnPacketSent(static_cast<uint16_t>(2000u + i), 1200, static_cast<int64_t>(i) * 10000);
-	}
-
-	std::vector<std::optional<int16_t>> deltas250us;
-	deltas250us.reserve(20);
-	for (int i = 0; i < 20; ++i) {
-		deltas250us.emplace_back(static_cast<int16_t>(40 + i * 20));
-	}
-	const auto packet = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
-		deltas250us,
-		2000,
+	auto wrappedPacket = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
+		{40},
+		1001,
 		0x11111111u,
 		0x22222222u,
-		0x000000u,
-		0x31u);
-	mediasoup::plainclient::TransportCcFeedback feedback;
+		0x000001u,
+		0x21u);
+	mediasoup::plainclient::TransportCcFeedback wrappedFeedback;
 	ASSERT_TRUE(mediasoup::plainclient::ParseTransportCcFeedback(
-		packet.data(),
-		packet.size(),
-		&feedback));
+		wrappedPacket.data(),
+		wrappedPacket.size(),
+		&wrappedFeedback));
+	const auto [wrappedRefUs, wrappedOutOfOrder] = tracker.ProcessReport(wrappedFeedback, 1100000);
+	EXPECT_FALSE(wrappedOutOfOrder);
+	EXPECT_EQ(
+		wrappedRefUs,
+		static_cast<int64_t>((1u << 24) + 1u) * 64000);
 
-	const auto result = bwe.OnTransportFeedback(feedback);
-	EXPECT_EQ(result.state, DelayBasedBwe::TrendState::Overusing);
-	EXPECT_GT(result.correlatedPacketCount, 0u);
-	EXPECT_LT(result.estimateBps, 900000u);
-}
-
-TEST(DelayBasedBwe, ClampToConfiguredMinOnOveruse) {
-	DelayBasedBwe bwe(DelayBasedBwe::Config{100000u, 200000u});
-	bwe.SetEstimateBps(120000u);
-	for (uint16_t i = 0; i < 20; ++i) {
-		bwe.OnPacketSent(static_cast<uint16_t>(3000u + i), 800, static_cast<int64_t>(i) * 10000);
-	}
-
-	std::vector<std::optional<int16_t>> deltas250us;
-	deltas250us.reserve(20);
-	for (int i = 0; i < 20; ++i) {
-		deltas250us.emplace_back(static_cast<int16_t>(60 + i * 30));
-	}
-	const auto packet = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
-		deltas250us,
-		3000,
+	auto outOfOrderPacket = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
+		{40},
+		999,
 		0x11111111u,
 		0x22222222u,
-		0x000000u,
-		0x32u);
-	mediasoup::plainclient::TransportCcFeedback feedback;
+		0xFFFFFDu,
+		0x10u);
+	mediasoup::plainclient::TransportCcFeedback outOfOrderFeedback;
 	ASSERT_TRUE(mediasoup::plainclient::ParseTransportCcFeedback(
-		packet.data(),
-		packet.size(),
-		&feedback));
+		outOfOrderPacket.data(),
+		outOfOrderPacket.size(),
+		&outOfOrderFeedback));
+	const auto [outOfOrderRefUs, outOfOrder] = tracker.ProcessReport(outOfOrderFeedback, 1200000);
+	EXPECT_TRUE(outOfOrder);
+	EXPECT_EQ(
+		outOfOrderRefUs,
+		static_cast<int64_t>(0xFFFFFDu) * 64000);
+	EXPECT_EQ(tracker.NumReportsOutOfOrder(), 1);
+}
 
-	const auto result = bwe.OnTransportFeedback(feedback);
-	EXPECT_EQ(result.state, DelayBasedBwe::TrendState::Overusing);
-	EXPECT_EQ(result.estimateBps, 100000u);
+TEST(PacketTracker, RecordsSendsAndReceivedIndicationsUsingRelativeClocks) {
+	PacketTracker tracker;
+	const uint16_t seq0 = tracker.RecordPacketSendAndGetSequenceNumber(1000000, 1200, false, 0, false);
+	const uint16_t seq1 = tracker.RecordPacketSendAndGetSequenceNumber(1010000, 1200, false, 0, false);
+	const uint16_t seq2 = tracker.RecordPacketSendAndGetSequenceNumber(1020000, 1200, false, 0, false);
+	(void)seq2;
+
+	auto first = tracker.RecordPacketIndicationFromRemote(seq0, 2000000);
+	EXPECT_FALSE(first.valid);
+	EXPECT_EQ(first.sendDeltaUs, 0);
+	EXPECT_EQ(first.recvDeltaUs, 0);
+
+	auto second = tracker.RecordPacketIndicationFromRemote(seq1, 2012000);
+	EXPECT_TRUE(second.valid);
+	EXPECT_EQ(second.sendDeltaUs, 10000);
+	EXPECT_EQ(second.recvDeltaUs, 12000);
+
+	auto lost = tracker.RecordPacketIndicationFromRemote(seq2, 0);
+	EXPECT_TRUE(lost.valid);
+	EXPECT_EQ(lost.packetInfo.recvTimeUs, 0);
 }
 
 namespace {
