@@ -273,6 +273,7 @@ function parseQosTraceLine(line) {
     sample: fields.sample ?? 'unknown',
     bitrateBps: readNumber('bitrateBps'),
     sendBps: readNumber('sendBps'),
+    lossRate: readNumber('lossRate'),
     packetsLost: readNumber('packetsLost'),
     rttMs: readNumber('rttMs'),
     jitterMs: readNumber('jitterMs'),
@@ -318,6 +319,7 @@ function buildTraceFromSamples(samples) {
         source: sample.sample,
         bitrateBps: sample.bitrateBps,
         sendBps: sample.sendBps,
+        lossRate: sample.lossRate,
         packetsLost: sample.packetsLost,
         rttMs: sample.rttMs,
         jitterMs: sample.jitterMs,
@@ -414,6 +416,7 @@ export async function createCppClientHarness({
     signalingPort,
   };
 
+  const workerBin = process.env.QOS_CPP_CLIENT_WORKER_BIN || './mediasoup-worker';
   let traceCache = { samples: [], trace: [] };
   let client = null;
   const sfu = spawn(
@@ -422,7 +425,7 @@ export async function createCppClientHarness({
       '--nodaemon',
       `--port=${signalingPort}`,
       '--workers=1',
-      '--workerBin=./mediasoup-worker',
+      `--workerBin=${workerBin}`,
       '--announcedIp=127.0.0.1',
       '--listenIp=127.0.0.1',
       '--redisHost=0.0.0.0',

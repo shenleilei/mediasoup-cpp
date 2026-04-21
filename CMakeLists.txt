@@ -287,6 +287,7 @@ if(BUILD_TESTS)
         SOURCES tests/test_thread_integration.cpp
         LINK_LIBRARIES
             mediasoup_build_test_support
+            mediasoup_lib
             mediasoup_build_pthread
             mediasoup_build_ffmpeg_extended
     )

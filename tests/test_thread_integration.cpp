@@ -7,6 +7,9 @@
 #include "../client/SourceWorker.h"
 #include "../client/ThreadedControlHelpers.h"
 #include "../client/qos/QosController.h"
+#include "../src/Router.h"
+#include "../src/Worker.h"
+#include "../src/PlainTransport.h"
 #include "TestWsClient.h"
 #include "TestProcessUtils.h"
 
@@ -20,6 +23,7 @@
 #include <sstream>
 #include <array>
 #include <set>
+#include <utility>
 #include <thread>
 
 static const char* kTestMp4 = "tests/fixtures/media/test_sweep.mp4";
@@ -33,6 +37,12 @@ static bool testFileExists() {
 
 static bool plainClientBinaryExists() {
 	return access("client/build/plain-client", X_OK) == 0;
+}
+
+static std::string threadedWorkerBinaryPath() {
+	const char* raw = std::getenv("QOS_THREAD_WORKER_BIN");
+	if (!raw || !*raw) return "./mediasoup-worker";
+	return raw;
 }
 
 static bool extractTransportCcSequence(
@@ -135,6 +145,92 @@ static json defaultRtpCapabilitiesForThreadedIntegration() {
 	};
 }
 
+static json transportCcRtpCapabilitiesForThreadedIntegration() {
+	auto caps = defaultRtpCapabilitiesForThreadedIntegration();
+	caps["headerExtensions"] = json::array({
+		{
+			{"kind", "audio"},
+			{"uri", "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"},
+			{"preferredId", 5},
+			{"preferredEncrypt", false},
+			{"direction", "recvonly"}
+		},
+		{
+			{"kind", "video"},
+			{"uri", "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"},
+			{"preferredId", 5},
+			{"preferredEncrypt", false},
+			{"direction", "recvonly"}
+		}
+	});
+	return caps;
+}
+
+static std::vector<uint8_t> buildTransportCcFeedbackPacket(
+	const std::vector<std::pair<uint8_t, uint16_t>>& runs,
+	uint16_t baseSequenceNumber = 1000,
+	uint32_t senderSsrc = 0x11223344u,
+	uint32_t mediaSsrc = 0x55667788u,
+	uint32_t referenceTime = 0x000110u,
+	uint8_t feedbackPacketCount = 0x10)
+{
+	std::vector<uint8_t> packet(20, 0);
+	packet[0] = 0x8F;
+	packet[1] = 205;
+	packet[4] = static_cast<uint8_t>(senderSsrc >> 24);
+	packet[5] = static_cast<uint8_t>(senderSsrc >> 16);
+	packet[6] = static_cast<uint8_t>(senderSsrc >> 8);
+	packet[7] = static_cast<uint8_t>(senderSsrc & 0xFF);
+	packet[8] = static_cast<uint8_t>(mediaSsrc >> 24);
+	packet[9] = static_cast<uint8_t>(mediaSsrc >> 16);
+	packet[10] = static_cast<uint8_t>(mediaSsrc >> 8);
+	packet[11] = static_cast<uint8_t>(mediaSsrc & 0xFF);
+	packet[12] = static_cast<uint8_t>(baseSequenceNumber >> 8);
+	packet[13] = static_cast<uint8_t>(baseSequenceNumber & 0xFF);
+	packet[16] = static_cast<uint8_t>((referenceTime >> 16) & 0xFF);
+	packet[17] = static_cast<uint8_t>((referenceTime >> 8) & 0xFF);
+	packet[18] = static_cast<uint8_t>(referenceTime & 0xFF);
+	packet[19] = feedbackPacketCount;
+
+	uint32_t totalStatusCount = 0;
+	std::vector<uint8_t> chunks;
+	std::vector<uint8_t> deltas;
+	for (const auto& run : runs) {
+		const uint8_t symbol = run.first;
+		const uint16_t runLength = run.second;
+		totalStatusCount += runLength;
+
+		const uint16_t chunk = static_cast<uint16_t>(
+			((static_cast<uint16_t>(symbol) & 0x03u) << 13) | (runLength & 0x1FFFu));
+		chunks.push_back(static_cast<uint8_t>(chunk >> 8));
+		chunks.push_back(static_cast<uint8_t>(chunk & 0xFF));
+
+		if (symbol == 1) {
+			for (uint16_t i = 0; i < runLength; ++i) {
+				deltas.push_back(0x01);
+			}
+		} else if (symbol == 2) {
+			for (uint16_t i = 0; i < runLength; ++i) {
+				deltas.push_back(0x00);
+				deltas.push_back(0x01);
+			}
+		}
+	}
+
+	packet[14] = static_cast<uint8_t>((totalStatusCount >> 8) & 0xFF);
+	packet[15] = static_cast<uint8_t>(totalStatusCount & 0xFF);
+	packet.insert(packet.end(), chunks.begin(), chunks.end());
+	packet.insert(packet.end(), deltas.begin(), deltas.end());
+	while ((packet.size() % 4) != 0) {
+		packet.push_back(0x00);
+	}
+
+	const uint16_t lengthWords = static_cast<uint16_t>((packet.size() / 4) - 1);
+	packet[2] = static_cast<uint8_t>(lengthWords >> 8);
+	packet[3] = static_cast<uint8_t>(lengthWords & 0xFF);
+	return packet;
+}
+
 class ThreadedPlainPublishIntegrationTest : public ::testing::Test {
 protected:
 	pid_t sfuPid_ = -1;
@@ -146,19 +242,29 @@ protected:
 		return std::max(1, atoi(raw));
 	}
 
-	void SetUp() override {
-		roomId_ = "threaded_room_" + std::to_string(getpid()) + "_" +
-			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
-		const int sfuPort = threadedIntegrationPort();
+	static const char* threadedIntegrationWorkerBin() {
+		const char* raw = std::getenv("QOS_THREAD_WORKER_BIN");
+		if (!raw || !*raw) return "./mediasoup-worker";
+		return raw;
+	}
 
-		std::string cmd = "./build/mediasoup-sfu --nodaemon"
-			" --port=" + std::to_string(sfuPort) +
-			" --workers=1"
-			" --workerBin=./mediasoup-worker"
-			" --announcedIp=127.0.0.1"
-			" --listenIp=127.0.0.1"
-			" --redisHost=0.0.0.0 --redisPort=1 --noRedisRequired"
-			" > /dev/null 2>&1 & echo $!";
+		void SetUp() override {
+			roomId_ = "threaded_room_" + std::to_string(getpid()) + "_" +
+				std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+			const int sfuPort = threadedIntegrationPort();
+			const char* sfuLogPath = std::getenv("QOS_THREAD_SFU_LOG");
+			const std::string logRedirect = (sfuLogPath && *sfuLogPath)
+				? (std::string(" >") + sfuLogPath + " 2>&1")
+				: " > /dev/null 2>&1";
+
+			std::string cmd = "./build/mediasoup-sfu --nodaemon"
+				" --port=" + std::to_string(sfuPort) +
+				" --workers=1"
+				" --workerBin=" + std::string(threadedIntegrationWorkerBin()) +
+				" --announcedIp=127.0.0.1"
+				" --listenIp=127.0.0.1"
+				" --redisHost=0.0.0.0 --redisPort=1 --noRedisRequired"
+				+ logRedirect + " & echo $!";
 		FILE* fp = popen(cmd.c_str(), "r");
 		ASSERT_NE(fp, nullptr);
 		char buf[64]{};
@@ -188,14 +294,16 @@ protected:
 		if (sfuPid_ > 0) terminateSfuProcess(sfuPid_);
 	}
 
-	std::unique_ptr<TestWsClient> joinPeer(const std::string& peerId) {
+	std::unique_ptr<TestWsClient> joinPeer(
+		const std::string& peerId,
+		json rtpCapabilities = defaultRtpCapabilitiesForThreadedIntegration()) {
 		auto ws = std::make_unique<TestWsClient>();
 		EXPECT_TRUE(ws->connect("127.0.0.1", threadedIntegrationPort()));
 		auto joinResp = ws->request("join", {
 			{"roomId", roomId_},
 			{"peerId", peerId},
 			{"displayName", peerId},
-			{"rtpCapabilities", defaultRtpCapabilitiesForThreadedIntegration()}
+			{"rtpCapabilities", std::move(rtpCapabilities)}
 		});
 		EXPECT_TRUE(joinResp.value("ok", false)) << joinResp.dump();
 		(void)ws->waitNotification("qosPolicy", 3000);
@@ -672,6 +780,69 @@ TEST(NetworkThreadIntegration, TransportCcFeedbackUpdatesEstimatedBitrate) {
 	close(recvFd);
 }
 
+TEST(NetworkThreadIntegration, TransportCcFeedbackModerateLossUpdatesEstimatedBitrate) {
+	int sendFd = -1, recvFd = -1;
+	uint16_t port = 0;
+	ASSERT_EQ(createConnectedUdpPair(sendFd, recvFd, port), 0);
+
+	NetworkThread::Config cfg;
+	cfg.udpFd = sendFd;
+	cfg.audioSsrc = 22222222;
+	cfg.audioPt = 111;
+	cfg.audioTransportCcExtensionId = 5;
+
+	NetworkThread net(cfg);
+	net.registerVideoTrack(0, 11111111u, 96, 5);
+	EXPECT_EQ(net.transportEstimatedBitrateBps(), 900000u);
+
+	net.start();
+	const auto feedback = buildTransportCcFeedbackPacket({{0, 5}, {1, 95}});
+	ASSERT_TRUE(sendDatagramToLocalAddressOfFd(
+		recvFd, sendFd, feedback.data(), feedback.size()));
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(120));
+	net.stop();
+
+	EXPECT_EQ(net.transportCcFeedbackReports(), 1u);
+	EXPECT_EQ(net.transportCcMalformedFeedbackCount(), 0u);
+	EXPECT_EQ(net.transportEstimatedBitrateBps(), 828000u);
+	EXPECT_EQ(net.effectivePacingBitrateBps(), 828000u);
+
+	close(sendFd);
+	close(recvFd);
+}
+
+TEST(NetworkThreadIntegration, TransportCcFeedbackAdditiveIncreaseUpdatesEstimatedBitrate) {
+	int sendFd = -1, recvFd = -1;
+	uint16_t port = 0;
+	ASSERT_EQ(createConnectedUdpPair(sendFd, recvFd, port), 0);
+
+	NetworkThread::Config cfg;
+	cfg.udpFd = sendFd;
+	cfg.audioSsrc = 22222222;
+	cfg.audioPt = 111;
+	cfg.audioTransportCcExtensionId = 5;
+
+	NetworkThread net(cfg);
+	net.registerVideoTrack(0, 11111111u, 96, 5);
+	EXPECT_EQ(net.transportEstimatedBitrateBps(), 900000u);
+
+	net.start();
+	const auto feedback = buildTransportCcFeedbackPacket({{1, 100}});
+	ASSERT_TRUE(sendDatagramToLocalAddressOfFd(
+		recvFd, sendFd, feedback.data(), feedback.size()));
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(120));
+	net.stop();
+
+	EXPECT_EQ(net.transportCcFeedbackReports(), 1u);
+	EXPECT_EQ(net.transportEstimatedBitrateBps(), 945000u);
+	EXPECT_EQ(net.effectivePacingBitrateBps(), 900000u);
+
+	close(sendFd);
+	close(recvFd);
+}
+
 TEST(NetworkThreadIntegration, TransportCcFeedbackDoesNotChangeEstimateWhenDisabled) {
 	int sendFd = -1, recvFd = -1;
 	uint16_t port = 0;
@@ -714,6 +885,481 @@ TEST(NetworkThreadIntegration, TransportCcFeedbackDoesNotChangeEstimateWhenDisab
 	close(recvFd);
 }
 
+TEST(NetworkThreadIntegration, TransportCcFeedbackClampsToConfiguredMin) {
+	int sendFd = -1, recvFd = -1;
+	uint16_t port = 0;
+	ASSERT_EQ(createConnectedUdpPair(sendFd, recvFd, port), 0);
+
+	NetworkThread::Config cfg;
+	cfg.udpFd = sendFd;
+	cfg.audioSsrc = 22222222;
+	cfg.audioPt = 111;
+	cfg.audioTransportCcExtensionId = 5;
+	cfg.transportEstimateMinBps = 850000u;
+
+	NetworkThread net(cfg);
+	net.registerVideoTrack(0, 11111111u, 96, 5);
+
+	net.start();
+	const auto feedback = buildTransportCcFeedbackPacket({{0, 10}});
+	ASSERT_TRUE(sendDatagramToLocalAddressOfFd(
+		recvFd, sendFd, feedback.data(), feedback.size()));
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(120));
+	net.stop();
+
+	EXPECT_EQ(net.transportCcFeedbackReports(), 1u);
+	EXPECT_EQ(net.transportEstimatedBitrateBps(), 850000u);
+	EXPECT_EQ(net.effectivePacingBitrateBps(), 850000u);
+
+	close(sendFd);
+	close(recvFd);
+}
+
+TEST(NetworkThreadIntegration, TransportCcFeedbackClampsToConfiguredMax) {
+	int sendFd = -1, recvFd = -1;
+	uint16_t port = 0;
+	ASSERT_EQ(createConnectedUdpPair(sendFd, recvFd, port), 0);
+
+	NetworkThread::Config cfg;
+	cfg.udpFd = sendFd;
+	cfg.audioSsrc = 22222222;
+	cfg.audioPt = 111;
+	cfg.audioTransportCcExtensionId = 5;
+	cfg.transportEstimateMaxBps = 910000u;
+
+	NetworkThread net(cfg);
+	net.registerVideoTrack(0, 11111111u, 96, 5);
+
+	net.start();
+	const auto feedback = buildTransportCcFeedbackPacket({{1, 100}});
+	ASSERT_TRUE(sendDatagramToLocalAddressOfFd(
+		recvFd, sendFd, feedback.data(), feedback.size()));
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(120));
+	net.stop();
+
+	EXPECT_EQ(net.transportCcFeedbackReports(), 1u);
+	EXPECT_EQ(net.transportEstimatedBitrateBps(), 910000u);
+	EXPECT_EQ(net.effectivePacingBitrateBps(), 900000u);
+
+	close(sendFd);
+	close(recvFd);
+}
+
+TEST(NetworkThreadIntegration, TransportCcFeedbackMalformedPacketLeavesEstimateUntouched) {
+	int sendFd = -1, recvFd = -1;
+	uint16_t port = 0;
+	ASSERT_EQ(createConnectedUdpPair(sendFd, recvFd, port), 0);
+
+	NetworkThread::Config cfg;
+	cfg.udpFd = sendFd;
+	cfg.audioSsrc = 22222222;
+	cfg.audioPt = 111;
+	cfg.audioTransportCcExtensionId = 5;
+
+	NetworkThread net(cfg);
+	net.registerVideoTrack(0, 11111111u, 96, 5);
+	EXPECT_EQ(net.transportEstimatedBitrateBps(), 900000u);
+
+	net.start();
+	auto malformedFeedback = buildTransportCcFeedbackPacket({{1, 10}});
+	malformedFeedback[15] = static_cast<uint8_t>(malformedFeedback[15] + 1);
+	ASSERT_TRUE(sendDatagramToLocalAddressOfFd(
+		recvFd, sendFd, malformedFeedback.data(), malformedFeedback.size()));
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(120));
+	net.stop();
+
+	EXPECT_EQ(net.transportCcFeedbackReports(), 0u);
+	EXPECT_EQ(net.transportCcMalformedFeedbackCount(), 1u);
+	EXPECT_EQ(net.transportEstimatedBitrateBps(), 900000u);
+	EXPECT_EQ(net.effectivePacingBitrateBps(), 900000u);
+
+	close(sendFd);
+	close(recvFd);
+}
+
+TEST(PlainTransportDirect, WorkerDumpRegistersTransportCcHeaderExtension) {
+	mediasoup::WorkerSettings workerSettings;
+	workerSettings.workerBin = threadedWorkerBinaryPath();
+	workerSettings.logLevel = "debug";
+	workerSettings.logTags = {"bwe", "rtp", "rtcp"};
+	auto worker = std::make_shared<mediasoup::Worker>(workerSettings);
+
+	std::vector<nlohmann::json> mediaCodecs = {
+		{{"mimeType", "video/VP8"}, {"clockRate", 90000}}
+	};
+	auto router = worker->createRouter(mediaCodecs);
+
+	mediasoup::PlainTransportOptions options;
+	options.listenInfos = {{{"ip", "127.0.0.1"}, {"protocol", "udp"}}};
+	auto transport = router->createPlainTransport(options);
+
+	json rtpParameters = {
+		{"codecs", json::array({
+			{
+				{"mimeType", "video/VP8"},
+				{"payloadType", 101},
+				{"clockRate", 90000},
+				{"rtcpFeedback", json::array({
+					{{"type", "nack"}, {"parameter", ""}},
+					{{"type", "transport-cc"}, {"parameter", ""}}
+				})}
+			}
+		})},
+		{"headerExtensions", json::array({
+			{
+				{"uri", "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"},
+				{"id", 5},
+				{"encrypt", false},
+				{"parameters", json::object()}
+			}
+		})},
+		{"encodings", json::array({
+			{{"ssrc", 11111111u}}
+		})},
+		{"rtcp", {{"cname", "transport-cc-direct"}}}
+	};
+
+	auto producer = transport->produce({
+		{"kind", "video"},
+		{"rtpParameters", rtpParameters},
+		{"routerRtpCapabilities", router->rtpCapabilities()}
+	});
+	ASSERT_NE(producer, nullptr);
+
+	auto dump = transport->dump();
+	ASSERT_TRUE(dump.contains("recvRtpHeaderExtensions")) << dump.dump();
+	ASSERT_TRUE(dump["recvRtpHeaderExtensions"].contains("transportWideCc01")) << dump.dump();
+	EXPECT_EQ(dump["recvRtpHeaderExtensions"]["transportWideCc01"], 5);
+
+	transport->close();
+	router->close();
+	worker->close();
+}
+
+TEST(PlainTransportDirect, WorkerReceivesTransportCcRtpButDoesNotYetEmitFeedback) {
+	mediasoup::WorkerSettings workerSettings;
+	workerSettings.workerBin = threadedWorkerBinaryPath();
+	auto worker = std::make_shared<mediasoup::Worker>(workerSettings);
+
+	std::vector<nlohmann::json> mediaCodecs = {
+		{{"mimeType", "video/VP8"}, {"clockRate", 90000}}
+	};
+	auto router = worker->createRouter(mediaCodecs);
+
+	mediasoup::PlainTransportOptions options;
+	options.listenInfos = {{{"ip", "127.0.0.1"}, {"protocol", "udp"}}};
+	auto transport = router->createPlainTransport(options);
+
+	json rtpParameters = {
+		{"codecs", json::array({
+			{
+				{"mimeType", "video/VP8"},
+				{"payloadType", 101},
+				{"clockRate", 90000},
+				{"rtcpFeedback", json::array({
+					{{"type", "nack"}, {"parameter", ""}},
+					{{"type", "transport-cc"}, {"parameter", ""}}
+				})}
+			}
+		})},
+		{"headerExtensions", json::array({
+			{
+				{"uri", "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"},
+				{"id", 5},
+				{"encrypt", false},
+				{"parameters", json::object()}
+			}
+		})},
+		{"encodings", json::array({
+			{{"ssrc", 11111111u}}
+		})},
+		{"rtcp", {{"cname", "transport-cc-direct"}}}
+	};
+
+	auto producer = transport->produce({
+		{"kind", "video"},
+		{"rtpParameters", rtpParameters},
+		{"routerRtpCapabilities", router->rtpCapabilities()}
+	});
+	ASSERT_NE(producer, nullptr);
+
+	auto dumpBefore = transport->dump();
+	ASSERT_TRUE(dumpBefore.contains("tuple")) << dumpBefore.dump();
+	const auto localAddress = dumpBefore["tuple"].value("localAddress", "");
+	const auto localPort = static_cast<uint16_t>(dumpBefore["tuple"].value("localPort", 0));
+	ASSERT_FALSE(localAddress.empty());
+	ASSERT_NE(localPort, 0u);
+
+	int udp = socket(AF_INET, SOCK_DGRAM, 0);
+	ASSERT_GE(udp, 0);
+	sockaddr_in local{};
+	local.sin_family = AF_INET;
+	local.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	local.sin_port = 0;
+	ASSERT_EQ(bind(udp, reinterpret_cast<sockaddr*>(&local), sizeof(local)), 0);
+	socklen_t localLen = sizeof(local);
+	ASSERT_EQ(getsockname(udp, reinterpret_cast<sockaddr*>(&local), &localLen), 0);
+
+	sockaddr_in dst{};
+	dst.sin_family = AF_INET;
+	dst.sin_port = htons(localPort);
+	inet_pton(AF_INET, localAddress.c_str(), &dst.sin_addr);
+
+	uint16_t seq = 1;
+	uint16_t twccSeq = 1;
+	for (uint32_t i = 0; i < 20; ++i) {
+		uint8_t packet[16] = {
+			0x80, 101,
+			static_cast<uint8_t>(seq >> 8), static_cast<uint8_t>(seq & 0xFF),
+			0x00, 0x01, static_cast<uint8_t>(0x5F + i), static_cast<uint8_t>(0x90 + i),
+			0x00, 0xA9, 0x8A, 0xC7,
+			0x10, 0x00, 0x00, static_cast<uint8_t>(0x80 + i)
+		};
+		uint8_t rewritten[1600];
+		size_t rewrittenLen = sizeof(rewritten);
+		ASSERT_TRUE(mediasoup::plainclient::RewriteRtpWithTransportCcSequence(
+			packet,
+			sizeof(packet),
+			5,
+			twccSeq++,
+			rewritten,
+			&rewrittenLen));
+		ASSERT_EQ(sendto(
+			udp,
+			rewritten,
+			rewrittenLen,
+			0,
+			reinterpret_cast<sockaddr*>(&dst),
+			sizeof(dst)),
+			static_cast<ssize_t>(rewrittenLen));
+		seq++;
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(250));
+
+	auto dumpAfter = transport->dump();
+	ASSERT_TRUE(dumpAfter.contains("tuple")) << dumpAfter.dump();
+	EXPECT_EQ(dumpAfter["tuple"].value("remoteIp", ""), "127.0.0.1");
+	EXPECT_EQ(
+		static_cast<uint16_t>(dumpAfter["tuple"].value("remotePort", 0)),
+		ntohs(local.sin_port));
+
+	auto stats = transport->getStats();
+	EXPECT_GT(static_cast<uint64_t>(stats.value("bytesReceived", 0)), 0u) << stats.dump();
+	EXPECT_GT(static_cast<uint64_t>(stats.value("rtpBytesReceived", 0)), 0u) << stats.dump();
+
+	timeval timeout{};
+	timeout.tv_sec = 0;
+	timeout.tv_usec = 500000;
+	ASSERT_EQ(setsockopt(udp, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)), 0);
+	uint8_t rtcp[1500];
+	const ssize_t rtcpLen = recv(udp, rtcp, sizeof(rtcp), 0);
+	ASSERT_GT(rtcpLen, 0) << "expected some RTCP from plain transport";
+	mediasoup::plainclient::TransportCcFeedbackSummary summary;
+	const bool parsedTransportCc = mediasoup::plainclient::ParseTransportCcFeedbackSummary(
+		rtcp,
+		static_cast<size_t>(rtcpLen),
+		&summary);
+	const uint8_t fmt = static_cast<uint8_t>(rtcp[0] & 0x1F);
+	const uint8_t pt = rtcp[1];
+	EXPECT_TRUE(parsedTransportCc)
+		<< "expected transport-cc feedback but got pt=" << static_cast<int>(pt)
+		<< " fmt=" << static_cast<int>(fmt)
+		<< " len=" << rtcpLen;
+
+	close(udp);
+	transport->close();
+	router->close();
+	worker->close();
+}
+
+TEST(PlainTransportDirect, WorkerEmitsTransportCcFeedbackForConnectedH264Socket) {
+	mediasoup::WorkerSettings workerSettings;
+	workerSettings.workerBin = threadedWorkerBinaryPath();
+	auto worker = std::make_shared<mediasoup::Worker>(workerSettings);
+
+	std::vector<nlohmann::json> mediaCodecs = {
+		{
+			{"mimeType", "video/H264"},
+			{"clockRate", 90000},
+			{"parameters", {
+				{"packetization-mode", 1},
+				{"profile-level-id", "42e01f"},
+				{"level-asymmetry-allowed", 1}
+			}}
+		}
+	};
+	auto router = worker->createRouter(mediaCodecs);
+
+	mediasoup::PlainTransportOptions options;
+	options.listenInfos = {{{"ip", "127.0.0.1"}, {"protocol", "udp"}}};
+	auto transport = router->createPlainTransport(options);
+
+	uint8_t payloadType = 0;
+	for (const auto& codec : router->rtpCapabilities().codecs) {
+		if (codec.mimeType == "video/H264" &&
+			codec.parameters.value("packetization-mode", 0) == 1 &&
+			codec.parameters.value("profile-level-id", std::string{}) == "42e01f") {
+			payloadType = static_cast<uint8_t>(codec.preferredPayloadType);
+			break;
+		}
+	}
+	ASSERT_NE(payloadType, 0u);
+
+	json rtpParameters = {
+		{"codecs", json::array({
+			{
+				{"mimeType", "video/H264"},
+				{"payloadType", payloadType},
+				{"clockRate", 90000},
+				{"parameters", {
+					{"packetization-mode", 1},
+					{"profile-level-id", "42e01f"},
+					{"level-asymmetry-allowed", 1}
+				}},
+				{"rtcpFeedback", json::array({
+					{{"type", "nack"}, {"parameter", ""}},
+					{{"type", "nack"}, {"parameter", "pli"}},
+					{{"type", "transport-cc"}, {"parameter", ""}}
+				})}
+			}
+		})},
+		{"headerExtensions", json::array({
+			{
+				{"uri", "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"},
+				{"id", 5},
+				{"encrypt", false},
+				{"parameters", json::object()}
+			}
+		})},
+		{"encodings", json::array({
+			{{"ssrc", 11111111u}}
+		})},
+		{"rtcp", {{"cname", "transport-cc-h264"}}}
+	};
+
+	auto producer = transport->produce({
+		{"kind", "video"},
+		{"rtpParameters", rtpParameters},
+		{"routerRtpCapabilities", router->rtpCapabilities()}
+	});
+	ASSERT_NE(producer, nullptr);
+
+	auto dumpBefore = transport->dump();
+	ASSERT_TRUE(dumpBefore.contains("tuple")) << dumpBefore.dump();
+	const auto localAddress = dumpBefore["tuple"].value("localAddress", "");
+	const auto localPort = static_cast<uint16_t>(dumpBefore["tuple"].value("localPort", 0));
+	ASSERT_FALSE(localAddress.empty());
+	ASSERT_NE(localPort, 0u);
+
+	int udp = socket(AF_INET, SOCK_DGRAM, 0);
+	ASSERT_GE(udp, 0);
+	sockaddr_in local{};
+	local.sin_family = AF_INET;
+	local.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	local.sin_port = 0;
+	ASSERT_EQ(bind(udp, reinterpret_cast<sockaddr*>(&local), sizeof(local)), 0);
+	socklen_t localLen = sizeof(local);
+	ASSERT_EQ(getsockname(udp, reinterpret_cast<sockaddr*>(&local), &localLen), 0);
+
+	sockaddr_in dst{};
+	dst.sin_family = AF_INET;
+	dst.sin_port = htons(localPort);
+	inet_pton(AF_INET, localAddress.c_str(), &dst.sin_addr);
+	ASSERT_EQ(connect(udp, reinterpret_cast<sockaddr*>(&dst), sizeof(dst)), 0);
+
+	std::vector<std::vector<uint8_t>> packetizedRtp;
+	class CollectingSink final : public mediasoup::media::rtp::H264PacketSink {
+	public:
+		explicit CollectingSink(std::vector<std::vector<uint8_t>>& packets)
+			: packets_(packets) {}
+
+		void OnPacket(const uint8_t* packet, size_t packetLen) override {
+			packets_.emplace_back(packet, packet + packetLen);
+		}
+
+	private:
+		std::vector<std::vector<uint8_t>>& packets_;
+	};
+
+	uint16_t seq = 1;
+	CollectingSink sink(packetizedRtp);
+	const uint8_t annexb[] = {
+		0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0x00, 0x1e,
+		0x00, 0x00, 0x00, 0x01, 0x68, 0xce, 0x06, 0xe2,
+		0x00, 0x00, 0x00, 0x01, 0x65, 0x88, 0x84, 0x21
+	};
+	const auto packetsProduced = mediasoup::media::rtp::H264Packetizer::PacketizeAnnexB(
+		annexb,
+		sizeof(annexb),
+		payloadType,
+		90000,
+		11111111u,
+		&seq,
+		&sink);
+	ASSERT_GT(packetsProduced, 0u);
+
+	uint16_t twccSeq = 1;
+	for (uint32_t burst = 0; burst < 20; ++burst) {
+		for (const auto& packet : packetizedRtp) {
+			uint8_t rewritten[1600];
+			size_t rewrittenLen = sizeof(rewritten);
+			ASSERT_TRUE(mediasoup::plainclient::RewriteRtpWithTransportCcSequence(
+				packet.data(),
+				packet.size(),
+				5,
+				twccSeq++,
+				rewritten,
+				&rewrittenLen));
+			ASSERT_EQ(send(udp, rewritten, rewrittenLen, 0), static_cast<ssize_t>(rewrittenLen));
+		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(250));
+
+	auto stats = transport->getStats();
+	EXPECT_GT(static_cast<uint64_t>(stats.value("bytesReceived", 0)), 0u) << stats.dump();
+	EXPECT_GT(static_cast<uint64_t>(stats.value("rtpBytesReceived", 0)), 0u) << stats.dump();
+
+	timeval timeout{};
+	timeout.tv_sec = 1;
+	timeout.tv_usec = 0;
+	ASSERT_EQ(setsockopt(udp, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)), 0);
+	bool sawTransportCc = false;
+	int lastPacketType = -1;
+	int lastFmt = -1;
+	ssize_t lastLen = -1;
+	for (int attempt = 0; attempt < 8 && !sawTransportCc; ++attempt) {
+		uint8_t rtcp[1500];
+		const ssize_t rtcpLen = recv(udp, rtcp, sizeof(rtcp), 0);
+		if (rtcpLen <= 0) {
+			continue;
+		}
+		lastLen = rtcpLen;
+		lastPacketType = rtcp[1];
+		lastFmt = static_cast<uint8_t>(rtcp[0] & 0x1F);
+		mediasoup::plainclient::TransportCcFeedbackSummary summary;
+		sawTransportCc = mediasoup::plainclient::ParseTransportCcFeedbackSummary(
+			rtcp,
+			static_cast<size_t>(rtcpLen),
+			&summary);
+	}
+	EXPECT_TRUE(sawTransportCc)
+		<< "expected transport-cc feedback but last packet had pt=" << lastPacketType
+		<< " fmt=" << lastFmt
+		<< " len=" << lastLen;
+
+	close(udp);
+	transport->close();
+	router->close();
+	worker->close();
+}
+
 TEST(NetworkThreadIntegration, TransportEstimateRaisesWhenAggregateTargetIncreases) {
 	int sendFd = -1, recvFd = -1;
 	uint16_t port = 0;
@@ -751,6 +1397,97 @@ TEST(NetworkThreadIntegration, TransportEstimateRaisesWhenAggregateTargetIncreas
 	EXPECT_EQ(net.transportEstimatedBitrateBps(), 1500000u);
 	EXPECT_EQ(net.effectivePacingBitrateBps(), 1500000u);
 
+	close(sendFd);
+	close(recvFd);
+}
+
+TEST(NetworkPause, PauseAckDropsQueuedRetransmissionsAndPreventsLateRtp) {
+	int sendFd = -1, recvFd = -1;
+	uint16_t port = 0;
+	ASSERT_EQ(createConnectedUdpPair(sendFd, recvFd, port), 0);
+
+	mt::SpscQueue<mt::EncodedAccessUnit, mt::kEncodedAuQueueCapacity> auQueue;
+	mt::SpscQueue<mt::NetworkToSourceCommand, mt::kNetworkSourceQueueCapacity> netQueue;
+	mt::SpscQueue<mt::NetworkControlCommand, mt::kControlCommandQueueCapacity> controlQueue;
+	mt::SpscQueue<mt::CommandAck, mt::kCommandAckQueueCapacity> ackQueue;
+
+	NetworkThread::Config cfg;
+	cfg.udpFd = sendFd;
+	NetworkThread net(cfg);
+	net.registerVideoTrack(0, 11111111, 96);
+	net.controlQueue = &controlQueue;
+	net.commandAckQueue = &ackQueue;
+	NetworkThread::SourceInput si;
+	si.auQueue = &auQueue;
+	si.keyframeQueue = &netQueue;
+	net.addSourceInput(si);
+
+	mt::EncodedAccessUnit au;
+	au.ssrc = 11111111;
+	au.payloadType = 96;
+	au.rtpTimestamp = 90000;
+	au.isKeyframe = true;
+	au.configGeneration = 0;
+	std::vector<uint8_t> bigNal(10000, 0xAA);
+	bigNal[0] = 0x00;
+	bigNal[1] = 0x00;
+	bigNal[2] = 0x00;
+	bigNal[3] = 0x01;
+	bigNal[4] = 0x65;
+	au.assign(bigNal.data(), bigNal.size());
+	ASSERT_TRUE(auQueue.tryPush(std::move(au)));
+
+	net.start();
+	net.wakeup();
+	std::this_thread::sleep_for(std::chrono::milliseconds(120));
+
+	uint8_t nack[16]{};
+	nack[0] = 0x81;
+	nack[1] = 205;
+	nack[2] = 0x00;
+	nack[3] = 0x03;
+	nack[12] = 0x00;
+	nack[13] = 0x00;
+	nack[14] = 0x00;
+	nack[15] = 0x07;
+	ASSERT_TRUE(sendDatagramToLocalAddressOfFd(recvFd, sendFd, nack, sizeof(nack)));
+
+	for (int i = 0; i < 50 && net.queuedRetransmissionPackets() == 0; ++i) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(20));
+	}
+	mt::NetworkControlCommand pause;
+	pause.type = mt::NetworkControlCommand::PauseTrack;
+	pause.trackIndex = 0;
+	pause.commandId = 88;
+	ASSERT_TRUE(controlQueue.tryPush(std::move(pause)));
+	net.wakeup();
+
+	mt::CommandAck ack;
+	bool gotAck = false;
+	for (int i = 0; i < 50 && !gotAck; ++i) {
+		if (ackQueue.tryPop(ack)) {
+			gotAck = true;
+		} else {
+			std::this_thread::sleep_for(std::chrono::milliseconds(20));
+		}
+	}
+	ASSERT_TRUE(gotAck);
+	EXPECT_EQ(ack.commandId, 88u);
+	EXPECT_TRUE(ack.applied);
+
+	uint8_t buf[1500];
+	while (recv(recvFd, buf, sizeof(buf), MSG_DONTWAIT) > 0) {}
+	std::this_thread::sleep_for(std::chrono::milliseconds(30));
+
+	int latePackets = 0;
+	while (recv(recvFd, buf, sizeof(buf), MSG_DONTWAIT) > 0) {
+		latePackets++;
+	}
+
+	EXPECT_EQ(net.queuedRetransmissionPackets(), 0u);
+	EXPECT_EQ(latePackets, 0) << "no RTP should leave the socket after pause ack, including retransmissions";
+
+	net.stop();
 	close(sendFd);
 	close(recvFd);
 }
@@ -1999,6 +2736,226 @@ TEST_F(ThreadedPlainPublishIntegrationTest, PlainPublishGetStatsAndClientStatsSm
 
 	ws->close();
 	close(udp);
+}
+
+TEST_F(ThreadedPlainPublishIntegrationTest, RealWorkerTWCCFeedbackObservedByPlainSender) {
+	auto ws = joinPeer("alice", transportCcRtpCapabilitiesForThreadedIntegration());
+
+	const uint32_t videoSsrc = 11111111u;
+	const uint32_t audioSsrc = 22222222u;
+	auto publishResp = ws->request("plainPublish", {
+		{"videoSsrcs", json::array({videoSsrc})},
+		{"audioSsrc", audioSsrc}
+	});
+	ASSERT_TRUE(publishResp.value("ok", false)) << publishResp.dump();
+	auto data = publishResp["data"];
+	ASSERT_TRUE(data.contains("videoTracks"));
+	ASSERT_FALSE(data["videoTracks"].empty());
+
+	const std::string dstIp = data["ip"].get<std::string>();
+	const uint16_t dstPort = data["port"].get<uint16_t>();
+	const uint8_t videoPt = static_cast<uint8_t>(data["videoTracks"][0].value("pt", 0));
+	const uint8_t videoTransportCcExtId = static_cast<uint8_t>(
+		data["videoTracks"][0].value("transportCcExtId", 0));
+	const uint8_t audioPt = static_cast<uint8_t>(data.value("audioPt", 0));
+	const uint8_t audioTransportCcExtId = static_cast<uint8_t>(
+		data.value("audioTransportCcExtId", 0));
+	ASSERT_NE(videoTransportCcExtId, 0) << publishResp.dump();
+
+	int udp = socket(AF_INET, SOCK_DGRAM, 0);
+	ASSERT_GE(udp, 0);
+	sockaddr_in dst{};
+	dst.sin_family = AF_INET;
+	dst.sin_port = htons(dstPort);
+	inet_pton(AF_INET, dstIp.c_str(), &dst.sin_addr);
+	ASSERT_EQ(::connect(udp, reinterpret_cast<sockaddr*>(&dst), sizeof(dst)), 0);
+	int flags = fcntl(udp, F_GETFL, 0);
+	fcntl(udp, F_SETFL, flags | O_NONBLOCK);
+
+	mt::SpscQueue<mt::EncodedAccessUnit, mt::kEncodedAuQueueCapacity> auQueue;
+	mt::SpscQueue<mt::NetworkToSourceCommand, mt::kNetworkSourceQueueCapacity> netQueue;
+
+	NetworkThread::Config cfg;
+	cfg.udpFd = udp;
+	cfg.audioSsrc = audioSsrc;
+	cfg.audioPt = audioPt;
+	cfg.audioTransportCcExtensionId = audioTransportCcExtId;
+	NetworkThread net(cfg);
+	net.registerVideoTrack(0, videoSsrc, videoPt, videoTransportCcExtId);
+	NetworkThread::SourceInput si;
+	si.auQueue = &auQueue;
+	si.keyframeQueue = &netQueue;
+	net.addSourceInput(si);
+
+	net.sendComediaProbe();
+	std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	net.start();
+
+	const uint8_t keyframeAnnexb[] = {
+		0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0x00, 0x1e,
+		0x00, 0x00, 0x00, 0x01, 0x68, 0xce, 0x06, 0xe2,
+		0x00, 0x00, 0x00, 0x01, 0x65, 0x88, 0x84, 0x21
+	};
+	const uint8_t deltaAnnexb[] = {
+		0x00, 0x00, 0x00, 0x01, 0x41, 0x9a, 0x20, 0x11
+	};
+
+	for (uint32_t i = 0; i < 40; ++i) {
+		mt::EncodedAccessUnit au;
+		au.trackIndex = 0;
+		au.ssrc = videoSsrc;
+		au.payloadType = videoPt;
+		au.rtpTimestamp = 90000 + i * 3000;
+		au.isKeyframe = (i == 0);
+		au.configGeneration = 0;
+		if (i == 0) {
+			au.assign(keyframeAnnexb, sizeof(keyframeAnnexb));
+		} else {
+			au.assign(deltaAnnexb, sizeof(deltaAnnexb));
+		}
+		ASSERT_TRUE(auQueue.tryPush(std::move(au)));
+		net.wakeup();
+		std::this_thread::sleep_for(std::chrono::milliseconds(15));
+	}
+
+	for (int i = 0; i < 50 && net.transportCcFeedbackReports() == 0; ++i) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	}
+
+	net.stop();
+	const uint64_t feedbackReports = net.transportCcFeedbackReports();
+	const uint64_t malformedFeedback = net.transportCcMalformedFeedbackCount();
+	const uint32_t estimateBps = net.transportEstimatedBitrateBps();
+
+	ws->close();
+	close(udp);
+	EXPECT_GT(feedbackReports, 0u);
+	EXPECT_GT(estimateBps, 900000u)
+		<< "real worker feedback should drive at least one additive increase on loopback"
+		<< " (reports=" << feedbackReports
+		<< ", malformed=" << malformedFeedback << ")";
+}
+
+TEST_F(ThreadedPlainPublishIntegrationTest, RealWorkerTWCCFeedbackHonorsEstimateToggle) {
+	auto runScenario = [&](bool enableTransportEstimate) -> std::pair<uint64_t, uint32_t> {
+		auto ws = joinPeer(
+			enableTransportEstimate ? "alice_estimate_on" : "alice_estimate_off",
+			transportCcRtpCapabilitiesForThreadedIntegration());
+		auto fail = [&](const std::string& message) {
+			ADD_FAILURE() << message;
+			ws->close();
+			return std::make_pair(uint64_t{0}, uint32_t{0});
+		};
+
+		const uint32_t videoSsrc = 11111111u;
+		const uint32_t audioSsrc = 22222222u;
+		auto publishResp = ws->request("plainPublish", {
+			{"videoSsrcs", json::array({videoSsrc})},
+			{"audioSsrc", audioSsrc}
+		});
+		if (!publishResp.value("ok", false)) {
+			return fail(publishResp.dump());
+		}
+		auto data = publishResp["data"];
+
+		const std::string dstIp = data["ip"].get<std::string>();
+		const uint16_t dstPort = data["port"].get<uint16_t>();
+		const uint8_t videoPt = static_cast<uint8_t>(data["videoTracks"][0].value("pt", 0));
+		const uint8_t videoTransportCcExtId = static_cast<uint8_t>(
+			data["videoTracks"][0].value("transportCcExtId", 0));
+		const uint8_t audioPt = static_cast<uint8_t>(data.value("audioPt", 0));
+		const uint8_t audioTransportCcExtId = static_cast<uint8_t>(
+			data.value("audioTransportCcExtId", 0));
+		if (videoTransportCcExtId == 0) {
+			return fail(publishResp.dump());
+		}
+
+		int udp = socket(AF_INET, SOCK_DGRAM, 0);
+		if (udp < 0) {
+			return fail("socket() failed");
+		}
+		sockaddr_in dst{};
+		dst.sin_family = AF_INET;
+		dst.sin_port = htons(dstPort);
+		inet_pton(AF_INET, dstIp.c_str(), &dst.sin_addr);
+		if (::connect(udp, reinterpret_cast<sockaddr*>(&dst), sizeof(dst)) != 0) {
+			close(udp);
+			return fail("connect() failed");
+		}
+		int flags = fcntl(udp, F_GETFL, 0);
+		fcntl(udp, F_SETFL, flags | O_NONBLOCK);
+
+		mt::SpscQueue<mt::EncodedAccessUnit, mt::kEncodedAuQueueCapacity> auQueue;
+		mt::SpscQueue<mt::NetworkToSourceCommand, mt::kNetworkSourceQueueCapacity> netQueue;
+
+		NetworkThread::Config cfg;
+		cfg.udpFd = udp;
+		cfg.audioSsrc = audioSsrc;
+		cfg.audioPt = audioPt;
+		cfg.audioTransportCcExtensionId = audioTransportCcExtId;
+		cfg.enableTransportEstimate = enableTransportEstimate;
+		NetworkThread net(cfg);
+		net.registerVideoTrack(0, videoSsrc, videoPt, videoTransportCcExtId);
+		NetworkThread::SourceInput si;
+		si.auQueue = &auQueue;
+		si.keyframeQueue = &netQueue;
+		net.addSourceInput(si);
+
+		net.sendComediaProbe();
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		net.start();
+
+		const uint8_t keyframeAnnexb[] = {
+			0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0x00, 0x1e,
+			0x00, 0x00, 0x00, 0x01, 0x68, 0xce, 0x06, 0xe2,
+			0x00, 0x00, 0x00, 0x01, 0x65, 0x88, 0x84, 0x21
+		};
+		const uint8_t deltaAnnexb[] = {
+			0x00, 0x00, 0x00, 0x01, 0x41, 0x9a, 0x20, 0x11
+		};
+
+		for (uint32_t i = 0; i < 40; ++i) {
+			mt::EncodedAccessUnit au;
+			au.trackIndex = 0;
+			au.ssrc = videoSsrc;
+			au.payloadType = videoPt;
+			au.rtpTimestamp = 90000 + i * 3000;
+			au.isKeyframe = (i == 0);
+			au.configGeneration = 0;
+			if (i == 0) {
+				au.assign(keyframeAnnexb, sizeof(keyframeAnnexb));
+			} else {
+				au.assign(deltaAnnexb, sizeof(deltaAnnexb));
+			}
+			if (!auQueue.tryPush(std::move(au))) {
+				ws->close();
+				close(udp);
+				ADD_FAILURE() << "failed to enqueue AU";
+				return std::make_pair(uint64_t{0}, uint32_t{0});
+			}
+			net.wakeup();
+			std::this_thread::sleep_for(std::chrono::milliseconds(15));
+		}
+
+		for (int i = 0; i < 50 && net.transportCcFeedbackReports() == 0; ++i) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		}
+
+		net.stop();
+		const auto feedbackReports = net.transportCcFeedbackReports();
+		const auto estimateBps = net.transportEstimatedBitrateBps();
+		ws->close();
+		close(udp);
+		return std::make_pair(feedbackReports, estimateBps);
+	};
+
+	const auto [reportsDisabled, estimateDisabled] = runScenario(false);
+	const auto [reportsEnabled, estimateEnabled] = runScenario(true);
+
+	EXPECT_GT(reportsDisabled, 0u);
+	EXPECT_GT(reportsEnabled, 0u);
+	EXPECT_EQ(estimateDisabled, 900000u);
+	EXPECT_GT(estimateEnabled, 900000u);
 }
 
 TEST_F(ThreadedPlainPublishIntegrationTest, AudioRtpAndStatsSmoke) {

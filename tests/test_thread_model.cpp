@@ -906,6 +906,70 @@ TEST(TransportCcHelpers, ParseTransportFeedbackSummaryHandlesRunLengthAndLoss) {
 	EXPECT_EQ(summary.lostPacketCount, 2u);
 }
 
+namespace {
+
+struct BitrateAllocationScenarioResult {
+	std::array<uint64_t, 4> packetsByClass{};
+	std::array<uint64_t, 4> bytesByClass{};
+	uint64_t audioPacketsEnqueued{ 0 };
+	uint64_t retransmissionPacketsEnqueued{ 0 };
+	uint64_t freshVideoPacketsEnqueued{ 0 };
+	mediasoup::plainclient::SenderTransportController::Metrics metrics;
+};
+
+BitrateAllocationScenarioResult runBitrateAllocationScenario(
+	uint32_t bitrateBps,
+	int tickCount,
+	int retransmissionPacketsPerTick = 0)
+{
+	BitrateAllocationScenarioResult result;
+	SenderTransportController::Config config;
+	config.maxFreshVideoPacketsTotal = static_cast<size_t>(tickCount * 2);
+	config.maxRetransmissionPackets = static_cast<size_t>(
+		std::max(1, retransmissionPacketsPerTick) * tickCount * 2);
+	SenderTransportController controller(config);
+	int64_t nowMs = 1000;
+	controller.SetNowFn([&nowMs] { return nowMs; });
+	controller.SetSendFn([&result](PacketClass packetClass, const uint8_t*, size_t len) {
+		const size_t index = mediasoup::plainclient::PacketClassIndex(packetClass);
+		result.packetsByClass[index]++;
+		result.bytesByClass[index] += len;
+		return SendResult{SendStatus::Sent, 0, len};
+	});
+	controller.RegisterVideoTrack(0, 424242u, bitrateBps);
+	controller.UpdateTrackTransportHint(0, 424242u, bitrateBps, false);
+	controller.SetTransportEstimatedBitrateBps(bitrateBps);
+	controller.OnPacingTick(nowMs);
+
+	uint8_t audio[120] = {};
+	uint8_t retransmission[1000] = {};
+	uint8_t freshVideo[1000] = {};
+	for (int tick = 0; tick < tickCount; ++tick) {
+		EXPECT_TRUE(controller.EnqueueAudioPacket(
+			31337u,
+			960u * static_cast<uint32_t>(tick),
+			audio,
+			sizeof(audio)));
+		result.audioPacketsEnqueued++;
+		for (int i = 0; i < retransmissionPacketsPerTick; ++i) {
+			EXPECT_TRUE(controller.EnqueueVideoRetransmissionPacket(
+				424242u,
+				retransmission,
+				sizeof(retransmission)));
+			result.retransmissionPacketsEnqueued++;
+		}
+		EXPECT_TRUE(controller.EnqueueVideoMediaPacket(424242u, freshVideo, sizeof(freshVideo)));
+		result.freshVideoPacketsEnqueued++;
+		nowMs += 20;
+		controller.OnPacingTick(nowMs);
+	}
+
+	result.metrics = controller.GetMetrics();
+	return result;
+}
+
+} // namespace
+
 TEST(SenderTransportControllerTest, ControlSendBypassesMediaBacklog) {
 	SenderTransportController controller;
 	std::vector<PacketClass> sentClasses;
@@ -1178,6 +1242,76 @@ TEST(SenderTransportControllerTest, FlushForShutdownDrainsQueuedVideoBeforeDisca
 			mediasoup::plainclient::PacketClassIndex(PacketClass::VideoMedia)],
 		10u);
 	EXPECT_EQ(controller.GetMetrics().queuedVideoDiscards, 0u);
+}
+
+TEST(SenderTransportControllerTest, BitrateAllocationControlBypassesBacklogAcrossBitrates) {
+	for (const uint32_t bitrateBps : {64000u, 128000u, 512000u}) {
+		SenderTransportController controller;
+		std::vector<PacketClass> sentClasses;
+		controller.SetNowFn([] { return int64_t{1000}; });
+		controller.SetSendFn([&sentClasses](PacketClass packetClass, const uint8_t*, size_t len) {
+			sentClasses.push_back(packetClass);
+			return SendResult{SendStatus::Sent, 0, len};
+		});
+		controller.RegisterVideoTrack(0, 10101u, bitrateBps);
+		controller.UpdateTrackTransportHint(0, 10101u, bitrateBps, false);
+		controller.SetTransportEstimatedBitrateBps(bitrateBps);
+
+		uint8_t freshVideo[1000] = {};
+		uint8_t retransmission[1000] = {};
+		for (int i = 0; i < 8; ++i) {
+			ASSERT_TRUE(controller.EnqueueVideoMediaPacket(10101u, freshVideo, sizeof(freshVideo)));
+			ASSERT_TRUE(controller.EnqueueVideoRetransmissionPacket(10101u, retransmission, sizeof(retransmission)));
+		}
+
+		uint8_t control[16] = {};
+		const auto result = controller.SendControlPacket(control, sizeof(control));
+		EXPECT_EQ(result.status, SendStatus::Sent);
+		ASSERT_FALSE(sentClasses.empty());
+		EXPECT_EQ(sentClasses.front(), PacketClass::Control);
+		EXPECT_EQ(controller.QueuedFreshVideoPackets(), 8u);
+		EXPECT_EQ(controller.QueuedRetransmissionPackets(), 8u);
+	}
+}
+
+TEST(SenderTransportControllerTest, BitrateAllocationPrefersAudioOverFreshVideoAtLowBitrate) {
+	const auto result = runBitrateAllocationScenario(64000u, 500);
+	const size_t audioIndex = mediasoup::plainclient::PacketClassIndex(PacketClass::AudioRtp);
+	const size_t videoIndex = mediasoup::plainclient::PacketClassIndex(PacketClass::VideoMedia);
+
+	EXPECT_EQ(result.packetsByClass[audioIndex], result.audioPacketsEnqueued);
+	EXPECT_GT(result.packetsByClass[audioIndex], result.packetsByClass[videoIndex]);
+	EXPECT_EQ(result.metrics.audioDeadlineDrops, 0u);
+}
+
+TEST(SenderTransportControllerTest, BitrateAllocationPrefersRetransmissionOverFreshVideoAcrossBitrates) {
+	const size_t retransmissionIndex =
+		mediasoup::plainclient::PacketClassIndex(PacketClass::VideoRetransmission);
+	const size_t videoIndex = mediasoup::plainclient::PacketClassIndex(PacketClass::VideoMedia);
+
+	for (const uint32_t bitrateBps : {64000u, 128000u, 256000u, 512000u, 1000000u}) {
+		const auto result = runBitrateAllocationScenario(bitrateBps, 500, 3);
+		EXPECT_EQ(result.packetsByClass[videoIndex], 0u)
+			<< "fresh video should remain blocked while retransmission backlog stays non-empty at bitrate "
+			<< bitrateBps;
+		EXPECT_GT(result.packetsByClass[retransmissionIndex], 0u);
+	}
+}
+
+TEST(SenderTransportControllerTest, BitrateAllocationFreshVideoAvailabilityIncreasesMonotonicallyWithBitrate) {
+	const size_t videoIndex = mediasoup::plainclient::PacketClassIndex(PacketClass::VideoMedia);
+	std::vector<uint64_t> freshVideoPackets;
+
+	for (const uint32_t bitrateBps : {64000u, 128000u, 256000u, 512000u, 1000000u}) {
+		const auto result = runBitrateAllocationScenario(bitrateBps, 500);
+		freshVideoPackets.push_back(result.packetsByClass[videoIndex]);
+	}
+
+	ASSERT_EQ(freshVideoPackets.size(), 5u);
+	for (size_t i = 1; i < freshVideoPackets.size(); ++i) {
+		EXPECT_GE(freshVideoPackets[i], freshVideoPackets[i - 1]);
+	}
+	EXPECT_GT(freshVideoPackets.back(), freshVideoPackets.front());
 }
 
 TEST(SenderTransportControllerTest, EffectivePacingBitrateUsesMinOfTargetEstimateAndCap) {

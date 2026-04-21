@@ -1,0 +1,424 @@
+{
+  "schema": "mediasoup.twcc.ab.v1",
+  "generatedAt": "2026-04-21T06:39:19.638Z",
+  "baseline": {
+    "label": "G1 Controller-Only",
+    "commit": "c17cab34b87c8f1438ada553f9af560d60e3bd2f"
+  },
+  "candidate": {
+    "label": "G2 Candidate",
+    "commit": "c17cab34b87c8f1438ada553f9af560d60e3bd2f"
+  },
+  "environment": {
+    "host": "iZbp16494z0s9fdwtwq6pgZ",
+    "os": "linux",
+    "kernel": "5.10.134-18.al8.x86_64",
+    "cpu": "Intel(R) Xeon(R) Platinum",
+    "memoryGb": 3.5,
+    "networkSetup": "tc/netem via cpp-client-matrix speed=0.25",
+    "inputMedia": "tests/fixtures/media/test_sweep_cpp_matrix.mp4 + threaded multi_video_budget"
+  },
+  "runConfig": {
+    "repetitionsPerScenario": 2,
+    "scenarios": [
+      "AB-001",
+      "AB-002",
+      "AB-003",
+      "AB-004",
+      "AB-005"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "AB-001",
+      "name": "steady_state",
+      "network": {
+        "bandwidthKbps": 4000,
+        "rttMs": 25,
+        "lossRate": 0.1,
+        "jitterMs": 5
+      },
+      "baseline": {
+        "goodputKbps": {
+          "mean": 880.65,
+          "p50": 880.65,
+          "p90": 880.65
+        },
+        "lossPercent": {
+          "mean": 0,
+          "p50": 0,
+          "p90": 0
+        },
+        "recoveryTimeMs": {
+          "mean": null,
+          "p50": null,
+          "p90": null
+        },
+        "stabilityKbpsP90MinusP50": 0,
+        "queuePressure": {
+          "wouldBlockTotal": null,
+          "queuedVideoRetentions": null,
+          "audioDeadlineDrops": null,
+          "retransmissionDrops": null
+        },
+        "fairnessDeviation": null
+      },
+      "candidate": {
+        "goodputKbps": {
+          "mean": 880.65,
+          "p50": 880.65,
+          "p90": 880.65
+        },
+        "lossPercent": {
+          "mean": 0,
+          "p50": 0,
+          "p90": 0
+        },
+        "recoveryTimeMs": {
+          "mean": null,
+          "p50": null,
+          "p90": null
+        },
+        "stabilityKbpsP90MinusP50": 0,
+        "queuePressure": {
+          "wouldBlockTotal": null,
+          "queuedVideoRetentions": null,
+          "audioDeadlineDrops": null,
+          "retransmissionDrops": null
+        },
+        "fairnessDeviation": null
+      },
+      "delta": {
+        "goodputPercent": 0,
+        "lossPercent": null,
+        "recoveryTimePercent": null,
+        "queuePressurePercent": null,
+        "fairnessDeviationPercent": null
+      },
+      "pass": true,
+      "notes": "Phase=baseline, case=B1. Goodput/loss derived from QOS_TRACE sendBps/lossRate samples."
+    },
+    {
+      "id": "AB-002",
+      "name": "step_down_congestion",
+      "network": {
+        "bandwidthKbps": 500,
+        "rttMs": 25,
+        "lossRate": 0.1,
+        "jitterMs": 5
+      },
+      "baseline": {
+        "goodputKbps": {
+          "mean": 283.5,
+          "p50": 283.5,
+          "p90": 283.5
+        },
+        "lossPercent": {
+          "mean": 0,
+          "p50": 0,
+          "p90": 0
+        },
+        "recoveryTimeMs": {
+          "mean": null,
+          "p50": null,
+          "p90": null
+        },
+        "stabilityKbpsP90MinusP50": 0,
+        "queuePressure": {
+          "wouldBlockTotal": null,
+          "queuedVideoRetentions": null,
+          "audioDeadlineDrops": null,
+          "retransmissionDrops": null
+        },
+        "fairnessDeviation": null
+      },
+      "candidate": {
+        "goodputKbps": {
+          "mean": 283.5,
+          "p50": 283.5,
+          "p90": 283.5
+        },
+        "lossPercent": {
+          "mean": 0,
+          "p50": 0,
+          "p90": 0
+        },
+        "recoveryTimeMs": {
+          "mean": null,
+          "p50": null,
+          "p90": null
+        },
+        "stabilityKbpsP90MinusP50": 0,
+        "queuePressure": {
+          "wouldBlockTotal": null,
+          "queuedVideoRetentions": null,
+          "audioDeadlineDrops": null,
+          "retransmissionDrops": null
+        },
+        "fairnessDeviation": null
+      },
+      "delta": {
+        "goodputPercent": 0,
+        "lossPercent": null,
+        "recoveryTimePercent": null,
+        "queuePressurePercent": null,
+        "fairnessDeviationPercent": null
+      },
+      "pass": true,
+      "notes": "Phase=impairment, case=T3. Goodput/loss derived from QOS_TRACE sendBps/lossRate samples."
+    },
+    {
+      "id": "AB-003",
+      "name": "step_up_recovery",
+      "network": {
+        "bandwidthKbps": 500,
+        "rttMs": 25,
+        "lossRate": 0.1,
+        "jitterMs": 5
+      },
+      "baseline": {
+        "goodputKbps": {
+          "mean": 450,
+          "p50": 450,
+          "p90": 450
+        },
+        "lossPercent": {
+          "mean": 0,
+          "p50": 0,
+          "p90": 0
+        },
+        "recoveryTimeMs": {
+          "mean": 6400.5,
+          "p50": 6454,
+          "p90": 6454
+        },
+        "stabilityKbpsP90MinusP50": 0,
+        "queuePressure": {
+          "wouldBlockTotal": null,
+          "queuedVideoRetentions": null,
+          "audioDeadlineDrops": null,
+          "retransmissionDrops": null
+        },
+        "fairnessDeviation": null
+      },
+      "candidate": {
+        "goodputKbps": {
+          "mean": 450,
+          "p50": 450,
+          "p90": 450
+        },
+        "lossPercent": {
+          "mean": 0,
+          "p50": 0,
+          "p90": 0
+        },
+        "recoveryTimeMs": {
+          "mean": 6375,
+          "p50": 6392,
+          "p90": 6392
+        },
+        "stabilityKbpsP90MinusP50": 0,
+        "queuePressure": {
+          "wouldBlockTotal": null,
+          "queuedVideoRetentions": null,
+          "audioDeadlineDrops": null,
+          "retransmissionDrops": null
+        },
+        "fairnessDeviation": null
+      },
+      "delta": {
+        "goodputPercent": 0,
+        "lossPercent": null,
+        "recoveryTimePercent": -0.398406374501992,
+        "queuePressurePercent": null,
+        "fairnessDeviationPercent": null
+      },
+      "pass": true,
+      "notes": "Phase=recovery, case=T3. Goodput/loss derived from QOS_TRACE sendBps/lossRate samples."
+    },
+    {
+      "id": "AB-004",
+      "name": "high_rtt_stability",
+      "network": {
+        "bandwidthKbps": 4000,
+        "rttMs": 180,
+        "lossRate": 0.1,
+        "jitterMs": 5
+      },
+      "baseline": {
+        "goodputKbps": {
+          "mean": 751.05,
+          "p50": 751.05,
+          "p90": 751.05
+        },
+        "lossPercent": {
+          "mean": 0,
+          "p50": 0,
+          "p90": 0
+        },
+        "recoveryTimeMs": {
+          "mean": null,
+          "p50": null,
+          "p90": null
+        },
+        "stabilityKbpsP90MinusP50": 0,
+        "queuePressure": {
+          "wouldBlockTotal": null,
+          "queuedVideoRetentions": null,
+          "audioDeadlineDrops": null,
+          "retransmissionDrops": null
+        },
+        "fairnessDeviation": null
+      },
+      "candidate": {
+        "goodputKbps": {
+          "mean": 751.05,
+          "p50": 751.05,
+          "p90": 751.05
+        },
+        "lossPercent": {
+          "mean": 0,
+          "p50": 0,
+          "p90": 0
+        },
+        "recoveryTimeMs": {
+          "mean": null,
+          "p50": null,
+          "p90": null
+        },
+        "stabilityKbpsP90MinusP50": 0,
+        "queuePressure": {
+          "wouldBlockTotal": null,
+          "queuedVideoRetentions": null,
+          "audioDeadlineDrops": null,
+          "retransmissionDrops": null
+        },
+        "fairnessDeviation": null
+      },
+      "delta": {
+        "goodputPercent": 0,
+        "lossPercent": null,
+        "recoveryTimePercent": null,
+        "queuePressurePercent": null,
+        "fairnessDeviationPercent": null
+      },
+      "pass": true,
+      "notes": "Phase=impairment, case=R4. Goodput/loss derived from QOS_TRACE sendBps/lossRate samples."
+    },
+    {
+      "id": "AB-005",
+      "name": "multi_video_budget",
+      "network": {
+        "bandwidthKbps": 300,
+        "rttMs": 260,
+        "lossRate": 0.08,
+        "jitterMs": 24
+      },
+      "baseline": {
+        "goodputKbps": {
+          "mean": null,
+          "p50": null,
+          "p90": null
+        },
+        "lossPercent": {
+          "mean": null,
+          "p50": null,
+          "p90": null
+        },
+        "recoveryTimeMs": {
+          "mean": null,
+          "p50": null,
+          "p90": null
+        },
+        "stabilityKbpsP90MinusP50": null,
+        "queuePressure": {
+          "wouldBlockTotal": null,
+          "queuedVideoRetentions": null,
+          "audioDeadlineDrops": null,
+          "retransmissionDrops": null
+        },
+        "fairnessDeviation": 0.22743651259784564
+      },
+      "candidate": {
+        "goodputKbps": {
+          "mean": null,
+          "p50": null,
+          "p90": null
+        },
+        "lossPercent": {
+          "mean": null,
+          "p50": null,
+          "p90": null
+        },
+        "recoveryTimeMs": {
+          "mean": null,
+          "p50": null,
+          "p90": null
+        },
+        "stabilityKbpsP90MinusP50": null,
+        "queuePressure": {
+          "wouldBlockTotal": null,
+          "queuedVideoRetentions": null,
+          "audioDeadlineDrops": null,
+          "retransmissionDrops": null
+        },
+        "fairnessDeviation": 0.22330208747720243
+      },
+      "delta": {
+        "goodputPercent": null,
+        "lossPercent": null,
+        "recoveryTimePercent": null,
+        "queuePressurePercent": null,
+        "fairnessDeviationPercent": -1.8178370189634967
+      },
+      "pass": true,
+      "notes": "Fairness derived from weighted multi-track trace shares over the final 10 samples."
+    }
+  ],
+  "gates": [
+    {
+      "id": "gate-AB-002-loss",
+      "description": "AB-002 congestion loss proxy improves >=20%",
+      "target": ">=20%",
+      "actual": "n/a",
+      "pass": false
+    },
+    {
+      "id": "gate-AB-003-recovery",
+      "description": "AB-003 recovery time not worse, ideally >=15%",
+      "target": "not worse, ideally >=15%",
+      "actual": "0.40%",
+      "pass": true
+    },
+    {
+      "id": "gate-AB-001-goodput",
+      "description": "AB-001 steady-state goodput regression <=5%",
+      "target": ">=-5%",
+      "actual": "0.00%",
+      "pass": true
+    },
+    {
+      "id": "gate-AB-005-fairness",
+      "description": "AB-005 fairness deviation not increased",
+      "target": "<=0%",
+      "actual": "-1.82%",
+      "pass": true
+    },
+    {
+      "id": "gate-regression-safety",
+      "description": "transport-control hard regression suite",
+      "target": "all pass",
+      "actual": "pass",
+      "pass": true
+    }
+  ],
+  "overall": {
+    "pass": false,
+    "summary": "G2 Candidate did not meet every configured gate over G1 Controller-Only."
+  },
+  "artifacts": {
+    "rawMetricsPath": "changes/2026-04-21-plain-client-sender-transport-control/artifacts/twcc-ab-eval/2026-04-21T06-39-19.638Z/raw-groups.json",
+    "comparisonReportPath": "changes/2026-04-21-plain-client-sender-transport-control/artifacts/twcc-ab-eval/2026-04-21T06-39-19.638Z/g1-vs-g2.json",
+    "logsPath": "changes/2026-04-21-plain-client-sender-transport-control/artifacts/twcc-ab-eval/2026-04-21T06-39-19.638Z/raw"
+  }
+}

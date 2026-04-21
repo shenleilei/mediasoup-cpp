@@ -29,6 +29,7 @@ Read `REVIEW.md` before code review or self-review.
 - Handle errors, edge cases, and fallback paths explicitly; do not silently swallow failures without a documented reason
 - Keep comments focused on why, constraints, invariants, and tradeoffs; if a comment only explains what the code says, simplify the code instead
 - Minimize new dependencies, indirection, and hidden coupling; add a new abstraction or library only when existing code cannot reasonably cover the need
+- When downloading third-party build dependencies or toolchain prerequisites, prefer Alibaba Cloud (`Aliyun`) mirrors first and only fall back to upstream when the mirror is missing the required artifact
 - Run unit tests, integration tests, and required checks before claiming completion
 - Use `REVIEW.md` for review work and pre-completion self-review
 - Review from the whole-system perspective, not only the edited file perspective

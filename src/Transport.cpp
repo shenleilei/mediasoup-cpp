@@ -9,6 +9,7 @@
 #include "router_generated.h"
 #include "webRtcTransport_generated.h"
 #include "plainTransport_generated.h"
+#include "transport_generated.h"
 
 namespace mediasoup {
 
@@ -209,6 +210,71 @@ std::shared_ptr<Consumer> Transport::consume(const json& options) {
 	return consumer;
 }
 
+json Transport::dump(int timeoutMs) {
+	if (closed_) return json::object();
+
+	auto owned = channel_->requestWait(
+		FBS::Request::Method::TRANSPORT_DUMP,
+		FBS::Request::Body::NONE,
+		0,
+		id_,
+		timeoutMs);
+	auto* response = owned.response();
+
+	json result;
+	auto parseBaseDump = [&result](const FBS::Transport::Dump* dump) {
+		if (!dump) return;
+		result["id"] = dump->id() ? dump->id()->str() : "";
+		result["direct"] = dump->direct();
+		if (dump->recv_rtp_header_extensions()) {
+			auto* extensions = dump->recv_rtp_header_extensions();
+			json recvExtensions = json::object();
+			if (extensions->mid().has_value()) recvExtensions["mid"] = extensions->mid().value();
+			if (extensions->rid().has_value()) recvExtensions["rid"] = extensions->rid().value();
+			if (extensions->rrid().has_value()) recvExtensions["rrid"] = extensions->rrid().value();
+			if (extensions->abs_send_time().has_value())
+				recvExtensions["absSendTime"] = extensions->abs_send_time().value();
+			if (extensions->transport_wide_cc01().has_value())
+				recvExtensions["transportWideCc01"] = extensions->transport_wide_cc01().value();
+			result["recvRtpHeaderExtensions"] = std::move(recvExtensions);
+		}
+	};
+
+	if (response && response->body_type() == FBS::Response::Body::WebRtcTransport_DumpResponse) {
+		auto* dump = response->body_as_WebRtcTransport_DumpResponse();
+		if (dump && dump->base()) {
+			parseBaseDump(dump->base());
+			if (dump->ice_selected_tuple()) {
+				auto* tuple = dump->ice_selected_tuple();
+				result["tuple"] = {
+					{"localAddress", tuple->local_address() ? tuple->local_address()->str() : ""},
+					{"localPort", tuple->local_port()},
+					{"remoteIp", tuple->remote_ip() ? tuple->remote_ip()->str() : ""},
+					{"remotePort", tuple->remote_port()},
+					{"protocol", tuple->protocol() == FBS::Transport::Protocol::UDP ? "udp" : "tcp"}
+				};
+			}
+		}
+	} else if (response && response->body_type() == FBS::Response::Body::PlainTransport_DumpResponse) {
+		auto* dump = response->body_as_PlainTransport_DumpResponse();
+		if (dump && dump->base()) {
+			parseBaseDump(dump->base());
+			if (dump->tuple()) {
+				auto* tuple = dump->tuple();
+				result["tuple"] = {
+					{"localAddress", tuple->local_address() ? tuple->local_address()->str() : ""},
+					{"localPort", tuple->local_port()},
+					{"remoteIp", tuple->remote_ip() ? tuple->remote_ip()->str() : ""},
+					{"remotePort", tuple->remote_port()},
+					{"protocol", tuple->protocol() == FBS::Transport::Protocol::UDP ? "udp" : "tcp"}
+				};
+			}
+		}
+	}
+
+	return result;
+}
+
 json Transport::getStats(int timeoutMs) {
 	if (closed_) return json::object();
 
@@ -266,11 +332,26 @@ json Transport::getStats(int timeoutMs) {
 		if (statsResp && statsResp->base()) {
 			auto* s = statsResp->base();
 			result["transportId"] = s->transport_id() ? s->transport_id()->str() : "";
+			result["timestamp"] = s->timestamp();
+			result["bytesReceived"] = s->bytes_received();
 			result["recvBitrate"] = s->recv_bitrate();
+			result["bytesSent"] = s->bytes_sent();
 			result["sendBitrate"] = s->send_bitrate();
+			result["rtpBytesReceived"] = s->rtp_bytes_received();
 			result["rtpRecvBitrate"] = s->rtp_recv_bitrate();
+			result["rtpBytesSent"] = s->rtp_bytes_sent();
 			result["rtpSendBitrate"] = s->rtp_send_bitrate();
+			result["rtxBytesReceived"] = s->rtx_bytes_received();
+			result["rtxRecvBitrate"] = s->rtx_recv_bitrate();
+			result["rtxBytesSent"] = s->rtx_bytes_sent();
+			result["rtxSendBitrate"] = s->rtx_send_bitrate();
+			result["probationBytesSent"] = s->probation_bytes_sent();
+			result["probationSendBitrate"] = s->probation_send_bitrate();
+			result["availableOutgoingBitrate"] = s->available_outgoing_bitrate();
+			result["availableIncomingBitrate"] = s->available_incoming_bitrate();
+			result["maxIncomingBitrate"] = s->max_incoming_bitrate();
 			result["rtpPacketLossReceived"] = s->rtp_packet_loss_received();
+			result["rtpPacketLossSent"] = s->rtp_packet_loss_sent();
 		}
 	}
 
