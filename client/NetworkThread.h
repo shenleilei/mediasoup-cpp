@@ -63,6 +63,7 @@ public:
 		uint32_t audioSsrc = 0;
 		uint8_t audioPt = 0;
 		uint8_t audioTransportCcExtensionId = 0;
+		uint32_t applicationBitrateCapBps = 0;
 		bool enableTransportController = true;
 	};
 
@@ -108,6 +109,7 @@ public:
 				stream->nackRetransmitted++;
 			}
 		});
+		transportController_.SetApplicationBitrateCapBps(cfg.applicationBitrateCapBps);
 	}
 
 	~NetworkThread() { stop(); }
@@ -128,6 +130,10 @@ public:
 		// Note: rtcp_ registration deferred to start() to avoid dangling pointers from vector realloc
 		if (useTransportController_) {
 			transportController_.RegisterVideoTrack(trackIndex, ssrc);
+			if (transportEstimatedBitrateBps_ == 0) {
+				transportEstimatedBitrateBps_ = transportController_.AggregateTargetBitrateBps();
+				transportController_.SetTransportEstimatedBitrateBps(transportEstimatedBitrateBps_);
+			}
 		}
 	}
 
@@ -411,6 +417,7 @@ private:
 						transportCcFeedbackReports_++;
 						transportCcFeedbackPacketCount_ += summary.packetStatusCount;
 						transportCcFeedbackLostCount_ += summary.lostPacketCount;
+						UpdateTransportEstimateFromFeedback(summary);
 					} else {
 						transportCcMalformedFeedbackCount_++;
 					}
@@ -552,6 +559,10 @@ private:
 					if (useTransportController_) {
 						transportController_.UpdateTrackTransportHint(
 							cmd.trackIndex, cmd.ssrc, cmd.targetBitrateBps, cmd.paused);
+						if (transportEstimatedBitrateBps_ == 0) {
+							transportEstimatedBitrateBps_ = transportController_.AggregateTargetBitrateBps();
+							transportController_.SetTransportEstimatedBitrateBps(transportEstimatedBitrateBps_);
+						}
 					}
 					break;
 				case mt::NetworkControlCommand::PauseTrack:
@@ -679,6 +690,46 @@ private:
 			pacingQueue_.pop_front();
 		}
 	}
+
+	void UpdateTransportEstimateFromFeedback(
+		const mediasoup::plainclient::TransportCcFeedbackSummary& summary)
+	{
+		if (!useTransportController_ || summary.packetStatusCount == 0) {
+			return;
+		}
+
+		uint32_t estimateBps = transportEstimatedBitrateBps_;
+		if (estimateBps == 0) {
+			estimateBps = transportController_.AggregateTargetBitrateBps();
+		}
+		if (estimateBps == 0) {
+			return;
+		}
+
+		const double lossRatio =
+			static_cast<double>(summary.lostPacketCount) /
+			static_cast<double>(summary.packetStatusCount);
+		if (lossRatio >= 0.10) {
+			estimateBps = static_cast<uint32_t>(
+				static_cast<uint64_t>(estimateBps) * 80u / 100u);
+		} else if (lossRatio >= 0.02) {
+			estimateBps = static_cast<uint32_t>(
+				static_cast<uint64_t>(estimateBps) * 92u / 100u);
+		} else {
+			const uint32_t additiveStep = std::max<uint32_t>(20000u, estimateBps / 20u);
+			estimateBps = estimateBps > kMaxTransportEstimateBps - additiveStep
+				? kMaxTransportEstimateBps
+				: (estimateBps + additiveStep);
+		}
+
+		estimateBps = std::clamp<uint32_t>(
+			estimateBps,
+			kMinTransportEstimateBps,
+			kMaxTransportEstimateBps);
+		transportEstimatedBitrateBps_ = estimateBps;
+		lastTransportFeedbackAtMs_ = steadyNowMs();
+		transportController_.SetTransportEstimatedBitrateBps(transportEstimatedBitrateBps_);
+	}
 public:
 	const mediasoup::plainclient::SenderTransportController::Metrics& transportMetrics() const {
 		return transportController_.GetMetrics();
@@ -702,6 +753,18 @@ public:
 		return useTransportController_ ? transportController_.MediaBudgetBytes() : 0;
 	}
 
+	uint32_t transportEstimatedBitrateBps() const {
+		return transportEstimatedBitrateBps_;
+	}
+
+	uint64_t transportCcFeedbackReports() const {
+		return transportCcFeedbackReports_;
+	}
+
+	uint32_t effectivePacingBitrateBps() const {
+		return useTransportController_ ? transportController_.EffectivePacingBitrateBps() : 0;
+	}
+
 private:
 	Config cfg_;
 	bool useTransportController_{ true };
@@ -713,12 +776,16 @@ private:
 	std::thread thread_;
 	uint16_t audioSeq_ = 0;
 	uint16_t nextTransportWideCcSequence_{ 0 };
+	uint32_t transportEstimatedBitrateBps_{ 0 };
+	int64_t lastTransportFeedbackAtMs_{ 0 };
 	uint64_t transportCcRewrittenPacketsSent_{ 0 };
 	uint64_t transportCcRewriteFailures_{ 0 };
 	uint64_t transportCcFeedbackReports_{ 0 };
 	uint64_t transportCcFeedbackPacketCount_{ 0 };
 	uint64_t transportCcFeedbackLostCount_{ 0 };
 	uint64_t transportCcMalformedFeedbackCount_{ 0 };
+	static constexpr uint32_t kMinTransportEstimateBps = 30000u;
+	static constexpr uint32_t kMaxTransportEstimateBps = 8000000u;
 	uint64_t statsGeneration_ = 0;
 	int epollFd_ = -1;
 	int wakeupFd_ = -1;

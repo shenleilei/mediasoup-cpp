@@ -1154,6 +1154,32 @@ TEST(SenderTransportControllerTest, PauseDropsQueuedRetransmissionsForTrack) {
 	EXPECT_EQ(controller.GetMetrics().retransmissionDrops, 1u);
 }
 
+TEST(SenderTransportControllerTest, EffectivePacingBitrateUsesMinOfTargetEstimateAndCap) {
+	SenderTransportController controller;
+	int64_t nowMs = 1000;
+	controller.SetNowFn([&nowMs] { return nowMs; });
+	controller.SetSendFn([](PacketClass, const uint8_t*, size_t len) {
+		return SendResult{SendStatus::Sent, 0, len};
+	});
+	controller.RegisterVideoTrack(0, 9999, 1000000);
+	controller.UpdateTrackTransportHint(0, 9999, 1000000, false);
+
+	EXPECT_EQ(controller.AggregateTargetBitrateBps(), 1000000u);
+	EXPECT_EQ(controller.EffectivePacingBitrateBps(), 1000000u);
+
+	controller.SetTransportEstimatedBitrateBps(700000);
+	EXPECT_EQ(controller.EffectivePacingBitrateBps(), 700000u);
+
+	controller.SetApplicationBitrateCapBps(500000);
+	EXPECT_EQ(controller.EffectivePacingBitrateBps(), 500000u);
+
+	controller.OnPacingTick(nowMs);
+	nowMs += 100;
+	controller.OnPacingTick(nowMs);
+
+	EXPECT_EQ(controller.MediaBudgetBytes(), 6250); // 500000 bps * 100ms / 8000
+}
+
 // ═══════════════════════════════════════════════════════════
 // SpscQueue wraparound
 // ═══════════════════════════════════════════════════════════

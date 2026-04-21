@@ -107,6 +107,18 @@ public:
 		RefreshAggregateTargetBitrate();
 	}
 
+	void SetTransportEstimatedBitrateBps(uint32_t estimatedBitrateBps)
+	{
+		transportEstimatedBitrateBps_ = estimatedBitrateBps;
+		RefreshEffectivePacingBitrate();
+	}
+
+	void SetApplicationBitrateCapBps(uint32_t appBitrateCapBps)
+	{
+		applicationBitrateCapBps_ = appBitrateCapBps;
+		RefreshEffectivePacingBitrate();
+	}
+
 	void SetTrackPaused(uint32_t ssrc, bool paused)
 	{
 		auto it = ssrcToTrackIndex_.find(ssrc);
@@ -228,6 +240,11 @@ public:
 		return aggregateTargetBitrateBps_;
 	}
 
+	uint32_t EffectivePacingBitrateBps() const
+	{
+		return effectivePacingBitrateBps_;
+	}
+
 	const Metrics& GetMetrics() const
 	{
 		return metrics_;
@@ -277,14 +294,14 @@ private:
 		}
 		const int64_t deltaMs = std::max<int64_t>(0, nowMs - lastBudgetUpdateMs_);
 		lastBudgetUpdateMs_ = nowMs;
-		if (deltaMs == 0 || aggregateTargetBitrateBps_ == 0) {
+		if (deltaMs == 0 || effectivePacingBitrateBps_ == 0) {
 			return;
 		}
 		const int64_t addedBytes =
-			static_cast<int64_t>(aggregateTargetBitrateBps_) * deltaMs / 8000;
+			static_cast<int64_t>(effectivePacingBitrateBps_) * deltaMs / 8000;
 		const int64_t maxBudget = std::max<int64_t>(
 			static_cast<int64_t>(kMaxPacketBytes),
-			static_cast<int64_t>(aggregateTargetBitrateBps_) * config_.maxBudgetWindowMs / 8000);
+			static_cast<int64_t>(effectivePacingBitrateBps_) * config_.maxBudgetWindowMs / 8000);
 		mediaBudgetBytes_ = std::min(maxBudget, mediaBudgetBytes_ + addedBytes);
 	}
 
@@ -298,6 +315,19 @@ private:
 		}
 		aggregateTargetBitrateBps_ = static_cast<uint32_t>(
 			std::min<uint64_t>(total, std::numeric_limits<uint32_t>::max()));
+		RefreshEffectivePacingBitrate();
+	}
+
+	void RefreshEffectivePacingBitrate()
+	{
+		uint32_t effective = aggregateTargetBitrateBps_;
+		if (transportEstimatedBitrateBps_ > 0) {
+			effective = std::min(effective, transportEstimatedBitrateBps_);
+		}
+		if (applicationBitrateCapBps_ > 0) {
+			effective = std::min(effective, applicationBitrateCapBps_);
+		}
+		effectivePacingBitrateBps_ = effective;
 	}
 
 	void DropExpiredAudioPackets(int64_t nowMs)
@@ -486,6 +516,9 @@ private:
 	int64_t mediaBudgetBytes_{ 0 };
 	int64_t lastBudgetUpdateMs_{ 0 };
 	uint32_t aggregateTargetBitrateBps_{ 0 };
+	uint32_t transportEstimatedBitrateBps_{ 0 };
+	uint32_t applicationBitrateCapBps_{ 0 };
+	uint32_t effectivePacingBitrateBps_{ 0 };
 	size_t nextVideoTrackIndex_{ 0 };
 	Metrics metrics_;
 };
