@@ -9,6 +9,26 @@ namespace mediasoup::plainclient {
 
 static constexpr uint8_t RTCP_RTPFB_FMT_TRANSPORT_CC = 15;
 
+struct TransportCcPacketFeedback {
+	uint16_t sequenceNumber{ 0 };
+	uint8_t symbol{ 0 };
+	bool received{ false };
+	bool deltaPresent{ false };
+	int64_t receiveTimeUs{ 0 };
+};
+
+struct TransportCcFeedback {
+	uint32_t senderSsrc{ 0 };
+	uint32_t mediaSsrc{ 0 };
+	uint16_t baseSequenceNumber{ 0 };
+	uint16_t packetStatusCount{ 0 };
+	uint32_t referenceTime{ 0 };
+	uint8_t feedbackPacketCount{ 0 };
+	uint32_t receivedPacketCount{ 0 };
+	uint32_t lostPacketCount{ 0 };
+	std::vector<TransportCcPacketFeedback> packets;
+};
+
 struct TransportCcFeedbackSummary {
 	uint32_t senderSsrc{ 0 };
 	uint32_t mediaSsrc{ 0 };
@@ -20,12 +40,12 @@ struct TransportCcFeedbackSummary {
 	uint32_t lostPacketCount{ 0 };
 };
 
-inline bool ParseTransportCcFeedbackSummary(
+inline bool ParseTransportCcFeedback(
 	const uint8_t* packet,
 	size_t packetLen,
-	TransportCcFeedbackSummary* summary)
+	TransportCcFeedback* feedback)
 {
-	if (!packet || !summary || packetLen < 20) {
+	if (!packet || !feedback || packetLen < 20) {
 		return false;
 	}
 
@@ -42,7 +62,7 @@ inline bool ParseTransportCcFeedbackSummary(
 		return false;
 	}
 
-	TransportCcFeedbackSummary parsed;
+	TransportCcFeedback parsed;
 	parsed.senderSsrc =
 		(static_cast<uint32_t>(packet[4]) << 24) |
 		(static_cast<uint32_t>(packet[5]) << 16) |
@@ -103,31 +123,78 @@ inline bool ParseTransportCcFeedbackSummary(
 	}
 
 	size_t deltaOffset = offset;
+	int64_t currentReceiveTimeUs = static_cast<int64_t>(parsed.referenceTime) * 64000;
+	parsed.packets.reserve(parsed.packetStatusCount);
 	for (const uint8_t symbol : symbols) {
+		TransportCcPacketFeedback packetFeedback;
+		packetFeedback.sequenceNumber = static_cast<uint16_t>(
+			parsed.baseSequenceNumber + static_cast<uint16_t>(parsed.packets.size()));
+		packetFeedback.symbol = symbol;
 		switch (symbol) {
 			case 0:
 				parsed.lostPacketCount++;
+				packetFeedback.received = false;
 				break;
 			case 1:
 				if (deltaOffset + 1 > packetLen) {
 					return false;
 				}
+				currentReceiveTimeUs += static_cast<int64_t>(
+					static_cast<int8_t>(packet[deltaOffset])) * 250;
 				deltaOffset += 1;
 				parsed.receivedPacketCount++;
+				packetFeedback.received = true;
+				packetFeedback.deltaPresent = true;
+				packetFeedback.receiveTimeUs = currentReceiveTimeUs;
 				break;
 			case 2:
 				if (deltaOffset + 2 > packetLen) {
 					return false;
 				}
+				currentReceiveTimeUs += static_cast<int64_t>(
+					static_cast<int16_t>(
+						static_cast<uint16_t>(packet[deltaOffset] << 8) |
+						static_cast<uint16_t>(packet[deltaOffset + 1]))) * 250;
 				deltaOffset += 2;
 				parsed.receivedPacketCount++;
+				packetFeedback.received = true;
+				packetFeedback.deltaPresent = true;
+				packetFeedback.receiveTimeUs = currentReceiveTimeUs;
 				break;
 			default:
 				// Reserved/unknown symbol. Skip delta parsing and do not count.
 				break;
 		}
+		parsed.packets.push_back(packetFeedback);
 	}
 
+	*feedback = parsed;
+	return true;
+}
+
+inline bool ParseTransportCcFeedbackSummary(
+	const uint8_t* packet,
+	size_t packetLen,
+	TransportCcFeedbackSummary* summary)
+{
+	if (!summary) {
+		return false;
+	}
+
+	TransportCcFeedback feedback;
+	if (!ParseTransportCcFeedback(packet, packetLen, &feedback)) {
+		return false;
+	}
+
+	TransportCcFeedbackSummary parsed;
+	parsed.senderSsrc = feedback.senderSsrc;
+	parsed.mediaSsrc = feedback.mediaSsrc;
+	parsed.baseSequenceNumber = feedback.baseSequenceNumber;
+	parsed.packetStatusCount = feedback.packetStatusCount;
+	parsed.referenceTime = feedback.referenceTime;
+	parsed.feedbackPacketCount = feedback.feedbackPacketCount;
+	parsed.receivedPacketCount = feedback.receivedPacketCount;
+	parsed.lostPacketCount = feedback.lostPacketCount;
 	*summary = parsed;
 	return true;
 }

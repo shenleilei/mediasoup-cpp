@@ -2,6 +2,8 @@
 
 生成时间：`2026-04-21`
 
+注：本报告记录的是 phase-1 收尾时的证据口径。后续 phase-2 改为 delay-based BWE 后，真实 worker smoke 的判定口径调整为“`estimate on` 会让 estimate 偏离 bootstrap 值”，而不再要求 app-limited loopback 样本一定上升到 `> 900000`。
+
 ## 结论
 
 今天的修复已经有可重复的实锤证据证明是有效的。

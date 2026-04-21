@@ -3,6 +3,9 @@
 //        NetworkThread (offline), SourceWorker command handling
 #include <gtest/gtest.h>
 
+#include "TransportCcTestHelpers.h"
+
+#include "../client/DelayBasedBwe.h"
 #include "../client/ThreadTypes.h"
 #include "../client/NetworkThread.h"
 #include "../client/ThreadedControlHelpers.h"
@@ -16,6 +19,7 @@
 
 using namespace mt;
 using mediasoup::plainclient::PacketClass;
+using mediasoup::plainclient::DelayBasedBwe;
 using mediasoup::plainclient::SendResult;
 using mediasoup::plainclient::SendStatus;
 using mediasoup::plainclient::SenderTransportController;
@@ -904,6 +908,138 @@ TEST(TransportCcHelpers, ParseTransportFeedbackSummaryHandlesRunLengthAndLoss) {
 	EXPECT_EQ(summary.packetStatusCount, 6u);
 	EXPECT_EQ(summary.receivedPacketCount, 4u);
 	EXPECT_EQ(summary.lostPacketCount, 2u);
+
+	mediasoup::plainclient::TransportCcFeedback feedback;
+	ASSERT_TRUE(mediasoup::plainclient::ParseTransportCcFeedback(
+		packet,
+		sizeof(packet),
+		&feedback));
+	ASSERT_EQ(feedback.packets.size(), 6u);
+	EXPECT_TRUE(feedback.packets[0].received);
+	EXPECT_EQ(feedback.packets[0].sequenceNumber, 1000u);
+	EXPECT_EQ(feedback.packets[0].receiveTimeUs, 65250);
+	EXPECT_FALSE(feedback.packets[1].received);
+	EXPECT_TRUE(feedback.packets[2].received);
+	EXPECT_EQ(feedback.packets[2].receiveTimeUs, 67750);
+	EXPECT_TRUE(feedback.packets[4].received);
+	EXPECT_EQ(feedback.packets[4].receiveTimeUs, 69250);
+	EXPECT_TRUE(feedback.packets[5].received);
+	EXPECT_EQ(feedback.packets[5].receiveTimeUs, 72000);
+}
+
+TEST(TransportCcHelpers, ParseTransportFeedbackReconstructsDetailedTimestamps) {
+	const auto packet = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
+		{40, 60, std::nullopt, 80},
+		32000,
+		0x01020304u,
+		0x55667788u,
+		0x000000u,
+		0x21u);
+
+	mediasoup::plainclient::TransportCcFeedback feedback;
+	ASSERT_TRUE(mediasoup::plainclient::ParseTransportCcFeedback(
+		packet.data(),
+		packet.size(),
+		&feedback));
+	ASSERT_EQ(feedback.senderSsrc, 0x01020304u);
+	ASSERT_EQ(feedback.mediaSsrc, 0x55667788u);
+	ASSERT_EQ(feedback.baseSequenceNumber, 32000u);
+	ASSERT_EQ(feedback.packetStatusCount, 4u);
+	ASSERT_EQ(feedback.receivedPacketCount, 3u);
+	ASSERT_EQ(feedback.lostPacketCount, 1u);
+	ASSERT_EQ(feedback.packets.size(), 4u);
+	EXPECT_EQ(feedback.packets[0].receiveTimeUs, 10000);
+	EXPECT_EQ(feedback.packets[1].receiveTimeUs, 25000);
+	EXPECT_FALSE(feedback.packets[2].received);
+	EXPECT_EQ(feedback.packets[3].receiveTimeUs, 45000);
+}
+
+TEST(DelayBasedBwe, StableDelayFeedbackIncreasesEstimate) {
+	DelayBasedBwe bwe;
+	bwe.SetEstimateBps(700000u);
+	for (uint16_t i = 0; i < 20; ++i) {
+		bwe.OnPacketSent(static_cast<uint16_t>(1000u + i), 1200, static_cast<int64_t>(i) * 10000);
+	}
+
+	const auto packet = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
+		std::vector<std::optional<int16_t>>(20, int16_t{40}),
+		1000,
+		0x11111111u,
+		0x22222222u,
+		0x000000u,
+		0x30u);
+	mediasoup::plainclient::TransportCcFeedback feedback;
+	ASSERT_TRUE(mediasoup::plainclient::ParseTransportCcFeedback(
+		packet.data(),
+		packet.size(),
+		&feedback));
+
+	const auto result = bwe.OnTransportFeedback(feedback);
+	EXPECT_EQ(result.state, DelayBasedBwe::TrendState::Normal);
+	EXPECT_GT(result.correlatedPacketCount, 0u);
+	EXPECT_GT(result.ackedBitrateBps, 900000u);
+	EXPECT_GT(result.estimateBps, 700000u);
+}
+
+TEST(DelayBasedBwe, GrowingDelayFeedbackDecreasesEstimate) {
+	DelayBasedBwe bwe;
+	bwe.SetEstimateBps(900000u);
+	for (uint16_t i = 0; i < 20; ++i) {
+		bwe.OnPacketSent(static_cast<uint16_t>(2000u + i), 1200, static_cast<int64_t>(i) * 10000);
+	}
+
+	std::vector<std::optional<int16_t>> deltas250us;
+	deltas250us.reserve(20);
+	for (int i = 0; i < 20; ++i) {
+		deltas250us.emplace_back(static_cast<int16_t>(40 + i * 20));
+	}
+	const auto packet = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
+		deltas250us,
+		2000,
+		0x11111111u,
+		0x22222222u,
+		0x000000u,
+		0x31u);
+	mediasoup::plainclient::TransportCcFeedback feedback;
+	ASSERT_TRUE(mediasoup::plainclient::ParseTransportCcFeedback(
+		packet.data(),
+		packet.size(),
+		&feedback));
+
+	const auto result = bwe.OnTransportFeedback(feedback);
+	EXPECT_EQ(result.state, DelayBasedBwe::TrendState::Overusing);
+	EXPECT_GT(result.correlatedPacketCount, 0u);
+	EXPECT_LT(result.estimateBps, 900000u);
+}
+
+TEST(DelayBasedBwe, ClampToConfiguredMinOnOveruse) {
+	DelayBasedBwe bwe(DelayBasedBwe::Config{100000u, 200000u});
+	bwe.SetEstimateBps(120000u);
+	for (uint16_t i = 0; i < 20; ++i) {
+		bwe.OnPacketSent(static_cast<uint16_t>(3000u + i), 800, static_cast<int64_t>(i) * 10000);
+	}
+
+	std::vector<std::optional<int16_t>> deltas250us;
+	deltas250us.reserve(20);
+	for (int i = 0; i < 20; ++i) {
+		deltas250us.emplace_back(static_cast<int16_t>(60 + i * 30));
+	}
+	const auto packet = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
+		deltas250us,
+		3000,
+		0x11111111u,
+		0x22222222u,
+		0x000000u,
+		0x32u);
+	mediasoup::plainclient::TransportCcFeedback feedback;
+	ASSERT_TRUE(mediasoup::plainclient::ParseTransportCcFeedback(
+		packet.data(),
+		packet.size(),
+		&feedback));
+
+	const auto result = bwe.OnTransportFeedback(feedback);
+	EXPECT_EQ(result.state, DelayBasedBwe::TrendState::Overusing);
+	EXPECT_EQ(result.estimateBps, 100000u);
 }
 
 namespace {
