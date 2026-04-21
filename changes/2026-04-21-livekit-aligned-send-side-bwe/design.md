@@ -25,5 +25,8 @@ Planned module mapping:
 - record successful sends in the BWE tracker
 - feed parsed TWCC feedback into the BWE
 - publish estimated available channel capacity into `SenderTransportController`
+- start probe clusters when application demand exceeds estimated capacity and the BWE allows probing
+- send transport-cc-enabled RTP padding probe packets on the network thread
+- feed probe completion back into the BWE through the probe observer / finalize path
 
 The previous local `DelayBasedBwe` has been replaced on the `NetworkThread` main path. Remaining cleanup work is limited to deleting legacy-only references/tests and keeping the livekit-aligned path as the only supported estimator implementation.

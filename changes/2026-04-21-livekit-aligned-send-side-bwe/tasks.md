@@ -5,3 +5,5 @@
 3. [x] Port packet-group / traffic-stats / congestion-detector core
 4. [x] Integrate `NetworkThread` with the new send-side BWE path
 5. [x] Add correctness tests for out-of-order feedback, reference-time wrap, and aggregate-target semantics
+6. [x] Wire probe lifecycle and RTP padding probe sends into the main path
+7. [x] Add positive and negative probe completion tests
