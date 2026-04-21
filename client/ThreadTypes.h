@@ -87,9 +87,20 @@ struct SenderStatsSnapshot {
 	double rrRttMs = -1.0;
 	double rrJitterMs = -1.0;
 	int64_t lastRrReceivedMs = 0;
+	uint32_t probePacketCount = 0;
+	bool probeActive = false;
+	uint32_t senderUsageBitrateBps = 0;
 	uint32_t transportEstimatedBitrateBps = 0;
 	uint32_t effectivePacingBitrateBps = 0;
 	uint64_t transportCcFeedbackReports = 0;
+	uint64_t transportWouldBlockTotal = 0;
+	uint64_t queuedVideoRetentions = 0;
+	uint64_t audioDeadlineDrops = 0;
+	uint64_t retransmissionDrops = 0;
+	uint64_t retransmissionSent = 0;
+	uint32_t queuedFreshVideoPackets = 0;
+	uint32_t queuedAudioPackets = 0;
+	uint32_t queuedRetransmissionPackets = 0;
 };
 
 // ═══════════════════════════════════════════════════════════

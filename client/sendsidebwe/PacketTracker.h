@@ -20,7 +20,15 @@ public:
 		sequenceNumber_ = dist(rng);
 	}
 
-	uint16_t RecordPacketSendAndGetSequenceNumber(
+	uint16_t GetNextSequenceNumber()
+	{
+		const uint16_t sequence = static_cast<uint16_t>(sequenceNumber_);
+		sequenceNumber_++;
+		return sequence;
+	}
+
+	void RecordPacketSent(
+		uint16_t sequenceNumber,
 		int64_t atUs,
 		size_t size,
 		bool isRtx,
@@ -30,9 +38,9 @@ public:
 		if (baseSendTimeUs_ == 0) {
 			baseSendTimeUs_ = atUs;
 		}
-		auto& packetInfo = packetInfos_[static_cast<size_t>(sequenceNumber_ & 0x7FFu)];
+		auto& packetInfo = packetInfos_[static_cast<size_t>(sequenceNumber & 0x7FFu)];
 		packetInfo = PacketInfo{
-			sequenceNumber_,
+			sequenceNumber,
 			atUs - baseSendTimeUs_,
 			0,
 			probeClusterId,
@@ -40,9 +48,6 @@ public:
 			isRtx,
 			isProbe,
 		};
-
-		const uint16_t sequence = static_cast<uint16_t>(sequenceNumber_);
-		sequenceNumber_++;
 		if (lastReceivedPacket_ == &packetInfo) {
 			lastReceivedPacket_ = nullptr;
 		}
@@ -51,6 +56,20 @@ public:
 			packetInfo.sequenceNumber > probeMaxSequenceNumber_) {
 			probeMaxSequenceNumber_ = packetInfo.sequenceNumber;
 		}
+		if (sequenceNumber_ <= sequenceNumber) {
+			sequenceNumber_ = static_cast<uint64_t>(sequenceNumber) + 1;
+		}
+	}
+
+	uint16_t RecordPacketSendAndGetSequenceNumber(
+		int64_t atUs,
+		size_t size,
+		bool isRtx,
+		mediasoup::ccutils::ProbeClusterId probeClusterId,
+		bool isProbe)
+	{
+		const uint16_t sequence = GetNextSequenceNumber();
+		RecordPacketSent(sequence, atUs, size, isRtx, probeClusterId, isProbe);
 		return sequence;
 	}
 

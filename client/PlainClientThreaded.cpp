@@ -355,14 +355,26 @@ int PlainClientApp::RunThreadedMode()
 						serverStats = std::nullopt;
 					}
 
-					if (!mt::shouldSampleTrack(statsFresh, serverStats.has_value()))
-						continue;
+						if (!mt::shouldSampleTrack(statsFresh, serverStats.has_value()))
+							continue;
 
-					if (statsFresh) {
-						trackStats[ti].lastConsumedGeneration = trackStats[ti].latest.generation;
-						auto& ns = trackStats[ti].latest;
-						qSnap.bytesSent = ns.octetCount;
-						qSnap.packetsSent = ns.packetCount;
+						const auto probeSuppression = mt::applyProbeSampleSuppression(
+							trackStats[ti],
+							statsFresh,
+							serverStats.has_value());
+						statsFresh = probeSuppression.statsFresh;
+						if (!probeSuppression.hasServerStats) {
+							serverStats = std::nullopt;
+						}
+						if (!statsFresh && !serverStats.has_value()) {
+							continue;
+						}
+
+						if (statsFresh) {
+							trackStats[ti].lastConsumedGeneration = trackStats[ti].latest.generation;
+							auto& ns = trackStats[ti].latest;
+							qSnap.bytesSent = ns.octetCount;
+							qSnap.packetsSent = ns.packetCount;
 						qSnap.packetsLost = ns.rrCumulativeLost;
 						qSnap.roundTripTimeMs = ns.rrRttMs;
 						qSnap.jitterMs = ns.rrJitterMs;
@@ -423,23 +435,37 @@ int PlainClientApp::RunThreadedMode()
 					const double traceLossRate = track.qosCtrl->lastSignals().has_value()
 						? track.qosCtrl->lastSignals()->lossRate
 						: 0.0;
-					std::printf("[QOS_TRACE] tsMs=%lld track=%s state=%s level=%d mode=%s sample=%s bitrateBps=%d sendBps=%.0f lossRate=%.6f packetsLost=%llu rttMs=%.1f jitterMs=%.1f width=%d height=%d fps=%d suppressed=%d\n",
-						static_cast<long long>(wallNowMs()),
-						track.trackId.c_str(),
-						qos::stateStr(track.qosCtrl->currentState()),
-						track.qosCtrl->currentLevel(),
+						std::printf("[QOS_TRACE] tsMs=%lld track=%s state=%s level=%d mode=%s sample=%s bitrateBps=%d sendBps=%.0f lossRate=%.6f packetsLost=%llu rttMs=%.1f jitterMs=%.1f senderUsageBps=%u transportEstimateBps=%u effectivePacingBps=%u feedbackReports=%llu probePackets=%u probeActive=%d wouldBlockTotal=%llu queuedVideoRetentions=%llu audioDeadlineDrops=%llu retransmissionDrops=%llu retransmissionSent=%llu queuedFreshVideoPackets=%u queuedAudioPackets=%u queuedRetransmissionPackets=%u width=%d height=%d fps=%d suppressed=%d\n",
+							static_cast<long long>(wallNowMs()),
+							track.trackId.c_str(),
+							qos::stateStr(track.qosCtrl->currentState()),
+							track.qosCtrl->currentLevel(),
 						track.videoSuppressed ? "audio-only" : "audio-video",
 						usingMatrixProfile ? "matrix" :
 							(serverStats.has_value() ? "server" : (statsFresh ? "local" : "stale")),
 						track.encBitrate,
-						observedBitrateBps > 0.0 ? observedBitrateBps : qSnap.targetBitrateBps,
-						traceLossRate,
-						static_cast<unsigned long long>(qSnap.packetsLost),
-						qSnap.roundTripTimeMs,
-						qSnap.jitterMs,
-						qSnap.frameWidth,
-						qSnap.frameHeight,
-						static_cast<int>(qSnap.framesPerSecond),
+							observedBitrateBps > 0.0 ? observedBitrateBps : qSnap.targetBitrateBps,
+							traceLossRate,
+							static_cast<unsigned long long>(qSnap.packetsLost),
+							qSnap.roundTripTimeMs,
+							qSnap.jitterMs,
+							trackStats[ti].latest.senderUsageBitrateBps,
+							trackStats[ti].latest.transportEstimatedBitrateBps,
+							trackStats[ti].latest.effectivePacingBitrateBps,
+							static_cast<unsigned long long>(trackStats[ti].latest.transportCcFeedbackReports),
+							trackStats[ti].latest.probePacketCount,
+							trackStats[ti].latest.probeActive ? 1 : 0,
+							static_cast<unsigned long long>(trackStats[ti].latest.transportWouldBlockTotal),
+							static_cast<unsigned long long>(trackStats[ti].latest.queuedVideoRetentions),
+							static_cast<unsigned long long>(trackStats[ti].latest.audioDeadlineDrops),
+							static_cast<unsigned long long>(trackStats[ti].latest.retransmissionDrops),
+							static_cast<unsigned long long>(trackStats[ti].latest.retransmissionSent),
+							trackStats[ti].latest.queuedFreshVideoPackets,
+							trackStats[ti].latest.queuedAudioPackets,
+							trackStats[ti].latest.queuedRetransmissionPackets,
+							qSnap.frameWidth,
+							qSnap.frameHeight,
+							static_cast<int>(qSnap.framesPerSecond),
 						track.videoSuppressed ? 1 : 0);
 					sampledTrackIds.insert(track.trackId);
 				}

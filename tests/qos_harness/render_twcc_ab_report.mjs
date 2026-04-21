@@ -90,6 +90,22 @@ function formatNetwork(network = {}) {
   ].join(' / ');
 }
 
+function formatWhiteBox(whiteBox = {}) {
+  const parts = [
+    `senderUsage=${fmtNum(whiteBox.senderUsageBps, 0)}`,
+    `estimate=${fmtNum(whiteBox.transportEstimateBps, 0)}`,
+    `pacing=${fmtNum(whiteBox.effectivePacingBps, 0)}`,
+    `fb=${fmtNum(whiteBox.feedbackReports, 0)}`,
+    `probePkts=${fmtNum(whiteBox.probePackets, 0)}`,
+    `rtxSent=${fmtNum(whiteBox.retransmissionSent, 0)}`,
+    `qFresh=${fmtNum(whiteBox.queuedFreshVideoPackets, 0)}`,
+    `qAudio=${fmtNum(whiteBox.queuedAudioPackets, 0)}`,
+    `qRtx=${fmtNum(whiteBox.queuedRetransmissionPackets, 0)}`,
+    `probeActive=${whiteBox.probeActiveObserved === true ? 'yes' : whiteBox.probeActiveObserved === false ? 'no' : '-'}`,
+  ];
+  return parts.join(' / ');
+}
+
 const scenarios = Array.isArray(report.scenarios) ? report.scenarios : [];
 const gates = Array.isArray(report.gates) ? report.gates : [];
 const passedScenarios = scenarios.filter(item => item && item.pass === true).length;
@@ -221,6 +237,8 @@ for (const scenario of scenarios) {
   lines.push(`| Baseline Recovery (mean/p50/p90) | ${fmtInt(scenario?.baseline?.recoveryTimeMs?.mean)} / ${fmtInt(scenario?.baseline?.recoveryTimeMs?.p50)} / ${fmtInt(scenario?.baseline?.recoveryTimeMs?.p90)} ms |`);
   lines.push(`| Candidate Recovery (mean/p50/p90) | ${fmtInt(scenario?.candidate?.recoveryTimeMs?.mean)} / ${fmtInt(scenario?.candidate?.recoveryTimeMs?.p50)} / ${fmtInt(scenario?.candidate?.recoveryTimeMs?.p90)} ms |`);
   lines.push(`| 队列压力 Baseline/Candidate | ${fmtNum(sumQueuePressure(scenario?.baseline?.queuePressure), 0)} / ${fmtNum(sumQueuePressure(scenario?.candidate?.queuePressure), 0)} |`);
+  lines.push(`| 白盒 Baseline | ${formatWhiteBox(scenario?.baseline?.whiteBox)} |`);
+  lines.push(`| 白盒 Candidate | ${formatWhiteBox(scenario?.candidate?.whiteBox)} |`);
   lines.push(`| 权重偏差 Baseline/Candidate | ${fmtNum(scenario?.baseline?.fairnessDeviation)} / ${fmtNum(scenario?.candidate?.fairnessDeviation)} |`);
   lines.push(`| 变化（goodput/loss/recovery/queue/fairness） | ${fmtPercent(scenario?.delta?.goodputPercent)} / ${fmtPercent(scenario?.delta?.lossPercent)} / ${fmtPercent(scenario?.delta?.recoveryTimePercent)} / ${fmtPercent(scenario?.delta?.queuePressurePercent)} / ${fmtPercent(scenario?.delta?.fairnessDeviationPercent)} |`);
   lines.push(`| 结论 | \`${scenario?.pass === true ? 'PASS' : scenario?.pass === false ? 'FAIL' : '-'}\` |`);

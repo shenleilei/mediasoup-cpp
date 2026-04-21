@@ -329,6 +329,23 @@ public:
 		return packetTracker_.RecordPacketSendAndGetSequenceNumber(atUs, size, isRtx, probeClusterId, isProbe);
 	}
 
+	uint16_t GetNextSequenceNumber()
+	{
+		return packetTracker_.GetNextSequenceNumber();
+	}
+
+	void RecordPacketSent(
+		uint16_t sequenceNumber,
+		int64_t atUs,
+		size_t size,
+		bool isRtx = false,
+		mediasoup::ccutils::ProbeClusterId probeClusterId = mediasoup::ccutils::ProbeClusterIdInvalid,
+		bool isProbe = false)
+	{
+		packetTracker_.RecordPacketSent(
+			sequenceNumber, atUs, size, isRtx, probeClusterId, isProbe);
+	}
+
 	void SeedSentPacketForTest(
 		uint16_t sequenceNumber,
 		int64_t sendTimeUs,
@@ -444,17 +461,17 @@ public:
 		}
 	}
 
-	bool ProbeClusterIsGoalReached() const
+	bool ProbeClusterIsGoalReached(
+		const mediasoup::ccutils::ProbeClusterInfo& probeClusterInfo) const
 	{
 		if (!probePacketGroup_ || congestionState_ != CongestionState::None) {
 			return false;
 		}
-		const auto& probeClusterInfo = probePacketGroup_->ProbeClusterInfoValue();
 		if (!config_.probeSignal.IsValid(probeClusterInfo)) {
 			return false;
 		}
 		auto [probeSignal, estimatedCapacity] = config_.probeSignal.ProbeSignalForGroup(*probePacketGroup_);
-		return probeSignal != mediasoup::ccutils::ProbeSignal::NotCongesting &&
+		return probeSignal == mediasoup::ccutils::ProbeSignal::NotCongesting &&
 			estimatedCapacity > probeClusterInfo.goal.desiredBps;
 	}
 
