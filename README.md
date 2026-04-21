@@ -172,8 +172,10 @@ Current downlink scope is subscriber receive control plus zero-demand publisher 
 
 Current repo docs and generated artifacts show:
 
-- browser uplink matrix main gate: `43 / 43 PASS` (`2026-04-13`)
-- PlainTransport C++ client matrix: `43 / 43 PASS` (`2026-04-16`)
+<!-- BEGIN AUTO QOS STATUS -->
+- browser uplink matrix main gate: `40 / 43 PASS, 3 FAIL` (`2026-04-21`)
+- PlainTransport C++ client matrix: `43 / 43 PASS` (`2026-04-21`)
+<!-- END AUTO QOS STATUS -->
 - PlainTransport C++ client signaling harness: `PASS`
 - C++ client QoS unit parity: `PASS`
 

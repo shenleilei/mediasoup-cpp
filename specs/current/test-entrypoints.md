@@ -8,6 +8,7 @@
 - It SHALL cover every C++ gtest target defined in `CMakeLists.txt`.
 - It SHALL also cover the full QoS regression surface defined by `scripts/run_qos_tests.sh`.
 - After an actual test execution, it SHALL rewrite `docs/full-regression-test-results.md`.
+- After an actual QoS-inclusive execution, it SHALL refresh the root `README.md` QoS matrix status block from the latest browser and plain-client generated matrix JSON artifacts when those artifacts are available.
 - When its selected groups delegate to `scripts/run_qos_tests.sh`, the QoS-specific reports owned by that script SHALL be refreshed according to that script's contract.
 - When the selected groups include `qos`, the generated Markdown report SHALL link the latest stable TWCC A/B summary from `docs/generated/twcc-ab-report.md`.
 - The generated Markdown report SHALL include:
@@ -41,6 +42,7 @@
 - It SHALL refresh the configured latest-log copy path after each run.
 - It SHALL snapshot the configured Markdown report attachments into the run directory.
 - It SHALL auto-record newly changed `docs/` paths from the nightly run in git.
+- It SHALL also auto-record a newly changed root `README.md` when that file was updated by the nightly run.
 - It SHALL exclude `docs/` paths that were already dirty before the run started.
 - It SHALL render an email body that includes:
   - overall status

@@ -473,7 +473,7 @@ def record_changed_docs_in_git(
         result["reason"] = "pre-existing staged changes present; nightly doc commit skipped"
         return result
 
-    post_run_doc_paths = git_status_paths(repo_root, ["docs"])
+    post_run_doc_paths = git_status_paths(repo_root, ["docs", "README.md"])
     if post_run_doc_paths is None:
         result["status"] = "failed"
         result["reason"] = "failed to read post-run git doc status"
@@ -1402,7 +1402,7 @@ def handle_run(args):
         Path(config["artifact_root"]),
         int(config["nightly_max_backup_runs"]),
     )
-    preexisting_doc_paths = git_status_paths(repo_root, ["docs"])
+    preexisting_doc_paths = git_status_paths(repo_root, ["docs", "README.md"])
     preexisting_staged_paths = git_staged_paths(repo_root)
 
     exit_code = 0

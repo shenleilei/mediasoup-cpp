@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build"
 CLIENT_BUILD_DIR="$ROOT_DIR/client/build"
 REPORT_FILE="$ROOT_DIR/docs/full-regression-test-results.md"
+ROOT_README_FILE="$ROOT_DIR/README.md"
 JOBS="${JOBS:-$(nproc)}"
 
 ALL_GROUPS=(
@@ -339,6 +340,74 @@ write_report() {
   } > "$REPORT_FILE"
 }
 
+refresh_root_readme_qos_status() {
+  python3 - "$ROOT_DIR" "$ROOT_README_FILE" <<'PY'
+import json
+import os
+import re
+import sys
+
+root_dir = os.path.abspath(sys.argv[1])
+readme_path = os.path.abspath(sys.argv[2])
+
+if not os.path.isfile(readme_path):
+    sys.exit(0)
+
+with open(readme_path, "r", encoding="utf-8") as handle:
+    content = handle.read()
+
+marker_re = re.compile(
+    r"(<!-- BEGIN AUTO QOS STATUS -->\n)(.*?)(<!-- END AUTO QOS STATUS -->)",
+    re.DOTALL,
+)
+
+if not marker_re.search(content):
+    sys.exit(0)
+
+
+def load_matrix_summary(rel_path):
+    json_path = os.path.join(root_dir, rel_path)
+    if not os.path.isfile(json_path):
+        return None
+    with open(json_path, "r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    summary = payload.get("summary") or {}
+    total = summary.get("total")
+    passed = summary.get("passed")
+    failed = summary.get("failed") or 0
+    errors = summary.get("errors") or 0
+    generated_at = payload.get("generatedAt") or ""
+    date_label = generated_at[:10] if len(generated_at) >= 10 else "-"
+    if total is None or passed is None:
+        return None
+    status_parts = [f"{passed} / {total} PASS"]
+    if failed:
+        status_parts.append(f"{failed} FAIL")
+    if errors:
+        status_parts.append(f"{errors} ERROR")
+    return f"`{', '.join(status_parts)}` (`{date_label}`)"
+
+
+browser_status = load_matrix_summary("docs/generated/uplink-qos-matrix-report.json")
+plain_client_status = load_matrix_summary("docs/generated/uplink-qos-cpp-client-matrix-report.json")
+
+if not browser_status or not plain_client_status:
+    sys.exit(0)
+
+replacement = (
+    "<!-- BEGIN AUTO QOS STATUS -->\n"
+    f"- browser uplink matrix main gate: {browser_status}\n"
+    f"- PlainTransport C++ client matrix: {plain_client_status}\n"
+    "<!-- END AUTO QOS STATUS -->"
+)
+
+updated = marker_re.sub(replacement, content, count=1)
+if updated != content:
+    with open(readme_path, "w", encoding="utf-8") as handle:
+        handle.write(updated)
+PY
+}
+
 require_file() {
   local path="$1"
   local label="${2:-}"
@@ -552,6 +621,7 @@ main() {
   done
 
   write_report
+  refresh_root_readme_qos_status
 
   echo
   if ((${#FAILED_GROUPS[@]} == 0)); then
