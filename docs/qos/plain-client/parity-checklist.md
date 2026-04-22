@@ -26,7 +26,8 @@
 - JS/client 纯逻辑测试
   已有 C++ `ClientQos*` 对位测试
 - JS node/browser signaling harness
-  已有 `cpp-client-harness` 对位场景
+  运行时真实 threaded plain-client 已有 `cpp-client-harness` 对位场景
+  server-side synthetic signaling / `clientStats` 语义仍主要由 `cpp-integration` + `node-harness` 覆盖
 - JS uplink browser matrix 主 gate `43 case`
   已有 `cpp-client-matrix` 对位结果
 - JS `BW2` extended sentinel
@@ -38,11 +39,8 @@
 |---|---|---|---|
 | `signals / stateMachine / planner / controller / protocol` | `client-js` | [tests/test_client_qos.cpp](../../../tests/test_client_qos.cpp) | `PASS` |
 | `publish_snapshot` | [tests/qos_harness/run.mjs](../../../tests/qos_harness/run.mjs) | [tests/qos_harness/run_cpp_client_harness.mjs](../../../tests/qos_harness/run_cpp_client_harness.mjs) | `PASS` |
-| `stale_seq` | [tests/qos_harness/run.mjs](../../../tests/qos_harness/run.mjs) | [tests/qos_harness/run_cpp_client_harness.mjs](../../../tests/qos_harness/run_cpp_client_harness.mjs) | `PASS` |
-| `policy_update` | [tests/qos_harness/run.mjs](../../../tests/qos_harness/run.mjs) | [tests/qos_harness/run_cpp_client_harness.mjs](../../../tests/qos_harness/run_cpp_client_harness.mjs) | `PASS` |
-| `auto_override_poor` | [tests/qos_harness/run.mjs](../../../tests/qos_harness/run.mjs) | [tests/qos_harness/run_cpp_client_harness.mjs](../../../tests/qos_harness/run_cpp_client_harness.mjs) | `PASS` |
-| `override_force_audio_only` | [tests/qos_harness/run.mjs](../../../tests/qos_harness/run.mjs) | [tests/qos_harness/run_cpp_client_harness.mjs](../../../tests/qos_harness/run_cpp_client_harness.mjs) | `PASS` |
-| `manual_clear` | [tests/qos_harness/run.mjs](../../../tests/qos_harness/run.mjs) | [tests/qos_harness/run_cpp_client_harness.mjs](../../../tests/qos_harness/run_cpp_client_harness.mjs) | `PASS` |
+| `threaded_multi_video_budget` | runtime-specific threaded harness | [tests/qos_harness/run_cpp_client_harness.mjs](../../../tests/qos_harness/run_cpp_client_harness.mjs) | `PASS` |
+| `threaded_generation_switch` | runtime-specific threaded harness | [tests/qos_harness/run_cpp_client_harness.mjs](../../../tests/qos_harness/run_cpp_client_harness.mjs) | `PASS` |
 | uplink browser matrix 主 gate | [tests/qos_harness/run_matrix.mjs](../../../tests/qos_harness/run_matrix.mjs) | [tests/qos_harness/run_cpp_client_matrix.mjs](../../../tests/qos_harness/run_cpp_client_matrix.mjs) | `43 / 43 PASS` |
 | uplink `BW2` extended sentinel | [tests/qos_harness/run_matrix.mjs](../../../tests/qos_harness/run_matrix.mjs) targeted | [tests/qos_harness/run_cpp_client_matrix.mjs](../../../tests/qos_harness/run_cpp_client_matrix.mjs) targeted | `PASS` |
 
@@ -84,6 +82,16 @@
 
 - JS uplink QoS 已有的主测试资产
 - 在 C++ PlainTransport client 上已经存在可执行、可回归的对位入口
+
+这里刻意不再把下面这些 server-side synthetic signaling case 记为 plain-client runtime 对位：
+
+- `stale_seq`
+- `policy_update`
+- `auto_override_poor`
+- `override_force_audio_only`
+- `manual_clear`
+
+这些语义仍有自动化覆盖，但入口属于 `cpp-integration` / `node-harness`，不再由 plain-client 生产二进制内置测试注入承担。
 
 不包括：
 

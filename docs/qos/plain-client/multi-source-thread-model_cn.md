@@ -1,5 +1,10 @@
 # Linux PlainTransport C++ Client 多视频源推流迁移设计
 
+> 2026-04-22 更新
+>
+> 主 `plain-client` 二进制已经收敛为 threaded-only runtime。
+> 文中涉及 `copyMode`、legacy 单线程入口和阶段性双路径灰度的内容，保留为演进历史背景，不再代表当前主实现仍支持这些入口。
+
 ## 1. 文档目的
 
 这份文档描述的是 Linux `PlainTransport C++ client` 从当前单主线程媒体循环演进到多线程推流架构的目标设计与迁移约束。

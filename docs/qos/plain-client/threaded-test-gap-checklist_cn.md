@@ -306,7 +306,7 @@
 - `threaded_audio_stats_smoke`
 - `threaded_multi_track_snapshot`
 - `threaded_multi_video_budget`
-- `threaded_fallback_multi_track_snapshot`
+- `threaded_default_multi_track_snapshot`
 - `threaded_quick`
 
 ### 14. threaded QoS regression case
@@ -314,36 +314,33 @@
 状态：`已覆盖基础 harness regression`
 
 类型：harness
-建议位置：新增场景 JSON
-
-建议新增场景：
-
-- `threaded_rejected_ack_retry`
-- `threaded_stale_track_skip`
-- `threaded_generation_switch`
 
 当前已覆盖：
 
-- `threaded_rejected_ack_retry`
-- `threaded_stale_track_skip`
 - `threaded_generation_switch`
+
+另外，下列边界已经转到 gtest / integration 覆盖，而不是继续保留进程内 harness 注入：
+
+- stale stats freshness
+- stale / mismatched command ack
+- stale config-generation reject
 
 另外，当前还提供了一个顺序聚合入口：
 
 - `threaded_quick`
 
-### 15. fallback case
+### 15. default startup case
 
 类型：harness
 
 需要覆盖：
 
-- 多 track 单文件 + `PLAIN_CLIENT_THREADED=1`
-- 因不满足线程化入口条件而强制回退 legacy
+- 多 track 单文件
+- 不显式提供 `PLAIN_CLIENT_VIDEO_SOURCES` 时，仍直接进入默认 threaded runtime
 
 对应设计约束：
 
-- 未实现的 `SharedDecodeMultiTrackMode` 必须显式回退，而不是静默进入错误模式
+- 单文件 bootstrap 只负责输入发现与初始化，不再触发 sender QoS 的 legacy fallback
 
 ## 6. 建议优先级
 

@@ -7,6 +7,7 @@
 >
 > 当前状态、TWCC 变化和结果入口请继续看：
 > - [plain-client-qos-status.md](README.md)
+> - [plain-client-architecture-thread-model_cn.md](architecture-thread-model_cn.md)
 > - [plain-client-twcc-change-summary.md](twcc-change-summary.md)
 > - [twcc-ab-test.md](twcc-ab-test.md)
 > - [architecture_cn.md](../../platform/architecture_cn.md)
@@ -18,7 +19,7 @@
 - `client/main.cpp`
 - `client/PlainClientApp.*`
 - `client/PlainClientThreaded.cpp`
-- `client/PlainClientLegacy.cpp`
+- `client/ThreadedQosRuntime.*`
 - `client/NetworkThread.h`
 - `client/SenderTransportController.h`
 - `client/RtcpHandler.h`
@@ -35,20 +36,16 @@
 - 信令仍走 WebSocket JSON
 - 媒体不走浏览器 WebRTC sender，而是本地 FFmpeg + RTP/UDP
 - plain-client 自己维护 RTP / RTCP / transport-cc / send-side estimate 主路径
-- QoS stats 由 `本地 transport 指标 + RTCP RR + server getStats` 共同构成
+- sender QoS 控制输入由 `本地 transport 指标 + RTCP RR` 构成
+- server `getStats` 只用于观测、对账和测试，不再进入 sender QoS 控制链
 
 ## 2. 当前运行时结论
 
-当前 plain-client 有两条运行时路径：
+当前 plain-client 只有一条运行时主路径：
 
 - threaded 主路径
-  - 由 `PLAIN_CLIENT_THREADED=1` 启用
+  - `plain-client` 默认且唯一支持的运行时入口
   - 这是当前带 `NetworkThread` / transport control / TWCC send-side BWE 的主口径
-- legacy fallback
-  - 作为兼容回退保留
-  - 不承载当前文档的主要签收语义
-
-当前文档讨论的重点是 threaded 主路径。
 
 ### 2.1 执行单元
 
@@ -59,13 +56,13 @@
 | `NetworkThread` | 1 | UDP socket owner、RTP/RTCP、pacing、重传、transport-cc rewrite、TWCC feedback、send-side estimate、probe 生命周期 |
 | audio worker | `0..1` | 音频 decode / Opus encode / 音频 AU 生产 |
 | video `SourceWorker` | 每视频源 1 个 | 视频输入、decode/scale/encode、关键帧命令执行、encoded AU 生产 |
-| test helper thread | `0..2` | 仅测试注入路径使用 |
 
 ### 2.2 所有权结论
 
 当前 threaded plain-client 的关键所有权边界是：
 
-- `PlainClientApp` 负责 bootstrap 和 runtime 选择
+- `PlainClientApp` 负责 bootstrap 和 session shell
+- `ThreadedQosRuntime` 负责 threaded sender runtime 生命周期
 - control thread 是 QoS / signaling / session owner
 - `NetworkThread` 是唯一 transport owner
 - `SourceWorker` 负责视频输入和编码，不直接拥有网络发送语义
@@ -82,6 +79,7 @@ Session Bootstrap
 
 Control / QoS Runtime
   ├─ PlainClientThreaded.cpp
+  ├─ ThreadedQosRuntime.*
   ├─ ThreadedControlHelpers.h
   ├─ qos/*
   └─ PlainClientSupport.*
@@ -107,6 +105,8 @@ Signaling
 
 对应关系可以概括成：
 
+- `PlainClientApp` 负责 bootstrap / session，`PlainClientThreaded.cpp` 只负责进入 threaded runtime
+- `ThreadedQosRuntime` 负责 queue / worker / controller / sampling / coordination / snapshot upload
 - control thread 决定“发什么、怎么降级、什么时候采样”
 - `NetworkThread` 决定“什么时候发、怎么 pacing、怎么处理 RTCP/TWCC”
 - source worker 决定“如何把输入变成 encoded access unit”
@@ -133,9 +133,10 @@ open inputs
 
 当前 threaded runtime 的重要环境开关：
 
-- `PLAIN_CLIENT_THREADED`
 - `PLAIN_CLIENT_ENABLE_TRANSPORT_CONTROLLER`
 - `PLAIN_CLIENT_ENABLE_TRANSPORT_ESTIMATE`
+- `PLAIN_CLIENT_VIDEO_TRACK_COUNT`
+- `PLAIN_CLIENT_VIDEO_SOURCES`
 
 ## 5. 数据面与 transport-control 链路
 
@@ -238,8 +239,8 @@ accepted behavior 见：
 当前主路径是：
 
 ```text
-local transport stats + RTCP + server getStats
-  -> per-track RawSenderSnapshot
+local transport stats + RTCP RR
+  -> per-track CanonicalTransportSnapshot
   -> per-track PublisherQosController::onSample()
   -> actionSink
      - source command
@@ -248,14 +249,15 @@ local transport stats + RTCP + server getStats
   -> clientStats
 ```
 
-### 6.2 server-assisted sampling
+### 6.2 server-side observation
 
-plain-client 仍然会异步请求服务端 `getStats`，补足：
+plain-client 仍然会异步请求服务端 `getStats`，但用途已经收敛为：
 
-- producer stats `byteCount / packetCount / packetsLost`
-- `roundTripTime / jitter`
+- producer / peer 观测与对账
+- `clientStats` 聚合后的 server-side 可见性
+- harness / matrix / debug 验证
 
-但在 threaded TWCC 主路径下，本地 sender snapshot 已经多了一层 transport 白盒字段，例如：
+sender QoS 主控制链使用的仍然是本地 transport snapshot。该 snapshot 还会暴露 transport 白盒字段，例如：
 
 - `senderUsageBitrateBps`
 - `transportEstimatedBitrateBps`

@@ -17,7 +17,8 @@
 当前稳定口径包括：
 
 - `ClientQos*` 纯逻辑对位测试资产
-- `cpp-client-harness` 对 publish / stale-seq / policy-update / override / clear 主链路的覆盖
+- `cpp-client-harness` 对真实 threaded runtime 的 publish / multi-track / weak-network 主链路覆盖
+- server-side `clientStats` / stale-seq / policy / override 语义继续由 `cpp-integration` 与 `node-harness` 覆盖
 - `cpp-client-matrix` 的统一结果入口
 - 当前机器 full matrix：`43 / 43 PASS`
 - 当前 threaded plain-client 主路径：
@@ -27,6 +28,14 @@
   - TWCC send-side estimate
   - probe lifecycle
 - 默认 full QoS 回归会刷新 stable TWCC A/B 报告
+
+如果要看 plain-client QoS 的代码/原理边界问题，而不是只看 case 和结果，继续看：
+
+- [plain-client-qos-boundary-review_cn.md](plain-client-qos-boundary-review_cn.md)
+
+如果要看 plain-client sender QoS 继续对齐 LiveKit 的整体规划与实施顺序，继续看：
+
+- [livekit-alignment-plan_cn.md](livekit-alignment-plan_cn.md)
 
 ## 2. 当前签收范围
 
@@ -99,6 +108,7 @@
 
 如果要理解 Linux client 如何把 QoS 与发送主路径接起来，继续看：
 
+- [plain-client-architecture-thread-model_cn.md](architecture-thread-model_cn.md)
 - [linux-client-architecture_cn.md](architecture_cn.md)
 - [architecture_cn.md](../../platform/architecture_cn.md)
 - [full-architecture-flow_cn.md](../../platform/full-architecture-flow_cn.md)
@@ -109,19 +119,21 @@
 如果问题集中在 plain-client uplink QoS，建议按下面顺序阅读：
 
 1. [plain-client-qos-status.md](README.md)
-2. [plain-client-twcc-change-summary.md](twcc-change-summary.md)
-3. [linux-client-architecture_cn.md](architecture_cn.md)
-4. [../../../specs/current/plain-client-send-side-bwe.md](../../../specs/current/plain-client-send-side-bwe.md)
-5. [twcc-ab-test.md](twcc-ab-test.md)
-6. [generated/twcc-ab-report.md](../../generated/twcc-ab-report.md)
-7. [plain-client-qos-case-results.md](../../plain-client-qos-case-results.md)
+2. [plain-client-architecture-thread-model_cn.md](architecture-thread-model_cn.md)
+3. [plain-client-twcc-change-summary.md](twcc-change-summary.md)
+4. [linux-client-architecture_cn.md](architecture_cn.md)
+5. [../../../specs/current/plain-client-send-side-bwe.md](../../../specs/current/plain-client-send-side-bwe.md)
+6. [twcc-ab-test.md](twcc-ab-test.md)
+7. [generated/twcc-ab-report.md](../../generated/twcc-ab-report.md)
+8. [plain-client-qos-case-results.md](../../plain-client-qos-case-results.md)
 
 ## 7. 维护规则
 
 后续如果 plain-client QoS 能力继续演进，优先更新：
 
 1. 这份状态页
-2. [plain-client-twcc-change-summary.md](twcc-change-summary.md)
-3. [linux-client-architecture_cn.md](architecture_cn.md)
-4. [plain-client-qos-parity-checklist.md](parity-checklist.md)
-5. `docs/generated/` 下的 stable 结果入口
+2. [plain-client-architecture-thread-model_cn.md](architecture-thread-model_cn.md)
+3. [plain-client-twcc-change-summary.md](twcc-change-summary.md)
+4. [linux-client-architecture_cn.md](architecture_cn.md)
+5. [plain-client-qos-parity-checklist.md](parity-checklist.md)
+6. `docs/generated/` 下的 stable 结果入口
