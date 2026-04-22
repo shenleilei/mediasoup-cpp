@@ -163,6 +163,8 @@ PYTHON="$WORKER_PYTHON" \
 rm -f mediasoup-worker
 ln -s src/mediasoup-worker-src/worker/out/Release/mediasoup-worker mediasoup-worker
 echo "  Built $(readlink -f mediasoup-worker)"
+WORKER_GIT_DESCRIBE="$(git -C src/mediasoup-worker-src describe --tags --always --dirty 2>/dev/null || git -C src/mediasoup-worker-src rev-parse --short HEAD)"
+echo "  Worker source revision: $WORKER_GIT_DESCRIBE"
 
 # 5. Build
 echo "[5/5] Building mediasoup-cpp SFU + plain-client + tests..."
