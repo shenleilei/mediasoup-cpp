@@ -4,7 +4,12 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import { createCppClientHarness, ensureHarnessMp4, sleep } from './cpp_client_runner.mjs';
+import {
+  createCppClientHarness,
+  ensureHarnessMp4,
+  scheduleNetemPhaseProfile,
+  sleep,
+} from './cpp_client_runner.mjs';
 import { loadScenarioCatalog } from './scenario_catalog.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -268,24 +273,23 @@ async function runFairnessScenario(group, repetition) {
   const roomId = `${scenario.roomId}_${group.id.toLowerCase()}_${repetition}`;
   const peerId = `${scenario.peerId}_${group.id.toLowerCase()}_${repetition}`;
   const videoSources = Array.from({ length: scenario.trackCount }, () => ensureHarnessMp4()).join(',');
-
   const harness = await createCppClientHarness({
     signalingPort,
     roomId,
     peerId,
     mp4Path: ensureHarnessMp4(),
     extraEnv: {
-      PLAIN_CLIENT_THREADED: '1',
       PLAIN_CLIENT_VIDEO_TRACK_COUNT: String(scenario.trackCount),
       PLAIN_CLIENT_VIDEO_TRACK_WEIGHTS: scenario.weights.join(','),
       PLAIN_CLIENT_VIDEO_SOURCES: videoSources,
-      QOS_TEST_MATRIX_PROFILE: JSON.stringify(scaledProfile),
-      QOS_TEST_MATRIX_LOCAL_ONLY: '1',
       ...group.env,
     },
   });
+  const scheduledProfile = scheduleNetemPhaseProfile(scaledProfile);
 
   try {
+    // The final phase remains active until scheduledProfile.stop(), so the
+    // fairness window below still samples the shaped link instead of recovery.
     await sleep(totalDurationMs);
     const trace = harness.getTrace();
     const deviation = buildFairnessDeviation(
@@ -298,6 +302,7 @@ async function runFairnessScenario(group, repetition) {
       tracePath: null,
     };
   } finally {
+    scheduledProfile.stop();
     await harness.stop();
   }
 }
@@ -460,7 +465,6 @@ async function main() {
           QOS_MATRIX_SPEED: String(matrixSpeed),
           QOS_CPP_CLIENT_MATRIX_PORT: String(signalingPort),
           QOS_CPP_CLIENT_WORKER_BIN: workerBin,
-          PLAIN_CLIENT_THREADED: '1',
           PLAIN_CLIENT_VIDEO_TRACK_COUNT: '1',
           PLAIN_CLIENT_VIDEO_SOURCES: harnessMp4,
           ...group.env,

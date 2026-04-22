@@ -3,6 +3,7 @@
 #pragma once
 
 #include "RtcpHandler.h"
+#include "SenderPressureTracker.h"
 #include "SenderTransportController.h"
 #include "TransportCcHelpers.h"
 #include "ThreadTypes.h"
@@ -20,6 +21,7 @@
 
 #include <atomic>
 #include <algorithm>
+#include <cstdlib>
 #include <limits>
 #include <cstdio>
 #include <cstring>
@@ -41,6 +43,15 @@ inline void rtpHeader(uint8_t* buf, uint8_t pt, uint16_t seq, uint32_t ts, uint3
 	buf[2] = seq >> 8; buf[3] = seq & 0xFF;
 	buf[4] = ts >> 24; buf[5] = ts >> 16; buf[6] = ts >> 8; buf[7] = ts;
 	buf[8] = ssrc >> 24; buf[9] = ssrc >> 16; buf[10] = ssrc >> 8; buf[11] = ssrc;
+}
+
+inline bool rtcpDebugEnabled()
+{
+	static const bool enabled = []() {
+		const char* raw = std::getenv("QOS_DEBUG_RTCP");
+		return raw && (*raw == '1' || *raw == 't' || *raw == 'T' || *raw == 'y' || *raw == 'Y');
+	}();
+	return enabled;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -289,6 +300,27 @@ public:
 		snap.queuedFreshVideoPackets = static_cast<uint32_t>(queuedFreshVideoPackets());
 		snap.queuedAudioPackets = static_cast<uint32_t>(queuedAudioPackets());
 		snap.queuedRetransmissionPackets = static_cast<uint32_t>(queuedRetransmissionPackets());
+
+		if (useTransportController_) {
+			mediasoup::plainclient::SenderPressureSample pressureSample;
+			pressureSample.aggregateTargetBitrateBps = transportController_.AggregateTargetBitrateBps();
+			pressureSample.effectivePacingBitrateBps = snap.effectivePacingBitrateBps;
+			pressureSample.queuedFreshVideoPackets = snap.queuedFreshVideoPackets;
+			pressureSample.roundTripTimeMs = snap.rrRttMs;
+			pressureSample.jitterMs = snap.rrJitterMs;
+			pressureSample.transportWouldBlockTotal = snap.transportWouldBlockTotal;
+			pressureSample.queuedVideoRetentions = snap.queuedVideoRetentions;
+			const auto transportParityMetrics = sendSideBwe_.GetTransportParityMetrics();
+			snap.senderTransportDelayMs = transportParityMetrics.senderTransportDelayMs;
+			snap.senderTransportJitterMs = transportParityMetrics.senderTransportJitterMs;
+			snap.senderPressureState = senderPressureTracker_.Update(pressureSample);
+		} else {
+			senderPressureTracker_.Reset();
+			snap.senderTransportDelayMs = -1.0;
+			snap.senderTransportJitterMs = -1.0;
+			snap.senderPressureState = qos::SenderPressureState::None;
+		}
+
 		statsQueue->tryPush(std::move(snap));
 	}
 
@@ -477,14 +509,15 @@ private:
 		if (au.configGeneration < track->configGeneration) return;
 		if (au.configGeneration > track->configGeneration) {
 			track->configGeneration = au.configGeneration;
-			// New generation — invalidate old keyframe cache and retransmission store
+			// Encoder generation switch should not create RTP sequence gaps by
+			// dropping already-queued fresh media. Keep fresh packets in order
+			// and only clear caches that are generation-sensitive.
 			auto* stream = rtcp_.getVideoStream(au.ssrc);
 			if (stream) {
 				stream->lastKeyframe.clear();
 				stream->store = RtpPacketStore{};
 			}
 			if (useTransportController_) {
-				transportController_.DropQueuedFreshVideoForTrack(au.ssrc);
 				transportController_.DropQueuedRetransmissionForTrack(au.ssrc);
 			}
 		}
@@ -605,15 +638,27 @@ private:
 			uint32_t dlsr = ((uint32_t)buf[rbOff+20] << 24) | ((uint32_t)buf[rbOff+21] << 16)
 				| ((uint32_t)buf[rbOff+22] << 8) | buf[rbOff+23];
 
-			stream->rrJitterMs = (double)jitter / 90.0;
-			if (lsr != 0) {
-				auto it = stream->srNtpToSendTime.find(lsr);
-				if (it != stream->srNtpToSendTime.end()) {
-					double dlsrMs = (double)dlsr / 65536.0 * 1000.0;
-					double elapsed = (double)(steadyNowMs() - it->second);
-					stream->rrRttMs = std::max(0.0, elapsed - dlsrMs);
+				stream->rrJitterMs = (double)jitter / 90.0;
+				if (lsr != 0) {
+					auto it = stream->srNtpToSendTime.find(lsr);
+					if (it != stream->srNtpToSendTime.end()) {
+						double dlsrMs = (double)dlsr / 65536.0 * 1000.0;
+						double elapsed = (double)(steadyNowMs() - it->second);
+						stream->rrRttMs = std::max(0.0, elapsed - dlsrMs);
+						if (rtcpDebugEnabled()) {
+							std::printf(
+								"[RTCP_TRACE] ssrc=%u lossFraction=%.6f cumulativeLost=%u rawJitter=%u jitterMs=%.3f elapsedMs=%.3f dlsrMs=%.3f rttMs=%.3f\n",
+								reportSsrc,
+								stream->rrLossFraction,
+								stream->rrCumulativeLost,
+								jitter,
+								stream->rrJitterMs,
+								elapsed,
+								dlsrMs,
+								stream->rrRttMs);
+						}
+					}
 				}
-			}
 			if (stream->rrRttMs > 0.0) {
 				sendSideBwe_.UpdateRtt(stream->rrRttMs / 1000.0);
 			}
@@ -1242,6 +1287,7 @@ public:
 	uint64_t probeClusterCompleteCount_{ 0 };
 	uint64_t probeClusterEarlyStopCount_{ 0 };
 	uint64_t probeBytesSent_{ 0 };
+	mediasoup::plainclient::SenderPressureTracker senderPressureTracker_;
 	std::deque<SenderUsageSample> senderUsageSamples_;
 	size_t senderUsageBytesWindow_{ 0 };
 	uint64_t statsGeneration_ = 0;

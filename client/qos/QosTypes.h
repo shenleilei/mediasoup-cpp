@@ -1,10 +1,11 @@
 #pragma once
 #include "qos/QosContract.h"
+#include "SenderPressureState.h"
 #include <cstdint>
-#include <string>
-#include <vector>
 #include <optional>
 #include <nlohmann/json.hpp>
+#include <string>
+#include <vector>
 
 namespace qos {
 
@@ -25,7 +26,7 @@ struct EncodingParameters {
 	std::optional<bool> adaptivePtime;
 };
 
-struct RawSenderSnapshot {
+struct CanonicalTransportSnapshot {
 	int64_t timestampMs = 0;
 	std::string trackId;
 	std::string producerId;
@@ -39,10 +40,14 @@ struct RawSenderSnapshot {
 	double configuredBitrateBps = 0;
 	double roundTripTimeMs = -1; // -1 = unavailable
 	double jitterMs = -1;
+	double senderTransportDelayMs = -1;
+	double senderTransportJitterMs = -1;
+	SenderPressureState senderPressureState = SenderPressureState::None;
 	int frameWidth = 0;
 	int frameHeight = 0;
 	double framesPerSecond = 0;
 	QualityLimitationReason qualityLimitationReason = QualityLimitationReason::None;
+	QualityLimitationReason senderLimitationReason = QualityLimitationReason::None;
 };
 
 struct DerivedSignals {
@@ -58,6 +63,8 @@ struct DerivedSignals {
 	double rttEwma = 0;
 	double jitterMs = 0;
 	double jitterEwma = 0;
+	SenderPressureState senderPressureState = SenderPressureState::None;
+	QualityLimitationReason senderLimitationReason = QualityLimitationReason::None;
 	bool cpuLimited = false;
 	bool bandwidthLimited = false;
 	Reason reason = Reason::Unknown;

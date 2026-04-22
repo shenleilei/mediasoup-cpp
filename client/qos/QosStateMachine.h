@@ -8,23 +8,27 @@ namespace qos {
 
 inline bool isWarning(const DerivedSignals& s, const Thresholds& t) {
 	return s.lossEwma >= t.warnLossRate || s.rttEwma >= t.warnRttMs
-		|| s.jitterEwma >= t.warnJitterMs || s.bandwidthLimited || s.cpuLimited;
+		|| s.jitterEwma >= t.warnJitterMs || senderPressureActive(s.senderPressureState)
+		|| s.bandwidthLimited || s.cpuLimited;
 }
 
 inline bool isCongested(const DerivedSignals& s, const Thresholds& t) {
-	return s.bandwidthLimited || s.lossEwma >= t.congestedLossRate
+	return senderPressureCongested(s.senderPressureState) || s.bandwidthLimited
+		|| s.lossEwma >= t.congestedLossRate
 		|| s.rttEwma >= t.congestedRttMs || s.jitterEwma >= t.congestedJitterMs;
 }
 
 inline bool isHealthy(const DerivedSignals& s, const Thresholds& t) {
 	return s.lossEwma < t.stableLossRate && s.rttEwma < t.stableRttMs
-		&& s.jitterEwma < t.stableJitterMs && !s.bandwidthLimited && !s.cpuLimited;
+		&& s.jitterEwma < t.stableJitterMs && !senderPressureActive(s.senderPressureState)
+		&& !s.bandwidthLimited && !s.cpuLimited;
 }
 
 inline bool isRecoveryHealthy(const DerivedSignals& s, const Thresholds& t) {
 	double recoveryJitter = std::max(t.stableJitterMs, t.warnJitterMs);
 	return s.lossEwma < t.stableLossRate && s.rttEwma < t.stableRttMs
-		&& s.jitterEwma < recoveryJitter && !s.bandwidthLimited && !s.cpuLimited;
+		&& s.jitterEwma < recoveryJitter && !senderPressureActive(s.senderPressureState)
+		&& !s.bandwidthLimited && !s.cpuLimited;
 }
 
 inline bool isFastRecoveryHealthy(const DerivedSignals& s, const Thresholds& t) {
@@ -33,7 +37,9 @@ inline bool isFastRecoveryHealthy(const DerivedSignals& s, const Thresholds& t) 
 	double targetBitrateBps = std::max(0.0, s.targetBitrateBps);
 	bool sendReady = targetBitrateBps <= 0.0 || s.sendBitrateBps >= targetBitrateBps * 0.85;
 	return s.lossEwma < t.stableLossRate && s.rttEwma < t.stableRttMs
-		&& rawJitter < recoveryJitter && sendReady && !s.bandwidthLimited && !s.cpuLimited;
+		&& rawJitter < recoveryJitter && sendReady
+		&& !senderPressureActive(s.senderPressureState)
+		&& !s.bandwidthLimited && !s.cpuLimited;
 }
 
 inline int nextCounter(int current, bool matched) {

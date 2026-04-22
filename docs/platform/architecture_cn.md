@@ -192,7 +192,7 @@ flowchart TB
 
 - 薄入口：`client/main.cpp`
 - shared orchestration / session bootstrap：`client/PlainClientApp.*`
-- threaded / legacy runtime orchestration：`client/PlainClientThreaded.cpp`, `client/PlainClientLegacy.cpp`
+- threaded runtime entry / ownership：`client/PlainClientThreaded.cpp`, `client/ThreadedQosRuntime.*`
 - transport execution：`client/NetworkThread.h`, `client/SenderTransportController.h`, `client/TransportCcHelpers.h`
 - send-side BWE / probe：`client/sendsidebwe/*`, `client/ccutils/*`
 - RTCP：`client/RtcpHandler.h`
@@ -620,7 +620,7 @@ PlainClientApp / plain-client
 
 - 服务端不做 WebRTC 协商
 - 客户端自己维护 RTP / RTCP / transport-cc / send-side estimate 主路径
-- `clientStats` 不是浏览器 `getStats()`，而是 `本地 transport 指标 + RTCP + server getStats` 的组合
+- `clientStats` 不是浏览器 `getStats()`，而是 client 本地构造并上报的 QoS snapshot
 - `qosPolicy` / `qosOverride` 仍然通过同一个 WebSocket 通知通道进入
 
 ## 8. 多节点与 Redis 架构
@@ -730,7 +730,7 @@ Client -> 主线程
 两者 payload schema 相同，但 stats 来源不同：
 
 - 浏览器：`RTCPeerConnection.getStats()`
-- Linux client：`RTCP RR + 本地 RTP 计数 + server getStats`
+- Linux client：`本地 transport snapshot + RTCP RR`
 
 ### 9.2 录制
 

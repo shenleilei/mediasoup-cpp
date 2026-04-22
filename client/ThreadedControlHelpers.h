@@ -18,8 +18,6 @@ struct ThreadedTrackStatsState {
 	SenderStatsSnapshot latest;
 	bool hasData = false;
 	uint64_t lastConsumedGeneration = 0;
-	uint32_t lastObservedProbePacketCount = 0;
-	int localProbeSuppressionSamples = 0;
 	int actualWidth = 0;
 	int actualHeight = 0;
 };
@@ -35,7 +33,6 @@ struct ThreadedTrackControlState {
 
 struct ProbeSampleSuppressionDecision {
 	bool statsFresh = false;
-	bool hasServerStats = false;
 	bool suppressed = false;
 };
 
@@ -123,39 +120,17 @@ inline bool enqueueTrackTransportConfig(
 	return netQueue.tryPush(std::move(cmd));
 }
 
-inline bool shouldSampleTrack(bool statsFresh, bool hasServerStatsForTrack) {
-	return statsFresh || hasServerStatsForTrack;
+inline bool shouldSampleTrack(bool statsFresh) {
+	return statsFresh;
 }
 
 inline ProbeSampleSuppressionDecision applyProbeSampleSuppression(
 	ThreadedTrackStatsState& statsState,
-	bool statsFresh,
-	bool hasServerStats)
+	bool statsFresh)
 {
+	(void)statsState;
 	ProbeSampleSuppressionDecision decision;
 	decision.statsFresh = statsFresh;
-	decision.hasServerStats = hasServerStats;
-
-	if (statsFresh) {
-		const auto& latest = statsState.latest;
-		const bool probeStatsPresent =
-			latest.probeActive ||
-			latest.probePacketCount != statsState.lastObservedProbePacketCount;
-		statsState.lastObservedProbePacketCount = latest.probePacketCount;
-		if (probeStatsPresent) {
-			statsState.localProbeSuppressionSamples = std::max(
-				statsState.localProbeSuppressionSamples,
-				2);
-		}
-	}
-
-	if (statsState.localProbeSuppressionSamples > 0) {
-		decision.statsFresh = false;
-		decision.hasServerStats = false;
-		decision.suppressed = true;
-		statsState.localProbeSuppressionSamples--;
-	}
-
 	return decision;
 }
 

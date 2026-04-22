@@ -329,8 +329,7 @@ TEST_F(ThreadedPlainPublishIntegrationTest, ExplicitThreadedSourcesDoNotRequireB
 	unlink(logPath.c_str());
 
 	std::ostringstream cmd;
-	cmd << "env PLAIN_CLIENT_THREADED=1 "
-		<< "PLAIN_CLIENT_VIDEO_TRACK_COUNT=2 "
+	cmd << "env PLAIN_CLIENT_VIDEO_TRACK_COUNT=2 "
 		<< "PLAIN_CLIENT_VIDEO_SOURCES=" << kTestMp4 << "," << kTestMp4 << " "
 		<< "stdbuf -oL -eL ./client/build/plain-client 127.0.0.1 "
 		<< threadedIntegrationPort() << " " << roomId_ << " threaded_sources " << missingBootstrap
@@ -2065,10 +2064,9 @@ TEST(CommandAck, RejectedResumeDoesNotFlipSuppressedState) {
 }
 
 TEST(StatsFreshness, PeerStatsPresentButTrackMissingStillSkipsTrack) {
-	// Simulate the control-loop gate: peer-level cached stats exist, but not for this track.
+	// Sampling now depends only on fresh local transport stats.
 	bool statsFresh = false;
-	bool hasServerStatsForTrack = false;
-	EXPECT_FALSE(mt::shouldSampleTrack(statsFresh, hasServerStatsForTrack));
+	EXPECT_FALSE(mt::shouldSampleTrack(statsFresh));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2132,6 +2130,69 @@ TEST(ConfigGeneration, OldGenerationAURejectedByNetwork) {
 	// gen=1 produces 1 NALU = 1 RTP, gen=2 produces 1 NALU = 1 RTP, gen=0 rejected
 	EXPECT_EQ(rtpCount, 2) << "only gen=1 and gen=2 AUs should produce RTP packets";
 
+	close(sendFd);
+	close(recvFd);
+}
+
+TEST(ConfigGeneration, GenerationSwitchKeepsQueuedFreshVideoPackets) {
+	int sendFd = -1, recvFd = -1;
+	uint16_t port = 0;
+	ASSERT_EQ(createConnectedUdpPair(sendFd, recvFd, port), 0);
+
+	mt::SpscQueue<mt::EncodedAccessUnit, mt::kEncodedAuQueueCapacity> auQueue;
+	mt::SpscQueue<mt::NetworkToSourceCommand, mt::kNetworkSourceQueueCapacity> netQueue;
+
+	NetworkThread::Config cfg;
+	cfg.udpFd = sendFd;
+	NetworkThread net(cfg);
+	net.registerVideoTrack(0, 11111111, 96);
+	net.SetUdpSendFnForTest([](int, const uint8_t*, size_t) {
+		return mediasoup::plainclient::SendResult{
+			mediasoup::plainclient::SendStatus::WouldBlock,
+			EAGAIN,
+			0
+		};
+	});
+	NetworkThread::SourceInput si;
+	si.auQueue = &auQueue;
+	si.keyframeQueue = &netQueue;
+	net.addSourceInput(si);
+
+	auto makeAu = [](uint64_t generation, size_t payloadBytes) {
+		mt::EncodedAccessUnit au;
+		au.ssrc = 11111111;
+		au.payloadType = 96;
+		au.rtpTimestamp = 90000;
+		au.isKeyframe = true;
+		au.configGeneration = generation;
+		std::vector<uint8_t> nal(payloadBytes, 0x88);
+		nal[0] = 0x00;
+		nal[1] = 0x00;
+		nal[2] = 0x00;
+		nal[3] = 0x01;
+		nal[4] = 0x65;
+		au.assign(nal.data(), nal.size());
+		return au;
+	};
+
+	net.start();
+
+	ASSERT_TRUE(auQueue.tryPush(makeAu(0, 10000)));
+	net.wakeup();
+	std::this_thread::sleep_for(std::chrono::milliseconds(80));
+
+	const size_t queuedBeforeGenerationSwitch = net.queuedFreshVideoPackets();
+	ASSERT_GT(queuedBeforeGenerationSwitch, 4u);
+
+	ASSERT_TRUE(auQueue.tryPush(makeAu(1, 1200)));
+	net.wakeup();
+	std::this_thread::sleep_for(std::chrono::milliseconds(80));
+
+	const size_t queuedAfterGenerationSwitch = net.queuedFreshVideoPackets();
+	EXPECT_GT(queuedAfterGenerationSwitch, queuedBeforeGenerationSwitch)
+		<< "generation switch must not drop already queued fresh video packets";
+
+	net.stop();
 	close(sendFd);
 	close(recvFd);
 }
@@ -2720,6 +2781,49 @@ TEST(ConfirmAction, AsyncConfirmThenProbeStartsCorrectly) {
 	EXPECT_TRUE(ctrl.getRuntimeSettings().probeActive) << "probe should start after confirmed level decrease";
 }
 
+TEST(ConfirmAction, AsyncConfirmStableLevelOneProbeCompletesAfterTwoHealthySamples) {
+	using namespace qos;
+
+	PublisherQosController::Options opts;
+	opts.source = Source::Camera;
+	opts.trackId = "video";
+	opts.initialLevel = 2;
+	opts.warmupSamples = 0;
+	opts.actionSink = [](const PlannedAction&) { return false; };
+	PublisherQosController ctrl(opts);
+
+	PlannedAction action;
+	action.type = ActionType::SetEncodingParameters;
+	action.level = 1;
+	action.encodingParameters = EncodingParameters{700000, 20, 1.5, {}};
+	ctrl.confirmAction(action);
+
+	ASSERT_TRUE(ctrl.getRuntimeSettings().probeActive);
+
+	auto makeHealthySnapshot = [](int64_t tsMs, uint64_t bytesSent, uint64_t packetsSent) {
+		CanonicalTransportSnapshot snapshot;
+		snapshot.timestampMs = tsMs;
+		snapshot.trackId = "video";
+		snapshot.source = Source::Camera;
+		snapshot.kind = TrackKind::Video;
+		snapshot.bytesSent = bytesSent;
+		snapshot.packetsSent = packetsSent;
+		snapshot.packetsLost = 0;
+		snapshot.targetBitrateBps = 900000;
+		snapshot.configuredBitrateBps = 900000;
+		snapshot.roundTripTimeMs = 80;
+		snapshot.jitterMs = 8;
+		return snapshot;
+	};
+
+	ctrl.onSample(makeHealthySnapshot(1000, 10000, 100));
+	EXPECT_TRUE(ctrl.getRuntimeSettings().probeActive);
+
+	ctrl.onSample(makeHealthySnapshot(2000, 220000, 200));
+	EXPECT_FALSE(ctrl.getRuntimeSettings().probeActive)
+		<< "stable/L1 async confirm path should use the JS parity two-sample probe exit";
+}
+
 // ═══════════════════════════════════════════════════════════
 // actionSink false → confirm → lastActionApplied state chain
 // ═══════════════════════════════════════════════════════════
@@ -2740,7 +2844,7 @@ TEST(ConfirmAction, LastActionAppliedReflectsAsyncConfirm) {
 
 	// Feed congested samples to trigger a degrade action
 	auto makeSnap = [](int64_t ts, double loss, double rtt) {
-		RawSenderSnapshot s;
+		CanonicalTransportSnapshot s;
 		s.timestampMs = ts;
 		s.trackId = "video";
 		s.source = Source::Camera;

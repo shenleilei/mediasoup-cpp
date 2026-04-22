@@ -1,8 +1,0 @@
-{
-  "name": "threaded_stale_track_skip",
-  "roomId": "qos_harness_room_threaded_stale_track_skip",
-  "peerId": "alice",
-  "trackCount": 2,
-  "staleTrackIndex": 1,
-  "expectPresentTrackIds": ["video"]
-}

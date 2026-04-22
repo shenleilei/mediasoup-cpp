@@ -27,6 +27,68 @@
 - 全局一个统一发送线程
 - 全局一个控制/协调线程
 
+### 1.1 双环总图
+
+```text
+                PlainClient 当前双环模型
+
+┌──────────────────────────────────────────────┐
+│ 外环：QoS / 策略闭环                         │
+│                                              │
+│ ThreadedQosRuntime                           │
+│   -> deriveSignals()                         │
+│   -> PublisherQosController                  │
+│   -> stateMachine / planner                  │
+│   -> peer coordination                       │
+│                                              │
+│ 决定：                                       │
+│   - level                                    │
+│   - bitrate / fps / scale                    │
+│   - audio-only / pause                       │
+│   - 多 track 谁保、谁降                      │
+└──────────────────────────────────────────────┘
+                    ▲
+                    │ 读取
+                    │
+                    │ CanonicalTransportSnapshot
+                    │
+┌──────────────────────────────────────────────┐
+│ 内环：transport / 发送闭环                   │
+│                                              │
+│ NetworkThread                                │
+│   -> SendSideBwe / CongestionDetector        │
+│   -> SenderTransportController               │
+│   -> TWCC / RTCP RR                          │
+│   -> pacing / retransmission / probe         │
+│                                              │
+│ 产出：                                       │
+│   - transportEstimatedBitrateBps             │
+│   - effectivePacingBitrateBps                │
+│   - senderUsageBitrateBps                    │
+│   - queuedFreshVideoPackets                  │
+│   - rrRttMs / rrJitterMs / rrLoss            │
+└──────────────────────────────────────────────┘
+                    ▲
+                    │ 真正发送
+                    │
+┌──────────────────────────────────────────────┐
+│ 生产层：media source                         │
+│                                              │
+│ SourceWorker x N                             │
+│   -> decode / scale / encode                 │
+│   -> 产出 video AU                           │
+│                                              │
+│ audio worker (optional)                      │
+│   -> 产出 audio AU                           │
+└──────────────────────────────────────────────┘
+```
+
+更直白地说：
+
+- 生产层负责“做出媒体数据”
+- 内环负责“这些数据现在能不能发、该按多快发”
+- 外环负责“既然链路只能这样，那视频质量该怎么调”
+
 ## 2. 为什么要这样拆
 
 如果 plain-client 只有单线程，多个 video track 会把下面这些事情全部串在一起：

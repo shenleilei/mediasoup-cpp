@@ -179,7 +179,7 @@ inline const char* resolvePeerMode(const std::vector<PeerTrackState>& tracks, bo
 inline json serializeSnapshot(int seq, int64_t tsMs, Quality peerQuality, bool stale,
 	const std::vector<PeerTrackState>& tracks, const std::map<std::string, DerivedSignals>& trackSignals,
 	const std::map<std::string, PlannedAction>& lastActions,
-	const std::map<std::string, RawSenderSnapshot>& rawSnapshots = {},
+	const std::map<std::string, CanonicalTransportSnapshot>& transportSnapshots = {},
 	const std::map<std::string, bool>& actionApplied = {},
 	bool peerHasAudioTrack = true)
 {
@@ -207,12 +207,16 @@ inline json serializeSnapshot(int seq, int64_t tsMs, Quality peerQuality, bool s
 			sig["jitterMs"] = sit->second.jitterMs;
 			sig["jitterEwma"] = sit->second.jitterEwma;
 		}
-		auto rit = rawSnapshots.find(t.trackId);
-		if (rit != rawSnapshots.end()) {
+		auto rit = transportSnapshots.find(t.trackId);
+		if (rit != transportSnapshots.end()) {
+			sig["senderTransportDelayMs"] = rit->second.senderTransportDelayMs;
+			sig["senderTransportJitterMs"] = rit->second.senderTransportJitterMs;
 			sig["frameWidth"] = rit->second.frameWidth;
 			sig["frameHeight"] = rit->second.frameHeight;
 			sig["framesPerSecond"] = rit->second.framesPerSecond;
 			sig["qualityLimitationReason"] = qualityLimitationReasonStr(rit->second.qualityLimitationReason);
+			sig["senderLimitationReason"] = qualityLimitationReasonStr(rit->second.senderLimitationReason);
+			sig["senderPressureState"] = senderPressureStateStr(rit->second.senderPressureState);
 		}
 		tj["signals"] = sig;
 		auto ait = lastActions.find(t.trackId);

@@ -39,8 +39,8 @@ mediasoup_add_configured_executable(plain-client
     SOURCES
         main.cpp
         PlainClientApp.cpp
-        PlainClientLegacy.cpp
         PlainClientThreaded.cpp
+        ThreadedQosRuntime.cpp
         PlainClientSupport.cpp
         WsClient.cpp
         ${PLAIN_CLIENT_COMMON_MEDIA_SOURCES}

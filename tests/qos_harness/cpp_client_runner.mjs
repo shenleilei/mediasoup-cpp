@@ -170,6 +170,52 @@ export function applyNetemConfig(config = {}, iface = 'lo') {
   ]);
 }
 
+export function scheduleNetemPhaseProfile(profile = {}, iface = 'lo') {
+  clearNetem(iface);
+
+  const timers = [];
+  let offsetMs = Math.max(0, Math.round(Number(profile?.warmupMs) || 0));
+  const phases = Array.isArray(profile?.phases) ? profile.phases : [];
+
+  for (const phase of phases) {
+    const config = {};
+    if (typeof phase?.sendCeilingBps === 'number' && phase.sendCeilingBps > 0) {
+      config.bandwidth = Math.max(1, Math.round(phase.sendCeilingBps / 1000));
+    }
+    if (typeof phase?.rttMs === 'number' && phase.rttMs >= 0) {
+      config.rtt = phase.rttMs;
+    }
+    if (typeof phase?.lossRate === 'number' && phase.lossRate > 0) {
+      config.loss = Math.max(0, Math.min(100, phase.lossRate * 100));
+    }
+    if (typeof phase?.jitterMs === 'number' && phase.jitterMs > 0) {
+      config.jitter = phase.jitterMs;
+    }
+
+    timers.push(setTimeout(() => {
+      if (Object.keys(config).length > 0) {
+        applyNetemConfig(config, iface);
+      } else {
+        clearNetem(iface);
+      }
+    }, offsetMs));
+
+    offsetMs += Math.max(0, Math.round(Number(phase?.durationMs) || 0));
+  }
+
+  return {
+    // The final shaped phase stays active until stop() so tail-window checks
+    // still observe the intended impairment rather than post-recovery traffic.
+    totalDurationMs: offsetMs,
+    stop() {
+      for (const timer of timers) {
+        clearTimeout(timer);
+      }
+      clearNetem(iface);
+    },
+  };
+}
+
 export async function waitForPort(hostname, port, timeoutMs = 5000) {
   const deadline = Date.now() + timeoutMs;
 
@@ -432,7 +478,6 @@ export async function createCppClientHarness({
   mp4Path = ensureMatrixMp4(),
   iface = 'lo',
   serverHost = '127.0.0.1',
-  copyMode = false,
   warmupMs = HARNESS_WARMUP_MS,
   extraEnv = {},
 } = {}) {
@@ -524,7 +569,6 @@ export async function createCppClientHarness({
         roomId,
         peerId,
         mp4Path,
-        ...(copyMode ? ['--copy'] : []),
       ],
       {
         cwd: repoRoot,

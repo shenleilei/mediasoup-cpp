@@ -41,6 +41,23 @@ It does not describe browser-side QoS behavior or LiveKit's full downlink alloca
   - `desiredIncreaseBps = max(transitionDeltaBps * ProbeOveragePct / 100, ProbeMinBps)`
   - `desiredBps = expectedUsageBps + desiredIncreaseBps`
 
+### Sender-Pressure Semantics
+
+- The transport inner loop publishes a sender-pressure semantic with at least:
+  - `none`
+  - `warning`
+  - `congested`
+- The warning state may be triggered by sustained fresh-video backlog together with elevated RTT/jitter even before transport estimate clamp is visible.
+- The congested state remains transport-owned and is reserved for stronger evidence such as pacing clamp or repeated local send retention.
+- QoS outer-loop warning transitions may consume the warning state directly.
+- QoS outer-loop `bandwidthLimited` semantics are only driven by browser bandwidth limitation or the strong sender-pressure congested state.
+
+### Generation Switch Handling
+
+- When encoder recreation bumps `configGeneration`, already queued fresh video RTP for the same SSRC SHALL remain queued and be sent in order.
+- Generation switches may still clear generation-sensitive caches such as retransmission queue and cached keyframe state.
+- Plain-client QoS adaptation MUST NOT create synthetic RTP sequence gaps by discarding fresh queued media on a downgrade action.
+
 ### Observability
 
 - The threaded plain-client trace path exposes transport-estimate and sender-side white-box fields needed for targeted effectiveness review, including:
@@ -50,6 +67,16 @@ It does not describe browser-side QoS behavior or LiveKit's full downlink alloca
   - transport feedback count
   - probe activity / probe packet count
   - queue and retransmission counters
+  - sender-pressure state
+- The canonical sender snapshot also carries plain-client-specific parity fields for:
+  - sender transport delay / RTT-like pressure
+  - sender transport jitter / variation pressure
+  - sender limitation reason
+- These plain-client parity fields are explicit local-equivalent fields.
+  They do not redefine browser `qualityLimitationReason`.
+- The current accepted implementation does not directly fold those local timing
+  fields into canonical `roundTripTimeMs` / `jitterMs`, because that was shown
+  to regress `J3` as `过强` during targeted matrix validation.
 
 ## Explicit Non-Goals
 

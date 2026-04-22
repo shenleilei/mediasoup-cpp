@@ -12,6 +12,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -37,6 +39,42 @@ enum class CongestionReason {
 	QueuingDelay,
 	Loss
 };
+
+struct TransportParityMetrics {
+	double senderTransportDelayMs = -1.0;
+	double senderTransportJitterMs = -1.0;
+	CongestionState congestionState = CongestionState::None;
+	CongestionReason congestionReason = CongestionReason::None;
+};
+
+inline bool congestionDebugEnabled()
+{
+	static const bool enabled = []() {
+		const char* raw = std::getenv("QOS_DEBUG_CONGESTION");
+		return raw && (*raw == '1' || *raw == 't' || *raw == 'T' || *raw == 'y' || *raw == 'Y');
+	}();
+	return enabled;
+}
+
+inline const char* congestionReasonStr(CongestionReason reason)
+{
+	switch (reason) {
+		case CongestionReason::None: return "none";
+		case CongestionReason::QueuingDelay: return "qd";
+		case CongestionReason::Loss: return "loss";
+	}
+	return "unknown";
+}
+
+inline const char* congestionStateStr(CongestionState state)
+{
+	switch (state) {
+		case CongestionState::None: return "none";
+		case CongestionState::EarlyWarning: return "warning";
+		case CongestionState::Congested: return "congested";
+	}
+	return "unknown";
+}
 
 struct CongestionSignalConfig {
 	int minNumberOfGroups{ 0 };
@@ -433,7 +471,50 @@ public:
 	}
 
 	CongestionState GetCongestionState() const { return congestionState_; }
+	CongestionReason GetCongestionReason() const { return congestionReason_; }
 	int64_t EstimatedAvailableChannelCapacityBps() const { return estimatedAvailableChannelCapacityBps_; }
+
+	TransportParityMetrics GetTransportParityMetrics() const
+	{
+		TransportParityMetrics metrics;
+		metrics.congestionState = congestionState_;
+		metrics.congestionReason = congestionReason_;
+
+		constexpr size_t kMaxFinalizedGroups = 6;
+		int64_t latestDelayUs = -1;
+		int64_t minDelayUs = std::numeric_limits<int64_t>::max();
+		int64_t maxDelayUs = std::numeric_limits<int64_t>::min();
+		size_t finalizedGroups = 0;
+
+		for (auto it = packetGroups_.rbegin();
+			it != packetGroups_.rend() && finalizedGroups < kMaxFinalizedGroups;
+			++it) {
+			int64_t propagatedDelayUs = 0;
+			if (!it->FinalizedPropagatedQueuingDelayUs(&propagatedDelayUs)) {
+				continue;
+			}
+			if (latestDelayUs < 0) {
+				latestDelayUs = propagatedDelayUs;
+			}
+			minDelayUs = std::min(minDelayUs, propagatedDelayUs);
+			maxDelayUs = std::max(maxDelayUs, propagatedDelayUs);
+			finalizedGroups++;
+		}
+
+		if (latestDelayUs >= 0) {
+			metrics.senderTransportDelayMs =
+				std::max(0.0, static_cast<double>(latestDelayUs) / 1000.0);
+		}
+		if (finalizedGroups == 1) {
+			metrics.senderTransportJitterMs = 0.0;
+		} else if (finalizedGroups > 1) {
+			metrics.senderTransportJitterMs = std::max(
+				0.0,
+				static_cast<double>(maxDelayUs - minDelayUs) / 1000.0);
+		}
+
+		return metrics;
+	}
 
 	bool CanProbe() const
 	{
@@ -655,8 +736,30 @@ private:
 			}
 		}
 		if (isAggregateValid) {
-			estimatedAvailableChannelCapacityBps_ = aggregate.AcknowledgedBitrate();
+			const int64_t previousEstimateBps = estimatedAvailableChannelCapacityBps_;
+			const int64_t aggregateEstimateBps = aggregate.AcknowledgedBitrate();
+			const bool allowDownwardUpdate =
+				congestionState_ == CongestionState::Congested ||
+				congestionReason_ == CongestionReason::Loss;
+			if (aggregateEstimateBps > estimatedAvailableChannelCapacityBps_ || allowDownwardUpdate) {
+				estimatedAvailableChannelCapacityBps_ = aggregateEstimateBps;
+			}
 			estimateTrafficStats_ = aggregate;
+			if (congestionDebugEnabled() &&
+				estimatedAvailableChannelCapacityBps_ != previousEstimateBps) {
+				std::printf(
+					"[BWE_TRACE] source=aggregate state=%s reason=%s prevEstimateBps=%lld newEstimateBps=%lld ackedPackets=%d lostPackets=%d sendDeltaUs=%lld recvDeltaUs=%lld weightedLoss=%.6f capturedRatio=%.6f\n",
+					congestionStateStr(congestionState_),
+					congestionReasonStr(congestionReason_),
+					static_cast<long long>(previousEstimateBps),
+					static_cast<long long>(estimatedAvailableChannelCapacityBps_),
+					aggregate.AckedPackets(),
+					aggregate.LostPackets(),
+					static_cast<long long>(aggregate.SendDeltaUs()),
+					static_cast<long long>(aggregate.RecvDeltaUs()),
+					aggregate.WeightedLoss(),
+					aggregate.CapturedTrafficRatio());
+			}
 		}
 	}
 
@@ -716,8 +819,23 @@ private:
 			congestedCtrTrend_->GetDirection() == mediasoup::ccutils::TrendDirection::Downward) {
 			const int64_t congestedAckedBitrate = congestedTrafficStats_.AcknowledgedBitrate();
 			if (congestedAckedBitrate < estimatedAvailableChannelCapacityBps_) {
+				const int64_t previousEstimateBps = estimatedAvailableChannelCapacityBps_;
 				estimatedAvailableChannelCapacityBps_ = congestedAckedBitrate;
 				changed = true;
+				if (congestionDebugEnabled()) {
+					std::printf(
+						"[BWE_TRACE] source=ctr_downward state=%s reason=%s prevEstimateBps=%lld newEstimateBps=%lld ackedPackets=%d lostPackets=%d sendDeltaUs=%lld recvDeltaUs=%lld weightedLoss=%.6f capturedRatio=%.6f\n",
+						congestionStateStr(congestionState_),
+						congestionReasonStr(congestionReason_),
+						static_cast<long long>(previousEstimateBps),
+						static_cast<long long>(estimatedAvailableChannelCapacityBps_),
+						congestedTrafficStats_.AckedPackets(),
+						congestedTrafficStats_.LostPackets(),
+						static_cast<long long>(congestedTrafficStats_.SendDeltaUs()),
+						static_cast<long long>(congestedTrafficStats_.RecvDeltaUs()),
+						congestedTrafficStats_.WeightedLoss(),
+						congestedTrafficStats_.CapturedTrafficRatio());
+				}
 			}
 			CreateCtrTrend();
 		}

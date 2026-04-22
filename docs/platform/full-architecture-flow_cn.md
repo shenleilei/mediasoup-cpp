@@ -301,15 +301,22 @@ threaded 数据面:
 QoS 侧链路：
 
 ```text
-local transport counters + RTCP RR + async getStats
-  -> RawSenderSnapshot
+local transport counters + RTCP RR
+  -> CanonicalTransportSnapshot
   -> PublisherQosController (per video track)
   -> actionSink
      - source worker encoding command
      - network transport hint
   -> serializeSnapshot()
   -> clientStats
+```
 
+server `getStats`:
+
+- 观测 / 对账 / debug
+- 不进入 sender QoS 主控制链
+
+```text
 notification:
   qosPolicy / qosOverride
     -> plain-client control thread

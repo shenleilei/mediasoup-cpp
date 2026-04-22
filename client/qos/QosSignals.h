@@ -44,7 +44,9 @@ inline Reason classifyReason(const DerivedSignals& s, bool activeOverride, bool 
 	if (activeOverride) return Reason::ServerOverride;
 	if (manual) return Reason::Manual;
 	if (s.cpuLimited && cpuSampleCount >= CPU_REASON_MIN_SAMPLES) return Reason::Cpu;
-	if (s.bandwidthLimited || s.lossEwma >= NETWORK_WARN_LOSS_RATE || s.rttEwma >= NETWORK_WARN_RTT_MS)
+	if (s.bandwidthLimited || senderPressureActive(s.senderPressureState)
+		|| s.senderLimitationReason == QualityLimitationReason::Bandwidth
+		|| s.lossEwma >= NETWORK_WARN_LOSS_RATE || s.rttEwma >= NETWORK_WARN_RTT_MS)
 		return Reason::Network;
 	return Reason::Unknown;
 }
@@ -56,7 +58,7 @@ struct DeriveContext {
 	std::optional<double> ewmaAlpha;
 };
 
-inline DerivedSignals deriveSignals(const RawSenderSnapshot& cur, const RawSenderSnapshot* prev,
+inline DerivedSignals deriveSignals(const CanonicalTransportSnapshot& cur, const CanonicalTransportSnapshot* prev,
 	const DerivedSignals* prevSig, const DeriveContext& ctx = {})
 {
 	DerivedSignals s;
@@ -70,19 +72,33 @@ inline DerivedSignals deriveSignals(const RawSenderSnapshot& cur, const RawSende
 	s.lossRate = computeLossRate(s.packetsSentDelta, s.packetsLostDelta);
 	s.lossEwma = computeEwma(s.lossRate, prevSig ? prevSig->lossEwma : s.lossRate, ewmaAlpha);
 
-	s.rttMs = cur.roundTripTimeMs >= 0 ? std::max(0.0, cur.roundTripTimeMs) : (prevSig ? std::max(0.0, prevSig->rttMs) : 0);
-	s.rttEwma = cur.roundTripTimeMs >= 0
+	const bool rawRttPresent = cur.roundTripTimeMs >= 0;
+	s.rttMs = rawRttPresent
+		? std::max(0.0, cur.roundTripTimeMs)
+		: (prevSig ? std::max(0.0, prevSig->rttMs) : 0);
+	s.rttEwma = rawRttPresent
 		? computeEwma(s.rttMs, prevSig ? prevSig->rttEwma : s.rttMs, ewmaAlpha)
 		: (prevSig ? prevSig->rttEwma : 0);
 
-	s.jitterMs = cur.jitterMs >= 0 ? std::max(0.0, cur.jitterMs) : (prevSig ? std::max(0.0, prevSig->jitterMs) : 0);
-	s.jitterEwma = cur.jitterMs >= 0
+	const bool rawJitterPresent = cur.jitterMs >= 0;
+	s.jitterMs = rawJitterPresent
+		? std::max(0.0, cur.jitterMs)
+		: (prevSig ? std::max(0.0, prevSig->jitterMs) : 0);
+	s.jitterEwma = rawJitterPresent
 		? computeEwma(s.jitterMs, prevSig ? prevSig->jitterEwma : s.jitterMs, ewmaAlpha)
 		: (prevSig ? prevSig->jitterEwma : 0);
 
-	s.cpuLimited = (cur.qualityLimitationReason == QualityLimitationReason::Cpu);
-	s.bandwidthLimited = (cur.qualityLimitationReason == QualityLimitationReason::Bandwidth)
+	s.senderPressureState = cur.senderPressureState;
+	s.senderLimitationReason = cur.senderLimitationReason;
+	s.cpuLimited =
+		(cur.qualityLimitationReason == QualityLimitationReason::Cpu) ||
+		(cur.senderLimitationReason == QualityLimitationReason::Cpu);
+	const bool browserBandwidthLimited =
+		(cur.qualityLimitationReason == QualityLimitationReason::Bandwidth)
 		&& s.bitrateUtilization < NETWORK_CONGESTED_UTILIZATION;
+	s.bandwidthLimited =
+		browserBandwidthLimited ||
+		senderPressureCongested(s.senderPressureState);
 	s.reason = classifyReason(s, ctx.activeOverride, ctx.manual, ctx.cpuSampleCount);
 	return s;
 }

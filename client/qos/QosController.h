@@ -27,7 +27,7 @@ public:
 		int initialLevel = 0;
 		ActionSink actionSink;
 		SendSnapshotFn sendSnapshot;
-		int warmupSamples = 5;
+		int warmupSamples = 0;
 		int snapshotIntervalMs = DEFAULT_SNAPSHOT_INTERVAL_MS;
 		std::function<int64_t()> monotonicNowMs;
 		std::function<int64_t()> wallNowMs;
@@ -119,7 +119,7 @@ public:
 		activeOverride_ = mergeOverrides(now);
 	}
 
-	void onSample(const RawSenderSnapshot& snapshot) {
+	void onSample(const CanonicalTransportSnapshot& snapshot) {
 		auto now = nowMs();
 		auto activeOverride = getActiveOverride(now);
 
@@ -265,15 +265,7 @@ public:
 		}
 		if (appliedEncodingAction) coordinationBitrateCapDirty_ = false;
 
-		// Start probe on recovery (level decreased or exited audio-only)
-		bool levelDecreased = currentLevel_ < prevLevel;
-		bool exitedAudioOnly = prevAudioOnly && !inAudioOnlyMode_;
-		if ((levelDecreased || exitedAudioOnly) && !probeCtx_.active) {
-			int reqHealthy = (recoveryProbeSuccessStreak_ > 0 && isStrongRecoverySignal(signals)) ? 2 : 3;
-			probeCtx_ = beginProbe(prevLevel, currentLevel_, prevAudioOnly, inAudioOnlyMode_, now);
-			probeCtx_.requiredHealthySamples = reqHealthy;
-			printf("[QoS] probe started: level %d → %d\n", prevLevel, currentLevel_);
-		}
+		maybeStartRecoveryProbe(prevLevel, prevAudioOnly, &signals, now, true);
 
 		if (currentLevel_ != prevLevel) {
 			printf("[QoS] %s level %d→%d (loss=%.1f%% rtt=%.0fms state=%s)\n",
@@ -290,7 +282,7 @@ public:
 			PeerTrackState ts{trackId_, source_, kind_, smCtx_.state, currentQuality_, currentLevel_, inAudioOnlyMode_, producerId_, signals.reason};
 			std::map<std::string, DerivedSignals> sigMap{{trackId_, signals}};
 			std::map<std::string, PlannedAction> actMap{{trackId_, lastAction_}};
-			std::map<std::string, RawSenderSnapshot> rawMap{{trackId_, snapshot}};
+			std::map<std::string, CanonicalTransportSnapshot> transportMap{{trackId_, snapshot}};
 			std::map<std::string, bool> appliedMap{{trackId_, lastActionApplied_}};
 			auto snap = serializeSnapshot(
 				snapshotSeq_++,
@@ -300,7 +292,7 @@ public:
 				{ts},
 				sigMap,
 				actMap,
-				rawMap,
+				transportMap,
 				appliedMap,
 				peerHasAudioTrack_);
 			sendSnapshot_(snap);
@@ -310,10 +302,6 @@ public:
 	void setOverrideClampLevel(int level) { overrideClampLevel_ = level; }
 	void clearOverride() { overrideClampLevel_ = -1; }
 	void resetExecutor() { executor_.reset(); }
-	void primeSnapshotBaseline(const RawSenderSnapshot& snapshot) {
-		prevSnapshot_ = snapshot;
-		hasPrev_ = true;
-	}
 
 	// For async command model: confirm that a previously queued action was applied by the worker.
 	// This advances controller state that was NOT advanced at queue time (because sink returned false).
@@ -323,6 +311,7 @@ public:
 		if (action.type == ActionType::SetEncodingParameters) {
 			currentLevel_ = action.level;
 			executor_.recordKey(action);
+			coordinationBitrateCapDirty_ = false;
 		} else if (action.type == ActionType::EnterAudioOnly || action.type == ActionType::PauseUpstream) {
 			inAudioOnlyMode_ = true;
 			currentLevel_ = action.level;
@@ -333,12 +322,12 @@ public:
 			executor_.recordKey(action);
 		}
 		lastActionApplied_ = true;
-		// Start probe if level decreased or exited audio-only (same as onSample path)
-		bool levelDecreased = currentLevel_ < prevLevel;
-		bool exitedAudioOnly = prevAudioOnly && !inAudioOnlyMode_;
-		if ((levelDecreased || exitedAudioOnly) && !probeCtx_.active) {
-			probeCtx_ = beginProbe(prevLevel, currentLevel_, prevAudioOnly, inAudioOnlyMode_, nowMs());
-		}
+		maybeStartRecoveryProbe(
+			prevLevel,
+			prevAudioOnly,
+			hasPrevSig_ ? &prevSignals_ : nullptr,
+			nowMs(),
+			true);
 	}
 
 	int currentLevel() const { return currentLevel_; }
@@ -483,12 +472,15 @@ private:
 		double targetBps = std::max(0.0, signals.targetBitrateBps);
 		bool sendReady = targetBps <= 0 || signals.sendBitrateBps >= targetBps * 0.85;
 		return signals.lossEwma < t.stableLossRate && signals.rttEwma < t.stableRttMs
-			&& rawJitter < recoveryJitter && sendReady && !signals.bandwidthLimited && !signals.cpuLimited;
+			&& rawJitter < recoveryJitter && sendReady
+			&& !senderPressureActive(signals.senderPressureState)
+			&& !signals.bandwidthLimited && !signals.cpuLimited;
 	}
 
 	DerivedSignals getTransitionSignals(const DerivedSignals& signals, const std::optional<QosOverride>& override, int64_t now) {
 		auto& t = profile_.thresholds;
 		bool networkRecovered = signals.lossEwma < t.stableLossRate && signals.rttEwma < t.stableRttMs
+			&& !senderPressureActive(signals.senderPressureState)
 			&& !signals.bandwidthLimited && !signals.cpuLimited;
 		DerivedSignals ts = signals;
 
@@ -507,6 +499,35 @@ private:
 		double sj = t.stableJitterMs < 1e8 ? t.stableJitterMs : 1e9;
 		ts.jitterEwma = std::min(ts.jitterEwma, std::max(0.0, sj - 0.001));
 		return ts;
+	}
+
+	void maybeStartRecoveryProbe(
+		int prevLevel,
+		bool prevAudioOnly,
+		const DerivedSignals* signals,
+		int64_t now,
+		bool logStart)
+	{
+		const bool levelDecreased = currentLevel_ < prevLevel;
+		const bool exitedAudioOnly = prevAudioOnly && !inAudioOnlyMode_;
+		if ((!levelDecreased && !exitedAudioOnly) || probeCtx_.active) {
+			return;
+		}
+
+		int requiredHealthySamples = 3;
+		if (signals && recoveryProbeSuccessStreak_ > 0 && isStrongRecoverySignal(*signals)) {
+			requiredHealthySamples = 2;
+		}
+		if (smCtx_.state == State::Stable && currentLevel_ == 1) {
+			requiredHealthySamples = std::min(requiredHealthySamples, 2);
+		}
+
+		probeCtx_ = beginProbe(prevLevel, currentLevel_, prevAudioOnly, inAudioOnlyMode_, now);
+		probeCtx_.requiredHealthySamples = requiredHealthySamples;
+
+		if (logStart) {
+			printf("[QoS] probe started: level %d → %d\n", prevLevel, currentLevel_);
+		}
 	}
 
 	std::vector<PlannedAction> filterActions(const std::vector<PlannedAction>& actions, const std::optional<QosOverride>& override) {
@@ -633,25 +654,25 @@ private:
 	PlannedAction lastAction_;
 	bool lastActionApplied_ = true;
 
-	RawSenderSnapshot prevSnapshot_;
+	CanonicalTransportSnapshot prevSnapshot_;
 	DerivedSignals prevSignals_;
 	bool hasPrev_ = false;
 	bool hasPrevSig_ = false;
 
 	int sampleCount_ = 0;
-	int warmupSamples_ = 5;
-		int snapshotSeq_ = 0;
-		int sampleIntervalMs_ = DEFAULT_SAMPLE_INTERVAL_MS;
-		int snapshotIntervalMs_ = DEFAULT_SNAPSHOT_INTERVAL_MS;
-		int64_t lastSnapshotMs_ = 0;
-		std::function<int64_t()> monotonicNowMs_;
-		std::function<int64_t()> wallNowMs_;
-		bool allowAudioOnly_ = true;
-		bool allowVideoPause_ = true;
-		bool peerHasAudioTrack_ = true;
-		std::map<std::string, ActiveOverrideRecord> activeOverrides_;
-		std::optional<QosOverride> activeOverride_;
-		std::optional<CoordinationOverride> coordinationOverride_;
+	int warmupSamples_ = 0;
+	int snapshotSeq_ = 0;
+	int sampleIntervalMs_ = DEFAULT_SAMPLE_INTERVAL_MS;
+	int snapshotIntervalMs_ = DEFAULT_SNAPSHOT_INTERVAL_MS;
+	int64_t lastSnapshotMs_ = 0;
+	std::function<int64_t()> monotonicNowMs_;
+	std::function<int64_t()> wallNowMs_;
+	bool allowAudioOnly_ = true;
+	bool allowVideoPause_ = true;
+	bool peerHasAudioTrack_ = true;
+	std::map<std::string, ActiveOverrideRecord> activeOverrides_;
+	std::optional<QosOverride> activeOverride_;
+	std::optional<CoordinationOverride> coordinationOverride_;
 	bool coordinationBitrateCapDirty_ = false;
 
 	// JS parity: recovery/probe tracking

@@ -68,7 +68,7 @@ Available groups:
   cpp-recording     QoS recording accuracy 测试
   cpp-client-matrix PlainTransport C++ client weak-network matrix（run_cpp_client_matrix.mjs）
   cpp-client-ab     PlainTransport C++ client TWCC A/B effectiveness report（run_twcc_ab_eval.mjs）
-  cpp-client-harness PlainTransport C++ client signaling / publish snapshot / override harness
+  cpp-client-harness PlainTransport C++ client threaded runtime / multi-track / weak-network harness
   cpp-threaded      PlainTransport C++ client threaded gtest / threaded harness regression
   node-harness      Node QoS harness 场景
   browser-harness   browser_server_signal + browser_loopback + downlink browser harnesses
@@ -765,13 +765,8 @@ run_cpp_client_harness() {
   prepare_test_port 14020 "QoS cpp-client harness SFU port 14020"
   local scenarios=(
     publish_snapshot
-    stale_seq
-    policy_update
-    auto_override_poor
-    override_force_audio_only
-    manual_clear
-    multi_video_budget
     multi_track_snapshot
+    threaded_multi_video_budget
     threaded_generation_switch
     threaded_quick
   )

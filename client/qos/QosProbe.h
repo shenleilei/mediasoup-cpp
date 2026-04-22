@@ -14,12 +14,14 @@ inline ProbeContext beginProbe(int previousLevel, int targetLevel,
 inline bool isProbeHealthy(const DerivedSignals& signals, const Thresholds& thresholds) {
 	return signals.lossEwma < thresholds.stableLossRate
 		&& signals.rttEwma < thresholds.stableRttMs
+		&& !senderPressureActive(signals.senderPressureState)
 		&& !signals.bandwidthLimited
 		&& !signals.cpuLimited;
 }
 
 inline bool isProbeBad(const DerivedSignals& signals, const Thresholds& thresholds) {
-	return signals.bandwidthLimited
+	return senderPressureCongested(signals.senderPressureState)
+		|| signals.bandwidthLimited
 		|| signals.lossEwma >= thresholds.congestedLossRate
 		|| signals.rttEwma >= thresholds.congestedRttMs
 		|| signals.cpuLimited;

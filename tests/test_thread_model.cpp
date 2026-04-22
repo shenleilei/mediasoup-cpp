@@ -11,6 +11,7 @@
 #include "../client/sendsidebwe/PacketTracker.h"
 #include "../client/sendsidebwe/SendSideBwe.h"
 #include "../client/sendsidebwe/TwccFeedbackTracker.h"
+#include "../client/SenderPressureTracker.h"
 #include "../client/ThreadTypes.h"
 #include "../client/NetworkThread.h"
 #include "../client/ThreadedControlHelpers.h"
@@ -242,6 +243,61 @@ TEST(SenderStatsSnapshot, ThroughQueue) {
 	EXPECT_EQ(out.trackIndex, 2u);
 	EXPECT_EQ(out.packetCount, 100u);
 	EXPECT_DOUBLE_EQ(out.rrRttMs, 45.5);
+}
+
+TEST(SenderPressureTrackerTest, EscalatesFromWarningToCongestedUnderPersistentRestrictedBacklog) {
+	mediasoup::plainclient::SenderPressureTracker tracker;
+	mediasoup::plainclient::SenderPressureSample sample;
+	sample.aggregateTargetBitrateBps = 900000;
+	sample.effectivePacingBitrateBps = 600000;
+	sample.queuedFreshVideoPackets = 80;
+
+	EXPECT_EQ(tracker.Update(sample), qos::SenderPressureState::None);
+	EXPECT_EQ(tracker.Update(sample), qos::SenderPressureState::Warning);
+
+	sample.queuedFreshVideoPackets = 124;
+	EXPECT_EQ(tracker.Update(sample), qos::SenderPressureState::Warning);
+	EXPECT_EQ(tracker.Update(sample), qos::SenderPressureState::Congested);
+}
+
+TEST(SenderPressureTrackerTest, IgnoresTransientQueueWithoutTransportRestriction) {
+	mediasoup::plainclient::SenderPressureTracker tracker;
+	mediasoup::plainclient::SenderPressureSample sample;
+	sample.aggregateTargetBitrateBps = 900000;
+	sample.effectivePacingBitrateBps = 900000;
+	sample.queuedFreshVideoPackets = 96;
+
+	EXPECT_EQ(tracker.Update(sample), qos::SenderPressureState::None);
+	EXPECT_EQ(tracker.Update(sample), qos::SenderPressureState::None);
+}
+
+TEST(SenderPressureTrackerTest, BacklogWithElevatedRttTriggersWarningWithoutPacingClamp) {
+	mediasoup::plainclient::SenderPressureTracker tracker;
+	mediasoup::plainclient::SenderPressureSample sample;
+	sample.aggregateTargetBitrateBps = 900000;
+	sample.effectivePacingBitrateBps = 900000;
+	sample.queuedFreshVideoPackets = 74;
+	sample.roundTripTimeMs = 105.0;
+
+	EXPECT_EQ(tracker.Update(sample), qos::SenderPressureState::None);
+	EXPECT_EQ(tracker.Update(sample), qos::SenderPressureState::Warning);
+}
+
+TEST(SenderPressureTrackerTest, ClearsAfterHealthySamples) {
+	mediasoup::plainclient::SenderPressureTracker tracker;
+	mediasoup::plainclient::SenderPressureSample sample;
+	sample.aggregateTargetBitrateBps = 900000;
+	sample.effectivePacingBitrateBps = 600000;
+	sample.queuedFreshVideoPackets = 80;
+
+	EXPECT_EQ(tracker.Update(sample), qos::SenderPressureState::None);
+	EXPECT_EQ(tracker.Update(sample), qos::SenderPressureState::Warning);
+
+	sample.effectivePacingBitrateBps = 900000;
+	sample.queuedFreshVideoPackets = 16;
+	EXPECT_EQ(tracker.Update(sample), qos::SenderPressureState::Warning);
+	EXPECT_EQ(tracker.Update(sample), qos::SenderPressureState::Warning);
+	EXPECT_EQ(tracker.Update(sample), qos::SenderPressureState::None);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -577,10 +633,9 @@ TEST(ThreadedControlHelpers, OlderAckIgnoredAfterPendingCommandReplaced) {
 	EXPECT_DOUBLE_EQ(trackState.scaleResolutionDownBy, 2.0);
 }
 
-TEST(ThreadedControlHelpers, ShouldSampleTrackRequiresFreshOrServerStats) {
-	EXPECT_TRUE(shouldSampleTrack(true, false));
-	EXPECT_TRUE(shouldSampleTrack(false, true));
-	EXPECT_FALSE(shouldSampleTrack(false, false));
+TEST(ThreadedControlHelpers, ShouldSampleTrackRequiresFreshLocalStats) {
+	EXPECT_TRUE(shouldSampleTrack(true));
+	EXPECT_FALSE(shouldSampleTrack(false));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1100,38 +1155,28 @@ TEST(PacketTracker, AllocatedSequenceIsIgnoredUntilSendIsRecorded) {
 	EXPECT_EQ(second.recvDeltaUs, 10000);
 }
 
-TEST(ThreadedControlHelpers, ProbeSuppressionDisablesLocalAndServerSamples) {
+TEST(ThreadedControlHelpers, ProbeSuppressionLeavesFreshLocalSamplesAvailable) {
 	mt::ThreadedTrackStatsState statsState;
 	statsState.latest.probeActive = true;
 	statsState.latest.probePacketCount = 5;
 
 	auto decision = mt::applyProbeSampleSuppression(
 		statsState,
-		/*statsFresh=*/true,
-		/*hasServerStats=*/true);
+		/*statsFresh=*/true);
 
-	EXPECT_FALSE(decision.statsFresh);
-	EXPECT_FALSE(decision.hasServerStats);
-	EXPECT_TRUE(decision.suppressed);
-	EXPECT_EQ(statsState.localProbeSuppressionSamples, 1);
-	EXPECT_EQ(statsState.lastObservedProbePacketCount, 5u);
+	EXPECT_TRUE(decision.statsFresh);
+	EXPECT_FALSE(decision.suppressed);
 }
 
-TEST(ThreadedControlHelpers, ProbeSuppressionCountdownContinuesWithoutFreshLocalStats) {
+TEST(ThreadedControlHelpers, ProbeSuppressionDoesNotInventFreshness) {
 	mt::ThreadedTrackStatsState statsState;
-	statsState.localProbeSuppressionSamples = 1;
-	statsState.lastObservedProbePacketCount = 5;
 
 	auto decision = mt::applyProbeSampleSuppression(
 		statsState,
-		/*statsFresh=*/false,
-		/*hasServerStats=*/true);
+		/*statsFresh=*/false);
 
 	EXPECT_FALSE(decision.statsFresh);
-	EXPECT_FALSE(decision.hasServerStats);
-	EXPECT_TRUE(decision.suppressed);
-	EXPECT_EQ(statsState.localProbeSuppressionSamples, 0);
-	EXPECT_EQ(statsState.lastObservedProbePacketCount, 5u);
+	EXPECT_FALSE(decision.suppressed);
 }
 
 TEST(RtcpHandler, VideoProbeRtpDoesNotPopulateStoreOrOctetCount) {

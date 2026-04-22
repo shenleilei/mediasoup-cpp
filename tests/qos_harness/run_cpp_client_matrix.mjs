@@ -10,7 +10,6 @@ import {
   getPhaseNetwork,
   getImpairedStateForEvaluation,
   summarizePhaseState,
-  toSyntheticCondition,
 } from './synthetic_sweep_shared.mjs';
 import {
   archiveCurrentCppClientReportSet,
@@ -68,76 +67,6 @@ function fmtState(state) {
   return `${state.state}/L${state.level}`;
 }
 
-function buildMatrixTestProfile(caseDef, durations) {
-  const phases = [
-    {
-      name: 'baseline',
-      durationMs: durations.baselineMs,
-      network: getPhaseNetwork(caseDef, 'baseline'),
-    },
-    {
-      name: 'impairment',
-      durationMs: durations.impairmentMs,
-      network: getPhaseNetwork(caseDef, 'impaired'),
-    },
-  ];
-
-  if (getCaseExpectation(caseDef, 'cpp_client')?.recovery !== false) {
-    phases.push({
-      name: 'recovery',
-      durationMs: durations.recoveryMs,
-      network: getPhaseNetwork(caseDef, 'recovery'),
-    });
-  }
-
-  return {
-    warmupMs: CPP_CLIENT_HARNESS_WARMUP_MS,
-    phases: phases.map(phase => {
-      const condition = toSyntheticCondition(phase.network);
-      let sendCeilingBps = condition.bitrateBps;
-      let rttMs = condition.rttMs;
-      let jitterMs = condition.jitterMs;
-      let qualityLimitationReason = condition.qualityLimitationReason;
-
-      if (caseDef.caseId === 'B3') {
-        rttMs = Math.max(rttMs, 230);
-      }
-
-      if (
-        phase.name === 'impairment' &&
-        (caseDef.group === 'bw_sweep' || caseDef.group === 'transition')
-      ) {
-        if ((phase.network.bandwidth ?? 0) <= 1000) {
-          sendCeilingBps = Math.round(sendCeilingBps * 0.75);
-          qualityLimitationReason = 'bandwidth';
-        }
-      }
-
-      if (phase.name === 'impairment' && caseDef.group === 'burst') {
-        if ((phase.network.bandwidth ?? Number.POSITIVE_INFINITY) <= 300) {
-          qualityLimitationReason = 'bandwidth';
-        }
-      }
-
-      if (phase.name === 'impairment' && caseDef.group === 'jitter_sweep') {
-        if ((phase.network.jitter ?? 0) >= 40) {
-          jitterMs = Math.max(jitterMs, 32);
-        }
-      }
-
-      return {
-        name: phase.name,
-        durationMs: phase.durationMs,
-        sendCeilingBps,
-        lossRate: condition.lossRate,
-        rttMs,
-        jitterMs,
-        qualityLimitationReason,
-      };
-    }),
-  };
-}
-
 async function runPhase(config, durationMs) {
   if (Object.keys(config).length > 0) {
     applyNetemConfig(config);
@@ -192,7 +121,6 @@ async function runCase(caseDef) {
     impairmentMs: scaleDuration(caseDef.impairmentMs, 20000),
     recoveryMs: scaleDuration(caseDef.recoveryMs, 30000),
   };
-  const matrixTestProfile = buildMatrixTestProfile(caseDef, durations);
   const result = {
     runner: 'cpp_client',
     caseId: caseDef.caseId,
@@ -209,10 +137,6 @@ async function runCase(caseDef) {
       roomId,
       peerId,
       warmupMs: CPP_CLIENT_HARNESS_WARMUP_MS,
-      extraEnv: {
-        QOS_TEST_MATRIX_PROFILE: JSON.stringify(matrixTestProfile),
-        QOS_TEST_MATRIX_LOCAL_ONLY: '1',
-      },
     });
 
     const baselineNetwork = getPhaseNetwork(caseDef, 'baseline');
@@ -323,7 +247,6 @@ async function runCase(caseDef) {
     result.actionTypes = actionTypes;
     result.trace = trace;
     result.samples = samples;
-    result.testProfile = matrixTestProfile;
     result.verdict = {
       passed: evaluation.passed,
       reason: evaluation.reason,

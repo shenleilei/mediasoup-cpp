@@ -11,7 +11,7 @@ using namespace qos;
 
 namespace {
 
-RawSenderSnapshot MakeSnapshot(
+CanonicalTransportSnapshot MakeSnapshot(
 	int64_t timestampMs = 1000,
 	uint64_t bytesSent = 0,
 	uint64_t packetsSent = 0,
@@ -21,7 +21,7 @@ RawSenderSnapshot MakeSnapshot(
 	double jitterMs = 8,
 	QualityLimitationReason reason = QualityLimitationReason::None)
 {
-	RawSenderSnapshot snapshot;
+	CanonicalTransportSnapshot snapshot;
 	snapshot.timestampMs = timestampMs;
 	snapshot.trackId = "video";
 	snapshot.producerId = "producer";
@@ -154,9 +154,9 @@ TEST(ClientQosSignalsTest, ClassifyReasonPrioritizesOverrideManualCpuAndNetwork)
 }
 
 TEST(ClientQosSignalsTest, DeriveSignalsComputesDeltasRatesEwmaFlagsAndReason) {
-	RawSenderSnapshot previous = MakeSnapshot(1000, 1000, 100, 10, 800000, 100, 8);
+	CanonicalTransportSnapshot previous = MakeSnapshot(1000, 1000, 100, 10, 800000, 100, 8);
 	previous.retransmittedPacketsSent = 4;
-	RawSenderSnapshot current = MakeSnapshot(2000, 21000, 220, 30, 1000000, 300, 20, QualityLimitationReason::Bandwidth);
+	CanonicalTransportSnapshot current = MakeSnapshot(2000, 21000, 220, 30, 1000000, 300, 20, QualityLimitationReason::Bandwidth);
 	current.retransmittedPacketsSent = 10;
 
 	DerivedSignals previousSignals;
@@ -190,8 +190,8 @@ TEST(ClientQosSignalsTest, DeriveSignalsComputesDeltasRatesEwmaFlagsAndReason) {
 }
 
 TEST(ClientQosSignalsTest, DeriveSignalsSupportsCpuReasonWhenEnoughSamples) {
-	RawSenderSnapshot current = MakeSnapshot(2000, 10000, 100, 0, 900000, 80, 8, QualityLimitationReason::Cpu);
-	RawSenderSnapshot previous = MakeSnapshot(1000, 1000, 0, 0);
+	CanonicalTransportSnapshot current = MakeSnapshot(2000, 10000, 100, 0, 900000, 80, 8, QualityLimitationReason::Cpu);
+	CanonicalTransportSnapshot previous = MakeSnapshot(1000, 1000, 0, 0);
 
 	DeriveContext context;
 	context.cpuSampleCount = 3;
@@ -203,8 +203,8 @@ TEST(ClientQosSignalsTest, DeriveSignalsSupportsCpuReasonWhenEnoughSamples) {
 }
 
 TEST(ClientQosSignalsTest, DeriveSignalsIgnoresBandwidthReasonWhenUtilizationIsStillHealthy) {
-	RawSenderSnapshot previous = MakeSnapshot(1000, 1000, 100, 0);
-	RawSenderSnapshot current = MakeSnapshot(2000, 86000, 220, 0, 800000, 80, 8, QualityLimitationReason::Bandwidth);
+	CanonicalTransportSnapshot previous = MakeSnapshot(1000, 1000, 100, 0);
+	CanonicalTransportSnapshot current = MakeSnapshot(2000, 86000, 220, 0, 800000, 80, 8, QualityLimitationReason::Bandwidth);
 
 	auto derived = deriveSignals(current, &previous, nullptr);
 
@@ -213,8 +213,8 @@ TEST(ClientQosSignalsTest, DeriveSignalsIgnoresBandwidthReasonWhenUtilizationIsS
 }
 
 TEST(ClientQosSignalsTest, DeriveSignalsIgnoresBandwidthReasonAtModerateUtilization) {
-	RawSenderSnapshot previous = MakeSnapshot(1000, 1000, 100, 0);
-	RawSenderSnapshot current = MakeSnapshot(2000, 91000, 220, 0, 1000000, 80, 8, QualityLimitationReason::Bandwidth);
+	CanonicalTransportSnapshot previous = MakeSnapshot(1000, 1000, 100, 0);
+	CanonicalTransportSnapshot current = MakeSnapshot(2000, 91000, 220, 0, 1000000, 80, 8, QualityLimitationReason::Bandwidth);
 
 	auto derived = deriveSignals(current, &previous, nullptr);
 
@@ -224,8 +224,8 @@ TEST(ClientQosSignalsTest, DeriveSignalsIgnoresBandwidthReasonAtModerateUtilizat
 }
 
 TEST(ClientQosSignalsTest, ReusesPreviousTransportMetricsWhenCurrentSnapshotOmitsThem) {
-	RawSenderSnapshot previous = MakeSnapshot(1000, 10000, 150, 9, 550000, 120, 10);
-	RawSenderSnapshot current = MakeSnapshot(2000, 18000, 210, 13, 550000, -1, -1);
+	CanonicalTransportSnapshot previous = MakeSnapshot(1000, 10000, 150, 9, 550000, 120, 10);
+	CanonicalTransportSnapshot current = MakeSnapshot(2000, 18000, 210, 13, 550000, -1, -1);
 
 	DerivedSignals previousSignals;
 	previousSignals.lossEwma = 0.05;
@@ -246,9 +246,9 @@ TEST(ClientQosSignalsTest, ReusesPreviousTransportMetricsWhenCurrentSnapshotOmit
 }
 
 TEST(ClientQosSignalsTest, DeriveSignalsGuardsMissingCountersAndNegativeDeltas) {
-	RawSenderSnapshot previous = MakeSnapshot(2000, 5000, 100, 10);
+	CanonicalTransportSnapshot previous = MakeSnapshot(2000, 5000, 100, 10);
 	previous.retransmittedPacketsSent = 5;
-	RawSenderSnapshot current = MakeSnapshot(3000, 4000, 50, 5, 0, 80, 8);
+	CanonicalTransportSnapshot current = MakeSnapshot(3000, 4000, 50, 5, 0, 80, 8);
 	current.retransmittedPacketsSent = 1;
 	current.configuredBitrateBps = 0;
 
@@ -258,6 +258,73 @@ TEST(ClientQosSignalsTest, DeriveSignalsGuardsMissingCountersAndNegativeDeltas) 
 	EXPECT_EQ(derived.packetsSentDelta, 0u);
 	EXPECT_EQ(derived.packetsLostDelta, 0u);
 	EXPECT_EQ(derived.retransmittedPacketsSentDelta, 0u);
+}
+
+TEST(ClientQosSignalsTest, DeriveSignalsTreatsSenderBandwidthPressureAsBandwidthLimited) {
+	CanonicalTransportSnapshot previous = MakeSnapshot(1000, 1000, 100, 0);
+	CanonicalTransportSnapshot current = MakeSnapshot(2000, 85000, 220, 0, 900000, 40, 6);
+	current.senderPressureState = SenderPressureState::Congested;
+
+	auto derived = deriveSignals(current, &previous, nullptr);
+
+	EXPECT_TRUE(derived.bandwidthLimited);
+	EXPECT_EQ(derived.reason, Reason::Network);
+}
+
+TEST(ClientQosSignalsTest, DeriveSignalsTreatsSenderPressureWarningAsNetworkWithoutBandwidthLimit) {
+	CanonicalTransportSnapshot previous = MakeSnapshot(1000, 1000, 100, 0);
+	CanonicalTransportSnapshot current = MakeSnapshot(2000, 85000, 220, 0, 900000, 40, 6);
+	current.senderPressureState = SenderPressureState::Warning;
+
+	auto derived = deriveSignals(current, &previous, nullptr);
+
+	EXPECT_EQ(derived.senderPressureState, SenderPressureState::Warning);
+	EXPECT_FALSE(derived.bandwidthLimited);
+	EXPECT_EQ(derived.reason, Reason::Network);
+}
+
+TEST(ClientQosProtocolTest, SerializeSnapshotIncludesSenderTransportParityFields) {
+	CanonicalTransportSnapshot current = MakeSnapshot(2000, 85000, 220, 0, 900000, 80, 9);
+	current.senderTransportDelayMs = 140;
+	current.senderTransportJitterMs = 26;
+	current.senderLimitationReason = QualityLimitationReason::Bandwidth;
+
+	PeerTrackState track;
+	track.trackId = "video";
+	track.producerId = "producer";
+	track.kind = TrackKind::Video;
+	track.source = Source::Camera;
+	track.state = State::Stable;
+	track.quality = Quality::Excellent;
+	track.level = 0;
+
+	auto snapshot = serializeSnapshot(
+		1,
+		1234,
+		Quality::Excellent,
+		false,
+		{track},
+		{},
+		{},
+		{{"video", current}},
+		{});
+
+	EXPECT_DOUBLE_EQ(snapshot["tracks"][0]["signals"]["senderTransportDelayMs"].get<double>(), 140.0);
+	EXPECT_DOUBLE_EQ(snapshot["tracks"][0]["signals"]["senderTransportJitterMs"].get<double>(), 26.0);
+	EXPECT_EQ(snapshot["tracks"][0]["signals"]["senderLimitationReason"], "bandwidth");
+}
+
+TEST(ClientQosSignalsTest, DeriveSignalsTreatsSenderLimitationReasonBandwidthLikeLocalEquivalent) {
+	CanonicalTransportSnapshot previous = MakeSnapshot(1000, 1000, 100, 0);
+	CanonicalTransportSnapshot current = MakeSnapshot(2000, 41000, 220, 0, 900000, 40, 6);
+	current.senderLimitationReason = QualityLimitationReason::Bandwidth;
+
+	auto derived = deriveSignals(current, &previous, nullptr);
+
+	EXPECT_LT(derived.bitrateUtilization, 0.65);
+	EXPECT_FALSE(derived.bandwidthLimited);
+	EXPECT_EQ(derived.senderLimitationReason, QualityLimitationReason::Bandwidth);
+	EXPECT_EQ(derived.reason, Reason::Network);
 }
 
 TEST(ClientQosStateMachineTest, StableTransitionsToEarlyWarningAfterTwoWarningSamples) {
@@ -274,6 +341,25 @@ TEST(ClientQosStateMachineTest, StableTransitionsToEarlyWarningAfterTwoWarningSa
 	auto second = evaluateStateTransition(first.context, warningSignals, profile, 2000);
 	EXPECT_EQ(second.context.state, State::EarlyWarning);
 	EXPECT_TRUE(second.transitioned);
+}
+
+TEST(ClientQosStateMachineTest, SenderPressureWarningTriggersEarlyWarningWithoutCongestedSignal) {
+	auto profile = makeCameraProfile();
+	auto context = createInitialQosStateMachineContext(0);
+	auto warningSignals = MakeSignals();
+	warningSignals.senderPressureState = SenderPressureState::Warning;
+
+	auto first = evaluateStateTransition(context, warningSignals, profile, 1000);
+	EXPECT_EQ(first.context.state, State::Stable);
+	EXPECT_FALSE(first.transitioned);
+
+	auto second = evaluateStateTransition(first.context, warningSignals, profile, 2000);
+	EXPECT_EQ(second.context.state, State::EarlyWarning);
+	EXPECT_TRUE(second.transitioned);
+
+	auto third = evaluateStateTransition(second.context, warningSignals, profile, 3000);
+	EXPECT_EQ(third.context.state, State::EarlyWarning);
+	EXPECT_FALSE(third.transitioned);
 }
 
 TEST(ClientQosStateMachineTest, StableStaysStableForLowUtilizationAloneWhenNetworkSignalsAreHealthy) {
@@ -930,10 +1016,13 @@ TEST(ClientQosProtocolTest, SerializeSnapshotIncludesServerCompatibleTrackFields
 	lastAction.type = ActionType::SetEncodingParameters;
 	lastAction.level = 1;
 
-	RawSenderSnapshot raw = MakeSnapshot(2000, 21000, 220, 30, 1000000, 300, 20, QualityLimitationReason::Bandwidth);
+	CanonicalTransportSnapshot raw = MakeSnapshot(2000, 21000, 220, 30, 1000000, 300, 20, QualityLimitationReason::Bandwidth);
 	raw.frameWidth = 640;
 	raw.frameHeight = 360;
 	raw.framesPerSecond = 24.0;
+	raw.senderTransportDelayMs = 180.0;
+	raw.senderTransportJitterMs = 35.0;
+	raw.senderLimitationReason = QualityLimitationReason::Bandwidth;
 
 	auto snapshot = serializeSnapshot(
 		7,
@@ -960,6 +1049,10 @@ TEST(ClientQosProtocolTest, SerializeSnapshotIncludesServerCompatibleTrackFields
 	EXPECT_EQ(serializedTrack["signals"]["frameHeight"], 360);
 	EXPECT_DOUBLE_EQ(serializedTrack["signals"]["framesPerSecond"].get<double>(), 24.0);
 	EXPECT_EQ(serializedTrack["signals"]["qualityLimitationReason"], "bandwidth");
+	EXPECT_DOUBLE_EQ(serializedTrack["signals"]["senderTransportDelayMs"].get<double>(), 180.0);
+	EXPECT_DOUBLE_EQ(serializedTrack["signals"]["senderTransportJitterMs"].get<double>(), 35.0);
+	EXPECT_EQ(serializedTrack["signals"]["senderLimitationReason"], "bandwidth");
+	EXPECT_EQ(serializedTrack["signals"]["senderPressureState"], "none");
 	EXPECT_FALSE(serializedTrack["lastAction"]["applied"].get<bool>());
 	EXPECT_EQ(snapshot["peerState"]["mode"], "audio-video");
 }
@@ -1156,6 +1249,7 @@ TEST(ClientQosControllerTest, WarmupSamplesDelayFirstReactiveAction) {
 	options.trackId = "video";
 	options.producerId = "producer";
 	options.initialLevel = 0;
+	options.warmupSamples = 5;
 	options.actionSink = [&](const PlannedAction& action) {
 		appliedActions.push_back(action);
 		return true;
@@ -1184,7 +1278,7 @@ TEST(ClientQosControllerTest, WarmupSamplesDelayFirstReactiveAction) {
 	EXPECT_EQ(controller.currentState(), State::EarlyWarning);
 }
 
-TEST(ClientQosControllerTest, CanDegradeAfterTwoWarningSamplesWhenWarmupDisabled) {
+TEST(ClientQosControllerTest, DefaultControllerCanDegradeAfterTwoWarningSamples) {
 	std::vector<PlannedAction> appliedActions;
 	int64_t monotonicNowMs = 0;
 	PublisherQosController::Options options;
@@ -1192,7 +1286,6 @@ TEST(ClientQosControllerTest, CanDegradeAfterTwoWarningSamplesWhenWarmupDisabled
 	options.trackId = "video";
 	options.producerId = "producer";
 	options.initialLevel = 0;
-	options.warmupSamples = 0;
 	options.monotonicNowMs = [&]() { return monotonicNowMs; };
 	options.actionSink = [&](const PlannedAction& action) {
 		appliedActions.push_back(action);
@@ -1511,38 +1604,6 @@ TEST(ClientQosControllerTest, SnapshotUsesVideoOnlyModeWhenPeerHasNoAudioTrack) 
 
 	ASSERT_FALSE(snapshots.empty());
 	EXPECT_EQ(snapshots.back()["peerState"]["mode"], "video-only");
-}
-
-TEST(ClientQosControllerTest, PrimeSnapshotBaselineResetsLossDeltaAcrossSourceSwitch) {
-	PublisherQosController::Options options;
-	options.warmupSamples = 0;
-	options.actionSink = [](const PlannedAction&) {
-		return true;
-	};
-
-	PublisherQosController controller(options);
-
-	controller.onSample(MakeSnapshot(1000, 10000, 1000, 10));
-	controller.onSample(MakeSnapshot(2000, 20000, 2000, 20));
-
-	auto beforeSwitch = controller.lastSignals();
-	ASSERT_TRUE(beforeSwitch.has_value());
-	EXPECT_EQ(beforeSwitch->packetsLostDelta, 10u);
-
-	auto switchedSnapshot = MakeSnapshot(3000, 30000, 3000, 580);
-	controller.primeSnapshotBaseline(switchedSnapshot);
-	controller.onSample(switchedSnapshot);
-
-	auto switchedSignals = controller.lastSignals();
-	ASSERT_TRUE(switchedSignals.has_value());
-	EXPECT_EQ(switchedSignals->packetsLostDelta, 0u);
-	EXPECT_DOUBLE_EQ(switchedSignals->lossRate, 0.0);
-
-	controller.onSample(MakeSnapshot(4000, 40000, 4000, 585));
-
-	auto afterSwitch = controller.lastSignals();
-	ASSERT_TRUE(afterSwitch.has_value());
-	EXPECT_EQ(afterSwitch->packetsLostDelta, 5u);
 }
 
 TEST(ClientQosControllerTest, OverrideClearRemovesMatchingOverridesByReasonPrefix) {

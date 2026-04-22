@@ -11,6 +11,8 @@
 #include <string>
 #include <vector>
 
+#include "qos/SenderPressureState.h"
+
 namespace mt {
 
 // ═══════════════════════════════════════════════════════════
@@ -105,6 +107,9 @@ struct SenderStatsSnapshot {
 	uint32_t queuedFreshVideoPackets = 0;
 	uint32_t queuedAudioPackets = 0;
 	uint32_t queuedRetransmissionPackets = 0;
+	double senderTransportDelayMs = -1.0;
+	double senderTransportJitterMs = -1.0;
+	qos::SenderPressureState senderPressureState = qos::SenderPressureState::None;
 };
 
 // ═══════════════════════════════════════════════════════════

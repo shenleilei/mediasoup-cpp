@@ -75,9 +75,19 @@ public:
 		return congestionDetector_.GetCongestionState();
 	}
 
+	CongestionReason GetCongestionReason() const
+	{
+		return congestionDetector_.GetCongestionReason();
+	}
+
 	int64_t EstimatedAvailableChannelCapacityBps() const
 	{
 		return congestionDetector_.EstimatedAvailableChannelCapacityBps();
+	}
+
+	TransportParityMetrics GetTransportParityMetrics() const
+	{
+		return congestionDetector_.GetTransportParityMetrics();
 	}
 
 	bool CanProbe() const { return congestionDetector_.CanProbe(); }

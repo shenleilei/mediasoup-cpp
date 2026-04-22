@@ -69,15 +69,6 @@ public:
 private:
 	// ─── Shared helpers ───────────────────────────────────
 
-	static std::optional<uint32_t> loadOptionalTrackIndexEnv(const char* name) {
-		const char* raw = std::getenv(name);
-		if (!raw || std::strlen(raw) == 0) return std::nullopt;
-		char* end = nullptr;
-		long parsed = std::strtol(raw, &end, 10);
-		if (!end || *end != '\0' || parsed < 0) return std::nullopt;
-		return static_cast<uint32_t>(parsed);
-	}
-
 	static int scaledDim(int src, double scale) {
 		int s = (int)(src / std::max(1.0, scale));
 		if (s < 2) s = 2;
@@ -184,13 +175,6 @@ private:
 			auto& le = *latestEncoding;
 			if (le.configGeneration != configGeneration_) {
 				sendAck(le.type, false, le.commandId, "stale-config-generation");
-				return;
-			}
-			if (!rejectedFirstSetEncoding_
-				&& rejectFirstSetEncodingTrackIndex_.has_value()
-				&& *rejectFirstSetEncodingTrackIndex_ == cfg_.trackIndex) {
-				rejectedFirstSetEncoding_ = true;
-				sendAck(le.type, false, le.commandId, "test-reject-first-set-encoding");
 				return;
 			}
 			int w = scaledDim(sourceWidth_, le.scaleResolutionDownBy);
@@ -480,7 +464,4 @@ private:
 	bool paused_ = false;
 	bool encoderRecreated_ = false;
 	uint64_t configGeneration_ = 0;
-	std::optional<uint32_t> rejectFirstSetEncodingTrackIndex_ =
-		loadOptionalTrackIndexEnv("QOS_TEST_REJECT_FIRST_SET_ENCODING_TRACK_INDEX");
-	bool rejectedFirstSetEncoding_ = false;
 };
