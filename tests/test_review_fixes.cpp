@@ -3,6 +3,7 @@
 #include "RoomManager.h"
 #include "Channel.h"
 #include "Constants.h"
+#include "RtpStreamStatsJson.h"
 #include "message_generated.h"
 #include "MainBootstrap.h"
 #include "notification_generated.h"
@@ -413,6 +414,50 @@ TEST(RuntimeOptionParsersTest, RejectsInvalidDoubleValues) {
 	EXPECT_FALSE(TryParseDoubleArgValue("1.5ms", parsed));
 	EXPECT_TRUE(TryParseDoubleArgValue("1.5", parsed));
 	EXPECT_DOUBLE_EQ(parsed, 1.5);
+}
+
+TEST(RtpStreamStatsJsonTest, ConsumerSendStatsPreservesNegativePacketsLost) {
+	flatbuffers::FlatBufferBuilder builder;
+
+	auto mimeType = builder.CreateString("video/VP8");
+	auto basePayload = FBS::RtpStream::CreateBaseStats(
+		builder,
+		1234,
+		0x01020304,
+		FBS::RtpParameters::MediaKind::VIDEO,
+		mimeType,
+		-1,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		10,
+		0,
+		flatbuffers::nullopt,
+		0,
+		0.0f);
+	auto baseStats = FBS::RtpStream::CreateStats(
+		builder,
+		FBS::RtpStream::StatsData::BaseStats,
+		basePayload.Union());
+	auto sendPayload = FBS::RtpStream::CreateSendStats(builder, baseStats, 7, 700, 42);
+	auto stats = FBS::RtpStream::CreateStats(
+		builder,
+		FBS::RtpStream::StatsData::SendStats,
+		sendPayload.Union());
+	builder.Finish(stats);
+
+	auto* root = flatbuffers::GetRoot<FBS::RtpStream::Stats>(builder.GetBufferPointer());
+	ASSERT_NE(root, nullptr);
+
+	const auto entry = ConsumerSendStatsToJson(root);
+	EXPECT_EQ(entry.value("type", ""), "outbound-rtp");
+	EXPECT_EQ(entry.value("packetsLost", 0), -1);
+	EXPECT_EQ(entry.value("packetCount", 0), 7);
 }
 
 TEST(RuntimeOptionParsersTest, FinalizeRuntimeOptionsRejectsRecordedLoadError) {

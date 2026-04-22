@@ -501,7 +501,7 @@ Dependency reference:
   - `libswscale`
   - `libavdevice`
 - hiredis
-- `curl` and `tar` (used by `setup.sh` to fetch and unpack `mediasoup-worker`)
+- Python 3.8+ with `pip` (used by `setup.sh` to build the vendored `mediasoup-worker`)
 
 Notes:
 

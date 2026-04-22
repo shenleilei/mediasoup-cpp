@@ -15,7 +15,7 @@ build-*/
 # Generated files in the repository root (can regenerate from fbs/)
 /generated/
 
-# mediasoup-worker binary (download separately)
+# mediasoup-worker runtime entrypoint (created by setup.sh)
 mediasoup-worker
 
 # IDE / tools

@@ -153,6 +153,8 @@ sudo dnf install -y \
 - 初始化这些 submodule
 - 构建 `flatc`
 - 生成 `generated/*_generated.h`
+- 构建 vendored `mediasoup-worker`
+- 在项目根目录创建 `./mediasoup-worker` 链接到 worker 构建产物
 
 ## 5. 运行时依赖
 
@@ -162,7 +164,19 @@ sudo dnf install -y \
 
 - `./mediasoup-worker`
 
-`setup.sh` 会按当前内核主版本下载对应的 `3.14.6` 预编译包。
+`setup.sh` 不再下载预编译包，而是从 vendored 源码：
+
+- `src/mediasoup-worker-src`
+
+构建 worker，并在项目根目录创建：
+
+- `./mediasoup-worker -> src/mediasoup-worker-src/worker/out/Release/mediasoup-worker`
+
+当前默认 worker 构建依赖：
+
+- Python 3.8+（或通过 `MEDIASOUP_WORKER_PYTHON` 指定）
+- `pip`
+- `invoke`（`setup.sh` 会优先从 Aliyun PyPI 镜像安装，缺失时回退到 upstream PyPI）
 
 ### 5.2 Redis
 

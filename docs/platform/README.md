@@ -2,7 +2,7 @@
 
 ## 架构概述
 
-基于 mediasoup C++ worker 的 SFU 服务端，Room-first 设计。控制面用 C++17 实现，媒体面复用 mediasoup-worker 预编译二进制（v3.14.6）。
+基于 mediasoup C++ worker 的 SFU 服务端，Room-first 设计。控制面用 C++17 实现，媒体面复用 vendored upstream `mediasoup-worker`，默认由 `setup.sh` 构建并在项目根目录暴露为 `./mediasoup-worker`。
 
 仓库内同时维护两条客户端相关路径：
 
@@ -10,6 +10,8 @@
 - Linux `PlainTransport C++ client` 路径
 
 如果要理解 Linux client 本身怎么工作，请继续看 [linux-client-architecture_cn.md](../qos/plain-client/architecture_cn.md)。
+
+如果要评估 worker 升级、backport 和本地 patch 延续，请看 [mediasoup-worker-upgrade-assessment_cn.md](./mediasoup-worker-upgrade-assessment_cn.md)。
 
 ## 线程模型
 

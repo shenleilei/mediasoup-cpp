@@ -1,21 +1,84 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo "=== mediasoup-cpp setup ==="
 
+pick_worker_python() {
+  local candidates=()
+
+  if [ -n "${MEDIASOUP_WORKER_PYTHON:-}" ]; then
+    candidates+=("${MEDIASOUP_WORKER_PYTHON}")
+  fi
+
+  candidates+=(python3.12 python3.11 python3.10 python3.9 python3.8 python3)
+
+  for candidate in "${candidates[@]}"; do
+    local candidate_path=""
+
+    if [ -x "$candidate" ]; then
+      candidate_path="$candidate"
+    elif command -v "$candidate" &>/dev/null; then
+      candidate_path="$(command -v "$candidate")"
+    else
+      continue
+    fi
+
+    local version
+    version="$("$candidate_path" -c 'import sys; print(f"{sys.version_info[0]} {sys.version_info[1]}")')"
+    local major minor
+    read -r major minor <<< "$version"
+
+    if [ "$major" -gt 3 ] || { [ "$major" -eq 3 ] && [ "$minor" -ge 8 ]; }; then
+      printf '%s\n' "$candidate_path"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+install_worker_invoke() {
+  local worker_python="$1"
+  local invoke_target_dir="$2"
+  local pythonpath="${invoke_target_dir}${PYTHONPATH:+:${PYTHONPATH}}"
+
+  if PYTHONPATH="$pythonpath" "$worker_python" -c 'import invoke' &>/dev/null; then
+    return 0
+  fi
+
+  mkdir -p "$invoke_target_dir"
+
+  if ! "$worker_python" -m pip install --upgrade --no-user --target "$invoke_target_dir" invoke -i https://mirrors.aliyun.com/pypi/simple; then
+    echo "  Aliyun PyPI mirror missing invoke or failed; falling back to upstream PyPI"
+    "$worker_python" -m pip install --upgrade --no-user --target "$invoke_target_dir" invoke -i https://pypi.org/simple
+  fi
+}
+
 # 1. Check system dependencies
 echo "[1/5] Checking system dependencies..."
-for cmd in cmake g++ pkg-config curl tar git; do
+for cmd in cmake g++ pkg-config git; do
   if ! command -v $cmd &>/dev/null; then
     echo "ERROR: $cmd not found. Install build essentials first."
-    echo "  Ubuntu/Debian: apt install build-essential cmake pkg-config git curl tar libssl-dev zlib1g-dev"
-    echo "  Fedora/RHEL:   dnf install gcc-c++ cmake pkgconf-pkg-config git curl tar openssl-devel zlib-devel"
+    echo "  Ubuntu/Debian: apt install build-essential cmake pkg-config git libssl-dev zlib1g-dev"
+    echo "  Fedora/RHEL:   dnf install gcc-c++ cmake pkgconf-pkg-config git openssl-devel zlib-devel"
     exit 1
   fi
 done
+
+if ! WORKER_PYTHON="$(pick_worker_python)"; then
+  echo "ERROR: no Python 3.8+ interpreter found for building mediasoup-worker."
+  echo "  Set MEDIASOUP_WORKER_PYTHON=/path/to/python3.8+ if needed."
+  exit 1
+fi
+
+if ! "$WORKER_PYTHON" -m pip --version &>/dev/null; then
+  echo "ERROR: pip is not available for $WORKER_PYTHON."
+  echo "  Install python3-pip for the selected Python interpreter."
+  exit 1
+fi
 
 missing_pkgs=()
 required_pkg_config_libs=(
@@ -49,6 +112,7 @@ if ! command -v node &>/dev/null; then
   echo "NOTE: node not found — browser / QoS harness will not be available"
 fi
 echo "  OK"
+echo "  Worker build Python: $WORKER_PYTHON"
 
 # 2. Init git submodules (if cloned from git)
 echo "[2/5] Setting up third-party dependencies..."
@@ -89,24 +153,16 @@ done
 cd ..
 echo "  Generated $(ls generated/*_generated.h | wc -l) header files"
 
-# 4. Download mediasoup-worker binary
-echo "[4/5] Checking mediasoup-worker binary..."
-if [ ! -x "mediasoup-worker" ]; then
-  echo "  Downloading mediasoup-worker v3.14.6..."
-  KERNEL_MAJOR=$(uname -r | cut -d. -f1)
-  if [ "$KERNEL_MAJOR" -ge 6 ]; then
-    WORKER_URL="https://github.com/versatica/mediasoup/releases/download/3.14.6/mediasoup-worker-3.14.6-linux-x64-kernel6.tgz"
-  else
-    WORKER_URL="https://github.com/versatica/mediasoup/releases/download/3.14.6/mediasoup-worker-3.14.6-linux-x64-kernel5.tgz"
-  fi
-  curl -L -o /tmp/mediasoup-worker.tgz "$WORKER_URL"
-  tar xzf /tmp/mediasoup-worker.tgz
-  chmod +x mediasoup-worker
-  rm -f /tmp/mediasoup-worker.tgz
-  echo "  Downloaded and extracted"
-else
-  echo "  Already exists"
-fi
+# 4. Build vendored mediasoup-worker and expose it at ./mediasoup-worker
+echo "[4/5] Building vendored mediasoup-worker..."
+WORKER_INVOKE_DIR="$SCRIPT_DIR/src/mediasoup-worker-src/worker/out/pip_setup_invoke"
+install_worker_invoke "$WORKER_PYTHON" "$WORKER_INVOKE_DIR"
+PYTHONPATH="$WORKER_INVOKE_DIR${PYTHONPATH:+:${PYTHONPATH}}" \
+PYTHON="$WORKER_PYTHON" \
+  "$WORKER_PYTHON" -m invoke -r src/mediasoup-worker-src/worker mediasoup-worker
+rm -f mediasoup-worker
+ln -s src/mediasoup-worker-src/worker/out/Release/mediasoup-worker mediasoup-worker
+echo "  Built $(readlink -f mediasoup-worker)"
 
 # 5. Build
 echo "[5/5] Building mediasoup-cpp SFU + plain-client + tests..."
