@@ -6,7 +6,10 @@
 - It SHALL continue running remaining selected groups after one selected group fails.
 - It SHALL exit non-zero after the run if any selected group failed.
 - It SHALL cover every C++ gtest target defined in `CMakeLists.txt`.
+- It SHALL also cover vendored `mediasoup-worker` regression cases through the worker's own test entrypoint.
 - It SHALL also cover the full QoS regression surface defined by `scripts/run_qos_tests.sh`.
+- Its `non-qos` alias SHALL include the vendored worker test group.
+- When it runs the vendored worker test group, it SHALL invoke a stable vendored worker regression subset under constrained parallelism so the worker test binary build uses a single CPU core.
 - After an actual test execution, it SHALL rewrite `docs/full-regression-test-results.md`.
 - After an actual QoS-inclusive execution, it SHALL refresh the root `README.md` QoS matrix status block from the latest browser and plain-client generated matrix JSON artifacts when those artifacts are available.
 - When its selected groups delegate to `scripts/run_qos_tests.sh`, the QoS-specific reports owned by that script SHALL be refreshed according to that script's contract.

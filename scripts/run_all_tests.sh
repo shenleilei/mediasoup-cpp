@@ -14,6 +14,7 @@ ALL_GROUPS=(
   qos
   topology
   threaded
+  worker
 )
 ALIAS_GROUPS=(
   non-qos
@@ -133,7 +134,8 @@ Groups:
   qos          full QoS regression delegated to scripts/run_qos_tests.sh
   topology     topology + multinode binaries
   threaded     compatibility alias for threaded QoS regression only
-  non-qos      alias for unit + integration + topology
+  worker       vendored mediasoup-worker Catch2 regression suite
+  non-qos      alias for unit + integration + topology + worker
 
 Notes:
   - This script is the full repository regression entry.
@@ -158,7 +160,7 @@ normalize_selected_groups() {
 
   for group in "${SELECTED_GROUPS[@]}"; do
     if [[ "$group" == "non-qos" ]]; then
-      for expanded_group in unit integration topology; do
+      for expanded_group in unit integration topology worker; do
         case " ${normalized[*]} " in
           *" $expanded_group "*) continue ;;
         esac
@@ -468,25 +470,106 @@ cleanup_test_ports() {
   sleep 1
 }
 
+append_unique_target() {
+  local target="$1"
+  local -n target_list_ref="$2"
+  local existing
+
+  for existing in "${target_list_ref[@]}"; do
+    [[ "$existing" == "$target" ]] && return 0
+  done
+
+  target_list_ref+=("$target")
+}
+
 build_targets() {
+  local -a build_targets=()
+
+  for group in "${SELECTED_GROUPS[@]}"; do
+    case "$group" in
+      unit)
+        append_unique_target mediasoup_tests build_targets
+        ;;
+      integration)
+        append_unique_target mediasoup-sfu build_targets
+        append_unique_target mediasoup_integration_tests build_targets
+        append_unique_target mediasoup_e2e_tests build_targets
+        append_unique_target mediasoup_stability_integration_tests build_targets
+        append_unique_target mediasoup_review_fix_tests build_targets
+        ;;
+      topology)
+        append_unique_target mediasoup-sfu build_targets
+        append_unique_target mediasoup_topology_tests build_targets
+        append_unique_target mediasoup_multinode_tests build_targets
+        ;;
+      qos|threaded|worker)
+        ;;
+      *)
+        echo "error: unsupported group in build_targets(): $group" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if ((${#build_targets[@]} == 0)); then
+    echo "==> no native prebuild targets required for selected groups: ${SELECTED_GROUPS[*]}"
+    return 0
+  fi
+
   log_system_snapshot "pre-build"
   echo "==> building full regression test targets"
-  cmake --build "$BUILD_DIR" -j"$JOBS" --target \
-    mediasoup-sfu \
-    mediasoup_tests \
-    mediasoup_qos_unit_tests \
-    mediasoup_integration_tests \
-    mediasoup_e2e_tests \
-    mediasoup_qos_integration_tests \
-    mediasoup_topology_tests \
-    mediasoup_stability_integration_tests \
-    mediasoup_multinode_tests \
-    mediasoup_review_fix_tests \
-    mediasoup_qos_accuracy_tests \
-    mediasoup_qos_recording_accuracy_tests \
-    mediasoup_thread_integration_tests
-  cmake --build "$CLIENT_BUILD_DIR" -j"$JOBS" --target plain-client
+  echo "==> selected native build targets: ${build_targets[*]}"
+  cmake --build "$BUILD_DIR" -j"$JOBS" --target "${build_targets[@]}"
   log_system_snapshot "post-build"
+}
+
+pick_worker_python() {
+  local candidates=()
+
+  if [[ -n "${MEDIASOUP_WORKER_PYTHON:-}" ]]; then
+    candidates+=("${MEDIASOUP_WORKER_PYTHON}")
+  fi
+
+  candidates+=(python3.12 python3.11 python3.10 python3.9 python3.8 python3)
+
+  local candidate candidate_path version major minor
+  for candidate in "${candidates[@]}"; do
+    candidate_path=""
+    if [[ -x "$candidate" ]]; then
+      candidate_path="$candidate"
+    elif command -v "$candidate" >/dev/null 2>&1; then
+      candidate_path="$(command -v "$candidate")"
+    else
+      continue
+    fi
+
+    version="$("$candidate_path" -c 'import sys; print(f"{sys.version_info[0]} {sys.version_info[1]}")')" || continue
+    read -r major minor <<< "$version"
+
+    if (( major > 3 || (major == 3 && minor >= 8) )); then
+      printf '%s\n' "$candidate_path"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+install_worker_invoke() {
+  local worker_python="$1"
+  local invoke_target_dir="$2"
+  local pythonpath="${invoke_target_dir}${PYTHONPATH:+:${PYTHONPATH}}"
+
+  if PYTHONPATH="$pythonpath" "$worker_python" -c 'import invoke' >/dev/null 2>&1; then
+    return 0
+  fi
+
+  mkdir -p "$invoke_target_dir"
+
+  if ! "$worker_python" -m pip install --upgrade --no-user --target "$invoke_target_dir" invoke -i https://mirrors.aliyun.com/pypi/simple; then
+    echo "warning: Aliyun PyPI mirror missing invoke or failed; falling back to upstream PyPI" >&2
+    "$worker_python" -m pip install --upgrade --no-user --target "$invoke_target_dir" invoke -i https://pypi.org/simple
+  fi
 }
 
 run_cmd() {
@@ -580,6 +663,44 @@ run_threaded() {
     "$ROOT_DIR/scripts/run_qos_tests.sh" cpp-threaded
 }
 
+run_worker() {
+  local worker_dir="$ROOT_DIR/src/mediasoup-worker-src/worker"
+  local invoke_dir="$worker_dir/out/pip_run_all_invoke"
+  local worker_python
+  local pythonpath
+  local worker_test_tags='[parser][rtcp][rr],[rtp][rtcp][nack]'
+
+  require_file "$worker_dir/meson.build" "worker:preflight:meson.build" || return 1
+
+  if ! worker_python="$(pick_worker_python)"; then
+    echo "error: no Python 3.8+ interpreter found for vendored worker tests" >&2
+    record_task_result "worker:preflight:python" "FAIL" "-"
+    return 1
+  fi
+
+  if ! "$worker_python" -m pip --version >/dev/null 2>&1; then
+    echo "error: pip is not available for $worker_python" >&2
+    record_task_result "worker:preflight:pip" "FAIL" "-"
+    return 1
+  fi
+
+  install_worker_invoke "$worker_python" "$invoke_dir" || {
+    record_task_result "worker:preflight:invoke" "FAIL" "-"
+    return 1
+  }
+
+  pythonpath="${invoke_dir}${PYTHONPATH:+:${PYTHONPATH}}"
+
+  run_cmd \
+    "worker:mediasoup-worker-test" \
+    env \
+      MEDIASOUP_TEST_TAGS="$worker_test_tags" \
+      PYTHONPATH="$pythonpath" \
+      PYTHON="$worker_python" \
+      taskset -c 0 \
+      "$worker_python" -m invoke -r "$worker_dir" test
+}
+
 run_group() {
   local group="$1"
   case "$group" in
@@ -588,6 +709,7 @@ run_group() {
     qos) run_qos ;;
     topology) run_topology ;;
     threaded) run_threaded ;;
+    worker) run_worker ;;
     *) echo "error: unknown group '$group'" >&2; return 1 ;;
   esac
 }

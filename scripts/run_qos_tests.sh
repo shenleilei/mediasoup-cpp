@@ -209,6 +209,7 @@ ensure_target_built() {
   local binary="$2"
   shift 2
   local sources=("$@")
+  local jobs_override=()
 
   require_file "$binary"
 
@@ -227,10 +228,14 @@ ensure_target_built() {
   done
 
   if ((rebuild)); then
+    if [[ "$target" == "mediasoup_thread_integration_tests" ]]; then
+      jobs_override=(-j1)
+    fi
+
     run_cmd \
       "build:$target" \
       --cwd "$ROOT_DIR" \
-      cmake --build "$BUILD_DIR" --target "$target"
+      cmake --build "$BUILD_DIR" "${jobs_override[@]}" --target "$target"
   fi
 }
 
