@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import {
   createLoopbackHarness,
   applyNetemConfig,
@@ -26,6 +27,7 @@ import {
 } from './scenario_catalog.mjs';
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
+const scriptPath = new URL(import.meta.url).pathname;
 const repoRoot = path.resolve(__dirname, '..', '..');
 const args = process.argv.slice(2);
 const caseArg = args.find(arg => arg.startsWith('--cases='));
@@ -33,11 +35,14 @@ const selectedCases = caseArg
   ? new Set(caseArg.replace('--cases=', '').split(',').map(id => id.trim()).filter(Boolean))
   : null;
 const includeExtended = args.includes('--include-extended');
+const childCaseJsonMode = args.includes('--child-case-json');
 const runType = getRunTypeForSelectedCases(selectedCases);
 const reportPaths = getReportSetPaths(repoRoot, runType);
 const outputPath = reportPaths.matrixJsonPath;
 
 const durationScale = Number(process.env.QOS_MATRIX_SPEED) || 1;
+const caseSettleMs = Number(process.env.QOS_MATRIX_CASE_SETTLE_MS) || 1000;
+const phaseSettleMs = Number(process.env.QOS_MATRIX_PHASE_SETTLE_MS) || 1000;
 
 function scaleDuration(ms, fallbackMs) {
   const raw = typeof ms === 'number' ? ms : fallbackMs;
@@ -287,6 +292,10 @@ async function runPhase(harness, phaseName, config, durationMs) {
     clearNetem();
   }
 
+  if (phaseSettleMs > 0) {
+    await sleep(phaseSettleMs);
+  }
+
   const runtimeStart = await harness.captureRuntimeSnapshot?.(`${phaseName}:start`);
   const startMs = await harness.nowMs();
   await sleep(durationMs);
@@ -432,6 +441,61 @@ async function runCase(caseDef) {
   }
 }
 
+function runCaseIsolated(caseDef) {
+  const childArgs = [
+    scriptPath,
+    `--cases=${caseDef.caseId}`,
+    '--child-case-json',
+  ];
+  if (includeExtended) {
+    childArgs.push('--include-extended');
+  }
+
+  const stdout = execFileSync(process.execPath, childArgs, {
+    cwd: repoRoot,
+    env: process.env,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'inherit'],
+    maxBuffer: 8 * 1024 * 1024,
+  });
+
+  const trimmed = stdout.trim();
+  if (!trimmed) {
+    throw new Error(`child matrix case ${caseDef.caseId} produced no JSON result`);
+  }
+
+  return JSON.parse(trimmed);
+}
+
+async function runChildCaseJson() {
+  const rawCases = loadScenarioCatalog();
+  const cases = filterScenarioCatalog(rawCases, {
+    selectedCaseIds: selectedCases,
+    includeExtended,
+  });
+
+  if (cases.length !== 1) {
+    throw new Error(`child-case-json mode requires exactly one case, got ${cases.length}`);
+  }
+
+  const caseDef = cases[0];
+  try {
+    const result = await runCase(caseDef);
+    process.stdout.write(`${JSON.stringify(result)}\n`);
+  } catch (error) {
+    const diagnostics = error.qosDiagnostics ?? null;
+    const result = {
+      caseId: caseDef.caseId,
+      group: caseDef.group,
+      priority: caseDef.priority,
+      error: error.message,
+      stack: error.stack,
+      diagnostics,
+    };
+    process.stdout.write(`${JSON.stringify(result)}\n`);
+  }
+}
+
 function buildSummary(results) {
   const executed = results.filter(result => !result.error);
   const failed = executed.filter(result => result.verdict?.passed !== true);
@@ -476,7 +540,7 @@ async function runMatrix() {
     for (let attempt = 1; attempt <= 2; attempt += 1) {
       try {
         console.error(`running case ${caseDef.caseId}${attempt > 1 ? ` (retry ${attempt})` : ''}`);
-        result = await runCase(caseDef);
+        result = runCaseIsolated(caseDef);
         break;
       } catch (error) {
         lastError = error;
@@ -516,6 +580,11 @@ async function runMatrix() {
         diagnostics: lastError.qosDiagnostics,
       });
     }
+
+    if (caseSettleMs > 0) {
+      clearNetem();
+      await sleep(caseSettleMs);
+    }
   }
 
   const report = {
@@ -547,7 +616,14 @@ async function runMatrix() {
   }
 }
 
-runMatrix().catch(error => {
-  console.error('matrix runner failed:', error);
-  process.exitCode = 1;
-});
+if (childCaseJsonMode) {
+  runChildCaseJson().catch(error => {
+    console.error('matrix child-case runner failed:', error);
+    process.exitCode = 1;
+  });
+} else {
+  runMatrix().catch(error => {
+    console.error('matrix runner failed:', error);
+    process.exitCode = 1;
+  });
+}

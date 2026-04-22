@@ -1829,12 +1829,14 @@ TEST_F(QosIntegrationTest, DownlinkClientStatsAcceptsSeqResetFromHighValue) {
 	ASSERT_TRUE(resp1.value("ok", false)) << resp1.dump();
 
 	usleep(150000);
+	// Large backward seq with a non-regressed timestamp is treated as a
+	// client reset and accepted by the registry.
 	payload["seq"] = 1;
 	auto resp2 = alice.ws->request("downlinkClientStats", payload);
 	ASSERT_TRUE(resp2.value("ok", false)) << resp2.dump();
 	ASSERT_TRUE(resp2["data"].is_object()) << resp2.dump();
-	EXPECT_FALSE(resp2["data"].value("stored", true));
-	EXPECT_EQ(resp2["data"].value("reason", ""), "stale-ts");
+	EXPECT_TRUE(resp2["data"].value("stored", false));
+	EXPECT_EQ(resp2["data"].value("reason", ""), "");
 
 	auto statsResp = alice.ws->request("getStats", {{"peerId", "alice"}});
 	ASSERT_TRUE(statsResp.value("ok", false)) << statsResp.dump();

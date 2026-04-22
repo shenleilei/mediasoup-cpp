@@ -646,6 +646,161 @@ test('controller accelerates the next recovery probe after a strong probe succes
     expect(actionExecutor.execute.mock.calls.some(call => call[0].type === 'exitAudioOnly')).toBe(true);
     expect(actionExecutor.execute.mock.calls.filter(call => call[0].type === 'setEncodingParameters').map(call => call[0].level)).toEqual([3, 2, 1]);
 });
+test('controller completes the stable L1 recovery tail quickly enough to restore L0', async () => {
+    const clock = new clock_1.ManualQosClock();
+    const healthySamples = [
+        createSnapshot(1000, {
+            bytesSent: 120000,
+            packetsSent: 120,
+            packetsLost: 0,
+            targetBitrateBps: 300000,
+            configuredBitrateBps: 900000,
+            roundTripTimeMs: 90,
+            jitterMs: 8,
+            qualityLimitationReason: 'none',
+        }),
+        createSnapshot(2000, {
+            bytesSent: 240000,
+            packetsSent: 240,
+            packetsLost: 0,
+            targetBitrateBps: 300000,
+            configuredBitrateBps: 900000,
+            roundTripTimeMs: 90,
+            jitterMs: 8,
+            qualityLimitationReason: 'none',
+        }),
+        createSnapshot(3000, {
+            bytesSent: 360000,
+            packetsSent: 360,
+            packetsLost: 0,
+            targetBitrateBps: 300000,
+            configuredBitrateBps: 900000,
+            roundTripTimeMs: 90,
+            jitterMs: 8,
+            qualityLimitationReason: 'none',
+        }),
+        createSnapshot(4000, {
+            bytesSent: 480000,
+            packetsSent: 480,
+            packetsLost: 0,
+            targetBitrateBps: 300000,
+            configuredBitrateBps: 900000,
+            roundTripTimeMs: 90,
+            jitterMs: 8,
+            qualityLimitationReason: 'none',
+        }),
+        createSnapshot(5000, {
+            bytesSent: 720000,
+            packetsSent: 600,
+            packetsLost: 0,
+            targetBitrateBps: 500000,
+            configuredBitrateBps: 900000,
+            roundTripTimeMs: 90,
+            jitterMs: 8,
+            qualityLimitationReason: 'none',
+        }),
+        createSnapshot(6000, {
+            bytesSent: 960000,
+            packetsSent: 720,
+            packetsLost: 0,
+            targetBitrateBps: 500000,
+            configuredBitrateBps: 900000,
+            roundTripTimeMs: 90,
+            jitterMs: 8,
+            qualityLimitationReason: 'none',
+        }),
+        createSnapshot(7000, {
+            bytesSent: 1260000,
+            packetsSent: 840,
+            packetsLost: 0,
+            targetBitrateBps: 700000,
+            configuredBitrateBps: 900000,
+            roundTripTimeMs: 90,
+            jitterMs: 8,
+            qualityLimitationReason: 'none',
+        }),
+        createSnapshot(8000, {
+            bytesSent: 1560000,
+            packetsSent: 960,
+            packetsLost: 0,
+            targetBitrateBps: 700000,
+            configuredBitrateBps: 900000,
+            roundTripTimeMs: 90,
+            jitterMs: 8,
+            qualityLimitationReason: 'none',
+        }),
+        createSnapshot(9000, {
+            bytesSent: 1920000,
+            packetsSent: 1080,
+            packetsLost: 0,
+            targetBitrateBps: 900000,
+            configuredBitrateBps: 900000,
+            roundTripTimeMs: 90,
+            jitterMs: 8,
+            qualityLimitationReason: 'none',
+        }),
+    ];
+    const statsProvider = {
+        getSnapshot: jest
+            .fn()
+            .mockResolvedValueOnce(healthySamples[0])
+            .mockResolvedValueOnce(healthySamples[1])
+            .mockResolvedValueOnce(healthySamples[2])
+            .mockResolvedValueOnce(healthySamples[3])
+            .mockResolvedValueOnce(healthySamples[4])
+            .mockResolvedValueOnce(healthySamples[5])
+            .mockResolvedValueOnce(healthySamples[6])
+            .mockResolvedValueOnce(healthySamples[7])
+            .mockResolvedValueOnce(healthySamples[8]),
+    };
+    const actionExecutor = {
+        execute: jest
+            .fn()
+            .mockResolvedValue(true),
+    };
+    const signalChannel = {
+        publishSnapshot: jest.fn(async () => undefined),
+    };
+    const controller = new controller_1.PublisherQosController({
+        clock,
+        profile: (0, profiles_1.getDefaultCameraProfile)(),
+        statsProvider,
+        actionExecutor,
+        signalChannel,
+        trackId: 'track-camera-main',
+        kind: 'video',
+        sampleIntervalMs: 1000,
+        snapshotIntervalMs: 1000,
+    });
+    controller.previousSnapshot = createSnapshot(0, {
+        bytesSent: 0,
+        packetsSent: 0,
+        packetsLost: 0,
+        targetBitrateBps: 300000,
+        configuredBitrateBps: 900000,
+        roundTripTimeMs: 90,
+        jitterMs: 8,
+        qualityLimitationReason: 'none',
+    });
+    controller.currentLevel = 4;
+    controller.inAudioOnlyMode = true;
+    controller.stateContext = {
+        state: 'recovering',
+        enteredAtMs: 0,
+        lastCongestedAtMs: 0,
+        lastRecoveryAtMs: 0,
+        consecutiveHealthySamples: 0,
+        consecutiveRecoverySamples: 0,
+        consecutiveWarningSamples: 0,
+        consecutiveCongestedSamples: 0,
+    };
+    for (let i = 0; i < healthySamples.length; i += 1) {
+        clock.advanceBy(1000);
+        await controller.sampleNow();
+    }
+    expect(controller.level).toBe(0);
+    expect(actionExecutor.execute.mock.calls.filter(call => call[0].type === 'setEncodingParameters').map(call => call[0].level)).toEqual([3, 2, 1, 0]);
+});
 test('controller probes stable upgrades before applying the next recovery step', async () => {
     const clock = new clock_1.ManualQosClock();
     const healthySamples = [
@@ -751,11 +906,6 @@ test('controller probes stable upgrades before applying the next recovery step',
     expect(actionExecutor.execute).toHaveBeenCalledTimes(1);
     clock.advanceBy(1000);
     await controller.sampleNow();
-    expect(controller.level).toBe(1);
-    expect(controller.getRuntimeSettings().probeActive).toBe(true);
-    expect(actionExecutor.execute).toHaveBeenCalledTimes(1);
-    clock.advanceBy(1000);
-    await controller.sampleNow();
     expect(controller.level).toBe(0);
     expect(controller.getRuntimeSettings().probeActive).toBe(true);
     expect(actionExecutor.execute).toHaveBeenCalledTimes(2);
@@ -763,6 +913,11 @@ test('controller probes stable upgrades before applying the next recovery step',
         type: 'setEncodingParameters',
         level: 0,
     });
+    clock.advanceBy(1000);
+    await controller.sampleNow();
+    expect(controller.level).toBe(0);
+    expect(controller.getRuntimeSettings().probeActive).toBe(true);
+    expect(actionExecutor.execute).toHaveBeenCalledTimes(2);
 });
 test('controller ignores jitter-only probe spikes until the upgrade probe completes', async () => {
     const clock = new clock_1.ManualQosClock();
@@ -866,15 +1021,15 @@ test('controller ignores jitter-only probe spikes until the upgrade probe comple
     expect(controller.getRuntimeSettings().probeActive).toBe(true);
     clock.advanceBy(1000);
     await controller.sampleNow();
-    expect(controller.level).toBe(1);
+    expect(controller.level).toBe(0);
     expect(controller.state).toBe('stable');
     expect(controller.getRuntimeSettings().probeActive).toBe(true);
+    expect(actionExecutor.execute.mock.calls.map(call => call[0].level)).toEqual([1, 0]);
     clock.advanceBy(1000);
     await controller.sampleNow();
     expect(controller.level).toBe(0);
     expect(controller.state).toBe('stable');
     expect(controller.getRuntimeSettings().probeActive).toBe(true);
-    expect(actionExecutor.execute.mock.calls.map(call => call[0].level)).toEqual([1, 0]);
 });
 test('controller ignores jitter-only tail spikes during recovery probe grace window', async () => {
     const clock = new clock_1.ManualQosClock();

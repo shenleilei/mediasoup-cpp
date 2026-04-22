@@ -14,7 +14,7 @@ const __dirname = path.dirname(__filename);
 const chromiumPath = '/usr/lib64/chromium-browser/headless_shell';
 const tcPath = '/usr/sbin/tc';
 const PUPPETEER_PROTOCOL_TIMEOUT_MS = 10 * 60 * 1000;
-const HARNESS_WARMUP_MS = 2000;
+const HARNESS_WARMUP_MS = 10000;
 const MAX_DIAGNOSTIC_ITEMS = 200;
 const MAX_RUNTIME_SNAPSHOTS = 48;
 const MAX_KERNEL_LINES = 80;
@@ -320,6 +320,36 @@ function collectProcessDiagnostics(browserPid = null) {
   };
 }
 
+async function waitForPidExit(pid, timeoutMs = 3000) {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return true;
+  }
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!fs.existsSync(`/proc/${pid}`)) {
+      return true;
+    }
+    await sleep(100);
+  }
+
+  return !fs.existsSync(`/proc/${pid}`);
+}
+
+function killPidTree(pid, signal = 'SIGKILL') {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return;
+  }
+
+  try {
+    execFileSync('pkill', ['-TERM', '-P', String(pid)], { stdio: 'ignore' });
+  } catch {}
+
+  try {
+    process.kill(pid, signal);
+  } catch {}
+}
+
 function createLineCollector(list, limit = MAX_BROWSER_IO_LINES) {
   let remainder = '';
 
@@ -612,6 +642,41 @@ export function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+async function waitForWarmupStable(page, diagnostics) {
+  const deadline = Date.now() + HARNESS_WARMUP_MS;
+  let stableSamples = 0;
+  let lastState = null;
+
+  while (Date.now() < deadline) {
+    lastState = await page.evaluate(() => window.__qosLoopbackHarness.getState());
+    if (lastState?.state === 'stable' &&
+      lastState?.level === 0 &&
+      !lastState?.lastError) {
+      stableSamples += 1;
+      if (stableSamples >= 2) {
+        return {
+          reachedStable: true,
+          lastState,
+        };
+      }
+    } else {
+      stableSamples = 0;
+    }
+
+    await sleep(500);
+  }
+
+  pushEvent(diagnostics, 'harness_warmup_timeout', {
+    state: lastState?.state ?? null,
+    level: lastState?.level ?? null,
+    lastError: lastState?.lastError ?? null,
+  });
+  return {
+    reachedStable: false,
+    lastState,
+  };
+}
+
 export function stateRank(state) {
   switch (state) {
     case 'stable':
@@ -672,7 +737,13 @@ export function applyNetemConfig(config = {}) {
   const delayBase = typeof rtt === 'number' ? Math.max(1, Math.round(rtt / 2)) : 1;
   netemArgs.push('delay', `${delayBase}ms`);
   if (typeof jitter === 'number' && jitter > 0) {
-    netemArgs.push(`${Math.round(jitter)}ms`, 'distribution', 'normal');
+    netemArgs.push(`${Math.round(jitter)}ms`);
+    // Large loopback jitter values are boundary tests in their own right.
+    // `distribution normal` amplifies the tail enough to turn S4-style burst
+    // cases into a different severity class than the catalog intends.
+    if (jitter <= 40) {
+      netemArgs.push('distribution', 'normal');
+    }
   }
   if (typeof loss === 'number' && loss > 0) {
     netemArgs.push('loss', `${loss}%`);
@@ -724,6 +795,7 @@ export async function createLoopbackHarness(options = {}) {
   let bundlePath;
   let browser;
   let page;
+  let browserPid = null;
   let browserStdoutCollector;
   let browserStderrCollector;
   let runtimeSnapshotTimer;
@@ -738,7 +810,8 @@ export async function createLoopbackHarness(options = {}) {
     pushEvent(diagnostics, 'bundle_built', { bundlePath });
 
     browser = await launchBrowser();
-    diagnostics.meta.browserPid = getBrowserPid(browser);
+    browserPid = getBrowserPid(browser);
+    diagnostics.meta.browserPid = browserPid;
     diagnostics.browserContextAtLaunch = collectPidContext(diagnostics.meta.browserPid);
     pushEvent(diagnostics, 'browser_launched', {
       browserPid: diagnostics.meta.browserPid,
@@ -855,10 +928,15 @@ export async function createLoopbackHarness(options = {}) {
       MAX_RUNTIME_SNAPSHOTS
     );
     // Let the loopback pair and the first sender stats samples settle before the
-    // matrix baseline timer starts, otherwise startup transients bleed into mild
-    // boundary cases such as R3.
-    await sleep(HARNESS_WARMUP_MS);
-    pushEvent(diagnostics, 'harness_warmup_done', {});
+    // matrix baseline timer starts. Startup drift can otherwise leak into
+    // boundary cases such as BW3/S4 and invalidate the baseline phase.
+    const warmupResult = await waitForWarmupStable(page, diagnostics);
+    pushEvent(diagnostics, 'harness_warmup_done', {
+      reachedStable: warmupResult.reachedStable,
+      state: warmupResult.lastState?.state ?? null,
+      level: warmupResult.lastState?.level ?? null,
+      lastError: warmupResult.lastState?.lastError ?? null,
+    });
 
     return {
       async nowMs() {
@@ -913,6 +991,11 @@ export async function createLoopbackHarness(options = {}) {
             message: error?.message ?? String(error),
           });
         }
+        if (!(await waitForPidExit(browserPid, 2000))) {
+          pushEvent(diagnostics, 'browser_force_kill', { browserPid });
+          killPidTree(browserPid, 'SIGKILL');
+          await waitForPidExit(browserPid, 1000);
+        }
         clearNetem();
         if (tmpDir) {
           fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -936,6 +1019,10 @@ export async function createLoopbackHarness(options = {}) {
     try {
       await browser?.close();
     } catch {}
+    if (!(await waitForPidExit(browserPid, 2000))) {
+      killPidTree(browserPid, 'SIGKILL');
+      await waitForPidExit(browserPid, 1000);
+    }
     browserStdoutCollector?.flush();
     browserStderrCollector?.flush();
     if (runtimeSnapshotTimer) {

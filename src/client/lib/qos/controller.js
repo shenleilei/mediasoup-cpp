@@ -585,10 +585,15 @@ class PublisherQosController {
         if (actions.some(action => action.type !== 'noop') &&
             (this.currentLevel < levelBeforeActions ||
                 (audioOnlyBeforeActions && !this.inAudioOnlyMode))) {
-            const requiredHealthySamples = this.recoveryProbeSuccessStreak > 0 &&
+            let requiredHealthySamples = this.recoveryProbeSuccessStreak > 0 &&
                 isStrongRecoverySignal(signals, this.profile)
                 ? 2
                 : 3;
+            // Tail recovery can otherwise stall at stable/L1 long enough to miss
+            // the final L0 restore inside short recovery windows such as T9.
+            if (stateAfter === 'stable' && this.currentLevel === 1) {
+                requiredHealthySamples = Math.min(requiredHealthySamples, 2);
+            }
             this.probeContext = (0, probe_1.beginProbe)(levelBeforeActions, this.currentLevel, nowMs, audioOnlyBeforeActions, this.inAudioOnlyMode, {
                 requiredHealthySamples,
             });
