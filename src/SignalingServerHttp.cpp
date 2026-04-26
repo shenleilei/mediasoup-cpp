@@ -80,6 +80,9 @@ void SignalingServerHttp::RegisterHttpRoutes(uWS::App& app, SignalingServer& ser
 				requestId, roomId, clientIp);
 			try {
 				result = server.registry_->resolveRoom(roomId, clientIp);
+				if (result.isNew && result.wsUrl.empty()) {
+					unavailable = true;
+				}
 			} catch (const std::exception& e) {
 				spdlog::warn("api.resolve failed [req:{} roomId:{} error:{}]",
 					requestId, roomId, e.what());
