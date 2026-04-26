@@ -64,6 +64,7 @@ public:
 				activeCluster_->MarkCompleted(info.result);
 			}
 			clusters_.clear();
+			startedClusters_.clear();
 			activeCluster_.reset();
 			stopRequested_ = true;
 			cv_.notify_all();
@@ -331,6 +332,7 @@ private:
 	{
 		for (;;) {
 			std::shared_ptr<Cluster> cluster;
+			bool isNewCluster = false;
 			{
 				std::unique_lock<std::mutex> lock(mutex_);
 				cv_.wait(lock, [&] {
@@ -348,10 +350,14 @@ private:
 				} else {
 					cluster = activeCluster_;
 				}
+
+				if (cluster && !startedClusters_.count(cluster->Id())) {
+					startedClusters_.insert(cluster->Id());
+					isNewCluster = true;
+				}
 			}
 
-			if (cluster && !startedClusters_.count(cluster->Id())) {
-				startedClusters_.insert(cluster->Id());
+			if (isNewCluster) {
 				cluster->Start();
 			}
 
