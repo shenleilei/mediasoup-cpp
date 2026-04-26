@@ -40,7 +40,18 @@ void RoomRegistry::subscriberLoop()
 		int flags = fcntl(subscriber->fd, F_GETFL, 0);
 		fcntl(subscriber->fd, F_SETFL, flags | O_NONBLOCK);
 
-		MS_DEBUG(logger_, "Subscriber connected");
+		MS_DEBUG(logger_, "Subscriber connected, adding random jitter before syncAll");
+		
+		// Add 0-2000ms random jitter to prevent thundering herd / sync storm
+		// when all nodes reconnect to Redis simultaneously.
+		uint32_t r = 0;
+		if (FILE* f = fopen("/dev/urandom", "r")) {
+			if (fread(&r, sizeof(r), 1, f) != 1) r = 0;
+			fclose(f);
+		}
+		int jitterMs = r % 2000;
+		std::this_thread::sleep_for(std::chrono::milliseconds(jitterMs));
+
 		syncAll();
 
 		while (!subStop_) {
