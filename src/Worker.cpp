@@ -384,8 +384,24 @@ bool Worker::processChannelData() {
 void Worker::handleWorkerDeath() {
 	if (closed_.load(std::memory_order_acquire)) return;
 
-	int status = waitChildWithTimeout(pid_, kWorkerDeathReapTimeoutMs).value_or(0);
-	workerDied("worker process exited with status " + std::to_string(status));
+	MS_WARN(logger_, "worker pipe closed [pid:{}], delegating to detached reaper", pid_);
+
+	// Reap asynchronously to avoid blocking the epoll loop and prevent zombies
+	pid_t p = pid_;
+	auto l = logger_;
+	std::thread([p, l]() {
+		int status = 0;
+		::waitpid(p, &status, 0);
+		if (WIFSIGNALED(status)) {
+			MS_ERROR(l, "worker process [pid:{}] killed by signal {}", p, WTERMSIG(status));
+		} else if (WIFEXITED(status)) {
+			MS_ERROR(l, "worker process [pid:{}] exited with code {}", p, WEXITSTATUS(status));
+		} else {
+			MS_ERROR(l, "worker process [pid:{}] exited with unknown status {}", p, status);
+		}
+	}).detach();
+
+	workerDied("worker process pipe closed (presumed dead)");
 }
 
 std::shared_ptr<Router> Worker::createRouter(
