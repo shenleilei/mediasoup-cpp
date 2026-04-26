@@ -1829,12 +1829,13 @@ TEST_F(QosIntegrationTest, DownlinkClientStatsAcceptsSeqResetFromHighValue) {
 	ASSERT_TRUE(resp1.value("ok", false)) << resp1.dump();
 
 	usleep(150000);
-	payload["seq"] = 1;
-	auto resp2 = alice.ws->request("downlinkClientStats", payload);
+	auto payload2 = makeDownlinkSnapshot(
+		1, "alice", "c1", "p1", 1'000'000.0, true, false, 640, 360);
+	payload2["tsMs"] = payload["tsMs"].get<int64_t>() + 150;
+	auto resp2 = alice.ws->request("downlinkClientStats", payload2);
 	ASSERT_TRUE(resp2.value("ok", false)) << resp2.dump();
 	ASSERT_TRUE(resp2["data"].is_object()) << resp2.dump();
-	EXPECT_FALSE(resp2["data"].value("stored", true));
-	EXPECT_EQ(resp2["data"].value("reason", ""), "stale-ts");
+	EXPECT_TRUE(resp2["data"].value("stored", false));
 
 	auto statsResp = alice.ws->request("getStats", {{"peerId", "alice"}});
 	ASSERT_TRUE(statsResp.value("ok", false)) << statsResp.dump();

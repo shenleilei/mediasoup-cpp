@@ -466,12 +466,12 @@ TEST_F(ReviewFixIntegration, EmptyPeerIdRejected) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Geo-aware resolve: /api/resolve accepts clientIp
+// Geo-aware resolve: /api/resolve accepts X-Forwarded-For
 // ═══════════════════════════════════════════════════════════════
 
-TEST_F(ReviewFixIntegration, ResolveAcceptsClientIp) {
-	// Single-node mode: resolve should return this node regardless of clientIp
-	// but the endpoint should accept the parameter without error
+TEST_F(ReviewFixIntegration, ResolveAcceptsXForwardedFor) {
+	// Single-node mode: resolve should return this node regardless of IP
+	// but the endpoint should accept the header without error
 	int fd = socket(AF_INET, SOCK_STREAM, 0);
 	sockaddr_in addr{};
 	addr.sin_family = AF_INET;
@@ -479,8 +479,9 @@ TEST_F(ReviewFixIntegration, ResolveAcceptsClientIp) {
 	inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
 	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
 
-	std::string req = "GET /api/resolve?roomId=geo_test&clientIp=36.110.147.0 HTTP/1.1\r\n"
-		"Host: 127.0.0.1\r\n\r\n";
+	std::string req = "GET /api/resolve?roomId=geo_test HTTP/1.1\r\n"
+		"Host: 127.0.0.1\r\n"
+		"X-Forwarded-For: 36.110.147.0\r\n\r\n";
 	::send(fd, req.data(), req.size(), 0);
 
 	std::string response = recvHttp(fd);
@@ -624,7 +625,8 @@ TEST_F(GeoJoinTest, ResolvePrefersSameIspNearest) {
 
 	// Beijing Telecom IP → should route to 杭州电信 (port A), not 广州联通 (port B)
 	std::string req = "GET /api/resolve?roomId=" + testRoom_ +
-		"&clientIp=36.110.147.0 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+		" HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+		"X-Forwarded-For: 36.110.147.0\r\n\r\n";
 	::send(fd, req.data(), req.size(), 0);
 
 	std::string response = recvHttp(fd);
@@ -790,7 +792,8 @@ TEST_F(CountryIsolationTest, ChinaClientOnUsNodeRoutedToChinaNode) {
 	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
 
 	std::string req = "GET /api/resolve?roomId=" + testRoom_ +
-		"&clientIp=36.110.147.0 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+		" HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+		"X-Forwarded-For: 36.110.147.0\r\n\r\n";
 	::send(fd, req.data(), req.size(), 0);
 
 	std::string response = recvHttp(fd);
@@ -812,8 +815,8 @@ TEST_F(CountryIsolationTest, UsClientOnCnNodeRoutedToUsNode) {
 	inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
 	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
 
-	std::string req = "GET /api/resolve?roomId=" + testRoom_ + "_us2" +
-		"&clientIp=8.8.8.8 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+	std::string req = "GET /api/resolve?roomId=" + testRoom_ + "_cn" +
+		" HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Forwarded-For: 8.8.8.8\r\n\r\n";
 	::send(fd, req.data(), req.size(), 0);
 
 	std::string response = recvHttp(fd);
@@ -836,7 +839,8 @@ TEST_F(CountryIsolationTest, ChinaClientRoutedToChinaNode) {
 	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
 
 	std::string req = "GET /api/resolve?roomId=" + testRoom_ +
-		"&clientIp=36.110.147.0 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+		" HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+		"X-Forwarded-For: 36.110.147.0\r\n\r\n";
 	::send(fd, req.data(), req.size(), 0);
 
 	std::string response = recvHttp(fd);
@@ -859,7 +863,7 @@ TEST_F(CountryIsolationTest, UsClientRoutedToUsNode) {
 	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
 
 	std::string req = "GET /api/resolve?roomId=" + testRoom_ + "_us" +
-		"&clientIp=8.8.8.8 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+		" HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Forwarded-For: 8.8.8.8\r\n\r\n";
 	::send(fd, req.data(), req.size(), 0);
 
 	std::string response = recvHttp(fd);

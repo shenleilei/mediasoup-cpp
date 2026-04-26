@@ -22,13 +22,12 @@ std::atomic<uint64_t> g_nextResolveRequestId{1};
 template<typename Response, typename Request>
 std::string ResolveClientIp(Response* res, Request* req)
 {
-	std::string clientIp(req->getQuery("clientIp"));
-	if (clientIp.empty()) {
-		std::string xff(req->getHeader("x-forwarded-for"));
-		if (!xff.empty()) {
-			auto comma = xff.find(',');
-			clientIp = (comma != std::string::npos) ? xff.substr(0, comma) : xff;
-		}
+	std::string clientIp;
+	// Ignore the query parameter "clientIp" to avoid spoofing
+	std::string xff(req->getHeader("x-forwarded-for"));
+	if (!xff.empty()) {
+		auto comma = xff.find(',');
+		clientIp = (comma != std::string::npos) ? xff.substr(0, comma) : xff;
 	}
 	if (clientIp.empty()) {
 		clientIp = std::string(res->getRemoteAddressAsText());

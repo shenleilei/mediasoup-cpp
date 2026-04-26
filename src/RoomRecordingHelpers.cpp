@@ -65,8 +65,8 @@ std::string BuildRecordingOutputPath(
 	std::filesystem::create_directories(roomPath, ec);
 
 	auto now = std::chrono::system_clock::now().time_since_epoch();
-	auto secs = std::chrono::duration_cast<std::chrono::seconds>(now).count();
-	return (roomPath / (peerId + "_" + std::to_string(secs) + ".webm")).string();
+	auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+	return (roomPath / (peerId + "_" + std::to_string(ms) + ".webm")).string();
 }
 
 bool HasActiveRecorderForDir(const RecorderMap& recorders, const std::string& roomId)

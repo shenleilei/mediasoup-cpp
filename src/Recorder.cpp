@@ -416,6 +416,7 @@ void PeerRecorder::writePacket(const media::rtp::RtpHeader& rtp)
 	if (rtp.payloadType == audioPT_) {
 		if (!audioBaseSet_) {
 			audioBaseTs_ = rtp.timestamp;
+			audioLastTs_ = rtp.timestamp;
 			audioBaseSet_ = true;
 		}
 		if (headerDeferred_) {
@@ -431,6 +432,7 @@ void PeerRecorder::writePacket(const media::rtp::RtpHeader& rtp)
 	} else if (rtp.payloadType == videoPT_) {
 		if (!videoBaseSet_) {
 			videoBaseTs_ = rtp.timestamp;
+			videoLastTs_ = rtp.timestamp;
 			videoBaseSet_ = true;
 		}
 
@@ -454,15 +456,26 @@ void PeerRecorder::writePacket(const media::rtp::RtpHeader& rtp)
 	}
 }
 
-uint64_t PeerRecorder::rtpTicksSinceBase(uint32_t ts, uint32_t baseTs)
+uint64_t PeerRecorder::unwrapTimestamp(uint32_t ts, uint32_t baseTs, uint32_t& lastTs, uint64_t& wrapCount)
 {
-	// RTP timestamp delta is modulo-32 by definition; keep that behavior and widen.
-	return static_cast<uint64_t>(static_cast<uint32_t>(ts - baseTs));
+	if (ts < lastTs) {
+		if (lastTs - ts > 0x80000000) {
+			wrapCount++;
+		}
+	} else {
+		if (ts - lastTs > 0x80000000 && wrapCount > 0) {
+			uint64_t ticks = ((wrapCount - 1) << 32) + ts;
+			return ticks >= baseTs ? ticks - baseTs : 0;
+		}
+	}
+	lastTs = ts;
+	uint64_t ticks = (wrapCount << 32) + ts;
+	return ticks >= baseTs ? ticks - baseTs : 0;
 }
 
 void PeerRecorder::writeAudioPacket(uint32_t ts, const uint8_t* data, int size)
 {
-	const auto ticks = rtpTicksSinceBase(ts, audioBaseTs_);
+	const auto ticks = unwrapTimestamp(ts, audioBaseTs_, audioLastTs_, audioWrapCount_);
 	int64_t pts = msff::ClampNonNegativePts(msff::RescaleQ(
 		static_cast<int64_t>(ticks),
 		{1, (int)audioClockRate_},
@@ -501,10 +514,10 @@ void PeerRecorder::flushVideoFrame()
 		writeData = &avccBuf;
 	}
 
-	const auto ticks = rtpTicksSinceBase(videoFrameTs_, videoBaseTs_);
+	const auto ticks = unwrapTimestamp(videoFrameTs_, videoBaseTs_, videoLastTs_, videoWrapCount_);
 	int64_t pts = msff::ClampNonNegativePts(msff::RescaleQ(
 		static_cast<int64_t>(ticks),
-		{1, (int)videoClockRate_},
+		{1, static_cast<int>(videoClockRate_)},
 		videoStream_->time_base));
 	AVPacket pkt{};
 	pkt.stream_index = videoStream_->index;
