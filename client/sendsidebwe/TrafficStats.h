@@ -57,15 +57,12 @@ public:
 
 	int64_t DurationUs() const
 	{
-		return std::max<int64_t>(0, maxSendTimeUs_ - minSendTimeUs_);
+		return std::max<int64_t>(1, maxSendTimeUs_ - minSendTimeUs_);
 	}
 
 	int64_t AcknowledgedBitrate() const
 	{
 		const int64_t durationUs = DurationUs();
-		if (durationUs <= 0) {
-			return 0;
-		}
 		const double ackedBitrate = static_cast<double>(ackedBytes_) * 8.0 * 1000000.0 /
 			static_cast<double>(durationUs);
 		return static_cast<int64_t>(ackedBitrate * CapturedTrafficRatio());

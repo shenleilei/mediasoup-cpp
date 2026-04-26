@@ -472,7 +472,7 @@ public:
 		}
 		auto [probeSignal, estimatedCapacity] = config_.probeSignal.ProbeSignalForGroup(*probePacketGroup_);
 		return probeSignal == mediasoup::ccutils::ProbeSignal::NotCongesting &&
-			estimatedCapacity > probeClusterInfo.goal.desiredBps;
+			estimatedCapacity >= static_cast<int64_t>(probeClusterInfo.goal.desiredBps * 0.95);
 	}
 
 	std::tuple<mediasoup::ccutils::ProbeSignal, int64_t, bool> ProbeClusterFinalize()
