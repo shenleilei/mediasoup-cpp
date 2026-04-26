@@ -104,7 +104,7 @@ public:
 		if (totalPackets != 0.0) {
 			lossRatio = static_cast<double>(lostPackets_) / totalPackets;
 		}
-		return lossRatio * std::log10(pps);
+		return lossRatio * std::log10(std::max(1.0, pps));
 	}
 
 	int64_t MinSendTimeUs() const { return minSendTimeUs_; }

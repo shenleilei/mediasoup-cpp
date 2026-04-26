@@ -27,6 +27,18 @@ public:
 		return sequence;
 	}
 
+	uint16_t RecordPacketSendAndGetSequenceNumber(
+		int64_t atUs,
+		size_t size,
+		bool isRtx,
+		mediasoup::ccutils::ProbeClusterId probeClusterId,
+		bool isProbe)
+	{
+		const uint16_t sequence = GetNextSequenceNumber();
+		RecordPacketSent(sequence, atUs, size, isRtx, probeClusterId, isProbe);
+		return sequence;
+	}
+
 	void RecordPacketSent(
 		uint16_t sequenceNumber,
 		int64_t atUs,
@@ -38,9 +50,10 @@ public:
 		if (baseSendTimeUs_ == 0) {
 			baseSendTimeUs_ = atUs;
 		}
-		auto& packetInfo = packetInfos_[static_cast<size_t>(sequenceNumber & 0x7FFu)];
+		uint64_t absoluteSeq = Unwrap(sequenceNumber);
+		auto& packetInfo = packetInfos_[static_cast<size_t>(absoluteSeq & 0x1FFFu)];
 		packetInfo = PacketInfo{
-			sequenceNumber,
+			absoluteSeq,
 			atUs - baseSendTimeUs_,
 			0,
 			probeClusterId,
@@ -56,21 +69,9 @@ public:
 			packetInfo.sequenceNumber > probeMaxSequenceNumber_) {
 			probeMaxSequenceNumber_ = packetInfo.sequenceNumber;
 		}
-		if (sequenceNumber_ <= sequenceNumber) {
-			sequenceNumber_ = static_cast<uint64_t>(sequenceNumber) + 1;
+		if (sequenceNumber_ <= absoluteSeq) {
+			sequenceNumber_ = absoluteSeq + 1;
 		}
-	}
-
-	uint16_t RecordPacketSendAndGetSequenceNumber(
-		int64_t atUs,
-		size_t size,
-		bool isRtx,
-		mediasoup::ccutils::ProbeClusterId probeClusterId,
-		bool isProbe)
-	{
-		const uint16_t sequence = GetNextSequenceNumber();
-		RecordPacketSent(sequence, atUs, size, isRtx, probeClusterId, isProbe);
-		return sequence;
 	}
 
 	void SeedPacketForTest(
@@ -84,9 +85,10 @@ public:
 		if (baseSendTimeUs_ == 0) {
 			baseSendTimeUs_ = sendTimeUs;
 		}
-		auto& packetInfo = packetInfos_[static_cast<size_t>(sequenceNumber & 0x7FFu)];
+		uint64_t absoluteSeq = Unwrap(sequenceNumber);
+		auto& packetInfo = packetInfos_[static_cast<size_t>(absoluteSeq & 0x1FFFu)];
 		packetInfo = PacketInfo{
-			sequenceNumber,
+			absoluteSeq,
 			sendTimeUs - baseSendTimeUs_,
 			0,
 			probeClusterId,
@@ -94,8 +96,8 @@ public:
 			isRtx,
 			isProbe,
 		};
-		if (sequenceNumber_ <= sequenceNumber) {
-			sequenceNumber_ = static_cast<uint64_t>(sequenceNumber) + 1;
+		if (sequenceNumber_ <= absoluteSeq) {
+			sequenceNumber_ = absoluteSeq + 1;
 		}
 	}
 
@@ -164,20 +166,40 @@ public:
 private:
 	PacketInfo* GetPacketInfoExisting(uint16_t sequenceNumber)
 	{
-		auto& packetInfo = packetInfos_[static_cast<size_t>(sequenceNumber & 0x7FFu)];
+		uint64_t absoluteSeq = Unwrap(sequenceNumber);
+		auto& packetInfo = packetInfos_[static_cast<size_t>(absoluteSeq & 0x1FFFu)];
 		if (static_cast<uint16_t>(packetInfo.sequenceNumber) == sequenceNumber) {
 			return &packetInfo;
 		}
 		return nullptr;
 	}
 
+	uint64_t Unwrap(uint16_t seq)
+	{
+		if (!lastSeq_) {
+			lastSeq_ = seq;
+			unwrappedSeq_ = seq;
+			return unwrappedSeq_;
+		}
+		int32_t diff = static_cast<int32_t>(seq) - static_cast<int32_t>(*lastSeq_);
+		if (diff == 0) return unwrappedSeq_;
+		if (diff > 0x8000) diff -= 0x10000;
+		else if (diff < -0x8000) diff += 0x10000;
+		
+		unwrappedSeq_ += diff;
+		lastSeq_ = seq;
+		return unwrappedSeq_;
+	}
+
 	uint64_t sequenceNumber_{ 0 };
 	int64_t baseSendTimeUs_{ 0 };
-	std::array<PacketInfo, 2048> packetInfos_{};
+	std::array<PacketInfo, 8192> packetInfos_{};
 	int64_t baseRecvTimeUs_{ 0 };
 	PacketInfo* lastReceivedPacket_{ nullptr };
 	mediasoup::ccutils::ProbeClusterId activeProbeClusterId_{ mediasoup::ccutils::ProbeClusterIdInvalid };
 	uint64_t probeMaxSequenceNumber_{ 0 };
+	std::optional<uint16_t> lastSeq_;
+	uint64_t unwrappedSeq_{ 0 };
 };
 
 } // namespace mediasoup::plainclient::sendsidebwe

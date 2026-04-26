@@ -50,5 +50,12 @@
   {"caseId":"S1","group":"burst","bandwidth":4000,"rtt":25,"loss":10,"jitter":5,"baselineMs":15000,"impairmentMs":5000,"recoveryMs":30000,"priority":"P1","expect":{"states":["early_warning","congested"],"maxLevel":4}},
   {"caseId":"S2","group":"burst","bandwidth":300,"rtt":25,"loss":0.1,"jitter":5,"baselineMs":15000,"impairmentMs":8000,"recoveryMs":32000,"priority":"P1","expect":{"state":"congested","maxLevel":4}},
   {"caseId":"S3","group":"burst","bandwidth":4000,"rtt":200,"loss":0.1,"jitter":5,"baselineMs":15000,"impairmentMs":5000,"recoveryMs":30000,"priority":"P1","expect":{"state":"early_warning","maxLevel":2}},
-  {"caseId":"S4","group":"burst","bandwidth":4000,"rtt":25,"loss":0.1,"jitter":60,"baselineMs":15000,"impairmentMs":5000,"recoveryMs":30000,"priority":"P1","expect":{"state":"early_warning","maxLevel":2},"expectByRunner":{"loopback":{"states":["early_warning","congested"],"maxLevel":2}}}
+  {"caseId":"S4","group":"burst","bandwidth":4000,"rtt":25,"loss":0.1,"jitter":60,"baselineMs":15000,"impairmentMs":5000,"recoveryMs":30000,"priority":"P1","expect":{"state":"early_warning","maxLevel":2},"expectByRunner":{"loopback":{"states":["early_warning","congested"],"maxLevel":2}}},
+
+  {"caseId":"M1","group":"traffic_model","source":"screenshare","bandwidth":4000,"rtt":25,"loss":3,"jitter":5,"baselineMs":10000,"impairmentMs":10000,"recoveryMs":0,"priority":"P0","expect":{"state":"stable","maxLevel":0}},
+  {"caseId":"M2","group":"traffic_model","source":"screenshare","bandwidth":300,"rtt":25,"loss":0,"jitter":5,"baselineMs":10000,"impairmentMs":10000,"recoveryMs":0,"priority":"P0","expect":{"state":"congested","minLevel":1}},
+  {"caseId":"M3","group":"traffic_model","source":"audio","bandwidth":1000,"rtt":400,"loss":10,"jitter":5,"baselineMs":10000,"impairmentMs":10000,"recoveryMs":0,"priority":"P1","expect":{"states":["stable","early_warning","congested"],"maxLevel":4}},
+  
+  {"caseId":"O1","group":"oscillation","bandwidth":500,"rtt":25,"loss":0.1,"jitter":5,"baselineMs":10000,"impairmentMs":15000,"recoveryMs":10000,"priority":"P0","expect":{"states":["stable","early_warning","congested"],"maxLevel":4,"maxActionCount":5},"expectByRunner":{"loopback":{"maxActionCount":5}}},
+  {"caseId":"O2","group":"oscillation","bandwidth":4000,"rtt":25,"loss":0.1,"jitter":150,"baselineMs":5000,"impairmentMs":15000,"recoveryMs":0,"priority":"P1","expect":{"states":["stable","early_warning","congested"],"maxLevel":4}}
 ]

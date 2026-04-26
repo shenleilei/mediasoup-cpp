@@ -333,7 +333,7 @@ write_report() {
     append_report_link_row "$ROOT_DIR/docs/generated/uplink-qos-matrix-report.json" "Uplink Matrix JSON" "Latest browser uplink matrix artifact"
     append_report_link_row "$ROOT_DIR/docs/generated/uplink-qos-cpp-client-matrix-report.json" "Plain Client Matrix JSON" "Latest C++ client matrix artifact"
     append_report_link_row "$ROOT_DIR/docs/generated/downlink-qos-matrix-report.json" "Downlink Matrix JSON" "Latest downlink matrix artifact"
-    append_latest_artifact_row "changes/2026-04-21-livekit-aligned-send-side-bwe/artifacts/full43-compare" "LiveKit 43-Case Compare" "Latest livekit-aligned 43-case comparison"
+    append_latest_artifact_row "changes/2026-04-21-livekit-aligned-send-side-bwe/artifacts/full43-compare" "LiveKit 48-Case Compare" "Latest livekit-aligned 43-case comparison"
     append_latest_artifact_row "changes/2026-04-21-plain-client-sender-transport-control/artifacts/twcc-ab-eval" "TWCC A/B Eval" "Latest TWCC A/B effectiveness report"
   } > "$REPORT_FILE"
 }
