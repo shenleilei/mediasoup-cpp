@@ -54,3 +54,7 @@ config.json
 /docs/archive/*-qos-runs/20*/
 /run_d1_test.sh
 /tests/qos_harness/artifacts/last-failures.txt
+bwe_diff.patch
+*.tmp
+tmp.*
+Testing/
