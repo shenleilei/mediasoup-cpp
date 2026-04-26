@@ -393,7 +393,7 @@ private:
 
 	void FlushAudioQueue()
 	{
-			while (!audioQueue_.empty()) {
+			while (!audioQueue_.empty() && mediaBudgetBytes_ > 0) {
 				auto& packet = audioQueue_.front();
 				const auto result = SendPacket(PacketClass::AudioRtp, packet);
 				if (result.status == SendStatus::Sent) {
@@ -406,6 +406,7 @@ private:
 			}
 			if (result.status == SendStatus::HardError) {
 				audioQueue_.pop_front();
+				continue;
 			}
 			break;
 		}
@@ -413,7 +414,7 @@ private:
 
 	void FlushRetransmissionQueue()
 	{
-			while (!videoRetransmissionQueue_.empty()) {
+			while (!videoRetransmissionQueue_.empty() && mediaBudgetBytes_ > 0) {
 				auto& packet = videoRetransmissionQueue_.front();
 				const auto result = SendPacket(PacketClass::VideoRetransmission, packet);
 				if (result.status == SendStatus::Sent) {
@@ -428,6 +429,7 @@ private:
 			if (result.status == SendStatus::HardError) {
 				videoRetransmissionQueue_.pop_front();
 				metrics_.retransmissionDrops++;
+				continue;
 			}
 			break;
 		}

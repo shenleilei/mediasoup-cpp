@@ -69,6 +69,15 @@ int PlainClientApp::RunThreadedMode()
 	std::atomic<bool> audioRunning{false};
 	std::atomic<bool> audioActuallyStarted{false};
 	std::thread audioThread;
+	struct AudioThreadGuard {
+		std::thread& t;
+		std::atomic<bool>& running;
+		~AudioThreadGuard() {
+			running = false;
+			if (t.joinable()) t.join();
+		}
+	} audioThreadGuard{audioThread, audioRunning};
+
 	const bool hasAudioPrecondition =
 		(audIdx_ >= 0 && audioDecoder_.has_value() && audioEncoder_.has_value());
 	if (hasAudioPrecondition) {
@@ -592,8 +601,6 @@ int PlainClientApp::RunThreadedMode()
 	}
 
 	for (auto& worker : workers) worker->stop();
-	audioRunning = false;
-	if (audioThread.joinable()) audioThread.join();
 	netThread.stop();
 	std::printf("[threaded] pipeline stopped\n");
 	return 0;

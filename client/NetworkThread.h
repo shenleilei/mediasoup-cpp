@@ -772,6 +772,14 @@ private:
 
 		while (running_.load()) {
 			int n = epoll_wait(epollFd_, events, kMaxEvents, 50 /*ms timeout as safety net*/);
+			if (n < 0) {
+				if (errno == EINTR) {
+					continue;
+				}
+				std::fprintf(stderr, "NetworkThread epoll_wait failed: %d\n", errno);
+				std::this_thread::sleep_for(std::chrono::milliseconds(10));
+				continue;
+			}
 
 			for (int i = 0; i < n; ++i) {
 				int fd = events[i].data.fd;
