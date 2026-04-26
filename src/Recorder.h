@@ -63,7 +63,7 @@ private:
 
 	static const uint8_t* stripVp8Descriptor(const uint8_t* data, int size,
 		int& outSize, bool& isStart);
-	static uint64_t rtpTicksSinceBase(uint32_t ts, uint32_t baseTs);
+	static uint64_t unwrapTimestamp(uint32_t ts, uint32_t baseTs, uint32_t& lastTs, uint64_t& wrapCount);
 	void depacketizeH264(const media::rtp::RtpHeader& rtp);
 	void writePacket(const media::rtp::RtpHeader& rtp);
 	void writeAudioPacket(uint32_t ts, const uint8_t* data, int size);
@@ -93,6 +93,10 @@ private:
 
 	uint32_t audioBaseTs_{0};
 	uint32_t videoBaseTs_{0};
+	uint32_t audioLastTs_{0};
+	uint32_t videoLastTs_{0};
+	uint64_t audioWrapCount_{0};
+	uint64_t videoWrapCount_{0};
 	bool audioBaseSet_{false};
 	bool videoBaseSet_{false};
 	std::vector<uint8_t> videoFrameBuf_;

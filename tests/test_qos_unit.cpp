@@ -259,8 +259,8 @@ public:
 		int& outSize, bool& isStart) {
 		return PeerRecorder::stripVp8Descriptor(data, size, outSize, isStart);
 	}
-	static uint64_t rtpTicksSinceBase(uint32_t ts, uint32_t baseTs) {
-		return PeerRecorder::rtpTicksSinceBase(ts, baseTs);
+	static uint64_t unwrapTimestamp(uint32_t ts, uint32_t baseTs, uint32_t& lastTs, uint64_t& wrapCount) {
+		return PeerRecorder::unwrapTimestamp(ts, baseTs, lastTs, wrapCount);
 	}
 	static bool setH264Extradata(
 		PeerRecorder& recorder,
@@ -311,14 +311,18 @@ TEST(Vp8DescriptorTest, EmptyPayload) {
 }
 
 TEST(RecorderTimestampMathTest, DeltaStaysPositiveAcrossSignedBoundary) {
+	uint32_t lastTs = 0;
+	uint64_t wrapCount = 0;
 	EXPECT_EQ(
-		PeerRecorderTestAccess::rtpTicksSinceBase(0x80000000u, 0u),
+		PeerRecorderTestAccess::unwrapTimestamp(0x80000000u, 0u, lastTs, wrapCount),
 		0x80000000ull);
 }
 
 TEST(RecorderTimestampMathTest, DeltaPreservesWraparoundModuloArithmetic) {
+	uint32_t lastTs = 0xFFFFF000u;
+	uint64_t wrapCount = 0;
 	EXPECT_EQ(
-		PeerRecorderTestAccess::rtpTicksSinceBase(0x00001000u, 0xFFFFF000u),
+		PeerRecorderTestAccess::unwrapTimestamp(0x00001000u, 0xFFFFF000u, lastTs, wrapCount),
 		0x00002000ull);
 }
 

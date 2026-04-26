@@ -48,10 +48,7 @@ inline bool BuildJoinRequestContext(
 
 	joinRequest.displayName = data.value("displayName", joinRequest.peerId);
 	joinRequest.rtpCapabilities = data.value("rtpCapabilities", json::object());
-	joinRequest.clientIp = data.value("clientIp", "");
-	if (joinRequest.clientIp.empty()) {
-		joinRequest.clientIp = remoteAddress;
-	}
+	joinRequest.clientIp = remoteAddress;
 
 	return true;
 }
