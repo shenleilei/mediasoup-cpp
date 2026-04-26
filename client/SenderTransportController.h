@@ -31,6 +31,7 @@ public:
 		std::array<uint64_t, 4> wouldBlockByClass{};
 		std::array<uint64_t, 4> hardErrorByClass{};
 		std::array<int, 4> lastHardErrorByClass{};
+		std::array<uint64_t, 4> bytesSentByClass{};
 		uint64_t audioDeadlineDrops{ 0 };
 		uint64_t queuedVideoRetentions{ 0 };
 		uint64_t freshVideoQueueDrops{ 0 };
@@ -140,7 +141,7 @@ public:
 		if (!trackState || trackState->paused) {
 			return false;
 		}
-		if (queuedFreshVideoPackets_ >= config_.maxFreshVideoPacketsTotal) {
+		if (trackState->videoQueue.size() >= config_.maxFreshVideoPacketsTotal) {
 			metrics_.freshVideoQueueDrops++;
 			return false;
 		}
@@ -393,12 +394,12 @@ private:
 
 	void FlushAudioQueue()
 	{
-			while (!audioQueue_.empty() && mediaBudgetBytes_ > 0) {
-				auto& packet = audioQueue_.front();
-				const auto result = SendPacket(PacketClass::AudioRtp, packet);
-				if (result.status == SendStatus::Sent) {
-					mediaBudgetBytes_ -= static_cast<int64_t>(packet.len);
-					if (onAudioSent_) {
+		while (!audioQueue_.empty()) {
+			auto& packet = audioQueue_.front();
+			const auto result = SendPacket(PacketClass::AudioRtp, packet);
+			if (result.status == SendStatus::Sent) {
+				mediaBudgetBytes_ -= static_cast<int64_t>(packet.len);
+				if (onAudioSent_) {
 					onAudioSent_(packet.len > 12 ? packet.len - 12 : 0, packet.rtpTimestamp);
 				}
 				audioQueue_.pop_front();
@@ -408,18 +409,19 @@ private:
 				audioQueue_.pop_front();
 				continue;
 			}
+			// WouldBlock or other: packet stays in queue, stop pacing.
 			break;
 		}
 	}
 
 	void FlushRetransmissionQueue()
 	{
-			while (!videoRetransmissionQueue_.empty() && mediaBudgetBytes_ > 0) {
-				auto& packet = videoRetransmissionQueue_.front();
-				const auto result = SendPacket(PacketClass::VideoRetransmission, packet);
-				if (result.status == SendStatus::Sent) {
-					mediaBudgetBytes_ -= static_cast<int64_t>(packet.len);
-					metrics_.retransmissionSent++;
+		while (!videoRetransmissionQueue_.empty()) {
+			auto& packet = videoRetransmissionQueue_.front();
+			const auto result = SendPacket(PacketClass::VideoRetransmission, packet);
+			if (result.status == SendStatus::Sent) {
+				mediaBudgetBytes_ -= static_cast<int64_t>(packet.len);
+				metrics_.retransmissionSent++;
 				if (onVideoRetransmissionSent_) {
 					onVideoRetransmissionSent_(packet.ssrc);
 				}
@@ -431,6 +433,7 @@ private:
 				metrics_.retransmissionDrops++;
 				continue;
 			}
+			// WouldBlock or other: packet stays in queue, stop pacing.
 			break;
 		}
 	}
@@ -507,6 +510,7 @@ private:
 		switch (result.status) {
 			case SendStatus::Sent:
 				metrics_.sentByClass[index]++;
+				metrics_.bytesSentByClass[index] += result.bytesSent;
 				break;
 			case SendStatus::WouldBlock:
 				metrics_.wouldBlockByClass[index]++;
