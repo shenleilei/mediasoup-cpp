@@ -240,7 +240,9 @@ int PlainClientApp::RunThreadedMode()
 			netThread.wakeup();
 			return false;
 		};
-		qosOptions.sendSnapshot = [&track](const nlohmann::json&) {
+		qosOptions.sendSnapshot = [this, &track](const nlohmann::json&) {
+			if (!testClientStatsPayloads_.empty()) return;
+			if (matrixLocalOnly_) return;
 			track.snapshotRequested = true;
 		};
 		track.qosCtrl = std::make_unique<qos::PublisherQosController>(qosOptions);

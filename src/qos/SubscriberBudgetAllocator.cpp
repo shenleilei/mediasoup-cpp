@@ -14,6 +14,8 @@ constexpr double kBaseBitrateBps = 100'000.0; // 100 kbps assumed base
 constexpr double kScreenShareBaseBps = 100'000.0;
 constexpr int kMaxSpatial = 2;
 constexpr int kMaxTemporal = 2;
+constexpr uint64_t kUnknownBitrateWarmupSeqLimit = 3;
+constexpr uint64_t kBootstrapBitrateGraceSeqLimit = 6;
 
 struct UpgradeStep {
 	size_t subIdx;
@@ -92,9 +94,10 @@ double SubscriberBudgetAllocator::computeBudgetBps(
 		// transport has produced a trustworthy estimate. Treat that as "unknown"
 		// until the planner is already in a degraded state; otherwise visible
 		// subscribers can be paused immediately on a healthy join path.
-		if (snapshot.seq <= 3 && HasVisibleVideo(snapshot))
+		if (snapshot.seq <= kUnknownBitrateWarmupSeqLimit && HasVisibleVideo(snapshot))
 			return budget;
-		if (VisibleVideosAreStillBootstrapping(snapshot))
+		if (snapshot.seq <= kBootstrapBitrateGraceSeqLimit &&
+			VisibleVideosAreStillBootstrapping(snapshot))
 			return budget;
 		if (degradeLevel > 0)
 			budget = 0.0;

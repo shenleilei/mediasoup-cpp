@@ -1,6 +1,6 @@
 {
   "generatedAt": "2026-04-27T10:07:36.425Z",
-  "updatedAt": "2026-04-27T10:07:36.549Z",
+  "updatedAt": "2026-04-27T13:01:23.720Z",
   "runTypes": [
     "full"
   ],
@@ -9,6 +9,7 @@
   ],
   "selectedCaseIds": "all",
   "artifacts": {
-    "matrixJson": "docs/generated/uplink-qos-cpp-client-matrix-report.json"
+    "matrixJson": "docs/generated/uplink-qos-cpp-client-matrix-report.json",
+    "caseMarkdown": "docs/plain-client-qos-case-results.md"
   }
 }
