@@ -1,6 +1,6 @@
 # 下行 QoS 测试结果汇总
 
-生成时间：`2026-04-27T14:18:28.281Z`
+生成时间：`2026-04-27T15:49:32.665Z`
 
 ## 1. 汇总
 
@@ -76,7 +76,7 @@
 | 类别 | `browser` |
 | 说明 | 浏览器弱网竞争验证：高优先级 subscriber 分配优于低优先级 |
 | 状态 | `PASS` |
-| 耗时 | `44s` |
+| 耗时 | `49s` |
 | 对应命令 | `node tests/qos_harness/browser_downlink_priority.mjs` |
 
 ### browser-harness:downlink-v2

@@ -443,32 +443,40 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 					joinQosPolicy = wt->roomService()->getDefaultQosPolicy();
 				}
 
-				loop->defer([&server, wt, wsMap, ws, alive, respStr = std::move(respStr),
-					joinOk, joinFailed, newSessionId,
-					jRoomId = std::move(jRoomId), jPeerId = std::move(jPeerId),
-					joinQosPolicy = std::move(joinQosPolicy)]
-				{
-					if (joinFailed) {
-						if (!wt->roomService() || !wt->roomService()->hasRoom(jRoomId))
-							server.unassignRoom(jRoomId);
-					}
+					const int workerThreadId = wt ? wt->id() : -1;
+					loop->defer([&server, workerThreadId, wsMap, ws, alive, respStr = std::move(respStr),
+						joinOk, joinFailed, newSessionId,
+						jRoomId = std::move(jRoomId), jPeerId = std::move(jPeerId),
+						joinQosPolicy = std::move(joinQosPolicy)]
+					{
+						WorkerThread* deferredWt =
+							server.running_.load(std::memory_order_relaxed)
+								? server.findWorkerThreadById(workerThreadId)
+								: nullptr;
+						if (joinFailed) {
+							if (!deferredWt || !deferredWt->roomService() || !deferredWt->roomService()->hasRoom(jRoomId))
+								server.unassignRoom(jRoomId);
+						}
 
-					const bool socketAlive = alive->load(std::memory_order_relaxed);
-					if (joinOk && !socketAlive) {
-						wt->post([wt, jRoomId, jPeerId, newSessionId] {
-							try {
-								auto* rs = wt->roomService();
-								if (!rs) return;
-								rs->leaveIfSessionMatches(jRoomId, jPeerId, newSessionId);
-							} catch (const std::exception& e) {
+						const bool socketAlive = alive->load(std::memory_order_relaxed);
+						if (joinOk && !socketAlive) {
+							if (!deferredWt) {
+								return;
+							}
+							deferredWt->post([deferredWt, jRoomId, jPeerId, newSessionId] {
+								try {
+									auto* rs = deferredWt->roomService();
+									if (!rs) return;
+									rs->leaveIfSessionMatches(jRoomId, jPeerId, newSessionId);
+								} catch (const std::exception& e) {
 								spdlog::error("[{} {}] rollback leave failed: {}", jRoomId, jPeerId, e.what());
 							} catch (...) {
 								spdlog::error("[{} {}] rollback leave failed: unknown error", jRoomId, jPeerId);
 							}
-							wt->updateRoomCount();
-						});
-						return;
-					}
+								deferredWt->updateRoomCount();
+							});
+							return;
+						}
 
 					if (!socketAlive) {
 						return;
@@ -478,10 +486,13 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 					if (joinFailed) {
 						ClearPendingSocketJoinIfMatches(socketData, newSessionId);
 					}
-					if (joinOk) {
-						auto oldWs = RegisterJoinedSocket(wsMap, ws, jRoomId, jPeerId, newSessionId);
-						server.assignRoom(jRoomId, wt);
-						spdlog::info("[{} {}] joined (session:{})", jRoomId, jPeerId, newSessionId);
+						if (joinOk) {
+							auto oldWs = RegisterJoinedSocket(wsMap, ws, jRoomId, jPeerId, newSessionId);
+							if (!deferredWt) {
+								return;
+							}
+							server.assignRoom(jRoomId, deferredWt);
+							spdlog::info("[{} {}] joined (session:{})", jRoomId, jPeerId, newSessionId);
 						if (oldWs) {
 							spdlog::info("[{} {}] kicking old connection (new session:{})", jRoomId, jPeerId, newSessionId);
 							oldWs->end(4000, "replaced");

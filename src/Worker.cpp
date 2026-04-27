@@ -383,6 +383,10 @@ bool Worker::processChannelData() {
 
 void Worker::handleWorkerDeath() {
 	if (closed_.load(std::memory_order_acquire)) return;
+	if (threaded_) {
+		MS_ERROR(logger_, "handleWorkerDeath() called in threaded mode [pid:{}], ignoring pipe-close reaper path", pid_);
+		return;
+	}
 
 	MS_WARN(logger_, "worker pipe closed [pid:{}], delegating to detached reaper", pid_);
 

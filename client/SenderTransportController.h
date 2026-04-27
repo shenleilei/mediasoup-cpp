@@ -488,6 +488,7 @@ private:
 			}
 
 			if (!sentPacket) {
+				nextVideoTrackIndex_ = (nextVideoTrackIndex_ + 1) % trackCount;
 				break;
 			}
 		}

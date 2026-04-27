@@ -51,6 +51,7 @@ struct TrackNetState {
 	uint32_t ssrc = 0;
 	uint8_t payloadType = 0;
 	uint8_t transportCcExtensionId = 0;
+	uint32_t targetBitrateBps = 0;
 	uint16_t seq = 0;
 	bool paused = false;
 	int64_t lastPliForwardedMs = 0;
@@ -145,6 +146,9 @@ public:
 		uint32_t ssrc,
 		uint8_t pt,
 		uint8_t transportCcExtensionId = 0) {
+		if (running_.load()) {
+			throw std::logic_error("registerVideoTrack must be called before start()");
+		}
 		TrackNetState t;
 		t.trackIndex = trackIndex;
 		t.ssrc = ssrc;
@@ -692,6 +696,9 @@ private:
 			while (controlQueue->tryPop(cmd)) {
 				switch (cmd.type) {
 				case mt::NetworkControlCommand::TrackTransportConfig:
+					if (auto* t = findTrackByIndex(cmd.trackIndex)) {
+						t->targetBitrateBps = cmd.targetBitrateBps;
+					}
 					if (useTransportController_) {
 						transportController_.UpdateTrackTransportHint(
 							cmd.trackIndex, cmd.ssrc, cmd.targetBitrateBps, cmd.paused);
@@ -843,10 +850,12 @@ private:
 	}
 
 	void pacingFlush() {
-		// Send up to a burst of packets per tick
-		constexpr int kBurstLimit = 8;
-		for (int i = 0; i < kBurstLimit && !pacingQueue_.empty(); ++i) {
+		RefreshLegacyPacingBudget();
+		while (!pacingQueue_.empty() && legacyPacingBudgetBytes_ > 0) {
 			auto& e = pacingQueue_.front();
+			if (static_cast<int64_t>(e.len) > legacyPacingBudgetBytes_) {
+				break;
+			}
 			const auto result = sendMediaPacketWithTransportCc(
 				mediasoup::plainclient::PacketClass::VideoMedia,
 				nullptr,
@@ -854,9 +863,47 @@ private:
 				e.len);
 			if (result.status == mediasoup::plainclient::SendStatus::Sent && e.len >= 12) {
 				rtcp_.onVideoRtpSent(e.data, e.len);
+				legacyPacingBudgetBytes_ -= static_cast<int64_t>(e.len);
 			}
 			pacingQueue_.pop_front();
 		}
+	}
+
+	void RefreshLegacyPacingBudget()
+	{
+		if (useTransportController_) {
+			return;
+		}
+
+		const int64_t nowMs = steadyNowMs();
+		if (lastLegacyPacingBudgetUpdateMs_ == 0) {
+			lastLegacyPacingBudgetUpdateMs_ = nowMs;
+			return;
+		}
+
+		const int64_t elapsedMs = std::max<int64_t>(0, nowMs - lastLegacyPacingBudgetUpdateMs_);
+		lastLegacyPacingBudgetUpdateMs_ = nowMs;
+		if (elapsedMs == 0) {
+			return;
+		}
+
+		uint64_t aggregateTargetBitrateBps = 0;
+		for (const auto& track : tracks_) {
+			if (track.paused) {
+				continue;
+			}
+			aggregateTargetBitrateBps += track.targetBitrateBps;
+		}
+		if (aggregateTargetBitrateBps == 0) {
+			legacyPacingBudgetBytes_ = 0;
+			return;
+		}
+
+		const int64_t addedBudgetBytes = static_cast<int64_t>(
+			(aggregateTargetBitrateBps * static_cast<uint64_t>(elapsedMs)) / 8000u);
+		legacyPacingBudgetBytes_ += addedBudgetBytes;
+		static constexpr int64_t kLegacyPacingMaxBurstBytes = 8 * 1500;
+		legacyPacingBudgetBytes_ = std::clamp<int64_t>(legacyPacingBudgetBytes_, 0, kLegacyPacingMaxBurstBytes);
 	}
 
 	void UpdateTransportEstimateFromFeedback(
@@ -1237,6 +1284,8 @@ public:
 	std::thread thread_;
 	uint16_t audioSeq_ = 0;
 	uint32_t transportEstimatedBitrateBps_{ 0 };
+	int64_t legacyPacingBudgetBytes_{ 0 };
+	int64_t lastLegacyPacingBudgetUpdateMs_{ 0 };
 	int64_t lastTransportFeedbackAtMs_{ 0 };
 	uint64_t transportCcRewrittenPacketsSent_{ 0 };
 	uint64_t transportCcRewriteFailures_{ 0 };

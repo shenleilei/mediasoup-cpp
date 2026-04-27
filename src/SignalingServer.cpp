@@ -51,7 +51,7 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 		}
 	};
 
-	running_ = true;
+	running_.store(true, std::memory_order_relaxed);
 	startRegistryWorker();
 	auto downlinkStatsRateLimit = std::make_shared<
 		std::unordered_map<std::string, DownlinkStatsRateLimitState>>();
@@ -110,7 +110,7 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 	closeTimer(redisTimer);
 	closeTimer(shutdownTimer);
 
-	running_ = false;
+	running_.store(false, std::memory_order_relaxed);
 	if (!listenSucceeded) {
 		stopRegistryWorker();
 		return false;

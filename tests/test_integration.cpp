@@ -453,6 +453,18 @@ TEST_F(IntegrationTest, PauseResumeProducer) {
 	EXPECT_TRUE(resumeResp.value("ok", false));
 }
 
+TEST_F(IntegrationTest, PauseResumeMissingProducerFailsExplicitly) {
+	auto alice = joinRoom(testRoom_, "alice");
+
+	auto pauseResp = alice.ws->request("pauseProducer", {{"producerId", "missing-producer"}});
+	EXPECT_FALSE(pauseResp.value("ok", true)) << pauseResp.dump();
+	EXPECT_EQ(pauseResp.value("error", ""), "producer not found");
+
+	auto resumeResp = alice.ws->request("resumeProducer", {{"producerId", "missing-producer"}});
+	EXPECT_FALSE(resumeResp.value("ok", true)) << resumeResp.dump();
+	EXPECT_EQ(resumeResp.value("error", ""), "producer not found");
+}
+
 // ─── Test 5: Multiple peers, verify participants list ───
 TEST_F(IntegrationTest, ParticipantsList) {
 	// Join 4 peers sequentially, each should see all previous peers
