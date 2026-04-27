@@ -459,13 +459,15 @@ void PeerRecorder::writePacket(const media::rtp::RtpHeader& rtp)
 uint64_t PeerRecorder::unwrapTimestamp(uint32_t ts, uint32_t baseTs, uint32_t& lastTs, uint64_t& wrapCount)
 {
 	if (ts < lastTs) {
+		// Apparent backward jump larger than half-range: forward wrap.
 		if (lastTs - ts > 0x80000000) {
 			wrapCount++;
 		}
 	} else {
+		// Apparent forward jump larger than half-range: backward wrap
+		// (out-of-order or duplicate from previous cycle).
 		if (ts - lastTs > 0x80000000 && wrapCount > 0) {
-			uint64_t ticks = ((wrapCount - 1) << 32) + ts;
-			return ticks >= baseTs ? ticks - baseTs : 0;
+			wrapCount--;
 		}
 	}
 	lastTs = ts;
