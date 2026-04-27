@@ -12,6 +12,7 @@ import {
   getCaseExpectation,
   getPhaseNetwork,
   getImpairedStateForEvaluation,
+  summarizeMeaningfulActions,
   summarizePhaseState,
 } from './synthetic_sweep_shared.mjs';
 import { readRootQdisc } from './netem_guard.mjs';
@@ -349,7 +350,10 @@ async function runCase(caseDef) {
   };
 
   try {
-    harness = await createLoopbackHarness({ caseId: caseDef.caseId });
+    harness = await createLoopbackHarness({
+      caseId: caseDef.caseId,
+      source: caseDef.source ?? 'camera',
+    });
     const baselineNetwork = getPhaseNetwork(caseDef, 'baseline');
     const impairedNetwork = getPhaseNetwork(caseDef, 'impaired');
     const recoveryNetwork = getPhaseNetwork(caseDef, 'recovery');
@@ -420,15 +424,14 @@ async function runCase(caseDef) {
       impairmentSummary,
       baselineSummary
     );
-    const actionTypes = fullTrace
-      .map(entry => entry?.plannedAction?.type)
-      .filter(type => type && type !== 'noop');
+    const actionSummary = summarizeMeaningfulActions(fullTrace);
     const evaluation = deriveCaseEvaluation(
       caseDef,
       baselineSummary.current,
       impairedStateForEvaluation,
       recoverySummary.best,
-      'loopback'
+      'loopback',
+      { actionCount: actionSummary.actionCount },
     );
 
     result.baseline = baseline;
@@ -447,8 +450,8 @@ async function runCase(caseDef) {
           : extractTiming(fullTrace, recovery.startMs),
     };
     result.analysis = evaluation.analysis;
-    result.actionCount = actionTypes.length;
-    result.actionTypes = actionTypes;
+    result.actionCount = actionSummary.actionCount;
+    result.actionTypes = actionSummary.actionTypes;
     result.verdict = {
       passed: evaluation.passed,
       reason: evaluation.reason,
