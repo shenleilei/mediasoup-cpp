@@ -515,9 +515,8 @@
   }
 
   function renderRemoteVideoGroups() {
-    els.remoteVideos.innerHTML = '';
-
     if (state.remoteVideoConsumers.size === 0) {
+      els.remoteVideos.innerHTML = '';
       els.remoteVideos.appendChild(createVideoCard({
         title: '远端订阅',
         subtitle: '加入房间并等待远端发布后，这里会按 peer 分组显示多路 video track。',
@@ -534,6 +533,20 @@
       groups.set(key, list);
     }
 
+    // Remove placeholder if present
+    const placeholder = els.remoteVideos.querySelector(':scope > .video-card');
+    if (placeholder) {
+      placeholder.remove();
+    }
+
+    // Keep existing groups, remove empty ones
+    const existingGroups = Array.from(els.remoteVideos.querySelectorAll('.remote-peer-group'));
+    existingGroups.forEach(group => {
+      if (!groups.has(group.dataset.peerId)) {
+        group.remove();
+      }
+    });
+
     const sortedGroups = Array.from(groups.entries()).sort((left, right) => left[0].localeCompare(right[0]));
     for (const [peerId, entries] of sortedGroups) {
       entries.sort((left, right) => {
@@ -544,7 +557,19 @@
       entries.forEach((entry, index) => {
         entry.fallbackTrackOrdinal = index + 1;
       });
-      els.remoteVideos.appendChild(createRemotePeerGroup(peerId, entries));
+
+      let groupEl = els.remoteVideos.querySelector(`.remote-peer-group[data-peer-id="${peerId}"]`);
+      if (!groupEl) {
+        groupEl = createRemotePeerGroup(peerId, entries);
+        els.remoteVideos.appendChild(groupEl);
+      } else {
+        const grid = groupEl.querySelector('.remote-peer-grid');
+        entries.forEach(entry => {
+          if (entry.card.parentElement !== grid) {
+            grid.appendChild(entry.card);
+          }
+        });
+      }
     }
   }
 
@@ -650,7 +675,26 @@
       updateRemoteCardUI(entry);
     }
 
-    renderRemoteVideoGroups();
+    const allPeers = state.latestStatsReport.peers;
+    for (const group of els.remoteVideos.querySelectorAll('.remote-peer-group')) {
+      const peerId = group.dataset.peerId;
+      const statsPeer = allPeers.find(p => p.peerId === peerId);
+      if (statsPeer) {
+        let tracksCount = 0;
+        for (const e of state.remoteVideoConsumers.values()) {
+          if (e.peerId === peerId || (!e.peerId && peerId === 'remote-peer')) tracksCount++;
+        }
+        const producerCount = statsPeer.producers ? Object.keys(statsPeer.producers).length : 0;
+        const subtitle = group.querySelector('.remote-peer-subtitle');
+        if (subtitle) {
+          subtitle.textContent = `tracks ${tracksCount} · producers ${producerCount}`;
+        }
+        const badge = group.querySelector('.remote-peer-head .badge');
+        if (badge) {
+          badge.textContent = statsPeer.qos?.quality || 'remote';
+        }
+      }
+    }
   }
 
   function stopMediaStream(stream) {
