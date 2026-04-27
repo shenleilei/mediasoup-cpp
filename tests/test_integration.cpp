@@ -116,6 +116,23 @@ protected:
 		return c;
 	}
 
+	JoinedClient joinRoomWithoutRtpCapabilities(const std::string& roomId, const std::string& peerId) {
+		JoinedClient c;
+		c.roomId = roomId;
+		c.peerId = peerId;
+		c.ws = std::make_unique<TestWsClient>();
+		EXPECT_TRUE(c.ws->connect(HOST, SFU_PORT));
+
+		auto resp = c.ws->request("join", {
+			{"roomId", roomId}, {"peerId", peerId},
+			{"displayName", peerId}
+		});
+		EXPECT_TRUE(resp.value("ok", false)) << "join failed: " << resp.dump();
+		if (resp.contains("data") && resp["data"].contains("routerRtpCapabilities"))
+			c.routerRtpCapabilities = resp["data"]["routerRtpCapabilities"];
+		return c;
+	}
+
 	bool waitForFreshRoomReady(int timeoutMs = 5000) {
 		const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
 		int attempt = 0;
@@ -363,6 +380,44 @@ TEST_F(IntegrationTest, ProduceAndAutoSubscribe) {
 	ASSERT_FALSE(consumerNotif.empty()) << "Bob did not receive newConsumer";
 	EXPECT_EQ(consumerNotif["data"]["peerId"], "alice");
 	EXPECT_EQ(consumerNotif["data"]["producerId"], producerId);
+	EXPECT_EQ(consumerNotif["data"]["kind"], "audio");
+}
+
+TEST_F(IntegrationTest, RecvTransportRequestCanPopulateRtpCapabilitiesForLaterAutoSubscribe) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoomWithoutRtpCapabilities(testRoom_, "bob");
+
+	auto bobRecv = bob.ws->request("createWebRtcTransport", {
+		{"producing", false},
+		{"consuming", true},
+		{"rtpCapabilities", defaultRtpCapabilities()}
+	});
+	ASSERT_TRUE(bobRecv.value("ok", false)) << bobRecv.dump();
+
+	auto aliceSend = alice.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(aliceSend.value("ok", false)) << aliceSend.dump();
+
+	json audioRtpParams = {
+		{"codecs", {{
+			{"mimeType", "audio/opus"}, {"clockRate", 48000}, {"channels", 2},
+			{"payloadType", 100}
+		}}},
+		{"encodings", {{{"ssrc", 44444444}}}},
+		{"mid", "0"}
+	};
+	auto produceResp = alice.ws->request("produce", {
+		{"transportId", aliceSend["data"]["id"]},
+		{"kind", "audio"},
+		{"rtpParameters", audioRtpParams}
+	});
+	ASSERT_TRUE(produceResp.value("ok", false)) << produceResp.dump();
+
+	auto consumerNotif = bob.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(consumerNotif.empty()) << "Bob did not receive newConsumer";
+	EXPECT_EQ(consumerNotif["data"]["peerId"], "alice");
+	EXPECT_EQ(consumerNotif["data"]["producerId"], produceResp["data"]["id"]);
 	EXPECT_EQ(consumerNotif["data"]["kind"], "audio");
 }
 

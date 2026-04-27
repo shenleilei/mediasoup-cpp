@@ -5,6 +5,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
+import {
+  acquireNetemGuard,
+  clearRootQdisc,
+  releaseNetemGuard,
+} from './netem_guard.mjs';
 
 const require = createRequire(import.meta.url);
 const esbuild = require('esbuild');
@@ -142,11 +147,7 @@ function getServerUrl(server) {
 }
 
 function clearNetem() {
-  try {
-    execFileSync(tcPath, ['qdisc', 'del', 'dev', 'lo', 'root'], {
-      stdio: 'ignore',
-    });
-  } catch {}
+  clearRootQdisc('lo');
 }
 
 function applyUdpNetem({ delayMs = 120, lossPct = 10 }) {
@@ -213,6 +214,7 @@ async function launchBrowser() {
 }
 
 async function runScenario() {
+  const netemGuard = await acquireNetemGuard({ label: 'browser-loopback', iface: 'lo' });
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qos-browser-'));
   const bundlePath = buildBundle(tmpDir);
   const server = await startStaticServer(bundlePath);
@@ -306,6 +308,7 @@ async function runScenario() {
     await browser.close();
     await new Promise(resolve => server.close(resolve));
     fs.rmSync(tmpDir, { recursive: true, force: true });
+    await releaseNetemGuard(netemGuard);
   }
 }
 

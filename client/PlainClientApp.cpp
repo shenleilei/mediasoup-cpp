@@ -66,6 +66,29 @@ bool envFlagDefaultTrue(const char* name)
 	return true;
 }
 
+bool envFlagDefaultFalse(const char* name)
+{
+	const char* raw = std::getenv(name);
+	if (!raw || std::strlen(raw) == 0) return false;
+	std::string value(raw);
+	std::transform(value.begin(), value.end(), value.begin(),
+		[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+	return value == "1" || value == "true" || value == "yes" || value == "on";
+}
+
+PlainClientApp::VideoCodecMode loadVideoCodecModeFromEnv()
+{
+	const char* raw = std::getenv("PLAIN_CLIENT_VIDEO_CODEC");
+	if (!raw || std::strlen(raw) == 0) return PlainClientApp::VideoCodecMode::H264;
+
+	std::string value(raw);
+	std::transform(value.begin(), value.end(), value.begin(),
+		[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+	if (value == "vp8") return PlainClientApp::VideoCodecMode::VP8;
+	return PlainClientApp::VideoCodecMode::H264;
+}
+
 } // namespace
 
 int PlainClientApp::RunPlainClientApp(int argc, char* argv[])
@@ -94,6 +117,29 @@ void PlainClientApp::SendH264ViaSharedPacketizer(
 		ssrc,
 		&seq,
 		&sink);
+}
+
+void PlainClientApp::SendVp8ViaSimplePacketizer(
+	int fd, const uint8_t* data, int size,
+	uint8_t pt, uint32_t ts, uint32_t ssrc, uint16_t& seq,
+	mediasoup::plainclient::Vp8PacketizerState& packetizerState)
+{
+	mediasoup::plainclient::PacketizeVp8Frame(
+		data,
+		static_cast<size_t>(std::max(0, size)),
+		pt,
+		ts,
+		ssrc,
+		&seq,
+		&packetizerState,
+		[fd](const uint8_t* packet, size_t packetLen) {
+			const auto result =
+				mediasoup::plainclient::SendUdpDatagram(fd, packet, packetLen);
+			if (result.status == mediasoup::plainclient::SendStatus::Sent &&
+				PlainClientApp::RtcpContextSlot()) {
+				PlainClientApp::RtcpContextSlot()->onVideoRtpSent(packet, packetLen);
+			}
+		});
 }
 
 bool PlainClientApp::SendOpus(
@@ -181,6 +227,11 @@ bool PlainClientApp::ParseArguments(int argc, char* argv[])
 	peerId_ = argv[4];
 	mp4Path_ = argv[5];
 	copyMode_ = (argc > 6 && std::string(argv[6]) == "--copy");
+	videoCodecMode_ = loadVideoCodecModeFromEnv();
+	if (videoCodecMode_ == VideoCodecMode::VP8 && copyMode_) {
+		std::printf("WARN: --copy is not supported with VP8 mode, falling back to re-encode mode\n");
+		copyMode_ = false;
+	}
 
 	videoTrackCount_ = loadVideoTrackCountFromEnv();
 	videoTrackWeights_ = loadVideoTrackWeightsFromEnv(videoTrackCount_);
@@ -192,7 +243,10 @@ bool PlainClientApp::ParseArguments(int argc, char* argv[])
 		LoadOptionalTrackIndexEnv("QOS_TEST_FORCE_STALE_TRACK_INDEX", videoTrackCount_);
 	videoSourcePaths_ = loadVideoSourcePathsFromEnv();
 	matrixTestRuntime_.startMs = steadyNowMs();
-	threadedRequested_ = envFlagEnabled("PLAIN_CLIENT_THREADED") && !copyMode_;
+	threadedRequested_ =
+		envFlagEnabled("PLAIN_CLIENT_THREADED") &&
+		!copyMode_ &&
+		videoCodecMode_ == VideoCodecMode::H264;
 	const auto distinctSourceCount = videoSourcePaths_.size();
 	threadedMode_ =
 		threadedRequested_ &&
@@ -201,11 +255,15 @@ bool PlainClientApp::ParseArguments(int argc, char* argv[])
 		envFlagDefaultTrue("PLAIN_CLIENT_ENABLE_TRANSPORT_CONTROLLER");
 	transportEstimateEnabled_ =
 		envFlagDefaultTrue("PLAIN_CLIENT_ENABLE_TRANSPORT_ESTIMATE");
+	qosEnabled_ = !envFlagDefaultFalse("PLAIN_CLIENT_DISABLE_QOS");
 	if (threadedRequested_ && !threadedMode_) {
 		std::printf(
 			"WARN: PLAIN_CLIENT_THREADED ignored — need %zu distinct PLAIN_CLIENT_VIDEO_SOURCES (got %zu), using legacy path\n",
 			videoTrackCount_,
 			distinctSourceCount);
+	}
+	if (videoCodecMode_ == VideoCodecMode::VP8 && envFlagEnabled("PLAIN_CLIENT_THREADED")) {
+		std::printf("WARN: VP8 mode currently runs in legacy path only; threaded mode disabled\n");
 	}
 	if (threadedMode_ && !transportControllerEnabled_) {
 		std::printf(
@@ -238,7 +296,9 @@ bool PlainClientApp::RecreateVideoEncoder(
 {
 	const int safeFps = std::max(1, fps);
 	try {
-		auto newEncoder = msff::Encoder::Create(AV_CODEC_ID_H264, [&](AVCodecContext* ctx) {
+		const AVCodecID codecId =
+			videoCodecMode_ == VideoCodecMode::VP8 ? AV_CODEC_ID_VP8 : AV_CODEC_ID_H264;
+		auto newEncoder = msff::Encoder::Create(codecId, [&](AVCodecContext* ctx) {
 			ctx->width = width;
 			ctx->height = height;
 			ctx->pix_fmt = AV_PIX_FMT_YUV420P;
@@ -249,9 +309,16 @@ bool PlainClientApp::RecreateVideoEncoder(
 			ctx->rc_buffer_size = bitrate;
 			ctx->gop_size = safeFps;
 			ctx->max_b_frames = 0;
-			av_opt_set(ctx->priv_data, "preset", "ultrafast", 0);
-			av_opt_set(ctx->priv_data, "tune", "zerolatency", 0);
-			av_opt_set(ctx->priv_data, "profile", "baseline", 0);
+			if (codecId == AV_CODEC_ID_H264) {
+				av_opt_set(ctx->priv_data, "preset", "ultrafast", 0);
+				av_opt_set(ctx->priv_data, "tune", "zerolatency", 0);
+				av_opt_set(ctx->priv_data, "profile", "baseline", 0);
+			} else if (codecId == AV_CODEC_ID_VP8) {
+				av_opt_set(ctx->priv_data, "deadline", "realtime", 0);
+				av_opt_set(ctx->priv_data, "cpu-used", "8", 0);
+				av_opt_set(ctx->priv_data, "lag-in-frames", "0", 0);
+				ctx->gop_size = safeFps;
+			}
 		});
 
 		auto newScaledFrame = msff::MakeFrame();
@@ -345,15 +412,27 @@ bool PlainClientApp::InitializeMediaBootstrap()
 						sourceVideoHeight_,
 						initialVideoFps,
 						track.encBitrate)) {
-					std::printf(
-						"WARN: x264 encoder init failed for %s, falling back to copy mode\n",
+					if (ShouldFallbackToCopyMode(videoCodecMode_)) {
+						std::printf(
+							"WARN: video encoder init failed for %s, falling back to copy mode\n",
+							track.trackId.c_str());
+						copyMode_ = true;
+						break;
+					}
+					std::fprintf(stderr,
+						"VP8 encoder init failed for %s, cannot fall back to copy mode safely\n",
 						track.trackId.c_str());
-					copyMode_ = true;
-					break;
+					return false;
 				}
 			}
 			videoFrame_ = msff::MakeFrame();
 		} catch (const std::exception& e) {
+			if (!ShouldFallbackToCopyMode(videoCodecMode_)) {
+				std::fprintf(stderr,
+					"VP8 video FFmpeg init failed, refusing invalid copy fallback: %s\n",
+					e.what());
+				return false;
+			}
 			std::printf("WARN: video FFmpeg init failed, falling back to copy mode: %s\n", e.what());
 			videoDecoder_.reset();
 			videoFrame_.reset();
@@ -361,12 +440,20 @@ bool PlainClientApp::InitializeMediaBootstrap()
 		}
 	}
 
-	std::printf("Mode: %s\n", copyMode_ ? "copy (no QoS bitrate control)" : "re-encode (QoS enabled)");
+	const char* codecName =
+		videoCodecMode_ == VideoCodecMode::VP8 ? "VP8" : "H264";
+	std::printf("Mode: %s, videoCodec=%s\n",
+		copyMode_ ? "copy (no QoS bitrate control)" : "re-encode (QoS enabled)",
+		codecName);
 	return true;
 }
 
 void PlainClientApp::ConfigureQosControllers()
 {
+	if (!qosEnabled_) {
+		return;
+	}
+
 	cachedServerStatsResponse_ = std::make_shared<CachedServerStatsResponse>();
 	for (auto& track : videoTracks_) {
 		if (copyMode_ || !track.encoder) continue;
@@ -591,6 +678,8 @@ bool PlainClientApp::InitializeSession()
 		videoSsrcs[i] = static_cast<uint32_t>(11111111u + (i * 1111u));
 
 	json plainPublishRequest{{"audioSsrc", audioSsrc_}};
+	plainPublishRequest["videoCodec"] =
+		videoCodecMode_ == VideoCodecMode::VP8 ? "vp8" : "h264";
 	if (videoSsrcs.size() == 1) plainPublishRequest["videoSsrc"] = videoSsrcs.front();
 	else plainPublishRequest["videoSsrcs"] = videoSsrcs;
 	auto pub = ws_.request("plainPublish", plainPublishRequest);

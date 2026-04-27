@@ -2,6 +2,7 @@
   const qosMode = new URLSearchParams(location.search).get('qos');
   const useLegacyQos = qosMode === 'legacy';
   const useFullQos = qosMode === 'full';
+  const publishAllCameras = new URLSearchParams(location.search).get('multicam') === '1';
 
   const els = {
     status: document.getElementById('status'),
@@ -49,6 +50,16 @@
   };
 
   const qosLib = window.mediasoupClient && window.mediasoupClient.qos;
+  window.__qosDemoDebug = {
+    getState: () => state,
+    getRecvTransportStats: async () => {
+      if (!state.recvTransport || typeof state.recvTransport.getStats !== 'function') {
+        return [];
+      }
+      const report = await state.recvTransport.getStats();
+      return Array.from(report.values ? report.values() : report);
+    },
+  };
 
   function log(message) {
     const line = `[${new Date().toLocaleTimeString()}] ${message}`;
@@ -451,7 +462,9 @@
     if (!cameraEntries || cameraEntries.length === 0) {
       els.localVideos.appendChild(createVideoCard({
         title: '本地发布',
-        subtitle: '发布麦克风和所有检测到的摄像头。',
+        subtitle: publishAllCameras
+          ? '发布麦克风和所有检测到的摄像头。'
+          : '发布麦克风和主摄像头。',
         badgeText: '空闲',
       }));
       return;
@@ -752,6 +765,14 @@
       });
     }
 
+    if (!publishAllCameras) {
+      return {
+        audioTrack,
+        cameraEntries,
+        captureStreams,
+      };
+    }
+
     if (navigator.mediaDevices && typeof navigator.mediaDevices.enumerateDevices === 'function') {
       const devices = await navigator.mediaDevices.enumerateDevices();
       for (const device of devices) {
@@ -894,8 +915,38 @@
     return !useLegacyQos && !useFullQos;
   }
 
+  function shouldEnableActiveQosControls() {
+    return useLegacyQos || useFullQos;
+  }
+
+  function selectPreferredVideoCodec() {
+    const codecs = Array.isArray(state.device?.rtpCapabilities?.codecs)
+      ? state.device.rtpCapabilities.codecs
+      : [];
+
+    return (
+      codecs.find(codec => {
+        const mimeType = String(codec?.mimeType || '').toLowerCase();
+        const packetizationMode = Number(codec?.parameters?.['packetization-mode'] ?? 0);
+        const profileLevelId = String(codec?.parameters?.['profile-level-id'] || '').toLowerCase();
+        return mimeType === 'video/h264' &&
+          packetizationMode === 1 &&
+          profileLevelId === '42e01f';
+      }) ||
+      codecs.find(codec => {
+        const mimeType = String(codec?.mimeType || '').toLowerCase();
+        const packetizationMode = Number(codec?.parameters?.['packetization-mode'] ?? 0);
+        return mimeType === 'video/h264' && packetizationMode === 1;
+      }) ||
+      codecs.find(codec => String(codec?.mimeType || '').toLowerCase() === 'video/h264') ||
+      codecs.find(codec => String(codec?.mimeType || '').toLowerCase() === 'video/vp8') ||
+      codecs.find(codec => String(codec?.mimeType || '').toLowerCase() === 'video/vp9') ||
+      null
+    );
+  }
+
   function normalizeIncomingQosMessage(message) {
-    if (message.method !== 'qosPolicy' || !shouldUseLocalNoPausePolicy()) {
+    if (message.method !== 'qosPolicy' || !shouldEnableActiveQosControls() || !shouldUseLocalNoPausePolicy()) {
       return message;
     }
 
@@ -1163,6 +1214,7 @@
           subtitle: data.peerId || data.producerId,
           badgeText: '已订阅',
           stream: new MediaStream([consumer.track]),
+          muted: true,
         });
         const renderedElement = card.querySelector('video');
         card.dataset.remoteProducerId = data.producerId;
@@ -1192,6 +1244,10 @@
 
         registerRemoteVideoConsumer(entry);
         renderRemoteVideoGroups();
+        void requestConsumerKeyFrame(consumer.id, data.peerId || data.producerId);
+        setTimeout(() => {
+          void requestConsumerKeyFrame(consumer.id, data.peerId || data.producerId);
+        }, 1000);
       }
 
       log(`Subscribed ${data.kind} from ${data.peerId || data.producerId}`);
@@ -1272,6 +1328,21 @@
     if (state.debugStatsTimer) {
       clearInterval(state.debugStatsTimer);
       state.debugStatsTimer = null;
+    }
+  }
+
+  async function requestConsumerKeyFrame(consumerId, label = '') {
+    if (!consumerId) {
+      return;
+    }
+
+    try {
+      await wsRequest('requestConsumerKeyFrame', { consumerId });
+      if (label) {
+        log(`Requested keyframe for ${label}`);
+      }
+    } catch (error) {
+      log(`Keyframe request failed for ${label || consumerId}: ${error.message}`);
     }
   }
 
@@ -1364,6 +1435,10 @@
   }
 
   function ensureDownlinkReporting() {
+    if (!shouldEnableActiveQosControls()) {
+      return;
+    }
+
     if (state.downlinkBundle || !state.recvTransport || !state.peerId) {
       return;
     }
@@ -1663,6 +1738,13 @@
   }
 
   function setupLocalQosSession(videoProducers) {
+    if (!shouldEnableActiveQosControls()) {
+      stopLegacyClientStatsReporting();
+      stopLocalQosSession();
+      updateControls();
+      return;
+    }
+
     if (useLegacyQos) {
       log('Legacy QoS mode enabled via query parameter');
       startLegacyClientStatsReporting();
@@ -1744,7 +1826,7 @@
       });
 
       state.latestQosPolicy = joinResponse.qosPolicy || null;
-      if (!useLegacyQos && !useFullQos) {
+      if (useFullQos) {
         const demoPolicy = buildDemoQosPolicy(joinResponse.qosPolicy);
         try {
           await wsRequest('setQosPolicy', {
@@ -1766,6 +1848,7 @@
       const recvData = await wsRequest('createWebRtcTransport', {
         producing: false,
         consuming: true,
+        rtpCapabilities: state.device.rtpCapabilities,
       });
 
       state.recvTransport = state.device.createRecvTransport(recvData);
@@ -1892,8 +1975,15 @@
       }
 
       const videoProducers = [];
+      const preferredVideoCodec = selectPreferredVideoCodec();
+      if (preferredVideoCodec) {
+        log(`Publishing video with codec ${preferredVideoCodec.mimeType}`);
+      }
       for (const [index, entry] of cameraEntries.entries()) {
-        const producer = await state.sendTransport.produce({ track: entry.track });
+        const producer = await state.sendTransport.produce({
+          track: entry.track,
+          codec: preferredVideoCodec || undefined,
+        });
         state.publishedProducers.set(producer.id, producer);
         videoProducers.push(producer);
         log(`Producing video #${index + 1} (${entry.label}) [${producer.id}]`);

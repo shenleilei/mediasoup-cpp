@@ -18,13 +18,23 @@ int PlainClientApp::RunLegacyMode()
 	RtcpContext rtcp;
 	rtcp.audioSsrc = audioSsrc_;
 	rtcp.sendH264Fn = PlainClientApp::SendH264ViaSharedPacketizer;
+	auto sendVideoFrame = [this](int fd, const uint8_t* data, int size,
+		uint8_t pt, uint32_t ts, uint32_t ssrc, uint16_t& seq,
+		VideoTrackRuntime& track) {
+		if (videoCodecMode_ == VideoCodecMode::VP8) {
+			SendVp8ViaSimplePacketizer(
+				fd, data, size, pt, ts, ssrc, seq, track.vp8PacketizerState);
+		} else {
+			SendH264ViaSharedPacketizer(fd, data, size, pt, ts, ssrc, seq);
+		}
+	};
 	rtcp.canSendVideoFn = [this](uint32_t ssrc) {
 		for (const auto& track : videoTracks_) {
 			if (track.ssrc == ssrc) return !track.videoSuppressed;
 		}
 		return true;
 	};
-	rtcp.requestKeyframeFn = [this, &rtcp](uint32_t ssrc) {
+	rtcp.requestKeyframeFn = [this, &rtcp, &sendVideoFrame](uint32_t ssrc) {
 		for (auto& track : videoTracks_) {
 			if (track.ssrc != ssrc || track.videoSuppressed) continue;
 
@@ -38,14 +48,15 @@ int PlainClientApp::RunLegacyMode()
 			if (stream && !stream->lastKeyframe.empty() && stream->seqPtr) {
 				const uint32_t resendTs =
 					stream->lastRtpTs != 0 ? stream->lastRtpTs : stream->lastKeyframeTs;
-				SendH264ViaSharedPacketizer(
-					udpFd_,
-					stream->lastKeyframe.data(),
-					static_cast<int>(stream->lastKeyframe.size()),
-					stream->payloadType,
-					resendTs,
-					stream->ssrc,
-					*stream->seqPtr);
+					sendVideoFrame(
+						udpFd_,
+						stream->lastKeyframe.data(),
+						static_cast<int>(stream->lastKeyframe.size()),
+						stream->payloadType,
+						resendTs,
+						stream->ssrc,
+						*stream->seqPtr,
+						track);
 			}
 			return;
 		}
@@ -156,14 +167,15 @@ int PlainClientApp::RunLegacyMode()
 									rtpTs);
 							}
 							if (!track.videoSuppressed) {
-								SendH264ViaSharedPacketizer(
+								sendVideoFrame(
 									udpFd_,
 									encodedPacket->data,
 									encodedPacket->size,
 									track.payloadType,
 									rtpTs,
 									track.ssrc,
-									track.seq);
+									track.seq,
+									track);
 							}
 							msff::PacketUnref(encodedPacket.get());
 						}
@@ -176,17 +188,18 @@ int PlainClientApp::RunLegacyMode()
 					h264BitstreamFilter_->SendPacket(filteredPacket.get());
 					while (h264BitstreamFilter_->ReceivePacket(filteredPacket.get())) {
 						for (auto& track : videoTracks_) {
-							if (filteredPacket->flags & AV_PKT_FLAG_KEY)
-								rtcp.cacheKeyframe(track.ssrc, filteredPacket->data, filteredPacket->size, rtpTs);
-							if (!track.videoSuppressed) {
-								SendH264ViaSharedPacketizer(
-									udpFd_,
-									filteredPacket->data,
-									filteredPacket->size,
+						if (filteredPacket->flags & AV_PKT_FLAG_KEY)
+							rtcp.cacheKeyframe(track.ssrc, filteredPacket->data, filteredPacket->size, rtpTs);
+						if (!track.videoSuppressed) {
+							sendVideoFrame(
+								udpFd_,
+								filteredPacket->data,
+								filteredPacket->size,
 									track.payloadType,
 									rtpTs,
 									track.ssrc,
-									track.seq);
+									track.seq,
+									track);
 							}
 						}
 						msff::PacketUnref(filteredPacket.get());
@@ -196,14 +209,15 @@ int PlainClientApp::RunLegacyMode()
 						if (packet->flags & AV_PKT_FLAG_KEY)
 							rtcp.cacheKeyframe(track.ssrc, packet->data, packet->size, rtpTs);
 						if (!track.videoSuppressed) {
-							SendH264ViaSharedPacketizer(
+							sendVideoFrame(
 								udpFd_,
 								packet->data,
 								packet->size,
 								track.payloadType,
 								rtpTs,
 								track.ssrc,
-								track.seq);
+								track.seq,
+								track);
 						}
 					}
 				}

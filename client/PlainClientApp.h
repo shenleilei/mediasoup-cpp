@@ -2,6 +2,7 @@
 
 #include "PlainClientSupport.h"
 #include "RtcpHandler.h"
+#include "Vp8Packetizer.h"
 #include "WsClient.h"
 #include "ffmpeg/BitstreamFilter.h"
 #include "ffmpeg/Decoder.h"
@@ -25,6 +26,15 @@ public:
 	static int RunPlainClientApp(int argc, char* argv[]);
 	static std::atomic<bool>& RunningFlag() { return running_; }
 	static RtcpContext*& RtcpContextSlot() { return rtcpContext_; }
+
+	enum class VideoCodecMode {
+		H264,
+		VP8
+	};
+
+	static bool ShouldFallbackToCopyMode(VideoCodecMode mode) {
+		return mode == VideoCodecMode::H264;
+	}
 
 private:
 	enum class LossCounterSource {
@@ -51,6 +61,7 @@ private:
 		int encBitrate = 900000;
 		int configuredVideoFps = 25;
 		double scaleResolutionDownBy = 1.0;
+		mediasoup::plainclient::Vp8PacketizerState vp8PacketizerState;
 		std::optional<mediasoup::ffmpeg::Encoder> encoder;
 		mediasoup::ffmpeg::FramePtr scaledFrame;
 		SwsContext* swsCtx = nullptr;
@@ -79,6 +90,9 @@ private:
 	static void OnSignal(int);
 	static void SendH264ViaSharedPacketizer(int fd, const uint8_t* data, int size,
 		uint8_t pt, uint32_t ts, uint32_t ssrc, uint16_t& seq);
+	static void SendVp8ViaSimplePacketizer(int fd, const uint8_t* data, int size,
+		uint8_t pt, uint32_t ts, uint32_t ssrc, uint16_t& seq,
+		mediasoup::plainclient::Vp8PacketizerState& packetizerState);
 	static bool SendOpus(int fd, const uint8_t* data, int size,
 		uint8_t pt, uint32_t ts, uint32_t ssrc, uint16_t& seq);
 	static int ResolveScaledDimension(int sourceDimension, double scaleDownBy);
@@ -98,6 +112,7 @@ private:
 	std::string peerId_;
 	std::string mp4Path_;
 	bool copyMode_{false};
+	VideoCodecMode videoCodecMode_{VideoCodecMode::H264};
 	size_t videoTrackCount_{1};
 	std::vector<double> videoTrackWeights_;
 	std::optional<MatrixTestProfile> matrixTestProfile_;
@@ -112,6 +127,7 @@ private:
 	bool threadedOwnsAllVideoInputs_{false};
 	bool transportControllerEnabled_{true};
 	bool transportEstimateEnabled_{true};
+	bool qosEnabled_{true};
 
 	std::optional<mediasoup::ffmpeg::InputFormat> inputFormat_;
 	int vidIdx_{-1};

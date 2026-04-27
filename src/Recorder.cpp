@@ -519,6 +519,12 @@ void PeerRecorder::flushVideoFrame()
 		static_cast<int64_t>(ticks),
 		{1, static_cast<int>(videoClockRate_)},
 		videoStream_->time_base));
+
+	if (videoLastPts_ != -1 && pts <= videoLastPts_) {
+		pts = videoLastPts_ + 1;
+	}
+	videoLastPts_ = pts;
+
 	AVPacket pkt{};
 	pkt.stream_index = videoStream_->index;
 	pkt.data = writeData->data();

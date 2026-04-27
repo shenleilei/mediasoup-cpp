@@ -4,6 +4,9 @@
 #include "RoomRecordingHelpers.h"
 #include "RoomStatsQosHelpers.h"
 
+#include <algorithm>
+#include <cctype>
+
 namespace mediasoup {
 namespace {
 
@@ -58,6 +61,18 @@ bool IsPlainClientBaselineH264Codec(const RtpCodecCapability& codec)
 		profileLevelId == kPlainClientH264BaselineProfileLevelId;
 }
 
+bool IsPlainClientVp8Codec(const RtpCodecCapability& codec)
+{
+	return codec.mimeType == "video/VP8";
+}
+
+std::string NormalizeRequestedPlainVideoCodec(std::string value)
+{
+	std::transform(value.begin(), value.end(), value.begin(),
+		[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+	return value;
+}
+
 uint8_t FindTransportCcExtensionId(const RtpCapabilities& caps, const std::string& kind)
 {
 	for (const auto& extension : caps.headerExtensions) {
@@ -78,7 +93,7 @@ uint8_t FindTransportCcExtensionId(const RtpCapabilities& caps, const std::strin
 } // namespace
 
 RoomService::Result RoomService::createTransport(const std::string& roomId,
-	const std::string& peerId, bool producing, bool consuming)
+	const std::string& peerId, bool producing, bool consuming, const json& rtpCapabilities)
 {
 	if (producing == consuming)
 		return {false, {}, "", "exactly one of producing or consuming must be true"};
@@ -87,6 +102,16 @@ RoomService::Result RoomService::createTransport(const std::string& roomId,
 	if (!room) return {false, {}, "", "room not found"};
 	auto peer = room->getPeer(peerId);
 	if (!peer) return {false, {}, "", "peer not found"};
+	if (consuming) {
+		if (!rtpCapabilities.is_null() && !rtpCapabilities.is_object()) {
+			MS_WARN(logger_, "[{} {}] createTransport validation failed: invalid rtpCapabilities type",
+				roomId, peerId);
+			return {false, {}, "", "invalid rtpCapabilities"};
+		}
+		if (!rtpCapabilities.empty()) {
+			peer->rtpCapabilities = rtpCapabilities.get<RtpCapabilities>();
+		}
+	}
 
 	WebRtcTransportOptions opts;
 	opts.listenInfos = roomManager_.listenInfos();
@@ -209,7 +234,8 @@ RoomService::Result RoomService::connectPlainTransport(const std::string& roomId
 }
 
 RoomService::Result RoomService::plainPublish(const std::string& roomId,
-	const std::string& peerId, const std::vector<uint32_t>& videoSsrcs, uint32_t audioSsrc)
+	const std::string& peerId, const std::vector<uint32_t>& videoSsrcs, uint32_t audioSsrc,
+	const std::string& videoCodec)
 {
 	auto room = roomManager_.getRoom(roomId);
 	if (!room) return {false, {}, "", "room not found"};
@@ -245,24 +271,35 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 	peer->plainSendTransport = transport;
 
 	auto caps = room->router()->rtpCapabilities();
+	const std::string requestedVideoCodec =
+		NormalizeRequestedPlainVideoCodec(videoCodec.empty() ? "h264" : videoCodec);
+	if (requestedVideoCodec != "h264" && requestedVideoCodec != "vp8")
+		return {false, {}, "", "unsupported plain publish videoCodec"};
 
-	std::optional<RtpCodecCapability> videoCodec;
+	std::optional<RtpCodecCapability> selectedVideoCodec;
 	std::optional<RtpCodecCapability> audioCodec;
 	uint8_t audioPt = 0;
 	for (auto& c : caps.codecs) {
-		if (!videoCodec.has_value() && IsPlainClientBaselineH264Codec(c))
-			videoCodec = c;
+		if (!selectedVideoCodec.has_value()) {
+			if (requestedVideoCodec == "h264" && IsPlainClientBaselineH264Codec(c))
+				selectedVideoCodec = c;
+			else if (requestedVideoCodec == "vp8" && IsPlainClientVp8Codec(c))
+				selectedVideoCodec = c;
+		}
 		if (c.mimeType == "audio/opus" && audioPt == 0) {
 			audioPt = c.preferredPayloadType;
 			audioCodec = c;
 		}
 	}
-	if (!videoCodec.has_value())
+	if (!selectedVideoCodec.has_value()) {
+		if (requestedVideoCodec == "vp8")
+			return {false, {}, "", "router has no VP8 codec"};
 		return {false, {}, "", "router has no H264 Baseline codec"};
+	}
 	if (audioPt == 0) return {false, {}, "", "router has no opus codec"};
 
-	const uint8_t videoPt = videoCodec->preferredPayloadType;
-	json videoCodecParameters = videoCodec->parameters;
+	const uint8_t videoPt = selectedVideoCodec->preferredPayloadType;
+	json videoCodecParameters = selectedVideoCodec->parameters;
 	const uint8_t videoTransportCcExtId = FindTransportCcExtensionId(caps, "video");
 	const uint8_t audioTransportCcExtId = FindTransportCcExtensionId(caps, "audio");
 
@@ -272,10 +309,10 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 		uint32_t videoSsrc = videoSsrcs[index];
 		json videoRtpParams = {
 			{"codecs", {{
-				{"mimeType", "video/H264"}, {"payloadType", videoPt},
+				{"mimeType", selectedVideoCodec->mimeType}, {"payloadType", videoPt},
 				{"clockRate", 90000},
 				{"parameters", videoCodecParameters},
-				{"rtcpFeedback", videoCodec->rtcpFeedback}
+				{"rtcpFeedback", selectedVideoCodec->rtcpFeedback}
 			}}},
 			{"encodings", {{{"ssrc", videoSsrc}}}},
 			{"rtcp", {{"cname", peerId + "-video-" + std::to_string(index)}}}
@@ -353,6 +390,7 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 		{"ip", tuple.localAddress}, {"port", tuple.localPort},
 		{"videoPt", videoPt}, {"videoSsrc", videoSsrcs.front()},
 		{"videoProdId", videoProducers.front()->id()},
+		{"videoCodec", requestedVideoCodec},
 		{"videoTracks", videoTracks},
 		{"videoTransportCcExtId", videoTransportCcExtId},
 		{"audioPt", audioPt}, {"audioSsrc", audioSsrc},

@@ -4,6 +4,11 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import {
+  acquireNetemGuard,
+  clearRootQdisc,
+  releaseNetemGuard,
+} from './netem_guard.mjs';
 
 const require = createRequire(import.meta.url);
 const esbuild = require('esbuild');
@@ -22,6 +27,7 @@ const MAX_SYSTEM_LINES = 80;
 const MAX_PROCESS_LINES = 40;
 const MAX_BROWSER_IO_LINES = 120;
 const RUNTIME_SNAPSHOT_INTERVAL_MS = 5000;
+let activeNetemGuard = null;
 
 function runTc(args) {
   execFileSync(tcPath, args, { stdio: 'inherit' });
@@ -628,9 +634,7 @@ export function stateRank(state) {
 }
 
 export function clearNetem() {
-  try {
-    execFileSync(tcPath, ['qdisc', 'del', 'dev', 'lo', 'root'], { stdio: 'ignore' });
-  } catch {}
+  clearRootQdisc('lo');
 }
 
 function buildBundle(tmpDir) {
@@ -662,6 +666,9 @@ export async function launchBrowser() {
 }
 
 export function applyNetemConfig(config = {}) {
+  if (!activeNetemGuard) {
+    throw new Error('loopback netem guard not acquired before applyNetemConfig()');
+  }
   const { bandwidth, rtt, loss, jitter } = config;
   clearNetem();
 
@@ -692,6 +699,9 @@ export function applyNetemConfig(config = {}) {
 }
 
 export async function createLoopbackHarness(options = {}) {
+  const netemLabel = `loopback:${options.caseId ?? 'unknown'}`;
+  const netemGuard = await acquireNetemGuard({ label: netemLabel, iface: 'lo' });
+  activeNetemGuard = netemGuard;
   const diagnostics = {
     meta: {
       caseId: options.caseId ?? null,
@@ -914,6 +924,10 @@ export async function createLoopbackHarness(options = {}) {
           });
         }
         clearNetem();
+        await releaseNetemGuard(netemGuard);
+        if (activeNetemGuard === netemGuard) {
+          activeNetemGuard = null;
+        }
         if (tmpDir) {
           fs.rmSync(tmpDir, { recursive: true, force: true });
           pushEvent(diagnostics, 'tmp_dir_removed', { tmpDir });
@@ -943,6 +957,10 @@ export async function createLoopbackHarness(options = {}) {
       runtimeSnapshotTimer = null;
     }
     clearNetem();
+    await releaseNetemGuard(netemGuard);
+    if (activeNetemGuard === netemGuard) {
+      activeNetemGuard = null;
+    }
     if (tmpDir) {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }

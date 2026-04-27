@@ -168,10 +168,20 @@ std::shared_ptr<Consumer> Transport::consume(const json& options) {
 
 			std::vector<flatbuffers::Offset<FBS::RtpParameters::RtpEncodingParameters>> fbConsumableEncodings;
 			for (auto& enc : consumableRtpParameters.encodings) {
+				flatbuffers::Offset<FBS::RtpParameters::Rtx> rtxOffset = 0;
+				if (enc.rtxSsrc) {
+					rtxOffset = FBS::RtpParameters::CreateRtx(builder, *enc.rtxSsrc);
+				}
+
 				fbConsumableEncodings.push_back(FBS::RtpParameters::CreateRtpEncodingParameters(
 					builder,
 					enc.ssrc ? flatbuffers::Optional<uint32_t>(*enc.ssrc) : flatbuffers::Optional<uint32_t>(),
-					0, flatbuffers::Optional<uint8_t>(), 0, false, 0, flatbuffers::Optional<uint32_t>()));
+					enc.rid.empty() ? 0 : builder.CreateString(enc.rid),
+					enc.codecPayloadType ? flatbuffers::Optional<uint8_t>(*enc.codecPayloadType) : flatbuffers::Optional<uint8_t>(),
+					rtxOffset,
+					enc.dtx,
+					enc.scalabilityMode.empty() ? 0 : builder.CreateString(enc.scalabilityMode),
+					enc.maxBitrate ? flatbuffers::Optional<uint32_t>(*enc.maxBitrate) : flatbuffers::Optional<uint32_t>()));
 			}
 
 			auto reqOff = FBS::Transport::CreateConsumeRequest(

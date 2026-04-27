@@ -16,6 +16,10 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn, execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import {
+  acquireNetemGuard,
+  releaseNetemGuard,
+} from './netem_guard.mjs';
 
 const require = createRequire(import.meta.url);
 const esbuild = require('esbuild');
@@ -231,6 +235,7 @@ async function run() {
     console.log('WARNING: tc/netem not available; throttle tests will use degraded snapshot injection instead');
   }
 
+  const netemGuard = await acquireNetemGuard({ label: 'browser-downlink-priority', iface: 'lo' });
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qos-priority-'));
   const bundlePath = buildBundle(tmpDir);
   const results = [];
@@ -422,6 +427,7 @@ async function run() {
     if (browser) await browser.close();
     if (sfu) await stopSfu(sfu);
     fs.rmSync(tmpDir, { recursive: true, force: true });
+    await releaseNetemGuard(netemGuard);
   }
 
   // ── Summary ──

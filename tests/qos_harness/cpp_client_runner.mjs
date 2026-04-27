@@ -3,6 +3,11 @@ import path from 'node:path';
 import net from 'node:net';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import {
+  acquireNetemGuard,
+  clearRootQdisc,
+  releaseNetemGuard,
+} from './netem_guard.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,6 +17,7 @@ const HARNESS_WARMUP_MS = 2000;
 const DEFAULT_HARNESS_MP4_PATH = path.join(repoRoot, 'tests', 'fixtures', 'media', 'test_sweep.mp4');
 const DEFAULT_HARNESS_AV_MP4_PATH = path.join(repoRoot, 'tests', 'fixtures', 'media', 'test_sweep_av.mp4');
 const DEFAULT_MATRIX_MP4_PATH = path.join(repoRoot, 'tests', 'fixtures', 'media', 'test_sweep_cpp_matrix.mp4');
+const activeNetemGuards = new Map();
 
 function runTc(args) {
   execFileSync(tcPath, args, { stdio: 'inherit' });
@@ -126,12 +132,13 @@ export function sleep(ms) {
 }
 
 export function clearNetem(iface = 'lo') {
-  try {
-    execFileSync(tcPath, ['qdisc', 'del', 'dev', iface, 'root'], { stdio: 'ignore' });
-  } catch {}
+  clearRootQdisc(iface);
 }
 
 export function applyNetemConfig(config = {}, iface = 'lo') {
+  if (!activeNetemGuards.has(iface)) {
+    throw new Error(`cpp-client netem guard not acquired before applyNetemConfig() on ${iface}`);
+  }
   const { bandwidth, rtt, loss, jitter } = config;
   clearNetem(iface);
 
@@ -439,6 +446,11 @@ export async function createCppClientHarness({
   if (!fs.existsSync(mp4Path)) {
     throw new Error(`mp4 file not found: ${mp4Path}`);
   }
+  const netemGuard = await acquireNetemGuard({
+    label: `cpp-client:${roomId ?? peerId ?? 'unknown'}`,
+    iface,
+  });
+  activeNetemGuards.set(iface, netemGuard);
 
   const diagnostics = {
     sfuStdout: [],
@@ -505,9 +517,16 @@ export async function createCppClientHarness({
   };
 
   const stopHarness = async () => {
-    clearNetem(iface);
-    await stopChild(client);
-    await stopChild(sfu);
+    try {
+      clearNetem(iface);
+      await stopChild(client);
+      await stopChild(sfu);
+    } finally {
+      await releaseNetemGuard(netemGuard);
+      if (activeNetemGuards.get(iface) === netemGuard) {
+        activeNetemGuards.delete(iface);
+      }
+    }
   };
 
   try {
