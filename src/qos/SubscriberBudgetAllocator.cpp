@@ -50,6 +50,8 @@ double SubscriberBudgetAllocator::computeBudgetBps(const DownlinkSnapshot& snaps
 	double budget = kDefaultSafetyCap;
 	if (snapshot.availableIncomingBitrate > 0.0)
 		budget = std::min(budget, snapshot.availableIncomingBitrate * kAlpha);
+	else if (snapshot.availableIncomingBitrate == 0.0 && snapshot.seq > 0)
+		budget = 0.0; // Respect zero-bitrate congestion reports
 	return budget;
 }
 
@@ -142,6 +144,7 @@ SubscriberBudgetPlan SubscriberBudgetAllocator::Allocate(
 
 		for (size_t i = 0; i < n; ++i) {
 			if (!allocs[i].active) continue;
+			if (subs[i].kind != "video") continue; // Audio tracks don't have spatial/temporal layers
 			// Try spatial upgrade
 			if (allocs[i].spatial < maxSpatialCap) {
 				uint8_t ns = allocs[i].spatial + 1;
