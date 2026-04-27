@@ -201,6 +201,78 @@ TEST(SubscriberBudgetAllocatorTest, CameraBaseBitrateOverrideAffectsAdmission) {
 	EXPECT_EQ(paused, 1);
 }
 
+TEST(SubscriberBudgetAllocatorTest, StartupZeroIncomingBitrateDoesNotPauseVisibleSubscriber) {
+	SubscriberBudgetAllocator alloc;
+	auto snap = MakeSnapshot("sub1", 0.0, {
+		MakeSub("c1", "p1", true, true),
+	});
+	snap.seq = 1;
+	snap.subscriptions[0].framesPerSecond = 0.0;
+	snap.subscriptions[0].frameWidth = 0;
+	snap.subscriptions[0].frameHeight = 0;
+
+	auto plan = alloc.Allocate(snap, 1);
+
+	EXPECT_GT(plan.budgetBps, 0.0);
+	bool resumed = false;
+	bool paused = false;
+	for (const auto& action : plan.actions) {
+		if (action.consumerId != "c1") continue;
+		if (action.type == DownlinkAction::Type::kResume)
+			resumed = true;
+		if (action.type == DownlinkAction::Type::kPause)
+			paused = true;
+	}
+	EXPECT_TRUE(resumed);
+	EXPECT_FALSE(paused);
+}
+
+TEST(SubscriberBudgetAllocatorTest, StartupWarmupKeepsBudgetWhenVisibleStatsAreMixed) {
+	SubscriberBudgetAllocator alloc;
+	auto snap = MakeSnapshot("sub1", 0.0, {
+		MakeSub("c1", "p1", true, true),
+		MakeSub("c2", "p2", true, false),
+	});
+	snap.seq = 1;
+	snap.subscriptions[0].framesPerSecond = 0.0;
+	snap.subscriptions[0].frameWidth = 0;
+	snap.subscriptions[0].frameHeight = 0;
+	snap.subscriptions[1].framesPerSecond = 10.0;
+	snap.subscriptions[1].frameWidth = 640;
+	snap.subscriptions[1].frameHeight = 360;
+
+	auto plan = alloc.Allocate(snap, 1);
+
+	EXPECT_GT(plan.budgetBps, 0.0);
+	int pausedCount = 0;
+	for (const auto& action : plan.actions) {
+		if (action.type == DownlinkAction::Type::kPause)
+			++pausedCount;
+	}
+	EXPECT_EQ(pausedCount, 0);
+}
+
+TEST(SubscriberBudgetAllocatorTest, DegradedZeroIncomingBitrateStillCollapsesBudget) {
+	SubscriberBudgetAllocator alloc;
+	auto snap = MakeSnapshot("sub1", 0.0, {
+		MakeSub("c1", "p1", true, true),
+	});
+	snap.seq = 4;
+	snap.subscriptions[0].framesPerSecond = 15.0;
+	snap.subscriptions[0].frameWidth = 1280;
+	snap.subscriptions[0].frameHeight = 720;
+
+	auto plan = alloc.Allocate(snap, 2);
+
+	EXPECT_EQ(plan.budgetBps, 0.0);
+	bool paused = false;
+	for (const auto& action : plan.actions) {
+		if (action.consumerId == "c1" && action.type == DownlinkAction::Type::kPause)
+			paused = true;
+	}
+	EXPECT_TRUE(paused);
+}
+
 TEST(SubscriberBudgetAllocatorTest, ScreenShareBaseBitrateOverrideCanForceClampToBase) {
 	ScopedEnvVar bitrateOverride("MEDIASOUP_QOS_SCREENSHARE_BASE_BITRATE_BPS", "1000000");
 	SubscriberBudgetAllocator alloc;
