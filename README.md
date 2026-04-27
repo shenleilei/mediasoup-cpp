@@ -1,5 +1,7 @@
 # mediasoup-cpp
 
+[English](./README_en.md) | 简体中文
+
 这是一个围绕上游 `mediasoup-worker` 构建的 C++17 SFU 控制平面。
 
 本项目使用原生的 C++ 服务器取代了 mediasoup 通常的 Node.js 控制层，同时仍然依赖经过实战检验的 `mediasoup-worker` 进程进行媒体处理。最终呈现的是一个原生的 C++ 信令技术栈，具备房间/会话管理、多节点房间路由、录制以及 QoS 聚合等功能。
