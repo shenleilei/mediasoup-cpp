@@ -273,6 +273,27 @@ TEST(SubscriberBudgetAllocatorTest, DegradedZeroIncomingBitrateStillCollapsesBud
 	EXPECT_TRUE(paused);
 }
 
+TEST(SubscriberBudgetAllocatorTest, BootstrapZeroIncomingBitrateGraceExpires) {
+	SubscriberBudgetAllocator alloc;
+	auto snap = MakeSnapshot("sub1", 0.0, {
+		MakeSub("c1", "p1", true, true),
+	});
+	snap.seq = 7;
+	snap.subscriptions[0].framesPerSecond = 0.0;
+	snap.subscriptions[0].frameWidth = 0;
+	snap.subscriptions[0].frameHeight = 0;
+
+	auto plan = alloc.Allocate(snap, 1);
+
+	EXPECT_EQ(plan.budgetBps, 0.0);
+	bool paused = false;
+	for (const auto& action : plan.actions) {
+		if (action.consumerId == "c1" && action.type == DownlinkAction::Type::kPause)
+			paused = true;
+	}
+	EXPECT_TRUE(paused);
+}
+
 TEST(SubscriberBudgetAllocatorTest, ScreenShareBaseBitrateOverrideCanForceClampToBase) {
 	ScopedEnvVar bitrateOverride("MEDIASOUP_QOS_SCREENSHARE_BASE_BITRATE_BPS", "1000000");
 	SubscriberBudgetAllocator alloc;
