@@ -1,59 +1,59 @@
-# Test Entrypoints
+# 测试入口点规范 (Test Entrypoints)
 
 ## `scripts/run_all_tests.sh`
 
-- `scripts/run_all_tests.sh` is the full repository regression entrypoint.
-- It SHALL continue running remaining selected groups after one selected group fails.
-- It SHALL exit non-zero after the run if any selected group failed.
-- It SHALL cover every C++ gtest target defined in `CMakeLists.txt`.
-- It SHALL also cover the full QoS regression surface defined by `scripts/run_qos_tests.sh`.
-- After an actual test execution, it SHALL rewrite `docs/full-regression-test-results.md`.
-- When its selected groups delegate to `scripts/run_qos_tests.sh`, the QoS-specific reports owned by that script SHALL be refreshed according to that script's contract.
-- The generated Markdown report SHALL include:
-  - generation time
-  - selected groups for that run
-  - overall pass/fail status
-  - failed-group summary
-  - per-task status and elapsed time for each attempted task
-- `--help` and `--list` SHALL exit without rewriting `docs/full-regression-test-results.md`.
+- `scripts/run_all_tests.sh` 是整个仓库的全量回归测试（full regression）入口。
+- 当某个选定的测试组失败时，它**必须 (SHALL)** 继续执行剩余被选中的测试组。
+- 如果任何选定的测试组失败，运行结束后它**必须 (SHALL)** 以非零状态码退出。
+- 它**必须 (SHALL)** 涵盖 `CMakeLists.txt` 中定义的所有 C++ gtest 目标。
+- 它**必须 (SHALL)** 同时涵盖由 `scripts/run_qos_tests.sh` 定义的全部 QoS 回归测试范围。
+- 在实际执行测试后，它**必须 (SHALL)** 覆写 `docs/full-regression-test-results.md` 文件。
+- 当其选定的组委托给 `scripts/run_qos_tests.sh` 执行时，由该脚本负责的 QoS 相关报告**必须 (SHALL)** 根据该脚本的契约进行刷新。
+- 生成的 Markdown 报告**必须 (SHALL)** 包含：
+  - 生成时间
+  - 本次运行所选定的测试组
+  - 整体的通过/失败状态
+  - 失败组的摘要信息
+  - 每个尝试过的任务的单项状态及耗时
+- 使用 `--help` 和 `--list` 参数时，**必须 (SHALL)** 直接退出且不能覆写 `docs/full-regression-test-results.md`。
 
 ## `scripts/run_qos_tests.sh`
 
-- `scripts/run_qos_tests.sh` is the QoS regression entrypoint.
-- It SHALL continue running remaining selected groups after one selected task or group fails.
-- Its C++ unit and C++ integration groups SHALL execute the dedicated QoS binaries without per-case whitelist filters.
-- It SHALL record failed tasks in `tests/qos_harness/artifacts/last-failures.txt`.
-- After an actual execution, it SHALL rewrite `docs/downlink-qos-test-results-summary.md`.
-- When matrix-style groups run, it SHALL regenerate the corresponding QoS Markdown reports documented in `README.md`.
-- Its default `cpp-client-harness` group SHALL include the threaded plain-client harness regressions that cover:
+- `scripts/run_qos_tests.sh` 是 QoS 回归测试入口。
+- 当某个选定的任务或测试组失败时，它**必须 (SHALL)** 继续运行剩余选定的组。
+- 它的 C++ 单元测试组和 C++ 集成测试组**必须 (SHALL)** 执行专用的 QoS 二进制文件，且不带有单用例白名单过滤（per-case whitelist filters）。
+- 它**必须 (SHALL)** 将失败的任务记录到 `tests/qos_harness/artifacts/last-failures.txt` 中。
+- 在实际执行之后，它**必须 (SHALL)** 覆写 `docs/downlink-qos-test-results-summary.md`。
+- 当矩阵（matrix-style）组运行时，它**必须 (SHALL)** 重新生成在 `README.md` 中记录的对应 QoS Markdown 报告。
+- 它的默认 `cpp-client-harness` 测试组**必须 (SHALL)** 包含线程化的纯客户端（threaded plain-client）测试工具回归测试，覆盖：
   - `threaded_generation_switch`
   - `threaded_multi_video_budget`
 
 ## `scripts/nightly_full_regression.py`
 
-- `scripts/nightly_full_regression.py run` is the repo-local nightly full-regression wrapper.
-- It SHALL delegate actual test execution to `scripts/run_all_tests.sh`.
-- It SHALL create a timestamped run directory under `artifacts/nightly-full-regression/`.
-- It SHALL retain only the most recent 100 timestamped nightly run directories under that artifact root.
-- It SHALL preserve the full raw log for each run.
-- It SHALL refresh the configured latest-log copy path after each run.
-- It SHALL snapshot the configured Markdown report attachments into the run directory.
-- It SHALL auto-record newly changed `docs/` paths from the nightly run in git.
-- It SHALL exclude `docs/` paths that were already dirty before the run started.
-- It SHALL render an email body that includes:
-  - overall status
-  - task pass rate when `docs/full-regression-test-results.md` is available
-  - failed tasks
-  - best-effort failed cases parsed from the raw log
-- It SHALL preserve local artifacts even when tests fail or email delivery fails.
+- `scripts/nightly_full_regression.py run` 是仓库本地的夜间全量回归测试（nightly full-regression）包装脚本。
+- 它**必须 (SHALL)** 将实际的测试执行委托给 `scripts/run_all_tests.sh`。
+- 它**必须 (SHALL)** 在 `artifacts/nightly-full-regression/` 目录下创建一个带时间戳的运行目录。
+- 它**必须 (SHALL)** 仅保留该制品（artifact）根目录下最近 100 个带时间戳的夜间运行目录。
+- 它**必须 (SHALL)** 保留每次运行的完整原始日志（raw log）。
+- 每次运行后，它**必须 (SHALL)** 刷新配置好的最新日志副本路径。
+- 它**必须 (SHALL)** 将配置好的 Markdown 报告附件快照保存到运行目录中。
+- 它**必须 (SHALL)** 自动在 git 中记录本次夜间运行新更改的 `docs/` 路径。
+- 它**必须 (SHALL)** 排除在运行开始前就已经处于 dirty 状态的 `docs/` 路径。
+- 它**必须 (SHALL)** 渲染一封邮件正文，其中包含：
+  - 整体状态
+  - 任务通过率（如果 `docs/full-regression-test-results.md` 可用）
+  - 失败的任务
+  - 从原始日志中尽力（best-effort）解析出的失败用例
+- 即使测试失败或邮件发送失败，它也**必须 (SHALL)** 保留本地制品（artifacts）。
 
-## Date-Based Report Archives
+## 基于日期的报告存档 (Date-Based Report Archives)
 
-- Date-based report archive roots created by the QoS report pipeline SHALL keep only the most recent 100 timestamped report directories.
-- Archive retention SHALL prune timestamped directories only and SHALL NOT treat helper symlinks such as `latest` as retention candidates.
+- QoS 报告流水线创建的基于日期的报告存档根目录**必须 (SHALL)** 仅保留最近 100 个带时间戳的报告目录。
+- 存档保留清理（Archive retention prune）操作**必须 (SHALL)** 仅清理带时间戳的目录，**严禁 (SHALL NOT)** 将辅助符号链接（例如 `latest`）视为清理候选对象。
 
 ## `scripts/install_nightly_full_regression_cron.sh`
 
-- `scripts/install_nightly_full_regression_cron.sh` is the repo-local installer for the managed nightly cron entry.
-- It SHALL install or refresh a single daily 03:00 cron line for `scripts/nightly_full_regression.py run`.
-- Repeated installs SHALL be idempotent and SHALL NOT duplicate the managed entry.
+- `scripts/install_nightly_full_regression_cron.sh` 是用于被托管夜间 cron 任务的仓库本地安装脚本。
+- 它**必须 (SHALL)** 安装或刷新单条每日 03:00 执行 `scripts/nightly_full_regression.py run` 的 cron 记录。
+- 重复安装**必须 (SHALL)** 是幂等的，并且**严禁 (SHALL NOT)** 产生重复的被托管条目。
