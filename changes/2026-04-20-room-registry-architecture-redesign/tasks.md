@@ -12,7 +12,7 @@ Outcome:
 Verification:
 - implementation follows the documented ownership split
 
-3. [x] Isolate pub/sub worker lifecycle behind a dedicated internal module
+3. [ ] Isolate pub/sub worker lifecycle behind a dedicated internal module
 Outcome:
 - subscriber logic no longer lives as a free-floating set of methods mixed with claim/resolve concerns
 Verification:
