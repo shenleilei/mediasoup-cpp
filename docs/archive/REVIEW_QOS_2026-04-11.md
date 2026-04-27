@@ -290,7 +290,7 @@ void RoomService::maybeSendRoomPressureOverrides(...) {
 
 ```cpp
 struct QosOverride {
-    uint32_t ttlMs{ 0u };  // 只告诉客户端，服务端不清理
+    uint64_t ttlMs{ 0u };  // 只告诉客户端，服务端不清理
 };
 ```
 
