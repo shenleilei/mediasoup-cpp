@@ -55,7 +55,7 @@
   - [docs/generated/uplink-qos-cpp-client-matrix-report.json](./generated/uplink-qos-cpp-client-matrix-report.json)
 
 - targeted:
-  - [docs/generated/uplink-qos-cpp-client-case-results.targeted.md](./generated/uplink-qos-cpp-client-case-results.targeted.md)
+  - [docs/plain-client-qos-case-results.md](./plain-client-qos-case-results.md)
   - [docs/generated/uplink-qos-cpp-client-matrix-report.targeted.json](./generated/uplink-qos-cpp-client-matrix-report.targeted.json)
 
 ### 4.2 C++ client signaling harness

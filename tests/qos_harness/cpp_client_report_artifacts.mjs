@@ -7,7 +7,7 @@ export const CPP_CLIENT_REPORT_RELATIVE_PATHS = {
   fullMatrixJson: 'docs/generated/uplink-qos-cpp-client-matrix-report.json',
   fullCaseMarkdown: 'docs/plain-client-qos-case-results.md',
   targetedMatrixJson: 'docs/generated/uplink-qos-cpp-client-matrix-report.targeted.json',
-  targetedCaseMarkdown: 'docs/generated/uplink-qos-cpp-client-case-results.targeted.md',
+  targetedCaseMarkdown: 'docs/generated/plain-client-qos-case-results.targeted.md',
 };
 
 export function getCppClientRunTypeForSelectedCases(selectedCases) {

@@ -118,10 +118,10 @@
 - [uplink-qos-blind-spot-scenario.md](./uplink-qos-blind-spot-scenario.md) 用来汇总“高质量网络突入长时盲区再恢复”这一类极端转场场景的理论时序和实测结果。
 - [uplink-qos-loopback-boundary-investigation.md](./uplink-qos-loopback-boundary-investigation.md) 用来记录 `BW2` 一类 loopback 边界 case 的专项排查结论、runner 特性和后续治理方向。
 - full matrix 当前机器结果在 [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json)。
-- targeted rerun 当前机器结果在 [generated/uplink-qos-matrix-report.targeted.json](./generated/uplink-qos-matrix-report.targeted.json)。
+- targeted rerun 当前机器结果在 [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json)。
 - Linux plain-client QoS 当前状态摘要在 [plain-client-qos-status.md](./plain-client-qos-status.md)。
 - PlainTransport C++ client full matrix 当前机器结果在 [plain-client-qos-case-results.md](./plain-client-qos-case-results.md) 和 [generated/uplink-qos-cpp-client-matrix-report.json](./generated/uplink-qos-cpp-client-matrix-report.json)。
-- PlainTransport C++ client targeted rerun 当前机器结果在 [generated/uplink-qos-cpp-client-case-results.targeted.md](./generated/uplink-qos-cpp-client-case-results.targeted.md) 和 [generated/uplink-qos-cpp-client-matrix-report.targeted.json](./generated/uplink-qos-cpp-client-matrix-report.targeted.json)。
+- PlainTransport C++ client targeted rerun 当前机器结果在 [plain-client-qos-case-results.md](./plain-client-qos-case-results.md) 和 [generated/uplink-qos-cpp-client-matrix-report.targeted.json](./generated/uplink-qos-cpp-client-matrix-report.targeted.json)。
 - downlink 当前状态摘要在 [downlink-qos-status.md](./downlink-qos-status.md)。
 - 每次报告生成的历史快照都归档在 [archive/uplink-qos-runs](./archive/uplink-qos-runs)。
 - 已删除的 plain-client 历史迁移 / review / blocker / matrix 方案过程稿不再保留在 `docs/` 中；如需追历史判断，请直接看 git 历史。

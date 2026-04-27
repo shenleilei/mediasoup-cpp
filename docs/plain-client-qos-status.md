@@ -46,7 +46,7 @@
 ### 3.3 targeted 结果
 
 - 人类可读结果：
-  [generated/uplink-qos-cpp-client-case-results.targeted.md](./generated/uplink-qos-cpp-client-case-results.targeted.md)
+  [plain-client-qos-case-results.md](./plain-client-qos-case-results.md)
 - 结构化 artifact：
   [generated/uplink-qos-cpp-client-matrix-report.targeted.json](./generated/uplink-qos-cpp-client-matrix-report.targeted.json)
 
