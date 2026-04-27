@@ -33,12 +33,6 @@ public:
 
 	bool connect(const std::string& host, int port, const std::string& path);
 	bool sendText(const std::string& msg);
-	enum class RecvTextStatus {
-		Text,
-		Timeout,
-		Closed
-	};
-	RecvTextStatus recvText(std::string* text, int timeoutMs = 10000);
 
 	json request(const std::string& method, const json& reqData, int timeoutMs = 5000);
 	bool requestAsync(const std::string& method, const json& reqData,
@@ -50,10 +44,19 @@ public:
 	void close();
 
 private:
+	enum class RecvTextStatus {
+		Text,
+		Timeout,
+		Closed
+	};
+
+	RecvTextStatus recvText(std::string* text, int timeoutMs = 10000);
 	void readerLoop();
 	void handleResponse(const json& response);
 	void failAllPendingRequests(const std::string& error);
 	void abortConnection();
+	int currentFd() const;
+	bool isReaderThread() const;
 
 	int fd_{-1};
 	NotificationHandler notificationHandler_;

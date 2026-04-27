@@ -989,9 +989,9 @@ private:
 		return true;
 	}
 
-	const TrackNetState* FindProbeTrack() const
+	TrackNetState* FindProbeTrack()
 	{
-		for (const auto& track : tracks_) {
+		for (auto& track : tracks_) {
 			if (!track.paused && track.transportCcExtensionId != 0) {
 				return &track;
 			}
@@ -1001,7 +1001,7 @@ private:
 
 	void FlushPendingProbePackets()
 	{
-		const TrackNetState* probeTrack = FindProbeTrack();
+		TrackNetState* probeTrack = FindProbeTrack();
 		if (!probeTrack) {
 			pendingProbeBytes_.store(0);
 			return;
@@ -1030,7 +1030,7 @@ private:
 	}
 
 	mediasoup::plainclient::SendResult SendProbePacket(
-		const TrackNetState& track,
+		TrackNetState& track,
 		size_t packetBytes,
 		mediasoup::ccutils::ProbeClusterId probeClusterId)
 	{
@@ -1038,7 +1038,7 @@ private:
 		const size_t paddingBytes = totalBytes > 12 ? (totalBytes - 12) : 1u;
 		uint8_t packet[1600]{};
 		const uint32_t probeRtpTs = ProbeRtpTimestampForTrack(track.ssrc);
-		rtpHeader(packet, track.payloadType, const_cast<TrackNetState&>(track).seq++,
+		rtpHeader(packet, track.payloadType, track.seq++,
 			probeRtpTs, track.ssrc, false);
 		packet[0] |= 0x20; // P bit.
 		std::memset(packet + 12, 0, paddingBytes);

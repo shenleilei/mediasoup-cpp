@@ -335,3 +335,35 @@ TEST(WsClientTest, OversizedIncomingFrameFailsPendingRequestPromptly)
 	client.close();
 	server.stop();
 }
+
+TEST(WsClientTest, ConcurrentCloseIsIdempotentWithPendingAsyncRequest)
+{
+	TestWsServer server;
+	ASSERT_TRUE(server.start());
+	server.run([](int clientFd) {
+		WsFrame request;
+		ASSERT_TRUE(readOneWsFrame(clientFd, &request));
+		EXPECT_EQ(request.opcode, kWsOpcodeText);
+		std::this_thread::sleep_for(std::chrono::milliseconds(200));
+	});
+
+	WsClient client;
+	ASSERT_TRUE(client.connect("127.0.0.1", server.port(), "/ws"));
+
+	std::promise<std::string> completion;
+	auto future = completion.get_future();
+	ASSERT_TRUE(client.requestAsync("close-race", json::object(),
+		[&completion](bool ok, const json&, const std::string& error) {
+			completion.set_value(ok ? "ok" : error);
+		}));
+
+	std::thread closerA([&client] { client.close(); });
+	std::thread closerB([&client] { client.close(); });
+	closerA.join();
+	closerB.join();
+
+	ASSERT_EQ(future.wait_for(std::chrono::seconds(2)), std::future_status::ready);
+	EXPECT_EQ(future.get(), "connection closed");
+
+	server.stop();
+}

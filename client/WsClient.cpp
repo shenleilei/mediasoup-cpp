@@ -268,9 +268,10 @@ bool WsClient::connect(const std::string& host, int port, const std::string& pat
 bool WsClient::sendText(const std::string& msg)
 {
 	std::lock_guard<std::mutex> lock(sendMutex_);
-	if (fd_ < 0) return false;
+	const int fd = currentFd();
+	if (fd < 0 || !running_.load()) return false;
 	const bool ok = sendClientFrame(
-		fd_,
+		fd,
 		kWsOpcodeText,
 		reinterpret_cast<const uint8_t*>(msg.data()),
 		msg.size());
@@ -283,7 +284,6 @@ bool WsClient::sendText(const std::string& msg)
 WsClient::RecvTextStatus WsClient::recvText(std::string* text, int timeoutMs)
 {
 	if (text) text->clear();
-	if (fd_ < 0) return RecvTextStatus::Closed;
 
 	const auto deadline =
 		std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
@@ -291,16 +291,19 @@ WsClient::RecvTextStatus WsClient::recvText(std::string* text, int timeoutMs)
 	bool awaitingContinuation = false;
 
 	while (true) {
+		const int fd = currentFd();
+		if (fd < 0) return RecvTextStatus::Closed;
+
 		const auto remainingMs = std::chrono::duration_cast<std::chrono::milliseconds>(
 			deadline - std::chrono::steady_clock::now()).count();
 		if (remainingMs <= 0) return RecvTextStatus::Timeout;
 
-		const auto pollStatus = waitForReadable(fd_, static_cast<int>(remainingMs));
+		const auto pollStatus = waitForReadable(fd, static_cast<int>(remainingMs));
 		if (pollStatus == PollReadStatus::Timeout) return RecvTextStatus::Timeout;
 		if (pollStatus == PollReadStatus::Closed) return RecvTextStatus::Closed;
 
 		WsFrame frame;
-		if (!receiveWsFrame(fd_, &frame)) {
+		if (!receiveWsFrame(fd, &frame)) {
 			return RecvTextStatus::Closed;
 		}
 
@@ -309,8 +312,12 @@ WsClient::RecvTextStatus WsClient::recvText(std::string* text, int timeoutMs)
 		}
 		if (frame.opcode == kWsOpcodePing) {
 			std::lock_guard<std::mutex> lock(sendMutex_);
+			const int current = currentFd();
+			if (current != fd || current < 0) {
+				return RecvTextStatus::Closed;
+			}
 			if (!sendClientFrame(
-					fd_,
+					fd,
 					kWsOpcodePong,
 					reinterpret_cast<const uint8_t*>(frame.payload.data()),
 					frame.payload.size())) {
@@ -528,21 +535,62 @@ void WsClient::failAllPendingRequests(const std::string& error)
 
 void WsClient::close()
 {
-	abortConnection();
-	if (readerThread_.joinable()) {
-		readerThread_.join();
+	int fdToClose = -1;
+	std::thread readerToJoin;
+	{
+		std::lock_guard<std::mutex> sendLock(sendMutex_);
+		std::lock_guard<std::mutex> stateLock(stateMutex_);
+		fdToClose = fd_;
+		const bool wasRunning = running_.exchange(false);
+		if (fdToClose >= 0 && wasRunning) {
+			::shutdown(fdToClose, SHUT_RDWR);
+		}
+		if (readerThread_.joinable()) {
+			if (isReaderThread()) {
+				readerThread_.detach();
+			} else {
+				readerToJoin = std::move(readerThread_);
+			}
+		}
 	}
-	if (fd_ >= 0) {
-		::close(fd_);
+	if (readerToJoin.joinable()) {
+		readerToJoin.join();
+	}
+	{
+		std::lock_guard<std::mutex> sendLock(sendMutex_);
+		std::lock_guard<std::mutex> stateLock(stateMutex_);
+		fdToClose = fd_;
 		fd_ = -1;
+	}
+	if (fdToClose >= 0) {
+		::close(fdToClose);
 	}
 	failAllPendingRequests("connection closed");
 }
 
 void WsClient::abortConnection()
 {
-	const bool wasRunning = running_.exchange(false);
-	if (fd_ >= 0 && wasRunning) {
-		::shutdown(fd_, SHUT_RDWR);
+	int fdToShutdown = -1;
+	{
+		std::lock_guard<std::mutex> lock(stateMutex_);
+		const bool wasRunning = running_.exchange(false);
+		if (fd_ >= 0 && wasRunning) {
+			fdToShutdown = fd_;
+		}
 	}
+	if (fdToShutdown >= 0) {
+		::shutdown(fdToShutdown, SHUT_RDWR);
+	}
+}
+
+int WsClient::currentFd() const
+{
+	std::lock_guard<std::mutex> lock(stateMutex_);
+	return fd_;
+}
+
+bool WsClient::isReaderThread() const
+{
+	return readerThread_.joinable() &&
+		readerThread_.get_id() == std::this_thread::get_id();
 }
