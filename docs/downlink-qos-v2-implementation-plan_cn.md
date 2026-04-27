@@ -580,7 +580,7 @@ struct TrackQosOverrideRecord {
 	std::string peerId;
 	std::string trackId;
 	int64_t sentAtMs{ 0 };
-	uint32_t ttlMs{ 0u };
+	uint64_t ttlMs{ 0u };
 };
 
 std::unordered_map<std::string, TrackQosOverrideRecord> trackQosOverrideRecords_;

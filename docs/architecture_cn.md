@@ -629,7 +629,7 @@ plain-client
 - 用 Lua `SET NX EX` 原子抢占房间归属
 - 如果房间已被其他节点持有，返回对方地址
 
-`resolveRoom(roomId, clientIp)`：
+`resolveRoom(roomId, remoteIp)`：
 
 - 先查本地 `roomCache_`
 - miss 时查 Redis
@@ -846,7 +846,7 @@ Client
 
 WorkerThread event loop
   -> WorkerThread::processTaskQueue()
-     -> RoomService::join(roomId, peerId, displayName, rtpCapabilities, clientIp)
+     -> RoomService::join(roomId, peerId, displayName, rtpCapabilities, remoteIp)
         -> RoomRegistry::claimRoom()                # 如果启用 Redis
         -> RoomManager::getRoom()
         -> RoomManager::createRoom()                # 仅新房间

@@ -39,6 +39,10 @@
 
 ## Input Hardening
 
+- The `/api/resolve` endpoint and WS `join` handshake SHALL NOT blindly trust user-supplied IP query parameters or JSON fields for geo-routing decisions. They MUST derive the location from the socket peer address or explicitly verified `X-Forwarded-For` HTTP headers.
+- Long-running recording timestamps SHALL be mapped to 64-bit precision to prevent >6h signed 32-bit arithmetic overflow bugs.
+- Generated recording filenames SHALL include millisecond-level precision or UUIDs to avoid collision during rapid reconnections.
+
 - Malformed Redis reply shapes or missing string payloads SHALL be ignored or rejected without dereferencing null reply elements.
 - Invalid numeric CLI option values SHALL fail startup explicitly rather than crashing or silently falling back to defaults.
 
