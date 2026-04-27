@@ -14,14 +14,85 @@
 #include "SignalingSocketState.h"
 #include "StaticFileResponder.h"
 #include "WorkerThread.h"
+#include "../client/ccutils/Prober.h"
 #include "../client/RtcpHandler.h"
+#include <algorithm>
 #include <future>
 #include <chrono>
 #include <cerrno>
 #include <hiredis/hiredis.h>
+#include <mutex>
 #include <unistd.h>
 
 using namespace mediasoup;
+
+namespace {
+
+class BlockingProbeListener : public mediasoup::ccutils::ProberListener {
+public:
+	void OnProbeClusterSwitch(const mediasoup::ccutils::ProbeClusterInfo& info) override
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		startedIds_.push_back(info.id);
+		cv_.notify_all();
+	}
+
+	void OnSendProbe(int) override
+	{
+		std::unique_lock<std::mutex> lock(mutex_);
+		sendCount_++;
+		if (sendCount_ == 1) {
+			firstSendEntered_ = true;
+			cv_.notify_all();
+			cv_.wait(lock, [&] { return releaseFirstSend_; });
+		} else {
+			cv_.notify_all();
+		}
+	}
+
+	bool waitForFirstSend(std::chrono::milliseconds timeout)
+	{
+		std::unique_lock<std::mutex> lock(mutex_);
+		return cv_.wait_for(lock, timeout, [&] { return firstSendEntered_; });
+	}
+
+	void releaseFirstSend()
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		releaseFirstSend_ = true;
+		cv_.notify_all();
+	}
+
+	bool waitForClusterStart(
+		mediasoup::ccutils::ProbeClusterId clusterId,
+		std::chrono::milliseconds timeout)
+	{
+		std::unique_lock<std::mutex> lock(mutex_);
+		return cv_.wait_for(lock, timeout, [&] {
+			return std::find(startedIds_.begin(), startedIds_.end(), clusterId) != startedIds_.end();
+		});
+	}
+
+private:
+	std::mutex mutex_;
+	std::condition_variable cv_;
+	std::vector<mediasoup::ccutils::ProbeClusterId> startedIds_;
+	int sendCount_{ 0 };
+	bool firstSendEntered_{ false };
+	bool releaseFirstSend_{ false };
+};
+
+mediasoup::ccutils::ProbeClusterGoal MakeTestProbeGoal()
+{
+	mediasoup::ccutils::ProbeClusterGoal goal;
+	goal.availableBandwidthBps = 500000;
+	goal.expectedUsageBps = 100000;
+	goal.desiredBps = 250000;
+	goal.duration = std::chrono::milliseconds(60);
+	return goal;
+}
+
+} // namespace
 
 // ═══════════════════════════════════════════════════════════════
 // Fix 1: Room::addPeer closes old peer before replacing
@@ -247,6 +318,39 @@ TEST(RoomRegistrySelectionTest, NoGeoComparatorPreservesStrictWeakOrderingForSel
 	EXPECT_FALSE(mediasoup::roomregistry::CompareNoGeoCandidates(self, self, "ws://self"));
 	EXPECT_TRUE(mediasoup::roomregistry::CompareNoGeoCandidates(self, peer, "ws://self"));
 	EXPECT_FALSE(mediasoup::roomregistry::CompareNoGeoCandidates(peer, self, "ws://self"));
+}
+
+TEST(ProberConcurrencyFixTest, ResetRestartsWorkerForClusterQueuedDuringReset) {
+	BlockingProbeListener listener;
+	mediasoup::ccutils::Prober prober(&listener);
+
+	const auto first = prober.AddCluster(
+		mediasoup::ccutils::ProbeClusterMode::Uniform,
+		MakeTestProbeGoal());
+	ASSERT_TRUE(first.IsValid());
+	ASSERT_TRUE(listener.waitForFirstSend(std::chrono::milliseconds(500)));
+
+	auto resetFuture = std::async(std::launch::async, [&prober] {
+		prober.Reset();
+	});
+	EXPECT_EQ(
+		resetFuture.wait_for(std::chrono::milliseconds(20)),
+		std::future_status::timeout);
+
+	const auto queuedDuringReset = prober.AddCluster(
+		mediasoup::ccutils::ProbeClusterMode::Uniform,
+		MakeTestProbeGoal());
+	ASSERT_TRUE(queuedDuringReset.IsValid());
+
+	listener.releaseFirstSend();
+	EXPECT_EQ(
+		resetFuture.wait_for(std::chrono::seconds(1)),
+		std::future_status::ready);
+	EXPECT_TRUE(listener.waitForClusterStart(
+		queuedDuringReset.id,
+		std::chrono::seconds(1)));
+
+	prober.Reset();
 }
 
 TEST(ChannelThreadSafetyFixTest, ProcessAvailableDataRejectedInThreadedMode) {

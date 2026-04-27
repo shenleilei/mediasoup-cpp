@@ -58,6 +58,7 @@ public:
 
 	void Reset(const ProbeClusterInfo& info = ProbeClusterInfoInvalid)
 	{
+		std::thread workerToJoin;
 		{
 			std::lock_guard<std::mutex> lock(mutex_);
 			if (activeCluster_ && activeCluster_->Info().id == info.id && info.IsValid()) {
@@ -67,12 +68,22 @@ public:
 			startedClusters_.clear();
 			activeCluster_.reset();
 			stopRequested_ = true;
+			resetInProgress_ = true;
+			if (worker_.joinable()) {
+				workerToJoin = std::move(worker_);
+			}
 			cv_.notify_all();
 		}
-		if (worker_.joinable()) {
-			worker_.join();
+		if (workerToJoin.joinable()) {
+			workerToJoin.join();
 		}
-		stopRequested_ = false;
+		{
+			std::lock_guard<std::mutex> lock(mutex_);
+			stopRequested_ = false;
+			resetInProgress_ = false;
+			StartWorkerIfNeededLocked();
+			cv_.notify_all();
+		}
 	}
 
 	ProbeClusterInfo AddCluster(ProbeClusterMode mode, ProbeClusterGoal goal)
@@ -109,9 +120,7 @@ public:
 		{
 			std::lock_guard<std::mutex> lock(mutex_);
 			clusters_.push_back(cluster);
-			if (!worker_.joinable()) {
-				worker_ = std::thread([this] { Run(); });
-			}
+			StartWorkerIfNeededLocked();
 			cv_.notify_all();
 		}
 		return cluster->Info();
@@ -375,14 +384,31 @@ private:
 
 	void Stop()
 	{
+		std::thread workerToJoin;
 		{
 			std::lock_guard<std::mutex> lock(mutex_);
 			stopRequested_ = true;
+			resetInProgress_ = false;
+			if (worker_.joinable()) {
+				workerToJoin = std::move(worker_);
+			}
 			cv_.notify_all();
 		}
-		if (worker_.joinable()) {
-			worker_.join();
+		if (workerToJoin.joinable()) {
+			workerToJoin.join();
 		}
+		{
+			std::lock_guard<std::mutex> lock(mutex_);
+			stopRequested_ = false;
+		}
+	}
+
+	void StartWorkerIfNeededLocked()
+	{
+		if (resetInProgress_ || stopRequested_ || worker_.joinable() || clusters_.empty()) {
+			return;
+		}
+		worker_ = std::thread([this] { Run(); });
 	}
 
 	mutable std::mutex mutex_;
@@ -394,6 +420,7 @@ private:
 	mutable std::unordered_set<ProbeClusterId> startedClusters_;
 	std::thread worker_;
 	bool stopRequested_{ false };
+	bool resetInProgress_{ false };
 };
 
 } // namespace mediasoup::ccutils
