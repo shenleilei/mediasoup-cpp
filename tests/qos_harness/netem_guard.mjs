@@ -88,6 +88,11 @@ function removeStaleLock(lockPath, staleAfterMs) {
     return false;
   }
 
+  const latestMetadata = safeReadJson(metadataPath);
+  if (JSON.stringify(latestMetadata) !== JSON.stringify(metadata)) {
+    return false;
+  }
+
   fs.rmSync(lockPath, { recursive: true, force: true });
   return true;
 }

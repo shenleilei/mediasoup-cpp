@@ -510,7 +510,8 @@ RoomService::Result RoomService::pauseProducer(const std::string& roomId,
 	auto room = roomManager_.getRoom(roomId);
 	if (!room) return {false, {}, "", "room not found"};
 	auto producer = room->router()->getProducerById(producerId);
-	if (producer) producer->pause();
+	if (!producer) return {false, {}, "", "producer not found"};
+	producer->pause();
 	return {true, {}};
 }
 
@@ -520,7 +521,8 @@ RoomService::Result RoomService::resumeProducer(const std::string& roomId,
 	auto room = roomManager_.getRoom(roomId);
 	if (!room) return {false, {}, "", "room not found"};
 	auto producer = room->router()->getProducerById(producerId);
-	if (producer) producer->resume();
+	if (!producer) return {false, {}, "", "producer not found"};
+	producer->resume();
 	return {true, {}};
 }
 

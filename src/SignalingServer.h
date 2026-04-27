@@ -84,7 +84,9 @@ private:
 	RoomRegistry* registry_;
 	std::string recordDir_;
 	bool redisRequired_ = true;
-	bool running_ = false;
+	std::atomic<bool> running_{false};
+
+	WorkerThread* findWorkerThreadById(int workerThreadId) const;
 
 	// Room → WorkerThread dispatch table (only accessed from main uWS thread, no lock needed)
 	std::unordered_map<std::string, WorkerThread*> roomDispatch_;

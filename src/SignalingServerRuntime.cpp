@@ -114,6 +114,15 @@ WorkerThread* SignalingServer::getWorkerThread(const std::string& roomId, bool a
 	return best;
 }
 
+WorkerThread* SignalingServer::findWorkerThreadById(int workerThreadId) const {
+	for (const auto& wt : workerThreads_) {
+		if (wt && wt->id() == workerThreadId) {
+			return wt.get();
+		}
+	}
+	return nullptr;
+}
+
 void SignalingServer::assignRoom(const std::string& roomId, WorkerThread* wt) {
 	roomDispatch_[roomId] = wt;
 	destroyedRooms_.erase(roomId);
@@ -221,7 +230,7 @@ void SignalingServer::enqueueRegistryTask(std::function<void()> task, std::strin
 }
 
 void SignalingServer::stop() {
-	running_ = false;
+	running_.store(false, std::memory_order_relaxed);
 	startupSucceeded_.store(false, std::memory_order_relaxed);
 	stopRegistryWorker();
 }
