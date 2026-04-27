@@ -502,7 +502,7 @@
 - `docs/downlink-qos-case-results.md`
 - `docs/generated/downlink-qos-case-results.targeted.md`
 - `docs/generated/downlink-qos-matrix-report.json`
-- `docs/generated/downlink-qos-matrix-report.targeted.json`
+- `docs/generated/downlink-qos-matrix-report.json`
 - `docs/archive/downlink-qos-runs/<timestamp>/...`
 - `metadata.json`
 

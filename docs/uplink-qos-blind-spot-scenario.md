@@ -171,8 +171,8 @@
 
 归档结果见：
 
-- [第一次失败快照](./archive/uplink-qos-runs/2026-04-12T11-47-26.985Z/docs/generated/uplink-qos-case-results.targeted.md)
-- [第一次失败 JSON](./archive/uplink-qos-runs/2026-04-12T11-47-26.985Z/docs/generated/uplink-qos-matrix-report.targeted.json)
+- [第一次失败快照](./archive/uplink-qos-runs/2026-04-19T20-58-23.877Z/docs/uplink-qos-case-results.md)
+- [第一次失败 JSON](./archive/uplink-qos-runs/2026-04-19T20-58-23.877Z/docs/generated/uplink-qos-matrix-report.json)
 
 当时的关键结论是：
 
@@ -319,15 +319,15 @@
 
 当前 targeted 结果见：
 
-- [当前 targeted case report](./generated/uplink-qos-case-results.targeted.md)
-- [当前 targeted matrix json](./generated/uplink-qos-matrix-report.targeted.json)
+- [当前 targeted case report](./uplink-qos-case-results.md)
+- [当前 targeted matrix json](./generated/uplink-qos-matrix-report.json)
 
 归档快照见：
 
-- [第一次修正后通过快照](./archive/uplink-qos-runs/2026-04-12T12-16-10.821Z/docs/generated/uplink-qos-case-results.targeted.md)
-- [第一次修正后通过 JSON](./archive/uplink-qos-runs/2026-04-12T12-16-10.821Z/docs/generated/uplink-qos-matrix-report.targeted.json)
-- [最新稳定收尾快照](./archive/uplink-qos-runs/2026-04-12T12-55-55.178Z/docs/generated/uplink-qos-case-results.targeted.md)
-- [最新稳定收尾 JSON](./archive/uplink-qos-runs/2026-04-12T12-55-55.178Z/docs/generated/uplink-qos-matrix-report.targeted.json)
+- [第一次修正后通过快照](./archive/uplink-qos-runs/2026-04-19T20-58-23.877Z/docs/uplink-qos-case-results.md)
+- [第一次修正后通过 JSON](./archive/uplink-qos-runs/2026-04-19T20-58-23.877Z/docs/generated/uplink-qos-matrix-report.json)
+- [最新稳定收尾快照](./archive/uplink-qos-runs/2026-04-19T20-58-23.877Z/docs/uplink-qos-case-results.md)
+- [最新稳定收尾 JSON](./archive/uplink-qos-runs/2026-04-19T20-58-23.877Z/docs/generated/uplink-qos-matrix-report.json)
 
 关键结果如下：
 
@@ -401,13 +401,13 @@
 
 ```bash
 node tests/qos_harness/run_matrix.mjs --cases=T9
-node tests/qos_harness/render_case_report.mjs --input=docs/generated/uplink-qos-matrix-report.targeted.json --output=docs/generated/uplink-qos-case-results.targeted.md
+node tests/qos_harness/render_case_report.mjs --input=docs/generated/uplink-qos-matrix-report.json --output=docs/uplink-qos-case-results.md
 ```
 
 latest targeted artifact 为：
 
-- [最新 targeted case report](./generated/uplink-qos-case-results.targeted.md)
-- [最新 targeted matrix json](./generated/uplink-qos-matrix-report.targeted.json)
+- [最新 targeted case report](./uplink-qos-case-results.md)
+- [最新 targeted matrix json](./generated/uplink-qos-matrix-report.json)
 
 这次的关键结果变成：
 
@@ -447,8 +447,8 @@ latest targeted artifact 为：
 
 对应 artifact 为：
 
-- [组合 targeted case report](./generated/uplink-qos-case-results.targeted.md)
-- [组合 targeted matrix json](./generated/uplink-qos-matrix-report.targeted.json)
+- [组合 targeted case report](./uplink-qos-case-results.md)
+- [组合 targeted matrix json](./generated/uplink-qos-matrix-report.json)
 
 这轮的关键信息是：
 
@@ -493,7 +493,7 @@ blind-spot 三个 case 的恢复时间大致是：
 
 ```bash
 node tests/qos_harness/run_matrix.mjs --cases=T10,T11,J3,J4,J5
-node tests/qos_harness/render_case_report.mjs --input=docs/generated/uplink-qos-matrix-report.targeted.json --output=docs/generated/uplink-qos-case-results.targeted.md
+node tests/qos_harness/render_case_report.mjs --input=docs/generated/uplink-qos-matrix-report.json --output=docs/uplink-qos-case-results.md
 ```
 
 这轮 artifact 的 `generatedAt` 为：
@@ -543,8 +543,8 @@ node tests/qos_harness/render_case_report.mjs --input=docs/generated/uplink-qos-
 
 对应 artifact 为：
 
-- [latest targeted case report](./generated/uplink-qos-case-results.targeted.md)
-- [latest targeted matrix json](./generated/uplink-qos-matrix-report.targeted.json)
+- [latest targeted case report](./uplink-qos-case-results.md)
+- [latest targeted matrix json](./generated/uplink-qos-matrix-report.json)
 
 这轮的关键信息是：
 
