@@ -16,6 +16,7 @@
 #include "WorkerThread.h"
 #include "../client/ccutils/Prober.h"
 #include "../client/RtcpHandler.h"
+#include "../src/Recorder.h"
 #include <algorithm>
 #include <future>
 #include <chrono>
@@ -657,4 +658,76 @@ TEST(RtcpSuppressionFixTest, SuppressedVideoSkipsPliAndNackRetransmissions) {
 
 	::close(sv[0]);
 	::close(sv[1]);
+}
+
+// ── F1: unwrapTimestamp backward-wrap state consistency ─────────────
+
+TEST(UnwrapTimestamp, ForwardWrapUpdatesState)
+{
+	uint32_t lastTs = 0xFFFFFFF0u;
+	uint64_t wrapCount = 0;
+	const uint32_t baseTs = 0;
+
+	// Forward wrap: jump from near-max to near-zero crossing half-range
+	auto ticks = PeerRecorder::unwrapTimestamp(0x00000010u, baseTs, lastTs, wrapCount);
+	EXPECT_GT(ticks, 0u);
+	EXPECT_EQ(lastTs, 0x00000010u);
+	EXPECT_EQ(wrapCount, 1u);
+}
+
+TEST(UnwrapTimestamp, BackwardWrapUpdatesLastTsAndWrapCount)
+{
+	uint32_t lastTs = 0x00000010u;
+	uint64_t wrapCount = 1;
+	const uint32_t baseTs = 0;
+
+	// Backward wrap: jump from near-zero back to near-max crossing half-range
+	auto ticks = PeerRecorder::unwrapTimestamp(0xFFFFFFF0u, baseTs, lastTs, wrapCount);
+
+	// Key invariant: lastTs must be updated (was the F1 bug)
+	EXPECT_EQ(lastTs, 0xFFFFFFF0u);
+	// wrapCount must decrement (backward wrap undoes one forward wrap)
+	EXPECT_EQ(wrapCount, 0u);
+	// ticks should be near the top of the uint32 range (before baseTs subtraction)
+	// With wrapCount=0, ticks = 0xFFFFFFF0 which is >= baseTs(0), so result = 0xFFFFFFF0
+	EXPECT_EQ(ticks, static_cast<uint64_t>(0xFFFFFFF0u));
+}
+
+TEST(UnwrapTimestamp, BackwardWrapGuardedAtWrapCountZero)
+{
+	uint32_t lastTs = 0x00000010u;
+	uint64_t wrapCount = 0;
+	const uint32_t baseTs = 0;
+
+	// Large forward jump when wrapCount==0: treat as normal forward, don't decrement
+	auto ticks = PeerRecorder::unwrapTimestamp(0xFFFFFFF0u, baseTs, lastTs, wrapCount);
+	EXPECT_EQ(lastTs, 0xFFFFFFF0u);
+	EXPECT_EQ(wrapCount, 0u);  // No decrement below zero
+}
+
+TEST(UnwrapTimestamp, SmallBackwardJumpNoWrap)
+{
+	uint32_t lastTs = 1000u;
+	uint64_t wrapCount = 2;
+	const uint32_t baseTs = 0;
+
+	// Small backward jump (within half-range): genuine reorder, no wrap change
+	auto ticks = PeerRecorder::unwrapTimestamp(990u, baseTs, lastTs, wrapCount);
+	EXPECT_EQ(lastTs, 990u);
+	EXPECT_EQ(wrapCount, 2u);  // Unchanged
+}
+
+TEST(UnwrapTimestamp, MonotonicSequenceNoWrap)
+{
+	uint32_t lastTs = 0;
+	uint64_t wrapCount = 0;
+	const uint32_t baseTs = 0;
+
+	// Simple increasing sequence
+	auto t1 = PeerRecorder::unwrapTimestamp(100u, baseTs, lastTs, wrapCount);
+	auto t2 = PeerRecorder::unwrapTimestamp(200u, baseTs, lastTs, wrapCount);
+	auto t3 = PeerRecorder::unwrapTimestamp(300u, baseTs, lastTs, wrapCount);
+	EXPECT_LT(t1, t2);
+	EXPECT_LT(t2, t3);
+	EXPECT_EQ(wrapCount, 0u);
 }
