@@ -843,7 +843,10 @@ export async function createLoopbackHarness(options = {}) {
     pushEvent(diagnostics, 'page_set_content_done', {});
     await page.addScriptTag({ content: bundleCode });
     pushEvent(diagnostics, 'bundle_injected', {});
-    await page.evaluate(() => window.__qosLoopbackHarness.init());
+    await page.evaluate(
+      source => window.__qosLoopbackHarness.init({ source }),
+      options.source ?? 'camera',
+    );
     pushEvent(diagnostics, 'harness_init_done', {});
     runtimeSnapshotTimer = setInterval(() => {
       pushCapped(

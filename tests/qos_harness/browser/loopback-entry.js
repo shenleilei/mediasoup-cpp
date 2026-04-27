@@ -27,7 +27,21 @@ async function waitForConnection(pc) {
   });
 }
 
-function createCanvasTrack({ width = 960, height = 540, fps = 30 } = {}) {
+function normalizeHarnessSource(source) {
+  if (source === 'screenshare') {
+    return 'screenShare';
+  }
+  if (source === 'screenShare' || source === 'audio') {
+    return source;
+  }
+  return 'camera';
+}
+
+function getHarnessKind(source) {
+  return source === 'audio' ? 'audio' : 'video';
+}
+
+function createCameraCanvasTrack({ width = 960, height = 540, fps = 30 } = {}) {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -97,6 +111,68 @@ function createCanvasTrack({ width = 960, height = 540, fps = 30 } = {}) {
   return { canvas, stream, track };
 }
 
+function createScreenShareCanvasTrack({ width = 1280, height = 720, fps = 10 } = {}) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  document.body.appendChild(canvas);
+
+  const ctx = canvas.getContext('2d');
+  let tick = 0;
+  const draw = () => {
+    tick += 1;
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, canvas.width, 84);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = 'bold 34px sans-serif';
+    ctx.fillText('Quarterly Uplink QoS Review', 36, 54);
+
+    ctx.fillStyle = '#1e293b';
+    ctx.font = '28px monospace';
+    const rows = [
+      'Region   Peak bw   Loss   RTT   Verdict',
+      'CN-East  4.0 Mbps  0.1%   25ms  healthy',
+      'CN-North 3.4 Mbps  0.3%   31ms  healthy',
+      'US-West  2.8 Mbps  0.6%   58ms  warning',
+      `Cursor: row ${1 + (tick % 3)}   refresh ${tick}`,
+    ];
+    rows.forEach((line, index) => {
+      ctx.fillText(line, 52, 170 + index * 64);
+    });
+
+    ctx.fillStyle = '#93c5fd';
+    ctx.fillRect(48, 134 + (tick % 3) * 64, canvas.width - 96, 40);
+    ctx.strokeStyle = '#2563eb';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(48, 134 + (tick % 3) * 64, canvas.width - 96, 40);
+
+    ctx.fillStyle = '#64748b';
+    ctx.fillRect(0, canvas.height - 72, canvas.width, 72);
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = '24px sans-serif';
+    ctx.fillText('Static detail + low motion screen-share simulation', 36, canvas.height - 26);
+
+    requestAnimationFrame(draw);
+  };
+  draw();
+
+  const stream = canvas.captureStream(fps);
+  const [track] = stream.getVideoTracks();
+  track.contentHint = 'detail';
+  return { canvas, stream, track };
+}
+
+function createCanvasTrack({ source = 'camera' } = {}) {
+  const normalizedSource = normalizeHarnessSource(source);
+  if (normalizedSource === 'screenShare') {
+    return createScreenShareCanvasTrack();
+  }
+  return createCameraCanvasTrack();
+}
+
 function createKeepaliveTrack() {
   const canvas = document.createElement('canvas');
   canvas.width = 160;
@@ -125,8 +201,8 @@ function createKeepaliveTrack() {
   return { canvas, stream, track };
 }
 
-async function createLoopbackPair() {
-  const { stream, track } = createCanvasTrack();
+async function createLoopbackPair(source = 'camera') {
+  const { stream, track } = createCanvasTrack({ source });
   const keepalive = createKeepaliveTrack();
   const remoteVideo = document.createElement('video');
   remoteVideo.autoplay = true;
@@ -181,12 +257,12 @@ async function createLoopbackPair() {
   };
 }
 
-function createLoopbackAdapter(sender, originalTrack, keepaliveTrack) {
+function createLoopbackAdapter(sender, originalTrack, keepaliveTrack, source, kind) {
   return {
     getSnapshotBase() {
       return {
-        source: 'camera',
-        kind: 'video',
+        source,
+        kind,
         producerId: 'loopback-producer',
         trackId: originalTrack.id,
         configuredBitrateBps: LOOPBACK_CONFIGURED_BITRATE_BPS,
@@ -227,16 +303,10 @@ function createLoopbackAdapter(sender, originalTrack, keepaliveTrack) {
   };
 }
 
-async function createHarness() {
-  const loopback = await createLoopbackPair();
-  const adapter = createLoopbackAdapter(
-    loopback.sender,
-    loopback.originalTrack,
-    loopback.keepaliveTrack
-  );
-  const statsProvider = new qos.ProducerSenderStatsProvider(adapter);
-  const profile = qos.resolveProfile('camera', {
-    name: 'browser-loopback-camera',
+function buildLoopbackProfile(source) {
+  const normalizedSource = normalizeHarnessSource(source);
+  const profile = qos.resolveProfile(normalizedSource, {
+    name: `browser-loopback-${normalizedSource}`,
     thresholds: {
       warnBitrateUtilization: 0.6,
       congestedBitrateUtilization: 0.4,
@@ -251,6 +321,14 @@ async function createHarness() {
       stableRttMs: 120,
       stableJitterMs: 18,
     },
+  });
+
+  if (normalizedSource !== 'camera') {
+    return profile;
+  }
+
+  return {
+    ...profile,
     ladder: [
       {
         level: 0,
@@ -298,7 +376,22 @@ async function createHarness() {
         },
       },
     ],
-  });
+  };
+}
+
+async function createHarness(options = {}) {
+  const source = normalizeHarnessSource(options.source);
+  const kind = getHarnessKind(source);
+  const loopback = await createLoopbackPair(source);
+  const adapter = createLoopbackAdapter(
+    loopback.sender,
+    loopback.originalTrack,
+    loopback.keepaliveTrack,
+    source,
+    kind,
+  );
+  const statsProvider = new qos.ProducerSenderStatsProvider(adapter);
+  const profile = buildLoopbackProfile(source);
   const actionExecutor = new qos.QosActionExecutor({
     async execute(action) {
       switch (action.type) {
@@ -323,7 +416,7 @@ async function createHarness() {
     statsProvider,
     actionExecutor,
     trackId: loopback.originalTrack.id,
-    kind: 'video',
+    kind,
     producerId: 'loopback-producer',
     sampleIntervalMs: 500,
     snapshotIntervalMs: 5000,
@@ -360,11 +453,11 @@ async function createHarness() {
 }
 
 window.__qosLoopbackHarness = {
-  async init() {
+  async init(options = {}) {
     if (this.instance) {
       return true;
     }
-    this.instance = await createHarness();
+    this.instance = await createHarness(options);
     return true;
   },
   async getState() {
