@@ -177,6 +177,7 @@ if(BUILD_TESTS)
         tests/test_common_media.cpp
         tests/test_multinode.cpp
         tests/test_ortc.cpp
+        tests/test_plain_client_vp8.cpp
         tests/test_request_timeout.cpp
         tests/test_review_fixes.cpp
         tests/test_room.cpp

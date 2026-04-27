@@ -151,6 +151,7 @@ cleanup_test_processes_fallback() {
     "tests/qos_harness/browser_downlink_v3.mjs"
     "tests/qos_harness/run_matrix.mjs"
     "client/build/plain-client 127.0.0.1 14"
+    "headless_shell .*puppeteer_dev_chrome_profile-"
   )
 
   for pattern in "${patterns[@]}"; do
@@ -312,6 +313,12 @@ log_system_snapshot() {
     ps -eo pid,ppid,rss,stat,comm,args | awk '
       NR == 1 || /headless_shell|esbuild|cc1plus|mediasoup-sfu|run_matrix\.mjs|run_qos_tests\.sh|browser_downlink|browser_loopback/
     ' || true
+  fi
+}
+
+clear_loopback_root_qdisc() {
+  if [[ -x /usr/sbin/tc ]]; then
+    /usr/sbin/tc qdisc del dev lo root 2>/dev/null || true
   fi
 }
 
@@ -694,6 +701,7 @@ run_cpp_client_matrix() {
     "$ROOT_DIR/src/RoomService.cpp"
   ensure_plain_client_built
   prepare_test_port 14019 "QoS cpp-client matrix SFU port 14019"
+  clear_loopback_root_qdisc
   local matrix_args=()
   if ((MATRIX_INCLUDE_EXTENDED)); then
     matrix_args+=("--include-extended")
@@ -701,10 +709,15 @@ run_cpp_client_matrix() {
   if [[ -n "$MATRIX_CASES" ]]; then
     matrix_args+=("--cases=$MATRIX_CASES")
   fi
-  run_cmd \
+  local rc=0
+  if ! run_cmd \
     "cpp-client-matrix" \
     --cwd "$ROOT_DIR" \
-    node "$ROOT_DIR/tests/qos_harness/run_cpp_client_matrix.mjs" "${matrix_args[@]}"
+    node "$ROOT_DIR/tests/qos_harness/run_cpp_client_matrix.mjs" "${matrix_args[@]}"; then
+    rc=1
+  fi
+  clear_loopback_root_qdisc
+  return "$rc"
 }
 
 run_cpp_client_harness() {
@@ -767,6 +780,13 @@ run_cpp_threaded() {
 
 run_node_harness() {
   prepare_test_port 14011 "QoS node harness SFU port 14011"
+  local failed=0
+  if ! run_cmd \
+    "node-harness:netem-guard" \
+    --cwd "$ROOT_DIR" \
+    node --test "$ROOT_DIR/tests/qos_harness/test.netem_guard.mjs"; then
+    failed=1
+  fi
   local scenarios=(
     publish_snapshot
     stale_seq
@@ -776,7 +796,6 @@ run_node_harness() {
     manual_clear
   )
 
-  local failed=0
   for scenario in "${scenarios[@]}"; do
     if ! run_cmd \
       "node-harness:$scenario" \
@@ -789,14 +808,25 @@ run_node_harness() {
 }
 
 run_browser_harness() {
+  ensure_plain_client_built
   prepare_test_port 14012 "QoS browser harness SFU port 14012"
   prepare_test_port 14013 "Downlink control harness SFU port 14013"
   prepare_test_port 14014 "Downlink E2E harness SFU port 14014"
   prepare_test_port 14015 "Downlink priority harness SFU port 14015"
   prepare_test_port 14016 "Downlink v2 harness SFU port 14016"
   prepare_test_port 14017 "Downlink v3 harness SFU port 14017"
+  prepare_test_port 14022 "Public interop browser harness SFU port 14022"
+  clear_loopback_root_qdisc
   log_system_snapshot "pre-browser-harness"
   local failed=0
+  if ! run_cmd \
+    "browser-harness:public-interop" \
+    --cwd "$ROOT_DIR" \
+    env QOS_BROWSER_PUBLIC_INTEROP_PORT=14022 \
+    node "$ROOT_DIR/tests/qos_harness/browser_public_interop.mjs"; then
+    failed=1
+  fi
+
   if ! run_cmd \
     "browser-harness:server-signal" \
     --cwd "$ROOT_DIR" \
@@ -845,11 +875,13 @@ run_browser_harness() {
     node "$ROOT_DIR/tests/qos_harness/browser_downlink_v3.mjs"; then
     failed=1
   fi
+  clear_loopback_root_qdisc
   return "$failed"
 }
 
 run_matrix() {
   prepare_test_port 14011 "QoS matrix loopback port 14011"
+  clear_loopback_root_qdisc
   local matrix_args=()
   if ((MATRIX_INCLUDE_EXTENDED)); then
     matrix_args+=("--include-extended")
@@ -858,10 +890,15 @@ run_matrix() {
     matrix_args+=("--cases=$MATRIX_CASES")
   fi
   log_system_snapshot "pre-matrix"
-  run_cmd \
+  local rc=0
+  if ! run_cmd \
     "matrix" \
     --cwd "$ROOT_DIR" \
-    node "$ROOT_DIR/tests/qos_harness/run_matrix.mjs" "${matrix_args[@]}"
+    node "$ROOT_DIR/tests/qos_harness/run_matrix.mjs" "${matrix_args[@]}"; then
+    rc=1
+  fi
+  clear_loopback_root_qdisc
+  return "$rc"
 }
 
 run_downlink_matrix() {
@@ -922,10 +959,17 @@ run_target() {
     node-harness:*)
       prepare_test_port 14011 "QoS node harness SFU port 14011"
       local scenario="${target#node-harness:}"
-      run_cmd \
-        "$target" \
-        --cwd "$ROOT_DIR" \
-        node "$ROOT_DIR/tests/qos_harness/run.mjs" "$scenario"
+      if [[ "$scenario" == "netem-guard" ]]; then
+        run_cmd \
+          "$target" \
+          --cwd "$ROOT_DIR" \
+          node --test "$ROOT_DIR/tests/qos_harness/test.netem_guard.mjs"
+      else
+        run_cmd \
+          "$target" \
+          --cwd "$ROOT_DIR" \
+          node "$ROOT_DIR/tests/qos_harness/run.mjs" "$scenario"
+      fi
       ;;
     browser-harness:server-signal)
       prepare_test_port 14012 "QoS browser harness SFU port 14012"
@@ -934,12 +978,27 @@ run_target() {
         --cwd "$ROOT_DIR" \
         node "$ROOT_DIR/tests/qos_harness/browser_server_signal.mjs"
       ;;
-    browser-harness:loopback)
-      prepare_test_port 14012 "QoS browser harness SFU port 14012"
+    browser-harness:public-interop)
+      ensure_plain_client_built
+      prepare_test_port 14022 "Public interop browser harness SFU port 14022"
       run_cmd \
         "$target" \
         --cwd "$ROOT_DIR" \
-        node "$ROOT_DIR/tests/qos_harness/browser_loopback.mjs"
+        env QOS_BROWSER_PUBLIC_INTEROP_PORT=14022 \
+        node "$ROOT_DIR/tests/qos_harness/browser_public_interop.mjs"
+      ;;
+    browser-harness:loopback)
+      prepare_test_port 14012 "QoS browser harness SFU port 14012"
+      clear_loopback_root_qdisc
+      local rc=0
+      if ! run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        node "$ROOT_DIR/tests/qos_harness/browser_loopback.mjs"; then
+        rc=1
+      fi
+      clear_loopback_root_qdisc
+      return "$rc"
       ;;
     browser-harness:downlink-controls)
       prepare_test_port 14013 "Downlink control harness SFU port 14013"
@@ -957,10 +1016,16 @@ run_target() {
       ;;
     browser-harness:downlink-priority)
       prepare_test_port 14015 "Downlink priority harness SFU port 14015"
-      run_cmd \
+      clear_loopback_root_qdisc
+      local rc=0
+      if ! run_cmd \
         "$target" \
         --cwd "$ROOT_DIR" \
-        node "$ROOT_DIR/tests/qos_harness/browser_downlink_priority.mjs"
+        node "$ROOT_DIR/tests/qos_harness/browser_downlink_priority.mjs"; then
+        rc=1
+      fi
+      clear_loopback_root_qdisc
+      return "$rc"
       ;;
     browser-harness:downlink-v2)
       prepare_test_port 14016 "Downlink v2 harness SFU port 14016"

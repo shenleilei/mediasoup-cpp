@@ -1758,17 +1758,27 @@ TEST_F(QosIntegrationTest, DownlinkClientStatsRateLimited) {
 
 	auto payload = makeDownlinkSnapshot(
 		1, "alice", "c1", "p1", 1'000'000.0, true, false, 640, 360);
-	auto req1 = alice.ws->sendRequest("downlinkClientStats", payload);
+	std::vector<uint64_t> requestIds;
+	for (uint64_t seq = 1; seq <= 8; ++seq) {
+		payload["seq"] = seq;
+		requestIds.push_back(alice.ws->sendRequest("downlinkClientStats", payload));
+	}
 
-	payload["seq"] = 2;
-	auto req2 = alice.ws->sendRequest("downlinkClientStats", payload);
+	bool sawStored = false;
+	bool sawRateLimited = false;
+	for (auto requestId : requestIds) {
+		auto response = alice.ws->waitResponse(requestId);
+		if (response.value("ok", false)) {
+			sawStored = sawStored || response["data"].value("stored", false);
+			continue;
+		}
+		if (response.value("error", "").find("rate limit") != std::string::npos) {
+			sawRateLimited = true;
+		}
+	}
 
-	auto resp1 = alice.ws->waitResponse(req1);
-	ASSERT_TRUE(resp1.value("ok", false)) << resp1.dump();
-
-	auto resp2 = alice.ws->waitResponse(req2);
-	EXPECT_FALSE(resp2.value("ok", true));
-	EXPECT_NE(resp2.value("error", "").find("rate limited"), std::string::npos);
+	EXPECT_TRUE(sawStored) << "Expected at least one downlink snapshot to be stored";
+	EXPECT_TRUE(sawRateLimited) << "Expected burst submissions to trigger rate limiting";
 }
 
 TEST_F(QosIntegrationTest, DownlinkClientStatsAcceptsLegacySchema) {

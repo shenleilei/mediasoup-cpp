@@ -97,6 +97,8 @@ private:
 	uint32_t videoLastTs_{0};
 	uint64_t audioWrapCount_{0};
 	uint64_t videoWrapCount_{0};
+	int64_t audioLastPts_{-1};
+	int64_t videoLastPts_{-1};
 	bool audioBaseSet_{false};
 	bool videoBaseSet_{false};
 	std::vector<uint8_t> videoFrameBuf_;
