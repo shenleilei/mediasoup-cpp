@@ -18,8 +18,11 @@ RFC 3550) revealed systematic biases in the current model.
    (≈0.75× raw value) since WebRTC reports smoothed jitter, not raw.
 
 4. **CC convergence simulation**: Phase transitions in the C++ matrix test
-   profile must not jump values instantly; use exponential convergence with
-   empirical time constants (degrade ~1.5s, recover ~6s).
+   profile must not jump network-derived metrics instantly; use exponential
+   convergence with empirical time constants (degrade ~1.5s, recover ~6s) for
+   sendCeiling, RTT, jitter, and lossRate. Note: `qualityLimitationReason` is
+   excluded from convergence because it is a discrete encoder flag in real
+   WebRTC, not a smoothed network metric.
 
 5. **Calibration validation tests**: Test suite must validate that synthetic
    values stay within empirically measured bounds.

@@ -253,6 +253,7 @@ std::optional<double> applyMatrixTestProfile(
 		runtime.convergedCeilingBps = phase->sendCeilingBps;
 		runtime.convergedRttMs = phase->rttMs;
 		runtime.convergedJitterMs = phase->jitterMs;
+		runtime.convergedLossRate = phase->lossRate;
 		runtime.lastPhaseName = phase->name;
 	}
 
@@ -282,6 +283,14 @@ std::optional<double> applyMatrixTestProfile(
 			std::max(0.0, runtime.convergedJitterMs), phase->jitterMs,
 			static_cast<double>(deltaMs), degrading ? CC_DEGRADE_TAU_MS : CC_RECOVER_TAU_MS);
 	}
+	// Loss rate convergence: avoids instantaneous loss jumps on phase transition.
+	// Uses the same asymmetric time constants as other metrics.
+	{
+		const bool lossDegrading = phase->lossRate > runtime.convergedLossRate;
+		runtime.convergedLossRate = exponentialConverge(
+			std::max(0.0, runtime.convergedLossRate), phase->lossRate,
+			static_cast<double>(deltaMs), lossDegrading ? CC_DEGRADE_TAU_MS : CC_RECOVER_TAU_MS);
+	}
 
 	const uint64_t sentDelta = snap.packetsSent > runtime.lastPacketsSent
 		? snap.packetsSent - runtime.lastPacketsSent
@@ -293,8 +302,8 @@ std::optional<double> applyMatrixTestProfile(
 		runtime.syntheticBytesSent += bytesDelta;
 	}
 
-	if (sentDelta > 0 && phase->lossRate > 0.0 && phase->lossRate < 1.0) {
-		const double lostDelta = (phase->lossRate / std::max(1e-9, 1.0 - phase->lossRate)) * static_cast<double>(sentDelta);
+	if (sentDelta > 0 && runtime.convergedLossRate > 0.0 && runtime.convergedLossRate < 1.0) {
+		const double lostDelta = (runtime.convergedLossRate / std::max(1e-9, 1.0 - runtime.convergedLossRate)) * static_cast<double>(sentDelta);
 		runtime.syntheticPacketsLost += static_cast<uint64_t>(std::llround(lostDelta));
 	}
 
@@ -305,6 +314,10 @@ std::optional<double> applyMatrixTestProfile(
 	snap.packetsLost = runtime.syntheticPacketsLost;
 	snap.roundTripTimeMs = runtime.convergedRttMs;
 	snap.jitterMs = runtime.convergedJitterMs;
+	// qualityLimitationReason is intentionally set instantaneously (no convergence).
+	// In real WebRTC, this is a discrete enum reported by the encoder based on its
+	// current state, not a smoothed network metric.  Applying temporal smoothing
+	// here would introduce a synthetic delay that does not exist in real clients.
 	snap.qualityLimitationReason = phase->qualityLimitationReason;
 
 	return mergedSendBps;

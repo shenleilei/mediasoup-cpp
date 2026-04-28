@@ -60,10 +60,16 @@ struct MatrixTestRuntimeState {
 	uint64_t syntheticBytesSent = 0;
 	uint64_t syntheticPacketsLost = 0;
 	bool initialized = false;
-	// CC convergence simulation state
+	// CC convergence simulation state.
+	// sendCeiling, RTT, jitter, and lossRate all use exponential convergence
+	// to avoid instantaneous jumps on phase transitions (matching GCC behavior).
+	// qualityLimitationReason is intentionally NOT converged because the real
+	// WebRTC encoder quality limitation reason is a discrete flag derived from
+	// the encoder's instantaneous state, not a smoothed network metric.
 	double convergedCeilingBps = -1.0;
 	double convergedRttMs = -1.0;
 	double convergedJitterMs = -1.0;
+	double convergedLossRate = 0.0;
 	std::string lastPhaseName;
 };
 

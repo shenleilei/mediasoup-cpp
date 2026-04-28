@@ -100,9 +100,11 @@ function buildMatrixTestProfile(caseDef, durations) {
       let jitterMs = condition.jitterMs;
       let qualityLimitationReason = condition.qualityLimitationReason;
 
-      if (caseDef.caseId === 'B3') {
-        rttMs = Math.max(rttMs, 230);
-      }
+      // B3 RTT is now derived from the calibrated logarithmic model
+      // (computeReportedRtt). The previous hardcoded floor of 230ms was a
+      // legacy forcing value that predated the TMA 2021 calibration.  The
+      // model produces ~76ms for base RTT 55ms, which correctly reflects
+      // protocol overhead at moderate RTT without artificial inflation.
 
       if (
         phase.name === 'impairment' &&
