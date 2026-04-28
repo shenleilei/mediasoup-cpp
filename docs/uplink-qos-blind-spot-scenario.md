@@ -319,8 +319,8 @@
 
 当前 targeted 结果见：
 
-- [当前 targeted case report](./uplink-qos-case-results.md)
-- [当前 targeted matrix json](./generated/uplink-qos-matrix-report.json)
+- [当前 targeted case report](./generated/uplink-qos-case-results.targeted.md)
+- [当前 targeted matrix json](./generated/uplink-qos-matrix-report.targeted.json)
 
 归档快照见：
 
@@ -406,8 +406,8 @@ node tests/qos_harness/render_case_report.mjs --input=docs/generated/uplink-qos-
 
 latest targeted artifact 为：
 
-- [最新 targeted case report](./uplink-qos-case-results.md)
-- [最新 targeted matrix json](./generated/uplink-qos-matrix-report.json)
+- [最新 targeted case report](./generated/uplink-qos-case-results.targeted.md)
+- [最新 targeted matrix json](./generated/uplink-qos-matrix-report.targeted.json)
 
 这次的关键结果变成：
 
@@ -447,8 +447,8 @@ latest targeted artifact 为：
 
 对应 artifact 为：
 
-- [组合 targeted case report](./uplink-qos-case-results.md)
-- [组合 targeted matrix json](./generated/uplink-qos-matrix-report.json)
+- [组合 targeted case report](./generated/uplink-qos-case-results.targeted.md)
+- [组合 targeted matrix json](./generated/uplink-qos-matrix-report.targeted.json)
 
 这轮的关键信息是：
 
@@ -543,8 +543,8 @@ node tests/qos_harness/render_case_report.mjs --input=docs/generated/uplink-qos-
 
 对应 artifact 为：
 
-- [latest targeted case report](./uplink-qos-case-results.md)
-- [latest targeted matrix json](./generated/uplink-qos-matrix-report.json)
+- [latest targeted case report](./generated/uplink-qos-case-results.targeted.md)
+- [latest targeted matrix json](./generated/uplink-qos-matrix-report.targeted.json)
 
 这轮的关键信息是：
 
