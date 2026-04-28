@@ -71,6 +71,7 @@ set(MEDIASOUP_LIBRARY_SOURCES
     src/Worker.cpp
     src/Transport.cpp
     src/WebRtcTransport.cpp
+    src/PipeTransport.cpp
     src/Router.cpp
     src/Producer.cpp
     src/Consumer.cpp

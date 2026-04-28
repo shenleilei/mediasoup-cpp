@@ -18,6 +18,10 @@ public:
 		, rtpParameters_(rtpParameters), type_(type)
 		, channel_(channel), transportId_(transportId)
 		, logger_(Logger::Get("Consumer")) {}
+	Consumer(const Consumer&) = delete;
+	Consumer& operator=(const Consumer&) = delete;
+	Consumer(Consumer&&) = delete;
+	Consumer& operator=(Consumer&&) = delete;
 
 	const std::string& id() const { return id_; }
 	const std::string& producerId() const { return producerId_; }
@@ -31,6 +35,7 @@ public:
 	uint8_t preferredTemporalLayer() const { return preferredTemporalLayer_; }
 	uint8_t priority() const { return priority_; }
 	EventEmitter& emitter() { return emitter_; }
+	void setChannelListenerId(uint64_t listenerId) { channelListenerId_ = listenerId; }
 
 	void pause();
 	void resume();
@@ -72,6 +77,7 @@ private:
 	uint8_t preferredSpatialLayer_ = 0;
 	uint8_t preferredTemporalLayer_ = 0;
 	uint8_t priority_ = 1;
-};
+	uint64_t channelListenerId_{ 0 };
+	};
 
 } // namespace mediasoup

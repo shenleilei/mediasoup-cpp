@@ -19,6 +19,10 @@ public:
 		, consumableRtpParameters_(consumableRtpParameters)
 		, channel_(channel), transportId_(transportId)
 		, logger_(Logger::Get("Producer")) {}
+	Producer(const Producer&) = delete;
+	Producer& operator=(const Producer&) = delete;
+	Producer(Producer&&) = delete;
+	Producer& operator=(Producer&&) = delete;
 
 	const std::string& id() const { return id_; }
 	const std::string& kind() const { return kind_; }
@@ -28,6 +32,7 @@ public:
 	bool closed() const { return closed_; }
 	bool paused() const { return paused_; }
 	EventEmitter& emitter() { return emitter_; }
+	void setChannelListenerId(uint64_t listenerId) { channelListenerId_ = listenerId; }
 
 	void pause();
 	void resume();
@@ -57,6 +62,7 @@ private:
 	std::vector<ScoreEntry> scores_;
 	EventEmitter emitter_;
 	std::shared_ptr<spdlog::logger> logger_;
-};
+	uint64_t channelListenerId_{ 0 };
+	};
 
 } // namespace mediasoup

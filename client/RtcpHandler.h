@@ -33,13 +33,19 @@ struct NtpTime {
 };
 
 inline NtpTime getNtpNow() {
-	struct timeval tv;
-	gettimeofday(&tv, nullptr);
-	// NTP epoch offset from Unix epoch: 70 years in seconds
+	static const auto wallBase = std::chrono::system_clock::now();
+	static const auto steadyBase = std::chrono::steady_clock::now();
+	const auto wallNow = wallBase + (std::chrono::steady_clock::now() - steadyBase);
+	const auto wallSinceEpoch = wallNow.time_since_epoch();
+	const auto secPart = std::chrono::duration_cast<std::chrono::seconds>(wallSinceEpoch);
+	const auto fracPart = wallSinceEpoch - secPart;
+	// NTP epoch offset from Unix epoch: 70 years in seconds.
 	static constexpr uint32_t kNtpEpochOffset = 2208988800u;
 	NtpTime ntp;
-	ntp.sec = static_cast<uint32_t>(tv.tv_sec) + kNtpEpochOffset;
-	ntp.frac = static_cast<uint32_t>((double)tv.tv_usec / 1e6 * (1LL << 32));
+	ntp.sec = static_cast<uint32_t>(secPart.count()) + kNtpEpochOffset;
+	ntp.frac = static_cast<uint32_t>(
+		std::chrono::duration_cast<std::chrono::nanoseconds>(fracPart).count()
+		* (1ULL << 32) / 1000000000ULL);
 	return ntp;
 }
 

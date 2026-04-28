@@ -28,6 +28,8 @@ BitstreamFilter BitstreamFilter::Create(
 	const AVBitStreamFilter* filter = av_bsf_get_by_name(name.c_str());
 	if (!filter)
 		throw std::runtime_error("av_bsf_get_by_name(" + name + ") failed");
+	if (!inputParameters)
+		throw std::runtime_error("BitstreamFilter::Create missing codec parameters");
 
 	auto context = MakeBitstreamFilterContext(filter);
 	if (!context)

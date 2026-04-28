@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 import puppeteer from 'puppeteer-core';
 
@@ -54,6 +54,23 @@ function startSfu() {
   return { child, stdout, stderr };
 }
 
+function killWorkerChildrenOf(parentPid) {
+  const result = spawnSync('pgrep', ['-P', String(parentPid)], { encoding: 'utf8' });
+  if (result.status !== 0 || !result.stdout) {
+    return;
+  }
+  for (const line of result.stdout.split(/\r?\n/)) {
+    const pid = Number(line.trim());
+    if (Number.isInteger(pid) && pid > 0) {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {
+        // Ignore already-exited children.
+      }
+    }
+  }
+}
+
 function startPlainClient(roomId, peerId, mediaPath, { videoCodec = 'h264', copyMode = true } = {}) {
   const stdout = [];
   const stderr = [];
@@ -99,6 +116,22 @@ async function waitForPlainClientWarmup(plain, timeoutMs = 4000) {
     }
     await sleep(100);
   }
+}
+
+async function waitForPlainClientLog(plain, needle, timeoutMs = 12000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (plain.child.exitCode !== null) {
+      throw new Error(
+        `plain-client exited early (code=${plain.child.exitCode})\n${tailLines(plain.stdout)}\n${tailLines(plain.stderr)}`
+      );
+    }
+    if (plain.stdout.some(line => line.includes(needle)) || plain.stderr.some(line => line.includes(needle))) {
+      return;
+    }
+    await sleep(100);
+  }
+  throw new Error(`plain-client log did not contain "${needle}" in time\n${tailLines(plain.stdout)}\n${tailLines(plain.stderr)}`);
 }
 
 async function launchBrowser() {
@@ -208,6 +241,43 @@ async function runWebToWebCase(browser) {
   }
 }
 
+async function waitForRecoveryStatus(page, timeoutMs = 30000) {
+  await page.waitForFunction(
+    () => document.querySelector('#status')?.textContent.includes('Recovered'),
+    { timeout: timeoutMs },
+  );
+}
+
+async function runWebToWebRecoveryCase(browser, sfu) {
+  const roomId = `public_recover_${Date.now()}`;
+  const publisher = await openDemoPage(browser, 'web-recover-pub');
+  const subscriber = await openDemoPage(browser, 'web-recover-sub');
+
+  try {
+    await joinRoom(publisher.page, roomId);
+    await joinRoom(subscriber.page, roomId);
+    await publishFromPage(publisher.page);
+    await waitForRemoteVideo(subscriber.page);
+
+    killWorkerChildrenOf(sfu.child.pid);
+
+    await waitForRecoveryStatus(publisher.page);
+    await waitForRecoveryStatus(subscriber.page);
+    await waitForRemoteVideo(subscriber.page, 30000);
+  } catch (error) {
+    const publisherState = await snapshotPageState(publisher);
+    const subscriberState = await snapshotPageState(subscriber);
+    throw new Error(
+      `web->web recovery failed: ${error.message}\n` +
+      `publisher=${JSON.stringify(publisherState, null, 2)}\n` +
+      `subscriber=${JSON.stringify(subscriberState, null, 2)}`
+    );
+  } finally {
+    await publisher.page.close();
+    await subscriber.page.close();
+  }
+}
+
 async function runPlainClientToWebCase(browser) {
   const roomId = `public_plain_${Date.now()}`;
   const peerId = 'plain_cpp_single_bg';
@@ -240,6 +310,45 @@ async function runPlainClientToWebCase(browser) {
   }
 }
 
+async function runPlainClientToWebRecoveryCase(browser, sfu) {
+  const roomId = `public_plain_recover_${Date.now()}`;
+  const peerId = 'plain_cpp_recover';
+  const mediaPath = ensureHarnessMp4();
+  const subscriber = await openDemoPage(browser, 'plain-recover-sub');
+
+  try {
+    await joinRoom(subscriber.page, roomId);
+    const plain = startPlainClient(roomId, peerId, mediaPath, {
+      videoCodec: 'vp8',
+      copyMode: false,
+    });
+
+    try {
+      await waitForPlainClientWarmup(plain);
+      await waitForRemoteVideo(subscriber.page);
+
+      killWorkerChildrenOf(sfu.child.pid);
+
+      await waitForPlainClientLog(plain, 'serverRestart received', 15000);
+      await waitForPlainClientLog(plain, 'recovered session', 15000);
+      await waitForRecoveryStatus(subscriber.page, 30000);
+      await waitForRemoteVideo(subscriber.page, 30000);
+    } catch (error) {
+      const subscriberState = await snapshotPageState(subscriber);
+      throw new Error(
+        `plain-client->web recovery failed: ${error.message}\n` +
+        `subscriber=${JSON.stringify(subscriberState, null, 2)}\n` +
+        `plain_stdout=${tailLines(plain.stdout)}\n` +
+        `plain_stderr=${tailLines(plain.stderr)}`
+      );
+    } finally {
+      await stopChild(plain.child, 3000);
+    }
+  } finally {
+    await subscriber.page.close();
+  }
+}
+
 async function main() {
   const sfu = startSfu();
   const browser = await launchBrowser();
@@ -249,8 +358,14 @@ async function main() {
     await runWebToWebCase(browser);
     console.log('[PASS] public-demo web->web renders remote video');
 
+    await runWebToWebRecoveryCase(browser, sfu);
+    console.log('[PASS] public-demo web->web recovers after worker restart');
+
     await runPlainClientToWebCase(browser);
     console.log('[PASS] public-demo plain-client->web renders remote video');
+
+    await runPlainClientToWebRecoveryCase(browser, sfu);
+    console.log('[PASS] public-demo plain-client->web recovers after worker restart');
 
     console.log('\nbrowser_public_interop: all cases passed');
   } catch (error) {

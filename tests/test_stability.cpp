@@ -94,6 +94,15 @@ TEST(EventEmitterTest, ListenerExceptionsDoNotCrashEmit) {
 	EXPECT_EQ(called, 1);
 }
 
+TEST(EventEmitterTest, EmitCheckedRethrowsListenerFailureAfterInvokingListeners) {
+	EventEmitter emitter;
+	int called = 0;
+	emitter.on("evt", [](auto&) { throw std::runtime_error("listener failed"); });
+	emitter.on("evt", [&](auto&) { called++; });
+	EXPECT_THROW(emitter.emitChecked("evt"), std::runtime_error);
+	EXPECT_EQ(called, 1);
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Recorder: pendingAudio cap (500 packets)
 // ═══════════════════════════════════════════════════════════════

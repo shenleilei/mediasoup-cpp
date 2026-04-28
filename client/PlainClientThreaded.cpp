@@ -481,10 +481,11 @@ int PlainClientApp::RunThreadedMode()
 				bool anyBandwidthLimited = false;
 				bool peerSnapshotRequested = false;
 
-				for (auto& track : videoTracks_) {
-					if (!track.qosCtrl) continue;
-					if (sampledTrackIds.find(track.trackId) == sampledTrackIds.end()) continue;
-					peerTrackStates.push_back(track.qosCtrl->getTrackState());
+					for (auto& track : videoTracks_) {
+						if (!track.qosCtrl) continue;
+						track.qosCtrl->housekeep();
+						if (sampledTrackIds.find(track.trackId) == sampledTrackIds.end()) continue;
+						peerTrackStates.push_back(track.qosCtrl->getTrackState());
 					if (auto sig = track.qosCtrl->lastSignals())
 						peerTrackSignals[track.trackId] = *sig;
 					peerLastActions[track.trackId] = track.qosCtrl->lastAction();

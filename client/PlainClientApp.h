@@ -29,6 +29,14 @@ public:
 	static int RunPlainClientApp(int argc, char* argv[]);
 	static std::atomic<bool>& RunningFlag() { return running_; }
 	static RtcpContext*& RtcpContextSlot() { return rtcpContext_; }
+	static bool ShouldRecoverAfterServerRestart(bool restartRequested, bool signalStopRequested) {
+		return restartRequested && !signalStopRequested;
+	}
+	static int RecoveryBackoffMsForAttempt(int attempt) {
+		const int normalizedAttempt = std::max(1, attempt);
+		return std::min(normalizedAttempt * 1000, 5000);
+	}
+	static int RecoveryMaxAttempts() { return 20; }
 
 	enum class VideoCodecMode {
 		H264,
@@ -107,6 +115,7 @@ private:
 	static uint32_t GetTrackMinBitrateBps(const VideoTrackRuntime& track);
 
 	static std::atomic<bool> running_;
+	static std::atomic<bool> signalStopRequested_;
 	static RtcpContext* rtcpContext_;
 
 	std::string serverIp_;
@@ -155,6 +164,8 @@ private:
 	std::shared_ptr<CachedServerStatsResponse> cachedServerStatsResponse_;
 	int64_t lastPeerQosSampleMs_{0};
 	int peerSnapshotSeq_{0};
+	std::atomic<bool> sessionRestartRequested_{false};
+	std::string sessionRestartReason_;
 
 	std::thread testClientStatsThread_;
 	std::thread testWsRequestsThread_;

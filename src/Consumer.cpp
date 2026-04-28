@@ -58,7 +58,10 @@ void Consumer::close() {
 	closed_ = true;
 
 	if (channel_) {
-		channel_->emitter().off(id_);
+		if (channelListenerId_ != 0) {
+			channel_->emitter().off(channelListenerId_);
+			channelListenerId_ = 0;
+		}
 	}
 
 	try {
@@ -79,15 +82,19 @@ void Consumer::close() {
 		spdlog::warn("Consumer::close() request failed [id:{}]: unknown error", id_);
 	}
 
-	emitter_.emit("@close");
+	emitter_.emitChecked("@close", {std::any(std::string("close"))});
 }
 
 void Consumer::transportClosed() {
 	if (closed_) return;
 	closed_ = true;
 	if (channel_) {
-		channel_->emitter().off(id_);
+		if (channelListenerId_ != 0) {
+			channel_->emitter().off(channelListenerId_);
+			channelListenerId_ = 0;
+		}
 	}
+	emitter_.emitChecked("@close", {std::any(std::string("transportclose"))});
 	emitter_.emit("transportclose");
 }
 
@@ -104,16 +111,19 @@ void Consumer::handleNotification(
 			producerPaused_ = false;
 			emitter_.emit("producerresume");
 			break;
-		case FBS::Notification::Event::CONSUMER_PRODUCER_CLOSE:
-			if (closed_) break;
-			closed_ = true;
-			producerPaused_ = true;
-			if (channel_) {
-				channel_->emitter().off(id_);
-			}
-			emitter_.emit("@close");
-			emitter_.emit("producerclose");
-			break;
+			case FBS::Notification::Event::CONSUMER_PRODUCER_CLOSE:
+				if (closed_) break;
+				closed_ = true;
+				producerPaused_ = true;
+				if (channel_) {
+					if (channelListenerId_ != 0) {
+						channel_->emitter().off(channelListenerId_);
+						channelListenerId_ = 0;
+					}
+				}
+				emitter_.emitChecked("@close", {std::any(std::string("producerclose"))});
+				emitter_.emit("producerclose");
+				break;
 		case FBS::Notification::Event::CONSUMER_LAYERS_CHANGE:
 			emitter_.emit("layerschange");
 			break;

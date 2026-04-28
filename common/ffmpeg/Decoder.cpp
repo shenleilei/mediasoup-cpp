@@ -70,6 +70,8 @@ bool Decoder::SendPacket(const AVPacket* packet)
 
 bool Decoder::ReceiveFrame(AVFrame* frame)
 {
+	if (!frame)
+		throw std::runtime_error("Decoder::ReceiveFrame missing output frame");
 	const int err = avcodec_receive_frame(
 		RequireDecoderContext(context_.get(), "ReceiveFrame"),
 		frame);

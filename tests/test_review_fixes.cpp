@@ -3,9 +3,15 @@
 #include "RoomManager.h"
 #include "Channel.h"
 #include "Constants.h"
+#include "PipeTransport.h"
+#include "PlainTransport.h"
+#include "WebRtcTransport.h"
+#include "Consumer.h"
 #include "message_generated.h"
 #include "MainBootstrap.h"
 #include "notification_generated.h"
+#include "pipeTransport_generated.h"
+#include "plainTransport_generated.h"
 #include "RoomRegistryReplyUtils.h"
 #include "RuntimeOptionParsers.h"
 #include "RoomRegistrySelection.h"
@@ -14,6 +20,7 @@
 #include "SignalingSocketState.h"
 #include "StaticFileResponder.h"
 #include "WorkerThread.h"
+#include "webRtcTransport_generated.h"
 #include "../client/ccutils/Prober.h"
 #include "../client/RtcpHandler.h"
 #include "../src/Recorder.h"
@@ -21,6 +28,7 @@
 #include <future>
 #include <chrono>
 #include <cerrno>
+#include <cstring>
 #include <hiredis/hiredis.h>
 #include <mutex>
 #include <unistd.h>
@@ -91,6 +99,111 @@ mediasoup::ccutils::ProbeClusterGoal MakeTestProbeGoal()
 	goal.desiredBps = 250000;
 	goal.duration = std::chrono::milliseconds(60);
 	return goal;
+}
+
+bool ReadExact(int fd, uint8_t* data, size_t len)
+{
+	size_t total = 0;
+	while (total < len) {
+		ssize_t n = ::read(fd, data + total, len - total);
+		if (n <= 0) {
+			return false;
+		}
+		total += static_cast<size_t>(n);
+	}
+	return true;
+}
+
+bool WriteExact(int fd, const uint8_t* data, size_t len)
+{
+	size_t total = 0;
+	while (total < len) {
+		ssize_t n = ::write(fd, data + total, len - total);
+		if (n <= 0) {
+			return false;
+		}
+		total += static_cast<size_t>(n);
+	}
+	return true;
+}
+
+template<typename ResponseBuilder>
+std::future<bool> StartSingleResponseWorker(
+	int requestReadFd,
+	int responseWriteFd,
+	FBS::Request::Method expectedMethod,
+	ResponseBuilder buildResponse)
+{
+	return std::async(std::launch::async, [=]() mutable {
+		uint8_t sizePrefix[4];
+		if (!ReadExact(requestReadFd, sizePrefix, sizeof(sizePrefix))) {
+			return false;
+		}
+		uint32_t messageSize = 0;
+		std::memcpy(&messageSize, sizePrefix, sizeof(messageSize));
+		std::vector<uint8_t> requestBuf(4 + messageSize);
+		std::memcpy(requestBuf.data(), sizePrefix, sizeof(sizePrefix));
+		if (!ReadExact(requestReadFd, requestBuf.data() + 4, messageSize)) {
+			return false;
+		}
+
+		auto* requestMsg = FBS::Message::GetSizePrefixedMessage(requestBuf.data());
+		if (!requestMsg) {
+			return false;
+		}
+		auto* request = requestMsg->data_as_Request();
+		if (!request || request->method() != expectedMethod) {
+			return false;
+		}
+
+		const std::vector<uint8_t> response = buildResponse(*request);
+		return WriteExact(responseWriteFd, response.data(), response.size());
+	});
+}
+
+std::vector<uint8_t> BuildEmptyResponseBuffer(uint32_t requestId)
+{
+	flatbuffers::FlatBufferBuilder builder;
+	auto response = FBS::Response::CreateResponse(
+		builder,
+		requestId,
+		true,
+		FBS::Response::Body::NONE,
+		0);
+	auto message = FBS::Message::CreateMessage(
+		builder,
+		FBS::Message::Body::Response,
+		response.Union());
+	builder.FinishSizePrefixed(message);
+	return {
+		builder.GetBufferPointer(),
+		builder.GetBufferPointer() + builder.GetSize()
+	};
+}
+
+template<typename BodyBuilder>
+std::vector<uint8_t> BuildResponseBuffer(
+	uint32_t requestId,
+	FBS::Response::Body bodyType,
+	BodyBuilder buildBody)
+{
+	flatbuffers::FlatBufferBuilder builder;
+	auto body = buildBody(builder);
+	auto response = FBS::Response::CreateResponse(
+		builder,
+		requestId,
+		true,
+		bodyType,
+		body.Union());
+	auto message = FBS::Message::CreateMessage(
+		builder,
+		FBS::Message::Body::Response,
+		response.Union());
+	builder.FinishSizePrefixed(message);
+	return {
+		builder.GetBufferPointer(),
+		builder.GetBufferPointer() + builder.GetSize()
+	};
 }
 
 } // namespace
@@ -269,6 +382,261 @@ TEST(SocketPendingJoinStateTest, PendingJoinDoesNotCommitSessionState) {
 	EXPECT_EQ(socketData.pendingSessionId, kInvalidSessionId);
 	EXPECT_TRUE(socketData.pendingRoomId.empty());
 	EXPECT_TRUE(socketData.pendingPeerId.empty());
+}
+
+TEST(SocketPendingJoinStateTest, WorkerUnavailableClearsPendingJoinBeforeCommit) {
+	PerSocketData socketData;
+	socketData.roomId = "committed-room";
+	socketData.peerId = "committed-peer";
+	socketData.sessionId = 7;
+
+	SetPendingSocketJoin(&socketData, "pending-room", "pending-peer", 42);
+	EXPECT_FALSE(PrepareSocketJoinCommit(&socketData, 42, false));
+	EXPECT_EQ(socketData.roomId, "committed-room");
+	EXPECT_EQ(socketData.peerId, "committed-peer");
+	EXPECT_EQ(socketData.sessionId, 7u);
+	EXPECT_EQ(socketData.pendingSessionId, kInvalidSessionId);
+	EXPECT_TRUE(socketData.pendingRoomId.empty());
+	EXPECT_TRUE(socketData.pendingPeerId.empty());
+}
+
+TEST(ChannelWriteRetryTest, RecoverableErrorClassification) {
+	EXPECT_TRUE(IsRecoverableChannelWriteError(EINTR));
+	EXPECT_TRUE(IsRecoverableChannelWriteError(EAGAIN));
+	EXPECT_TRUE(IsRecoverableChannelWriteError(EWOULDBLOCK));
+	EXPECT_FALSE(IsRecoverableChannelWriteError(EPIPE));
+	EXPECT_FALSE(IsRecoverableChannelWriteError(EBADF));
+}
+
+TEST(TransportConnectValidationTest, WebRtcTransportUsesWorkerDtlsRole) {
+	int producerPipe[2];
+	int consumerPipe[2];
+	ASSERT_EQ(::pipe(producerPipe), 0);
+	ASSERT_EQ(::pipe(consumerPipe), 0);
+
+	{
+		Channel ch(
+			/*producerFd=*/producerPipe[1],
+			/*consumerFd=*/consumerPipe[0],
+			/*pid=*/12345,
+			/*threaded=*/false);
+		WebRtcTransport transport(
+			"webrtc-transport",
+			&ch,
+			"router-1",
+			IceParameters{},
+			{},
+			DtlsParameters{});
+		auto worker = StartSingleResponseWorker(
+			producerPipe[0],
+			consumerPipe[1],
+			FBS::Request::Method::WEBRTCTRANSPORT_CONNECT,
+			[](const FBS::Request::Request& request) {
+				return BuildResponseBuffer(
+					request.id(),
+					FBS::Response::Body::WebRtcTransport_ConnectResponse,
+					[](flatbuffers::FlatBufferBuilder& builder) {
+						return FBS::WebRtcTransport::CreateConnectResponse(
+							builder,
+							FBS::WebRtcTransport::DtlsRole::CLIENT);
+					});
+			});
+
+		const json result = transport.connect(DtlsParameters{});
+		EXPECT_EQ(result.value("dtlsLocalRole", ""), "client");
+		EXPECT_EQ(transport.dtlsParameters().role, "client");
+		EXPECT_TRUE(worker.get());
+	}
+
+	::close(producerPipe[0]);
+	::close(consumerPipe[1]);
+}
+
+TEST(TransportConnectValidationTest, WebRtcTransportRejectsUnexpectedResponseBody) {
+	int producerPipe[2];
+	int consumerPipe[2];
+	ASSERT_EQ(::pipe(producerPipe), 0);
+	ASSERT_EQ(::pipe(consumerPipe), 0);
+
+	{
+		Channel ch(
+			/*producerFd=*/producerPipe[1],
+			/*consumerFd=*/consumerPipe[0],
+			/*pid=*/12345,
+			/*threaded=*/false);
+		WebRtcTransport transport(
+			"webrtc-transport",
+			&ch,
+			"router-1",
+			IceParameters{},
+			{},
+			DtlsParameters{});
+		auto worker = StartSingleResponseWorker(
+			producerPipe[0],
+			consumerPipe[1],
+			FBS::Request::Method::WEBRTCTRANSPORT_CONNECT,
+			[](const FBS::Request::Request& request) {
+				return BuildEmptyResponseBuffer(request.id());
+			});
+
+		EXPECT_THROW(transport.connect(DtlsParameters{}), std::runtime_error);
+		EXPECT_TRUE(worker.get());
+	}
+
+	::close(producerPipe[0]);
+	::close(consumerPipe[1]);
+}
+
+TEST(TransportConnectValidationTest, PlainTransportRequiresValidatedTupleResponse) {
+	int producerPipe[2];
+	int consumerPipe[2];
+	ASSERT_EQ(::pipe(producerPipe), 0);
+	ASSERT_EQ(::pipe(consumerPipe), 0);
+
+	{
+		Channel ch(
+			/*producerFd=*/producerPipe[1],
+			/*consumerFd=*/consumerPipe[0],
+			/*pid=*/12345,
+			/*threaded=*/false);
+		TransportTuple tuple;
+		PlainTransport transport("plain-transport", &ch, "router-1", tuple, true);
+		auto worker = StartSingleResponseWorker(
+			producerPipe[0],
+			consumerPipe[1],
+			FBS::Request::Method::PLAINTRANSPORT_CONNECT,
+			[](const FBS::Request::Request& request) {
+				return BuildResponseBuffer(
+					request.id(),
+					FBS::Response::Body::PlainTransport_ConnectResponse,
+					[](flatbuffers::FlatBufferBuilder& builder) {
+						auto tupleOffset = FBS::Transport::CreateTupleDirect(
+							builder,
+							"127.0.0.1",
+							55000,
+							"198.51.100.20",
+							55001,
+							FBS::Transport::Protocol::UDP);
+						return FBS::PlainTransport::CreateConnectResponse(
+							builder,
+							tupleOffset,
+							0,
+							0);
+					});
+			});
+
+		const json result = transport.connect("198.51.100.20", 55001);
+		EXPECT_TRUE(result.value("connected", false));
+		EXPECT_EQ(transport.tuple().localAddress, "127.0.0.1");
+		EXPECT_EQ(transport.tuple().localPort, 55000);
+		EXPECT_EQ(transport.tuple().remoteIp, "198.51.100.20");
+		EXPECT_EQ(transport.tuple().remotePort, 55001);
+		EXPECT_EQ(transport.tuple().protocol, "udp");
+		EXPECT_TRUE(worker.get());
+	}
+
+	::close(producerPipe[0]);
+	::close(consumerPipe[1]);
+}
+
+TEST(TransportConnectValidationTest, PipeTransportRejectsMissingTupleResponse) {
+	int producerPipe[2];
+	int consumerPipe[2];
+	ASSERT_EQ(::pipe(producerPipe), 0);
+	ASSERT_EQ(::pipe(consumerPipe), 0);
+
+	{
+		Channel ch(
+			/*producerFd=*/producerPipe[1],
+			/*consumerFd=*/consumerPipe[0],
+			/*pid=*/12345,
+			/*threaded=*/false);
+		PipeTransport transport("pipe-transport", &ch, "router-1", TransportTuple{}, true);
+		auto worker = StartSingleResponseWorker(
+			producerPipe[0],
+			consumerPipe[1],
+			FBS::Request::Method::PIPETRANSPORT_CONNECT,
+			[](const FBS::Request::Request& request) {
+				flatbuffers::FlatBufferBuilder builder;
+				auto response = FBS::Response::CreateResponse(
+					builder,
+					request.id(),
+					true,
+					FBS::Response::Body::PipeTransport_ConnectResponse,
+					0);
+				auto message = FBS::Message::CreateMessage(
+					builder,
+					FBS::Message::Body::Response,
+					response.Union());
+				builder.FinishSizePrefixed(message);
+				return std::vector<uint8_t>(
+					builder.GetBufferPointer(),
+					builder.GetBufferPointer() + builder.GetSize());
+			});
+
+		EXPECT_THROW(transport.connect("198.51.100.40", 60000), std::runtime_error);
+		EXPECT_TRUE(worker.get());
+	}
+
+	::close(producerPipe[0]);
+	::close(consumerPipe[1]);
+}
+
+TEST(ChannelRequestIdTest, WraparoundSkipsPendingRequestIds) {
+	int producerPipe[2];
+	int consumerPipe[2];
+	ASSERT_EQ(::pipe(producerPipe), 0);
+	ASSERT_EQ(::pipe(consumerPipe), 0);
+
+	{
+		Channel ch(
+			/*producerFd=*/producerPipe[1],
+			/*consumerFd=*/consumerPipe[0],
+			/*pid=*/12345,
+			/*threaded=*/false);
+
+		ch.setNextIdForTest(0);
+		auto first = ch.requestWithId(FBS::Request::Method::WORKER_CLOSE);
+		EXPECT_EQ(first.requestId, 1u);
+
+		ch.setNextIdForTest(4294967294u);
+		auto nearWrap = ch.requestWithId(FBS::Request::Method::WORKER_CLOSE);
+		EXPECT_EQ(nearWrap.requestId, 4294967295u);
+
+		ch.setNextIdForTest(4294967295u);
+		auto wrapped = ch.requestWithId(FBS::Request::Method::WORKER_CLOSE);
+		EXPECT_EQ(wrapped.requestId, 2u);
+
+		ch.close();
+	}
+
+	::close(producerPipe[0]);
+	::close(consumerPipe[1]);
+}
+
+TEST(ConsumerCloseReasonTest, ProducerCloseCarriesTerminalReasonOnInternalCloseEvent) {
+	Consumer consumer(
+		"consumer-1",
+		"producer-1",
+		"video",
+		RtpParameters{},
+		"simple",
+		nullptr,
+		"transport-1");
+	std::string closeReason;
+	int producerCloseEvents = 0;
+	consumer.emitter().on("@close", [&](const std::vector<std::any>& args) {
+		ASSERT_EQ(args.size(), 1u);
+		closeReason = std::any_cast<std::string>(args[0]);
+	});
+	consumer.emitter().on("producerclose", [&](const std::vector<std::any>&) {
+		++producerCloseEvents;
+	});
+
+	consumer.handleNotification(FBS::Notification::Event::CONSUMER_PRODUCER_CLOSE, nullptr);
+
+	EXPECT_EQ(closeReason, "producerclose");
+	EXPECT_EQ(producerCloseEvents, 1);
 }
 
 TEST(DownlinkRateLimitStateTest, PendingSequenceDoesNotAdvanceAcceptedBaselineUntilMarked) {

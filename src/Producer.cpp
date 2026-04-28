@@ -27,7 +27,10 @@ void Producer::close() {
 	if (closed_) return;
 	closed_ = true;
 
-	channel_->emitter().off(id_);
+	if (channel_ && channelListenerId_ != 0) {
+		channel_->emitter().off(channelListenerId_);
+		channelListenerId_ = 0;
+	}
 
 	try {
 		channel_->requestBuild(FBS::Request::Method::TRANSPORT_CLOSE_PRODUCER,
@@ -41,16 +44,20 @@ void Producer::close() {
 	} catch (const std::exception& e) {
 		spdlog::warn("Producer::close() request failed [id:{}]: {}", id_, e.what());
 	} catch (...) {
-		spdlog::warn("Producer::close() request failed [id:{}]: unknown error", id_);
-	}
+			spdlog::warn("Producer::close() request failed [id:{}]: unknown error", id_);
+		}
 
-	emitter_.emit("@close");
+	emitter_.emitChecked("@close", {std::any(std::string("close"))});
 }
 
 void Producer::transportClosed() {
 	if (closed_) return;
 	closed_ = true;
-	channel_->emitter().off(id_);
+	if (channel_ && channelListenerId_ != 0) {
+		channel_->emitter().off(channelListenerId_);
+		channelListenerId_ = 0;
+	}
+	emitter_.emitChecked("@close", {std::any(std::string("transportclose"))});
 	emitter_.emit("transportclose");
 }
 

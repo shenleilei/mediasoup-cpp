@@ -119,6 +119,19 @@ inline void ClearPendingSocketJoinIfMatches(
 	}
 }
 
+inline bool PrepareSocketJoinCommit(
+	PerSocketData* socketData,
+	uint64_t sessionId,
+	bool workerAvailable)
+{
+	if (workerAvailable) {
+		return true;
+	}
+
+	ClearPendingSocketJoinIfMatches(socketData, sessionId);
+	return false;
+}
+
 inline void RemoveSocketFromRoomPeers(
 	const std::shared_ptr<WsMap>& wsMap,
 	SignalingWebSocket* ws,

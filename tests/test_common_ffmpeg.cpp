@@ -282,6 +282,12 @@ TEST(DecoderSharedTest, EmptyMethodsThrow)
 	EXPECT_THROW(decoder.ReceiveFrame(frame.get()), std::runtime_error);
 }
 
+TEST(DecoderSharedTest, ReceiveFrameRejectsNullOutputFrame)
+{
+	ffmpeg::Decoder decoder;
+	EXPECT_THROW(decoder.ReceiveFrame(nullptr), std::runtime_error);
+}
+
 TEST(DecoderSharedTest, MovedFromMethodsThrow)
 {
 	if (!HasMpeg4Encoder()) {
@@ -314,6 +320,12 @@ TEST(EncoderSharedTest, EmptyMethodsThrow)
 
 	EXPECT_THROW(encoder.SendFrame(frame.get()), std::runtime_error);
 	EXPECT_THROW(encoder.ReceivePacket(packet.get()), std::runtime_error);
+}
+
+TEST(EncoderSharedTest, ReceivePacketRejectsNullOutputPacket)
+{
+	ffmpeg::Encoder encoder;
+	EXPECT_THROW(encoder.ReceivePacket(nullptr), std::runtime_error);
 }
 
 TEST(EncoderSharedTest, MovedFromMethodsThrow)
@@ -362,4 +374,11 @@ TEST(BitstreamFilterSharedTest, MovedFromMethodsThrow)
 
 	EXPECT_THROW(original.SendPacket(packet.get()), std::runtime_error);
 	EXPECT_THROW(original.ReceivePacket(packet.get()), std::runtime_error);
+}
+
+TEST(BitstreamFilterSharedTest, CreateRejectsNullCodecParameters)
+{
+	EXPECT_THROW(
+		ffmpeg::BitstreamFilter::Create("null", nullptr, AVRational{1, 90000}),
+		std::runtime_error);
 }

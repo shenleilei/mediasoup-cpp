@@ -265,9 +265,10 @@ int PlainClientApp::RunLegacyMode()
 					bool anyBandwidthLimited = false;
 					bool peerSnapshotRequested = false;
 
-					for (auto& track : videoTracks_) {
-						if (!track.qosCtrl) continue;
-						track.snapshotRequested = false;
+						for (auto& track : videoTracks_) {
+							if (!track.qosCtrl) continue;
+							track.qosCtrl->housekeep();
+							track.snapshotRequested = false;
 
 						qos::RawSenderSnapshot snap;
 						snap.timestampMs = now;
@@ -345,7 +346,7 @@ int PlainClientApp::RunLegacyMode()
 						if (lossCounterSource != LossCounterSource::None)
 							track.lossCounterSource = lossCounterSource;
 
-						track.qosCtrl->onSample(snap);
+							track.qosCtrl->onSample(snap);
 						peerTrackStates.push_back(track.qosCtrl->getTrackState());
 						if (auto derivedSignals = track.qosCtrl->lastSignals())
 							peerTrackSignals[track.trackId] = *derivedSignals;

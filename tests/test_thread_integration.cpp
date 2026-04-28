@@ -120,6 +120,27 @@ static bool logContainsWithin(const std::string& path, const std::string& needle
 	return false;
 }
 
+static bool logContainsAtLeastWithin(
+	const std::string& path,
+	const std::string& needle,
+	size_t minimumCount,
+	int timeoutMs) {
+	const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+	while (std::chrono::steady_clock::now() < deadline) {
+		std::ifstream in(path);
+		std::string contents((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+		size_t count = 0;
+		size_t pos = 0;
+		while ((pos = contents.find(needle, pos)) != std::string::npos) {
+			++count;
+			pos += needle.size();
+		}
+		if (count >= minimumCount) return true;
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	}
+	return false;
+}
+
 static void terminateGenericProcess(pid_t pid) {
 	if (pid <= 0) return;
 	if (kill(pid, 0) != 0) return;
@@ -129,6 +150,18 @@ static void terminateGenericProcess(pid_t pid) {
 		if (kill(pid, 0) != 0) return;
 	}
 	kill(pid, SIGKILL);
+}
+
+static void killWorkerChildrenOf(pid_t parentPid) {
+	std::string cmd = "pgrep -P " + std::to_string(parentPid) + " 2>/dev/null";
+	FILE* fp = popen(cmd.c_str(), "r");
+	if (!fp) return;
+	char buf[64]{};
+	while (fgets(buf, sizeof(buf), fp)) {
+		pid_t p = atoi(buf);
+		if (p > 0) kill(p, SIGKILL);
+	}
+	pclose(fp);
 }
 
 static json defaultRtpCapabilitiesForThreadedIntegration() {
@@ -347,6 +380,45 @@ TEST_F(ThreadedPlainPublishIntegrationTest, ExplicitThreadedSourcesDoNotRequireB
 	ASSERT_TRUE(logContainsWithin(logPath, "skipping MP4 bootstrap", 5000));
 	ASSERT_TRUE(logContainsWithin(logPath, "Publish", 8000));
 	ASSERT_TRUE(logContainsWithin(logPath, "videoTracks=2", 8000));
+
+	terminateGenericProcess(clientPid);
+}
+
+TEST_F(ThreadedPlainPublishIntegrationTest, PlainClientRecoversAfterServerRestart) {
+	if (!testFileExists()) { GTEST_SKIP() << "tests/fixtures/media/test_sweep.mp4 not found"; }
+	if (!plainClientBinaryExists()) { GTEST_SKIP() << "client/build/plain-client not found"; }
+
+	const std::string missingBootstrap =
+		"/tmp/threaded_restart_missing_" + std::to_string(getpid()) + ".mp4";
+	const std::string logPath =
+		"/tmp/threaded_restart_recovery_" + std::to_string(getpid()) + ".log";
+	unlink(missingBootstrap.c_str());
+	unlink(logPath.c_str());
+
+	std::ostringstream cmd;
+	cmd << "env PLAIN_CLIENT_THREADED=1 "
+		<< "PLAIN_CLIENT_VIDEO_TRACK_COUNT=1 "
+		<< "PLAIN_CLIENT_VIDEO_SOURCES=" << kTestMp4 << " "
+		<< "stdbuf -oL -eL ./client/build/plain-client 127.0.0.1 "
+		<< threadedIntegrationPort() << " " << roomId_ << " threaded_restart " << missingBootstrap
+		<< " >" << logPath << " 2>&1 & echo $!";
+
+	FILE* fp = popen(cmd.str().c_str(), "r");
+	ASSERT_NE(fp, nullptr);
+	char buf[64]{};
+	ASSERT_NE(fgets(buf, sizeof(buf), fp), nullptr);
+	pclose(fp);
+	pid_t clientPid = atoi(buf);
+	ASSERT_GT(clientPid, 0);
+
+	ASSERT_TRUE(logContainsWithin(logPath, "Publish", 8000));
+	killWorkerChildrenOf(sfuPid_);
+
+	ASSERT_TRUE(logContainsWithin(logPath, "serverRestart received", 12000));
+	ASSERT_TRUE(logContainsWithin(logPath, "recovering session after serverRestart", 12000));
+	ASSERT_TRUE(logContainsWithin(logPath, "recovered session", 15000));
+	ASSERT_TRUE(logContainsAtLeastWithin(logPath, "Publish", 2, 15000))
+		<< "plain-client should republish after recovery";
 
 	terminateGenericProcess(clientPid);
 }

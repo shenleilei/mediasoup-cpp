@@ -190,14 +190,13 @@ public:
 		return result;
 	}
 
-	void OnPacingTick(int64_t nowMs)
-	{
-		AdvanceBudget(nowMs);
-		DropExpiredAudioPackets(nowMs);
-		FlushAudioQueue();
-		FlushRetransmissionQueue();
-		FlushFreshVideoQueues();
-	}
+		void OnPacingTick(int64_t nowMs)
+		{
+			AdvanceBudget(nowMs);
+			DropExpiredAudioPackets(nowMs);
+			FlushAudioQueue();
+			FlushVideoQueues();
+		}
 
 	void FlushForShutdown(int64_t nowMs)
 	{
@@ -209,14 +208,13 @@ public:
 			if (pendingBefore == 0) {
 				break;
 			}
-			DropExpiredAudioPackets(nowMs);
-			mediaBudgetBytes_ = std::numeric_limits<int64_t>::max() / 4;
-			FlushAudioQueue();
-			FlushRetransmissionQueue();
-			FlushFreshVideoQueues();
-			if (PendingPacketCount() >= pendingBefore) {
-				break;
-			}
+				DropExpiredAudioPackets(nowMs);
+				mediaBudgetBytes_ = std::numeric_limits<int64_t>::max() / 4;
+				FlushAudioQueue();
+				FlushVideoQueues();
+				if (PendingPacketCount() >= pendingBefore) {
+					break;
+				}
 		}
 
 		DropExpiredAudioPackets(nowMs);
@@ -319,13 +317,18 @@ private:
 		int64_t deadlineMs{ 0 };
 	};
 
-	struct TrackState {
-		uint32_t trackIndex{ 0 };
-		uint32_t ssrc{ 0 };
-		uint32_t targetBitrateBps{ 0 };
-		bool paused{ false };
-		std::deque<Packet> videoQueue;
-	};
+		struct TrackState {
+			uint32_t trackIndex{ 0 };
+			uint32_t ssrc{ 0 };
+			uint32_t targetBitrateBps{ 0 };
+			bool paused{ false };
+			std::deque<Packet> videoQueue;
+		};
+
+		enum class MixedVideoTurn {
+			Retransmission,
+			FreshVideo
+		};
 
 	bool EnqueuePacket(std::deque<Packet>& queue, uint32_t ssrc, const uint8_t* data, size_t len)
 	{
@@ -426,96 +429,135 @@ private:
 		}
 	}
 
-	void FlushRetransmissionQueue()
+	bool TryFlushOneRetransmissionPacket()
 	{
-		while (!videoRetransmissionQueue_.empty()) {
-			auto& packet = videoRetransmissionQueue_.front();
-			const auto result = SendPacket(PacketClass::VideoRetransmission, packet);
-			if (result.status == SendStatus::Sent) {
-				mediaBudgetBytes_ -= static_cast<int64_t>(packet.len);
-				metrics_.retransmissionSent++;
-				if (onVideoRetransmissionSent_) {
-					onVideoRetransmissionSent_(packet.ssrc);
-				}
-				videoRetransmissionQueue_.pop_front();
-				continue;
-			}
-			if (result.status == SendStatus::HardError) {
-				videoRetransmissionQueue_.pop_front();
-				metrics_.retransmissionDrops++;
-				continue;
-			}
-			// WouldBlock or other: packet stays in queue, stop pacing.
-			break;
+		if (videoRetransmissionQueue_.empty()) {
+			return false;
 		}
+		auto& packet = videoRetransmissionQueue_.front();
+		if (static_cast<int64_t>(packet.len) > mediaBudgetBytes_) {
+			return false;
+		}
+		const auto result = SendPacket(PacketClass::VideoRetransmission, packet);
+		if (result.status == SendStatus::Sent) {
+			mediaBudgetBytes_ -= static_cast<int64_t>(packet.len);
+			metrics_.retransmissionSent++;
+			if (onVideoRetransmissionSent_) {
+				onVideoRetransmissionSent_(packet.ssrc);
+			}
+			videoRetransmissionQueue_.pop_front();
+			return true;
+		}
+		if (result.status == SendStatus::HardError) {
+			videoRetransmissionQueue_.pop_front();
+			metrics_.retransmissionDrops++;
+			return true;
+		}
+		// WouldBlock or other: packet stays in queue, stop pacing.
+		return false;
 	}
 
-	void FlushFreshVideoQueues()
+	bool FlushOneFreshVideoPacket()
 	{
 		if (trackStates_.empty()) {
-			return;
+			return false;
 		}
 
+		const size_t trackCount = trackStates_.size();
+		for (size_t attempt = 0; attempt < trackCount; ++attempt) {
+			const size_t index = (nextVideoTrackIndex_ + attempt) % trackCount;
+			auto& trackState = trackStates_[index];
+			if (trackState.paused || trackState.videoQueue.empty()) {
+				continue;
+			}
+			auto& packet = trackState.videoQueue.front();
+			if (static_cast<int64_t>(packet.len) > mediaBudgetBytes_) {
+				continue;
+			}
+			const auto result = SendPacket(PacketClass::VideoMedia, packet);
+			if (result.status == SendStatus::Sent) {
+				mediaBudgetBytes_ -= static_cast<int64_t>(packet.len);
+				if (onVideoMediaSent_) {
+					onVideoMediaSent_(packet.data, packet.len);
+				}
+				trackState.videoQueue.pop_front();
+				if (queuedFreshVideoPackets_ > 0) {
+					queuedFreshVideoPackets_--;
+				}
+				nextVideoTrackIndex_ = (index + 1) % trackCount;
+				return true;
+			}
+			if (result.status == SendStatus::HardError) {
+				trackState.videoQueue.pop_front();
+				if (queuedFreshVideoPackets_ > 0) {
+					queuedFreshVideoPackets_--;
+				}
+				metrics_.queuedVideoDiscards++;
+				nextVideoTrackIndex_ = (index + 1) % trackCount;
+				return true;
+			}
+			if (result.status == SendStatus::WouldBlock) {
+				metrics_.queuedVideoRetentions++;
+			}
+			return false;
+		}
+		nextVideoTrackIndex_ = (nextVideoTrackIndex_ + 1) % trackCount;
+		return false;
+	}
+
+	void FlushVideoQueues()
+	{
 		while (mediaBudgetBytes_ > 0) {
-			bool sentPacket = false;
-			const size_t trackCount = trackStates_.size();
-			for (size_t attempt = 0; attempt < trackCount; ++attempt) {
-				const size_t index = (nextVideoTrackIndex_ + attempt) % trackCount;
-				auto& trackState = trackStates_[index];
-				if (trackState.paused || trackState.videoQueue.empty()) {
-					continue;
+			const bool haveRetransmission = !videoRetransmissionQueue_.empty();
+			const bool haveFreshVideo = queuedFreshVideoPackets_ > 0;
+			if (!haveRetransmission && !haveFreshVideo) {
+				return;
+			}
+			if (!haveFreshVideo) {
+				nextMixedVideoTurn_ = MixedVideoTurn::Retransmission;
+				if (!TryFlushOneRetransmissionPacket()) {
+					return;
 				}
-				auto& packet = trackState.videoQueue.front();
-					if (static_cast<int64_t>(packet.len) > mediaBudgetBytes_) {
-						continue;
-					}
-					const auto result = SendPacket(PacketClass::VideoMedia, packet);
-					if (result.status == SendStatus::Sent) {
-						mediaBudgetBytes_ -= static_cast<int64_t>(packet.len);
-						if (onVideoMediaSent_) {
-						onVideoMediaSent_(packet.data, packet.len);
-					}
-					trackState.videoQueue.pop_front();
-					if (queuedFreshVideoPackets_ > 0) {
-						queuedFreshVideoPackets_--;
-					}
-					nextVideoTrackIndex_ = (index + 1) % trackCount;
-					sentPacket = true;
-					break;
+				continue;
+			}
+			if (!haveRetransmission) {
+				nextMixedVideoTurn_ = MixedVideoTurn::Retransmission;
+				if (!FlushOneFreshVideoPacket()) {
+					return;
 				}
-				if (result.status == SendStatus::HardError) {
-					trackState.videoQueue.pop_front();
-					if (queuedFreshVideoPackets_ > 0) {
-						queuedFreshVideoPackets_--;
-					}
-					metrics_.queuedVideoDiscards++;
-					nextVideoTrackIndex_ = (index + 1) % trackCount;
-					sentPacket = true;
-					break;
-				}
-				if (result.status == SendStatus::WouldBlock) {
-					metrics_.queuedVideoRetentions++;
-				}
+				continue;
+			}
+
+			const bool preferRetransmission =
+				nextMixedVideoTurn_ == MixedVideoTurn::Retransmission;
+			bool progressed = preferRetransmission
+				? TryFlushOneRetransmissionPacket()
+				: FlushOneFreshVideoPacket();
+			if (!progressed) {
+				progressed = preferRetransmission
+					? FlushOneFreshVideoPacket()
+					: TryFlushOneRetransmissionPacket();
+			}
+			if (!progressed) {
 				return;
 			}
 
-			if (!sentPacket) {
-				nextVideoTrackIndex_ = (nextVideoTrackIndex_ + 1) % trackCount;
-				break;
-			}
+			nextMixedVideoTurn_ = preferRetransmission
+				? MixedVideoTurn::FreshVideo
+				: MixedVideoTurn::Retransmission;
 		}
 	}
 
-		SendResult SendPacket(PacketClass packetClass, Packet& packet)
-		{
-			if (!sendFn_) {
-				return {SendStatus::HardError, EINVAL, 0};
-			}
-			const auto result =
-				sendFn_(packetClass, &packet.transportMetadata, packet.data, packet.len);
-			RecordSendResult(packetClass, result);
-			return result;
+	SendResult SendPacket(PacketClass packetClass, Packet& packet)
+	{
+		if (!sendFn_) {
+			return {SendStatus::HardError, EINVAL, 0};
 		}
+		const auto result =
+			sendFn_(packetClass, &packet.transportMetadata, packet.data, packet.len);
+		RecordSendResult(packetClass, result);
+		return result;
+	}
 
 	void RecordSendResult(PacketClass packetClass, const SendResult& result)
 	{
@@ -593,11 +635,12 @@ private:
 	int64_t mediaBudgetBytes_{ 0 };
 	int64_t lastBudgetUpdateMs_{ 0 };
 	uint32_t aggregateTargetBitrateBps_{ 0 };
-	uint32_t transportEstimatedBitrateBps_{ 0 };
-	uint32_t applicationBitrateCapBps_{ 0 };
-	uint32_t effectivePacingBitrateBps_{ 0 };
-	size_t nextVideoTrackIndex_{ 0 };
-	Metrics metrics_;
-};
+		uint32_t transportEstimatedBitrateBps_{ 0 };
+		uint32_t applicationBitrateCapBps_{ 0 };
+		uint32_t effectivePacingBitrateBps_{ 0 };
+		size_t nextVideoTrackIndex_{ 0 };
+		MixedVideoTurn nextMixedVideoTurn_{ MixedVideoTurn::Retransmission };
+		Metrics metrics_;
+	};
 
 } // namespace mediasoup::plainclient

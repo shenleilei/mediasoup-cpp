@@ -389,11 +389,14 @@ public:
 			: std::optional<uint32_t>{};
 		if (previousCap != nextCap) coordinationBitrateCapDirty_ = true;
 	}
-	const Profile& profileConfig() const { return profile_; }
-	std::optional<QosOverride> getActiveOverride(int64_t nowMs) {
-		activeOverride_ = mergeOverrides(nowMs);
-		return activeOverride_;
-	}
+		const Profile& profileConfig() const { return profile_; }
+		std::optional<QosOverride> getActiveOverride(int64_t nowMs) {
+			activeOverride_ = mergeOverrides(nowMs);
+			return activeOverride_;
+		}
+		void housekeep() {
+			activeOverride_ = mergeOverrides(nowMs());
+		}
 
 private:
 	struct ActiveOverrideRecord {
@@ -638,8 +641,8 @@ private:
 	bool hasPrev_ = false;
 	bool hasPrevSig_ = false;
 
-	int sampleCount_ = 0;
-	int warmupSamples_ = 5;
+		int sampleCount_ = 0;
+		int warmupSamples_ = 5;
 		int snapshotSeq_ = 0;
 		int sampleIntervalMs_ = DEFAULT_SAMPLE_INTERVAL_MS;
 		int snapshotIntervalMs_ = DEFAULT_SNAPSHOT_INTERVAL_MS;

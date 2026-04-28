@@ -1,4 +1,5 @@
 #include "WebRtcTransport.h"
+#include "TransportConnectResponseUtils.h"
 #include "webRtcTransport_generated.h"
 #include "request_generated.h"
 #include "transport_generated.h"
@@ -7,7 +8,7 @@ namespace mediasoup {
 
 json WebRtcTransport::connect(const DtlsParameters& clientDtlsParams) {
 	if (closed_) throw std::runtime_error("Transport closed");
-	channel_->requestBuildWait(
+	auto owned = channel_->requestBuildWait(
 		FBS::Request::Method::WEBRTCTRANSPORT_CONNECT,
 		FBS::Request::Body::WebRtcTransport_ConnectRequest,
 		[clientDtlsParams](flatbuffers::FlatBufferBuilder& builder) {
@@ -33,7 +34,10 @@ json WebRtcTransport::connect(const DtlsParameters& clientDtlsParams) {
 			return reqOff.Union();
 		}, id_);
 
-	return {{"dtlsLocalRole", "server"}};
+	const std::string dtlsLocalRole =
+		transportconnect::ParseValidatedDtlsLocalRole(owned);
+	dtlsParameters_.role = dtlsLocalRole;
+	return {{"dtlsLocalRole", dtlsLocalRole}};
 }
 
 json WebRtcTransport::restartIce() {

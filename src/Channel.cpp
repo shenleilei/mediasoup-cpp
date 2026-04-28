@@ -6,6 +6,7 @@
 #include <cstring>
 #include <stdexcept>
 #include <algorithm>
+#include <limits>
 
 namespace mediasoup {
 
@@ -150,8 +151,18 @@ void Channel::sendBytes(const uint8_t* data, size_t len) {
 	size_t written = 0;
 	while (written < len) {
 		ssize_t n = ::write(producerFd, data + written, len - written);
-		if (n <= 0) {
-			MS_ERROR(logger_, "write to worker pipe failed: {}", strerror(errno));
+		if (n < 0) {
+			const int error = errno;
+			if (IsRecoverableChannelWriteError(error)) {
+				continue;
+			}
+			MS_ERROR(logger_, "write to worker pipe failed: {}", strerror(error));
+			::close(producerFd);
+			close();
+			return;
+		}
+		if (n == 0) {
+			MS_ERROR(logger_, "write to worker pipe returned 0 bytes");
 			::close(producerFd);
 			close();
 			return;
@@ -240,34 +251,50 @@ Channel::RequestResult Channel::requestWithIdLocked(
 {
 	auto sent = std::make_shared<PendingSent>();
 	std::vector<uint8_t> sendBuf;
-
-	if (nextId_ < 4294967295u) ++nextId_; else nextId_ = 1;
-	uint32_t id = nextId_;
-
-	auto handlerIdOff = builder_.CreateString(handlerId);
-	auto reqOff = FBS::Request::CreateRequest(
-		builder_, id, method, handlerIdOff, bodyType, bodyOffset);
-	auto msgOff = FBS::Message::CreateMessage(
-		builder_, FBS::Message::Body::Request, reqOff.Union());
-	builder_.FinishSizePrefixed(msgOff);
-
-	auto buf = builder_.GetBufferPointer();
-	auto size = builder_.GetSize();
-
-	if (size > MESSAGE_MAX_LEN) {
-		builder_.Clear();
-		throw std::runtime_error("request too big");
-	}
-
-	sendBuf.assign(buf, buf + size);
-	builder_.Clear();
-
-	sent->id = id;
-	sent->method = FBS::Request::EnumNameMethod(method);
-
+	uint32_t id = 0;
 	{
 		std::lock_guard<std::mutex> slock(sentsMutex_);
+		for (uint64_t attempts = 0; attempts < std::numeric_limits<uint32_t>::max(); ++attempts) {
+			if (nextId_ < 4294967295u) ++nextId_; else nextId_ = 1;
+			if (sents_.find(nextId_) == sents_.end()) {
+				id = nextId_;
+				break;
+			}
+		}
+		if (id == 0) {
+			throw std::runtime_error("channel request id space exhausted");
+		}
+		sent->id = id;
+		sent->method = FBS::Request::EnumNameMethod(method);
 		sents_[id] = sent;
+	}
+
+	try {
+		auto handlerIdOff = builder_.CreateString(handlerId);
+		auto reqOff = FBS::Request::CreateRequest(
+			builder_, id, method, handlerIdOff, bodyType, bodyOffset);
+		auto msgOff = FBS::Message::CreateMessage(
+			builder_, FBS::Message::Body::Request, reqOff.Union());
+		builder_.FinishSizePrefixed(msgOff);
+
+		auto buf = builder_.GetBufferPointer();
+		auto size = builder_.GetSize();
+
+		if (size > MESSAGE_MAX_LEN) {
+			builder_.Clear();
+			throw std::runtime_error("request too big");
+		}
+
+		sendBuf.assign(buf, buf + size);
+		builder_.Clear();
+	} catch (...) {
+		builder_.Clear();
+		std::lock_guard<std::mutex> slock(sentsMutex_);
+		auto it = sents_.find(id);
+		if (it != sents_.end() && it->second == sent) {
+			sents_.erase(it);
+		}
+		throw;
 	}
 
 	auto future = sent->promise.get_future();

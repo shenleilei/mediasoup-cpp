@@ -27,6 +27,7 @@ extern "C" {
 namespace msff = mediasoup::ffmpeg;
 
 std::atomic<bool> PlainClientApp::running_{true};
+std::atomic<bool> PlainClientApp::signalStopRequested_{false};
 RtcpContext* PlainClientApp::rtcpContext_ = nullptr;
 
 namespace {
@@ -100,6 +101,7 @@ int PlainClientApp::RunPlainClientApp(int argc, char* argv[])
 
 void PlainClientApp::OnSignal(int)
 {
+	signalStopRequested_.store(true, std::memory_order_relaxed);
 	running_.store(false, std::memory_order_relaxed);
 }
 
@@ -558,8 +560,17 @@ void PlainClientApp::ConfigureNotifications()
 			} catch (const std::exception& e) {
 				spdlog::warn("[QoS] override parse error: {}", e.what());
 			}
-		}
-	});
+			} else if (method == "serverRestart") {
+				sessionRestartReason_ = data.value("reason", "worker crashed");
+				sessionRestartRequested_.store(true, std::memory_order_relaxed);
+				running_.store(false, std::memory_order_relaxed);
+				spdlog::warn(
+					"[plain-client] serverRestart received [roomId:{} peerId:{} reason:{}], restarting session with original peer identity",
+					data.value("roomId", roomId_),
+					peerId_,
+					sessionRestartReason_);
+			}
+		});
 }
 
 void PlainClientApp::RequestServerProducerStats()
@@ -733,6 +744,7 @@ void PlainClientApp::Cleanup()
 
 bool PlainClientApp::Initialize(int argc, char* argv[])
 {
+	signalStopRequested_.store(false, std::memory_order_relaxed);
 	running_.store(true, std::memory_order_relaxed);
 	if (!ParseArguments(argc, argv))
 		return false;
@@ -743,17 +755,84 @@ bool PlainClientApp::Initialize(int argc, char* argv[])
 int PlainClientApp::Run()
 {
 	int exitCode = 0;
-	try {
-		if (!InitializeSession())
-			return 1;
-		exitCode = threadedMode_ ? RunThreadedMode() : RunLegacyMode();
-	} catch (const std::exception& e) {
-		spdlog::error("Error: {}", e.what());
-		exitCode = 1;
-	}
+	bool recovering = false;
+	int recoveryAttempt = 0;
 
-	StopTestHelperThreads();
-	ws_.close();
-	Cleanup();
+	while (true) {
+		if (recovering) {
+			if (recoveryAttempt > RecoveryMaxAttempts()) {
+				spdlog::error(
+					"[plain-client] recovery failed after {} attempts [roomId:{} peerId:{} reason:{}]",
+					RecoveryMaxAttempts(),
+					roomId_,
+					peerId_,
+					sessionRestartReason_);
+				exitCode = 1;
+				break;
+			}
+			const int backoffMs = RecoveryBackoffMsForAttempt(recoveryAttempt);
+			spdlog::warn(
+				"[plain-client] recovering session after serverRestart [attempt:{}/{} roomId:{} peerId:{} backoffMs:{} reason:{}]",
+				recoveryAttempt,
+				RecoveryMaxAttempts(),
+				roomId_,
+				peerId_,
+				backoffMs,
+				sessionRestartReason_);
+			for (int waitedMs = 0; waitedMs < backoffMs && !signalStopRequested_.load(); waitedMs += 100)
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			if (signalStopRequested_.load()) {
+				exitCode = 1;
+				break;
+			}
+		}
+
+		sessionRestartRequested_.store(false, std::memory_order_relaxed);
+		sessionRestartReason_.clear();
+		running_.store(true, std::memory_order_relaxed);
+
+			bool sessionInitialized = false;
+			try {
+				sessionInitialized = InitializeSession();
+				if (sessionInitialized) {
+					if (recovering) {
+						spdlog::info(
+							"[plain-client] recovered session [roomId:{} peerId:{}]",
+							roomId_,
+							peerId_);
+					}
+					recovering = false;
+					recoveryAttempt = 0;
+					exitCode = threadedMode_ ? RunThreadedMode() : RunLegacyMode();
+			} else {
+				exitCode = 1;
+			}
+		} catch (const std::exception& e) {
+			spdlog::error("Error: {}", e.what());
+			exitCode = 1;
+		}
+
+		StopTestHelperThreads();
+		ws_.close();
+		Cleanup();
+
+			if (!sessionInitialized) {
+				if (recovering && !signalStopRequested_.load()) {
+					++recoveryAttempt;
+					continue;
+				}
+			break;
+		}
+
+		if (ShouldRecoverAfterServerRestart(
+			sessionRestartRequested_.load(std::memory_order_relaxed),
+			signalStopRequested_.load(std::memory_order_relaxed))) {
+			recovering = true;
+			recoveryAttempt = 1;
+			continue;
+		}
+
+		break;
+	}
 	return exitCode;
 }

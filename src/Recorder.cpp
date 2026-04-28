@@ -419,15 +419,23 @@ void PeerRecorder::writePacket(const media::rtp::RtpHeader& rtp)
 			audioLastTs_ = rtp.timestamp;
 			audioBaseSet_ = true;
 		}
-		if (headerDeferred_) {
-			if (pendingAudio_.size() < kMaxPendingAudioPackets) {
-				pendingAudio_.push_back({
-					rtp.timestamp,
-					std::vector<uint8_t>(rtp.payload, rtp.payload + rtp.payloadSize)
-				});
+			if (headerDeferred_) {
+				if (pendingAudio_.size() < kMaxPendingAudioPackets) {
+					pendingAudio_.push_back({
+						rtp.timestamp,
+						std::vector<uint8_t>(rtp.payload, rtp.payload + rtp.payloadSize)
+					});
+				} else {
+					++pendingAudioDrops_;
+					if (!pendingAudioOverflowLogged_) {
+						MS_WARN(logger_,
+							"{} pending audio queue overflow while header deferred; dropping subsequent audio packets [peerId:{} roomId:{} limit:{}]",
+							logTag_, peerId_, roomId_, kMaxPendingAudioPackets);
+						pendingAudioOverflowLogged_ = true;
+					}
+				}
+				return;
 			}
-			return;
-		}
 		writeAudioPacket(rtp.timestamp, rtp.payload, static_cast<int>(rtp.payloadSize));
 	} else if (rtp.payloadType == videoPT_) {
 		if (!videoBaseSet_) {

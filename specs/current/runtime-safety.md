@@ -6,6 +6,7 @@
 - 格式错误的请求**严禁 (SHALL NOT)** 污染当前连接状态，也不能阻止后续有效请求的正常处理。
 - 单个 WebSocket 连接**严禁 (SHALL NOT)** 建立多个加入（joined）的会话；在已加入状态的 Socket 上重复发送 `join` 请求**必须 (SHALL)** 被拒绝。
 - 如果 WebSocket 在信令循环中的异步 `join` 尚未完成前断开连接，当该 Peer 的会话 ID 仍匹配时，服务器**必须 (SHALL)** 在 Worker 侧执行回滚（Rollback）操作并清理该 Peer。
+- 当异步 `join` 已在 Worker 侧成功，但主线程完成回调发现目标 Worker 已不可用时，服务器**严禁 (SHALL NOT)** 提交 joined socket 会话状态；系统**必须 (SHALL)** 清理 pending join 状态，并向仍存活的 Socket 返回显式失败。
 
 ## 房间注册中心排序 (Room Registry Ordering)
 
@@ -19,6 +20,7 @@
 - Worker 的启动阶段**必须 (SHALL)** 避免在 `fork()` 后执行非异步信号安全（non-async-signal-safe）的初始化设置，且在失败时**必须 (SHALL)** 妥善清理部分创建的管道资源。
 - 当 `Channel::close()` 在读取线程内部自身被调用时，**严禁 (SHALL NOT)** 遗留未被回收（joinable）的读取线程。
 - 在并发关闭期间，`Channel` 的发送与关闭路径**严禁 (SHALL NOT)** 向已经失效的 Producer 文件描述符进行写入。
+- `Channel` 的 pipe 写入路径**必须 (SHALL)** 重试可恢复的中断错误（例如 `EINTR`），而**严禁 (SHALL NOT)** 仅因该类可恢复错误就关闭整个 Channel。
 - 非线程化（Non-threaded）的 `Channel` 消息抽取器**必须 (SHALL)** 能够容忍重入 `requestWait()` 的通知回调，且不会重复执行（Replay）同一条缓冲消息。
 - `WorkerThread` 事件循环**必须 (SHALL)** 显式处理 `epoll_wait` 异常；应当重试 `EINTR` 错误，对于不可恢复的严重错误应当记录日志并打破循环，以避免陷入静默降级的死循环中。
 - 纯 C++ 客户端 `NetworkThread` 的关闭路径**必须 (SHALL)** 有界完成；即使 legacy pacing 队列仍有残留包或当前 pacing budget 无法推进，关闭流程也**严禁 (SHALL NOT)** busy-spin。
@@ -33,6 +35,21 @@
 - 基于 Redis 的房间注册中心默认**必须 (SHALL)** 被视为就绪（Readiness）的依赖项。
 - 当要求必须使用 Redis 但其在启动时不可用，进程**必须 (SHALL)** 显式返回启动失败，而不是静默降级为仅本地路由（local-only）模式。
 - 当要求必须使用 Redis 但其在运行时变为不可用，`/readyz` 接口**必须 (SHALL)** 返回 `503`，并且新的依赖路由的请求**必须 (SHALL)** 显式失败，而不是退化到仅本地路由。
+
+## Worker 崩溃处理 (Worker Crash Handling)
+
+- 当 mediasoup worker 崩溃导致现有房间不可继续服务时，服务器**必须 (SHALL)** 向受影响房间内的客户端发送 `serverRestart` 通知。
+- 当前系统认可的崩溃处理模型是“通知并拆除旧房间，再允许新房间在 respawn 后的 worker 上继续创建”；系统**不承诺 (DOES NOT GUARANTEE)** 旧房间的无损状态恢复。
+
+## 房间注册中心快照一致性 (Room Registry Snapshot Integrity)
+
+- `RoomRegistry` 的全量快照同步**严禁 (SHALL NOT)** 用不完整的 Redis `SCAN` / `MGET` 结果替换当前缓存。
+- 当全量快照组装在任一步骤中失败或中断时，系统**必须 (SHALL)** 保留旧缓存，并跳过 `replaceAll(...)` 发布。
+
+## Transport Connect Contract
+
+- `WebRtcTransport::connect()`、`PlainTransport::connect()` 与 `PipeTransport::connect()` **必须 (SHALL)** 校验 Worker 返回的响应体类型与所请求的 connect 操作一致。
+- 当 connect 响应体缺失、类型不匹配、或缺少必需字段（例如 DTLS local role 或 transport tuple）时，这些 helper **严禁 (SHALL NOT)** 返回假成功，而**必须 (SHALL)** 显式失败。
 
 ## RTP 与能力正确性 (RTP And Capability Correctness)
 
