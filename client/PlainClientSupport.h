@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 #include "qos/QosController.h"
 
+#include <cmath>
 #include <cstdint>
 #include <mutex>
 #include <optional>
@@ -86,6 +87,17 @@ struct TestWsRequestEntry {
 
 int64_t steadyNowMs();
 int64_t wallNowMs();
+
+// Exponential convergence for CC simulation.
+// GCC degrades in ~1-2s but recovers in ~5-7s (additive increase).
+constexpr double CC_DEGRADE_TAU_MS = 1500.0;
+constexpr double CC_RECOVER_TAU_MS = 6000.0;
+
+inline double exponentialConverge(double current, double target, double deltaMs, double tauMs) {
+	if (tauMs <= 0.0 || deltaMs <= 0.0) return target;
+	double alpha = 1.0 - std::exp(-deltaMs / tauMs);
+	return current + alpha * (target - current);
+}
 
 std::optional<ServerProducerStats> parseServerProducerStats(
 	const json& peerStats, const std::string& producerId, const std::string& expectedKind);

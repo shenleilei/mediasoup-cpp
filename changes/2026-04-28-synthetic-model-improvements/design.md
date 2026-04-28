@@ -111,24 +111,32 @@ reviewed when/if the synthetic model is replaced by recorded real-WebRTC traces.
 - 5 calibration validation tests compare model output against empirical
   ranges from published literature
 - 3 legacy override compatibility tests prove retained overrides stay within
-  calibrated bounds
-- 5 CC convergence behavioral tests verify the `exponentialConverge` time
+  calibrated bounds (individual conditions)
+- 3 combined override interaction tests prove overrides remain compatible
+  under multi-stressor conditions (bw+loss, jitter+loss, monotonicity)
+- 5 JS CC convergence behavioral tests verify the `exponentialConverge` time
   constants produce correct transition profiles (63% at 1τ, >95% at 3τ,
   asymmetric degrade/recover, loss rate convergence)
+- 6 C++ CC convergence unit tests (in `test_client_qos.cpp`) directly
+  exercise the `exponentialConverge` function from `PlainClientSupport.h`,
+  verifying the same behavioral properties plus edge cases
 - All existing sweep ordering, expectation, and evaluation tests must remain
   green
-- Verification: `node --test tests/qos_harness/test.synthetic_sweep.mjs`
+- JS verification: `node --test tests/qos_harness/test.synthetic_sweep.mjs`
+- C++ verification: `./build/mediasoup_qos_unit_tests --gtest_filter=ExponentialConverge*`
 
-### Convergence Verification Gap
+### Test Hook Protection
 
-The CC convergence tests reimplement `exponentialConverge` in JS to validate
-the mathematical properties of the time constants. This proves the algorithm
-is correct but does not exercise the C++ code path directly. Full end-to-end
-verification of C++ convergence would require either:
+All `QOS_TEST_*` environment variable accesses in the C++ client are guarded
+by `#ifdef MEDIASOUP_TEST_HOOKS`. The CMake option `MEDIASOUP_TEST_HOOKS`
+(default OFF) must be enabled for test builds. Production builds exclude
+these code paths entirely.
 
-1. A C++ unit test that calls `applyMatrixTestProfile` with controlled timing
-2. An integration test that runs the C++ client binary and inspects reported
-   stats over time during a phase transition
+### Convergence Verification
 
-Both are deferred as future work. The JS behavioral tests provide sufficient
-confidence that the algorithm specification is correct.
+The `exponentialConverge` function is now exposed in `PlainClientSupport.h`
+(inline) and tested directly in both JS and C++. The C++ tests exercise the
+actual compiled function, closing the previous gap where only a JS
+reimplementation was tested. Full end-to-end `applyMatrixTestProfile`
+integration testing (calling the function with controlled multi-phase timing)
+remains deferred as future work.

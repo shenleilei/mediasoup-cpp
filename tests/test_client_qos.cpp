@@ -1846,3 +1846,84 @@ TEST(ClientQosControllerTest, ClearingCoordinationBitrateCapRestoresCurrentLevel
 	ASSERT_TRUE(appliedActions[1].encodingParameters->maxBitrateBps.has_value());
 	EXPECT_EQ(*appliedActions[1].encodingParameters->maxBitrateBps, 900000u);
 }
+
+// --- CC convergence behavioral tests ---
+// These tests exercise the C++ exponentialConverge function directly,
+// closing the verification gap identified in design.md.
+
+#include "../client/PlainClientSupport.h"
+
+TEST(ExponentialConverge, DegradationReaches63PercentAtOneTau) {
+double current = 900000.0;
+const double target = 300000.0;
+const double delta = current - target;
+
+// Simulate 1.5s (one tau) in 100ms steps
+for (int t = 0; t < 1500; t += 100) {
+current = exponentialConverge(current, target, 100.0, CC_DEGRADE_TAU_MS);
+}
+
+double fraction = (900000.0 - current) / delta;
+EXPECT_GE(fraction, 0.55);
+EXPECT_LE(fraction, 0.72);
+}
+
+TEST(ExponentialConverge, RecoveryReaches63PercentAtOneTau) {
+double current = 300000.0;
+const double target = 900000.0;
+const double delta = target - current;
+
+for (int t = 0; t < 6000; t += 100) {
+current = exponentialConverge(current, target, 100.0, CC_RECOVER_TAU_MS);
+}
+
+double fraction = (current - 300000.0) / delta;
+EXPECT_GE(fraction, 0.55);
+EXPECT_LE(fraction, 0.72);
+}
+
+TEST(ExponentialConverge, DegradationIsFasterThanRecovery) {
+const double start = 900000.0;
+const double target = 300000.0;
+const double delta = start - target;
+
+double degraded = start;
+for (int t = 0; t < 2000; t += 100) {
+degraded = exponentialConverge(degraded, target, 100.0, CC_DEGRADE_TAU_MS);
+}
+double degradeFraction = (start - degraded) / delta;
+
+double recovered = target;
+for (int t = 0; t < 2000; t += 100) {
+recovered = exponentialConverge(recovered, start, 100.0, CC_RECOVER_TAU_MS);
+}
+double recoverFraction = (recovered - target) / delta;
+
+EXPECT_GT(degradeFraction, recoverFraction * 1.5);
+}
+
+TEST(ExponentialConverge, ConvergesWithin3Tau) {
+double degraded = 900000.0;
+for (int t = 0; t < 4500; t += 100) {
+degraded = exponentialConverge(degraded, 300000.0, 100.0, CC_DEGRADE_TAU_MS);
+}
+double remaining = std::abs(degraded - 300000.0) / 600000.0;
+EXPECT_LT(remaining, 0.06);
+
+double recovered = 300000.0;
+for (int t = 0; t < 18000; t += 100) {
+recovered = exponentialConverge(recovered, 900000.0, 100.0, CC_RECOVER_TAU_MS);
+}
+remaining = std::abs(recovered - 900000.0) / 600000.0;
+EXPECT_LT(remaining, 0.06);
+}
+
+TEST(ExponentialConverge, ZeroOrNegativeDeltaReturnsTarget) {
+EXPECT_DOUBLE_EQ(exponentialConverge(900000.0, 300000.0, 0.0, 1500.0), 300000.0);
+EXPECT_DOUBLE_EQ(exponentialConverge(900000.0, 300000.0, -100.0, 1500.0), 300000.0);
+}
+
+TEST(ExponentialConverge, ZeroOrNegativeTauReturnsTarget) {
+EXPECT_DOUBLE_EQ(exponentialConverge(900000.0, 300000.0, 100.0, 0.0), 300000.0);
+EXPECT_DOUBLE_EQ(exponentialConverge(900000.0, 300000.0, 100.0, -1.0), 300000.0);
+}

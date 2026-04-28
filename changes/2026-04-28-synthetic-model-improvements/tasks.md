@@ -18,8 +18,7 @@
 4. [x] Add CC convergence temporal simulation to C++ applyMatrixTestProfile.
    - Files: `client/PlainClientSupport.h`, `client/PlainClientSupport.cpp`
    - Change: instant phase values → exponential convergence (τ_down=1.5s, τ_up=6s)
-   - Verify: JS behavioral tests for time constant properties (63% at 1τ, asymmetric degrade/recover)
-   - Note: C++ unit test deferred; JS reimplementation validates algorithm specification
+   - Verify: C++ unit tests (ExponentialConverge.*) + JS behavioral tests
 
 5. [x] Add empirical calibration validation tests.
    - Files: `tests/qos_harness/test.synthetic_sweep.mjs`
@@ -35,3 +34,18 @@
    - Files: `tests/qos_harness/test.synthetic_sweep.mjs`
    - Added: degrade 1τ, recover 1τ, asymmetry, 3τ convergence, loss rate convergence
    - Verify: `node --test tests/qos_harness/test.synthetic_sweep.mjs`
+
+8. [x] Guard QOS_TEST_* env vars with MEDIASOUP_TEST_HOOKS macro.
+   - Files: `client/PlainClientSupport.h`, `client/PlainClientSupport.cpp`, `client/PlainClientApp.cpp`, `client/SourceWorker.h`, `client/CMakeLists.txt`, `setup.sh`
+   - Change: wrap loadMatrixTestProfileFromEnv, loadTestClientStatsPayloadsFromEnv, loadTestWsRequestsFromEnv, and related QOS_TEST_ accesses with `#ifdef MEDIASOUP_TEST_HOOKS`
+   - Verify: production build excludes test hook code; test build (setup.sh) enables it
+
+9. [x] Add C++ unit tests for exponentialConverge.
+   - Files: `tests/test_client_qos.cpp`
+   - Added: 6 GTest tests covering 1τ degrade/recover, asymmetry, 3τ convergence, edge cases
+   - Verify: `./build/mediasoup_qos_unit_tests --gtest_filter=ExponentialConverge*`
+
+10. [x] Add combined override interaction tests.
+    - Files: `tests/qos_harness/test.synthetic_sweep.mjs`
+    - Added: bw+loss combined bounds, jitter+loss QLR consistency, monotonicity under override
+    - Verify: `node --test tests/qos_harness/test.synthetic_sweep.mjs`

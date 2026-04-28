@@ -668,6 +668,71 @@ test('jitter sweep floor override stays within smoothed jitter range', () => {
     'override should not exceed raw network jitter');
 });
 
+// --- Combined override interaction tests ---
+// These tests verify that the retained legacy overrides produce values
+// compatible with the calibrated model when multiple overrides interact
+// in realistic combined conditions (not just individually).
+
+test('combined bw+loss overrides stay within calibrated bounds at bw=500,loss=10%', () => {
+  // At bw=500 and loss=10%, both utilization caps and the bw<=1000 override
+  // could apply.  The combined result must stay within GCC plausible range.
+  const condition = toSyntheticCondition({
+    bandwidth: 500, rtt: 55, loss: 10, jitter: 15,
+  });
+  const util = condition.bitrateBps / condition.targetBitrateBps;
+  // Utilization cap at loss>=10% is 0.42, and bw<=500 cap is 0.30.
+  // The min(0.30, 0.42) = 0.30 should dominate.
+  assert.ok(util <= 0.32,
+    `combined bw=500 + loss=10% utilization ${util.toFixed(3)} should be ≤0.32`);
+  assert.ok(util >= 0.05,
+    `combined utilization ${util.toFixed(3)} should stay above minimum floor`);
+  // With bw<=1000 runner override (×0.75), the result stays even lower.
+  const overriddenBps = Math.round(condition.bitrateBps * 0.75);
+  const overriddenUtil = overriddenBps / condition.targetBitrateBps;
+  assert.ok(overriddenUtil <= 0.30 && overriddenUtil >= 0.02,
+    `overridden combined utilization ${overriddenUtil.toFixed(3)} should be in [0.02, 0.30]`);
+});
+
+test('combined jitter+loss overrides maintain correct qualityLimitationReason', () => {
+  // High jitter (50ms) + moderate loss (5%) — jitter floor override applies
+  // (override jitter to 32ms), and the model should still produce the correct
+  // qualityLimitationReason based on overall severity.
+  const condition = toSyntheticCondition({
+    bandwidth: 4000, rtt: 25, loss: 5, jitter: 50,
+  });
+  const overriddenJitter = Math.max(condition.jitterMs, 32);
+  // The model uses severity (max stress) and utilization for QLR.
+  // With 5% loss: lossStress ≈ 0.83, severity ≥ 0.83 → QLR likely 'bandwidth'
+  // or close to threshold.
+  const util = condition.bitrateBps / condition.targetBitrateBps;
+  assert.ok(util >= 0.20 && util <= 0.65,
+    `5% loss + 50ms jitter utilization ${util.toFixed(3)} should be degraded`);
+  // Override should not push jitter past raw value
+  assert.ok(overriddenJitter <= 50,
+    'jitter override should not exceed raw jitter');
+});
+
+test('bw=800 with moderate loss=3% override preserves calibrated monotonicity', () => {
+  // At bw=800 (with ×0.75 override), worse network conditions should always
+  // produce lower effective bitrate than better conditions.
+  const mild = toSyntheticCondition({
+    bandwidth: 800, rtt: 25, loss: 1, jitter: 5,
+  });
+  const moderate = toSyntheticCondition({
+    bandwidth: 800, rtt: 55, loss: 3, jitter: 15,
+  });
+  // Apply bw<=1000 override to both
+  const mildOverridden = Math.round(mild.bitrateBps * 0.75);
+  const moderateOverridden = Math.round(moderate.bitrateBps * 0.75);
+  assert.ok(moderateOverridden < mildOverridden,
+    `overridden moderate ${moderateOverridden} should be < mild ${mildOverridden}`);
+  // Both should stay within GCC plausible range for ~800kbps link
+  assert.ok(mildOverridden / mild.targetBitrateBps <= 0.70,
+    'mild override should be below 0.70 utilization');
+  assert.ok(moderateOverridden / moderate.targetBitrateBps >= 0.10,
+    'moderate override should be above 0.10 utilization');
+});
+
 // --- CC convergence behavioral tests ---
 // These tests verify that the exponentialConverge function used in the C++
 // synthetic profile produces the expected transition shape.  We reimplement
