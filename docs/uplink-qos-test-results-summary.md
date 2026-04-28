@@ -28,7 +28,7 @@
 | client JS 单测 | `controller / signals / stateMachine` | `27 / 27 PASS` |
 | Node harness | `publish_snapshot / stale_seq / policy_update / auto_override_poor / override_force_audio_only / manual_clear` | `6 / 6 PASS` |
 | browser harness | `browser_server_signal / browser_loopback` | `2 / 2 PASS` |
-| browser matrix 主 gate | `B1-B3 / BW1 / BW3-BW7 / L1-L8 / R1-R6 / J1-J5 / T1-T11 / S1-S4` | `43 / 43 PASS` |
+| browser matrix 主 gate | `B1-B3 / BW1 / BW3-BW7 / L1-L8 / R1-R6 / J1-J5 / T1-T11 / S1-S4 / GD1-GD12` | `55 case`；当前增量验证：原 `43 case` 主 gate `PASS` + `GD1-GD12` targeted `PASS` |
 | browser matrix 扩展哨兵 | `BW2` | `观察中（historical mixed, non-blocking）` |
 
 ## 3. browser matrix 覆盖情况
@@ -42,12 +42,14 @@
 | jitter sweep | `J1-J5` | `PASS` |
 | transition | `T1-T11` | `PASS` |
 | burst | `S1-S4` | `PASS` |
+| gcc_degrade | `GD1-GD12` | `PASS`（targeted expansion validation） |
 
 补充说明：
 
 - latest full matrix `generatedAt=2026-04-13T03:34:38.058Z`，当前重渲染结果见 [uplink-qos-case-results.md](./uplink-qos-case-results.md)。
 - latest targeted 组合回归结果见 [generated/uplink-qos-case-results.targeted.md](./generated/uplink-qos-case-results.targeted.md)。
 - full / targeted 的原始机器 artifact 仍分别保留在 [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json) 和 [generated/uplink-qos-matrix-report.targeted.json](./generated/uplink-qos-matrix-report.targeted.json)。
+- 新增 `GD1-GD12` 的 gate 扩张验证采用 targeted rerun；当前 browser targeted 结果为 `12 / 12 PASS`。
 - latest 组合 targeted regression 覆盖：
   `T9,T10,T11,J3,J4,J5,BW2,T1,S4`
   当前结果为 `9 / 9 PASS`。

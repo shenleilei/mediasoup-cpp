@@ -14,7 +14,10 @@
 - `ClientQos*` 纯逻辑对位测试已具备
 - `cpp-client-harness` 已覆盖 publish / stale-seq / policy-update / override / clear 主链路
 - `cpp-client-matrix` 已进入统一测试与报告体系
-- 当前机器的 full matrix 结果为 `43 / 43 PASS`
+- 当前默认 gate 已扩展为 `55 case`。
+- 当前机器的增量验证结果为：
+  - 原 `43 case` 主 gate：`PASS`
+  - 新增 `GD1-GD12`：`12 / 12 PASS`
 
 ## 2. 当前签收范围
 

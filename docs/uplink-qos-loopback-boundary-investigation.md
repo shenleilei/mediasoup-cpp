@@ -83,13 +83,13 @@ loopback source 的真实发送目标大约在 `0.8 ~ 0.9Mbps`。
 
 - `BW2` 没有进入主 gate，因为它仍被标记为 `extended`
 - `R4 / J3 / T9 / T1 / S4` 在当前主 gate 中都保持通过
-- 主 gate 当前结论已经回到 `43 / 43 PASS`
+- 历史 `43 case` 主 gate 当前结论已经回到 `PASS`；当前默认 gate 口径另已扩展纳入 `GD1-GD12`
 
 但对比更早的 full matrix 快照，仍能看到 boundary evidence：
 
 - `2026-04-12T08:12:22.359Z` 中，`T1 = stable/L0`，`S4 = early_warning/L1`
 - `2026-04-12T17:03:58.344Z` 中，`T1 = congested/L4`，`S4 = congested/L2`
-- `2026-04-13T03:34:38.058Z` 中，当前主 gate 已按最新 expectation 收回到 `43 / 43 PASS`
+- `2026-04-13T03:34:38.058Z` 中，历史 `43 case` 主 gate 已按最新 expectation 收回到 `PASS`
 
 这说明：
 

@@ -27,7 +27,7 @@
   已有 C++ `ClientQos*` 对位测试
 - JS node/browser signaling harness
   已有 `cpp-client-harness` 对位场景
-- JS uplink browser matrix 主 gate `43 case`
+- JS uplink browser matrix 主 gate `55 case`
   已有 `cpp-client-matrix` 对位结果
 - JS `BW2` extended sentinel
   已有 C++ client targeted 结果
@@ -43,7 +43,7 @@
 | `auto_override_poor` | [tests/qos_harness/run.mjs](../tests/qos_harness/run.mjs) | [tests/qos_harness/run_cpp_client_harness.mjs](../tests/qos_harness/run_cpp_client_harness.mjs) | `PASS` |
 | `override_force_audio_only` | [tests/qos_harness/run.mjs](../tests/qos_harness/run.mjs) | [tests/qos_harness/run_cpp_client_harness.mjs](../tests/qos_harness/run_cpp_client_harness.mjs) | `PASS` |
 | `manual_clear` | [tests/qos_harness/run.mjs](../tests/qos_harness/run.mjs) | [tests/qos_harness/run_cpp_client_harness.mjs](../tests/qos_harness/run_cpp_client_harness.mjs) | `PASS` |
-| uplink browser matrix 主 gate | [tests/qos_harness/run_matrix.mjs](../tests/qos_harness/run_matrix.mjs) | [tests/qos_harness/run_cpp_client_matrix.mjs](../tests/qos_harness/run_cpp_client_matrix.mjs) | `43 / 43 PASS` |
+| uplink browser matrix 主 gate | [tests/qos_harness/run_matrix.mjs](../tests/qos_harness/run_matrix.mjs) | [tests/qos_harness/run_cpp_client_matrix.mjs](../tests/qos_harness/run_cpp_client_matrix.mjs) | `55 case`；当前增量验证：原 `43 case` 主 gate `PASS` + `GD1-GD12` targeted `PASS` |
 | uplink `BW2` extended sentinel | [tests/qos_harness/run_matrix.mjs](../tests/qos_harness/run_matrix.mjs) targeted | [tests/qos_harness/run_cpp_client_matrix.mjs](../tests/qos_harness/run_cpp_client_matrix.mjs) targeted | `PASS` |
 
 ## 4. 当前机器结果

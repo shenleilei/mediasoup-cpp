@@ -15,12 +15,13 @@
 
 可以直接对上汇报的结论是：
 
-`当前仓库内已落地的 uplink QoS 自动化主测试集已通过。服务端单测、服务端集成测试、client QoS 单测、Node/browser harness 以及默认 browser loopback matrix 主 gate 均已通过；BW2 继续作为 extended boundary sentinel 保留，不计入默认 blocking gate。`
+`当前仓库内已落地的 uplink QoS 自动化主测试集已通过。服务端单测、服务端集成测试、client QoS 单测、Node/browser harness 以及默认 browser loopback matrix 主 gate 均已通过；当前默认 gate 已扩展为原 43 case 主集加上 GD1-GD12 的 GCC degrade 覆盖；BW2 继续作为 extended boundary sentinel 保留，不计入默认 blocking gate。`
 
 这里的“主 gate 通过”指的是：
 
-- latest full matrix artifact [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json) 的 `generatedAt=2026-04-13T03:34:38.058Z`
-- 对应主报告 [uplink-qos-case-results.md](./uplink-qos-case-results.md) 已同步重渲染为 `43 / 43 PASS`
+- latest historical full matrix artifact [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json) 的 `generatedAt=2026-04-13T03:34:38.058Z`
+- 原 `43 case` 主集仍保持 `PASS`
+- 新增 `GD1-GD12` 已通过 browser targeted expansion validation（`12 / 12 PASS`）
 
 这里的“BW2 仍保留观察”指的是：
 
@@ -60,7 +61,7 @@
 | client QoS JS 单测 | `27 / 27 PASS` |
 | Node harness | `6 / 6 PASS` |
 | browser harness | `2 / 2 PASS` |
-| browser matrix 主 gate | `43 / 43 PASS` |
+| browser matrix 主 gate | `55 case`；当前增量验证为原 `43 case` 主 gate `PASS` + `GD1-GD12` targeted `PASS` |
 | browser matrix 扩展哨兵 | `BW2 观察中（historical mixed, non-blocking）` |
 
 ### 3.2 browser matrix 主 gate 分组结果
