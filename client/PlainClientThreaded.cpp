@@ -5,6 +5,9 @@
 #include "ThreadTypes.h"
 #include "ThreadedControlHelpers.h"
 
+#include <spdlog/spdlog.h>
+#include "QosTrace.h"
+
 #include <limits>
 #include <map>
 #include <memory>
@@ -14,7 +17,7 @@ namespace msff = mediasoup::ffmpeg;
 
 int PlainClientApp::RunThreadedMode()
 {
-	std::printf("[threaded] starting multi-thread pipeline (%zu tracks)\n", videoTracks_.size());
+	spdlog::info("[threaded] starting multi-thread pipeline ({} tracks)", videoTracks_.size());
 	rtcpContext_ = nullptr;
 
 	struct PerTrackQueues {
@@ -143,9 +146,9 @@ int PlainClientApp::RunThreadedMode()
 					msff::PacketUnref(threadPacket.get());
 				}
 			} catch (const std::exception& e) {
-				std::printf("[audio] ffmpeg init/runtime failed: %s\n", e.what());
+				spdlog::error("[audio] ffmpeg init/runtime failed: {}", e.what());
 			}
-			std::printf("[audio] thread finished\n");
+			spdlog::info("[audio] thread finished");
 		});
 	}
 
@@ -157,7 +160,7 @@ int PlainClientApp::RunThreadedMode()
 	}
 	const bool hasAudio = audioActuallyStarted.load();
 	if (hasAudioPrecondition && !hasAudio)
-		std::printf("[threaded] WARN: audio thread failed to initialize, treating as no-audio peer\n");
+		spdlog::warn("[threaded] audio thread failed to initialize, treating as no-audio peer");
 
 	std::vector<std::unique_ptr<SourceWorker>> workers;
 	for (size_t i = 0; i < videoTracks_.size(); ++i) {
@@ -175,12 +178,12 @@ int PlainClientApp::RunThreadedMode()
 			sourceConfig.captureWidth = 1280;
 			sourceConfig.captureHeight = 720;
 			sourceConfig.captureFps = sourceConfig.initialFps;
-			std::printf("[threaded] track %zu → camera %s\n", i, sourceConfig.inputPath.c_str());
+			spdlog::info("[threaded] track {} → camera {}", i, sourceConfig.inputPath);
 		} else {
 			sourceConfig.inputType = SourceWorker::InputType::File;
 			sourceConfig.inputPath =
 				(i < videoSourcePaths_.size()) ? videoSourcePaths_[i] : mp4Path_;
-			std::printf("[threaded] track %zu → file %s\n", i, sourceConfig.inputPath.c_str());
+			spdlog::info("[threaded] track {} → file {}", i, sourceConfig.inputPath);
 		}
 
 		auto worker = std::make_unique<SourceWorker>(sourceConfig);
@@ -305,10 +308,8 @@ int PlainClientApp::RunThreadedMode()
 				track.videoSuppressed = trackState.videoSuppressed;
 				syncTransportHint(ack.trackIndex);
 				if (!ack.applied && !ack.reason.empty()) {
-					std::printf("[QoS:%s] command %llu rejected: %s\n",
-						track.trackId.c_str(),
-						(unsigned long long)ack.commandId,
-						ack.reason.c_str());
+					spdlog::warn("[QoS:{}] command {} rejected: {}",
+						track.trackId, ack.commandId, ack.reason);
 				}
 			}
 		}
@@ -446,8 +447,8 @@ int PlainClientApp::RunThreadedMode()
 						const double traceLossRate = track.qosCtrl->lastSignals().has_value()
 							? track.qosCtrl->lastSignals()->lossRate
 							: 0.0;
-						std::printf("[QOS_TRACE] tsMs=%lld track=%s state=%s level=%d mode=%s sample=%s bitrateBps=%d sendBps=%.0f lossRate=%.6f packetsLost=%llu rttMs=%.1f jitterMs=%.1f senderUsageBps=%u transportEstimateBps=%u effectivePacingBps=%u feedbackReports=%llu probePackets=%u probeActive=%d probeClusterStarts=%llu probeClusterCompletes=%llu probeClusterEarlyStops=%llu probeBytesSent=%llu wouldBlockTotal=%llu queuedVideoRetentions=%llu audioDeadlineDrops=%llu retransmissionDrops=%llu retransmissionSent=%llu queuedFreshVideoPackets=%u queuedAudioPackets=%u queuedRetransmissionPackets=%u width=%d height=%d fps=%d suppressed=%d\n",
-							static_cast<long long>(wallNowMs()),
+						auto traceLine = mediasoup::plainclient::formatQosTraceLine(
+							wallNowMs(),
 							track.trackId.c_str(),
 							qos::stateStr(track.qosCtrl->currentState()),
 							track.qosCtrl->currentLevel(),
@@ -457,31 +458,15 @@ int PlainClientApp::RunThreadedMode()
 							track.encBitrate,
 							observedBitrateBps > 0.0 ? observedBitrateBps : qSnap.targetBitrateBps,
 							traceLossRate,
-							static_cast<unsigned long long>(qSnap.packetsLost),
+							qSnap.packetsLost,
 							qSnap.roundTripTimeMs,
 							qSnap.jitterMs,
-							trackStats[ti].latest.senderUsageBitrateBps,
-							trackStats[ti].latest.transportEstimatedBitrateBps,
-							trackStats[ti].latest.effectivePacingBitrateBps,
-							static_cast<unsigned long long>(trackStats[ti].latest.transportCcFeedbackReports),
-							trackStats[ti].latest.probePacketCount,
-							trackStats[ti].latest.probeActive ? 1 : 0,
-							static_cast<unsigned long long>(trackStats[ti].latest.probeClusterStartCount),
-							static_cast<unsigned long long>(trackStats[ti].latest.probeClusterCompleteCount),
-							static_cast<unsigned long long>(trackStats[ti].latest.probeClusterEarlyStopCount),
-							static_cast<unsigned long long>(trackStats[ti].latest.probeBytesSent),
-							static_cast<unsigned long long>(trackStats[ti].latest.transportWouldBlockTotal),
-							static_cast<unsigned long long>(trackStats[ti].latest.queuedVideoRetentions),
-							static_cast<unsigned long long>(trackStats[ti].latest.audioDeadlineDrops),
-							static_cast<unsigned long long>(trackStats[ti].latest.retransmissionDrops),
-							static_cast<unsigned long long>(trackStats[ti].latest.retransmissionSent),
-							trackStats[ti].latest.queuedFreshVideoPackets,
-							trackStats[ti].latest.queuedAudioPackets,
-							trackStats[ti].latest.queuedRetransmissionPackets,
 							qSnap.frameWidth,
 							qSnap.frameHeight,
 							static_cast<int>(qSnap.framesPerSecond),
-							track.videoSuppressed ? 1 : 0);
+							track.videoSuppressed ? 1 : 0,
+							&trackStats[ti].latest);
+						spdlog::info("{}", traceLine);
 						sampledTrackIds.insert(track.trackId);
 					}
 
@@ -592,7 +577,7 @@ int PlainClientApp::RunThreadedMode()
 							hasAudio);
 						ws_.requestAsync("clientStats", snapshot,
 							[](bool ok, const json&, const std::string& err) {
-								if (!ok) std::printf("[QoS] clientStats failed: %s\n", err.c_str());
+								if (!ok) spdlog::error("[QoS] clientStats failed: {}", err);
 							});
 					}
 				}
@@ -604,6 +589,6 @@ int PlainClientApp::RunThreadedMode()
 
 	for (auto& worker : workers) worker->stop();
 	netThread.stop();
-	std::printf("[threaded] pipeline stopped\n");
+	spdlog::info("[threaded] pipeline stopped");
 	return 0;
 }

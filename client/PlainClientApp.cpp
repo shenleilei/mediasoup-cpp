@@ -19,7 +19,6 @@ extern "C" {
 #include <cctype>
 #include <chrono>
 #include <cmath>
-#include <cstdio>
 #include <cstring>
 #include <limits>
 #include <map>
@@ -156,11 +155,7 @@ bool PlainClientApp::SendOpus(
 
 int PlainClientApp::ResolveScaledDimension(int sourceDimension, double scaleDownBy)
 {
-	double safeScale = scaleDownBy >= 1.0 ? scaleDownBy : 1.0;
-	int scaled = static_cast<int>(sourceDimension / safeScale);
-	if (scaled < 2) scaled = 2;
-	if (scaled % 2 != 0) scaled -= 1;
-	return std::max(2, scaled);
+	return mediasoup::scaledDimension(sourceDimension, scaleDownBy);
 }
 
 int PlainClientApp::ResolveVideoFps(const AVStream* stream, int fallbackFps)
@@ -178,7 +173,7 @@ int PlainClientApp::ResolveVideoFps(const AVStream* stream, int fallbackFps)
 
 std::optional<size_t> PlainClientApp::LoadOptionalTrackIndexEnv(const char* name, size_t maxTrackCount)
 {
-	const char* raw = std::getenv(name);
+	const char* raw = loadTestHookEnv(name);
 	if (!raw || std::strlen(raw) == 0) return std::nullopt;
 	char* end = nullptr;
 	long parsed = std::strtol(raw, &end, 10);
@@ -229,18 +224,25 @@ bool PlainClientApp::ParseArguments(int argc, char* argv[])
 	copyMode_ = (argc > 6 && std::string(argv[6]) == "--copy");
 	videoCodecMode_ = loadVideoCodecModeFromEnv();
 	if (videoCodecMode_ == VideoCodecMode::VP8 && copyMode_) {
-		std::printf("WARN: --copy is not supported with VP8 mode, falling back to re-encode mode\n");
+		spdlog::warn("--copy is not supported with VP8 mode, falling back to re-encode mode");
 		copyMode_ = false;
 	}
 
 	videoTrackCount_ = loadVideoTrackCountFromEnv();
 	videoTrackWeights_ = loadVideoTrackWeightsFromEnv(videoTrackCount_);
 	matrixTestProfile_ = loadMatrixTestProfileFromEnv();
+#ifdef MEDIASOUP_TEST_HOOKS
 	matrixLocalOnly_ = envFlagEnabled("QOS_TEST_MATRIX_LOCAL_ONLY");
 	testClientStatsPayloads_ = loadTestClientStatsPayloadsFromEnv();
 	testWsRequests_ = loadTestWsRequestsFromEnv();
 	forcedStaleTrackIndex_ =
 		LoadOptionalTrackIndexEnv("QOS_TEST_FORCE_STALE_TRACK_INDEX", videoTrackCount_);
+#else
+	matrixLocalOnly_ = false;
+	testClientStatsPayloads_.clear();
+	testWsRequests_.clear();
+	forcedStaleTrackIndex_.reset();
+#endif
 	videoSourcePaths_ = loadVideoSourcePathsFromEnv();
 	matrixTestRuntime_.startMs = steadyNowMs();
 	threadedRequested_ =
@@ -257,20 +259,16 @@ bool PlainClientApp::ParseArguments(int argc, char* argv[])
 		envFlagDefaultTrue("PLAIN_CLIENT_ENABLE_TRANSPORT_ESTIMATE");
 	qosEnabled_ = !envFlagDefaultFalse("PLAIN_CLIENT_DISABLE_QOS");
 	if (threadedRequested_ && !threadedMode_) {
-		std::printf(
-			"WARN: PLAIN_CLIENT_THREADED ignored — need %zu distinct PLAIN_CLIENT_VIDEO_SOURCES (got %zu), using legacy path\n",
-			videoTrackCount_,
-			distinctSourceCount);
+		spdlog::warn("PLAIN_CLIENT_THREADED ignored — need {} distinct PLAIN_CLIENT_VIDEO_SOURCES (got {}), using legacy path",
+			videoTrackCount_, distinctSourceCount);
 	}
 	if (videoCodecMode_ == VideoCodecMode::VP8 && envFlagEnabled("PLAIN_CLIENT_THREADED")) {
-		std::printf("WARN: VP8 mode currently runs in legacy path only; threaded mode disabled\n");
+		spdlog::warn("VP8 mode currently runs in legacy path only; threaded mode disabled");
 	}
 	if (threadedMode_ && !transportControllerEnabled_) {
-		std::printf(
-			"[threaded] transport controller disabled via PLAIN_CLIENT_ENABLE_TRANSPORT_CONTROLLER=0 (fallback pacing path)\n");
+		spdlog::info("[threaded] transport controller disabled via PLAIN_CLIENT_ENABLE_TRANSPORT_CONTROLLER=0 (fallback pacing path)");
 	} else if (threadedMode_ && !transportEstimateEnabled_) {
-		std::printf(
-			"[threaded] transport estimate disabled via PLAIN_CLIENT_ENABLE_TRANSPORT_ESTIMATE=0 (controller still enabled)\n");
+		spdlog::info("[threaded] transport estimate disabled via PLAIN_CLIENT_ENABLE_TRANSPORT_ESTIMATE=0 (controller still enabled)");
 	}
 	threadedOwnsAllVideoInputs_ = threadedMode_ && videoSourcePaths_.size() >= videoTrackCount_;
 	return true;
@@ -334,10 +332,7 @@ bool PlainClientApp::RecreateVideoEncoder(
 		return false;
 	}
 
-	if (track.swsCtx) {
-		sws_freeContext(track.swsCtx);
-		track.swsCtx = nullptr;
-	}
+	track.swsCtx.reset();
 	track.configuredVideoFps = safeFps;
 	return true;
 }
@@ -349,16 +344,16 @@ bool PlainClientApp::InitializeMediaBootstrap()
 			inputFormat_ = msff::InputFormat::Open(mp4Path_);
 			inputFormat_->FindStreamInfo();
 		} catch (const std::exception& e) {
-			std::fprintf(stderr, "Cannot open %s: %s\n", mp4Path_.c_str(), e.what());
+			spdlog::error("Cannot open {}: {}", mp4Path_, e.what());
 			return false;
 		}
 		vidIdx_ = inputFormat_->FindFirstStreamIndex(AVMEDIA_TYPE_VIDEO);
 		audIdx_ = inputFormat_->FindFirstStreamIndex(AVMEDIA_TYPE_AUDIO);
 	} else {
-		std::printf("[threaded] skipping MP4 bootstrap for %zu explicit video source(s)\n",
+		spdlog::info("[threaded] skipping MP4 bootstrap for {} explicit video source(s)",
 			videoSourcePaths_.size());
 	}
-	std::printf("MP4: video=%d audio=%d\n", vidIdx_, audIdx_);
+	spdlog::info("MP4: video={} audio={}", vidIdx_, audIdx_);
 
 	if (inputFormat_ && vidIdx_ >= 0) {
 		auto* videoStream = inputFormat_->StreamAt(vidIdx_);
@@ -386,7 +381,7 @@ bool PlainClientApp::InitializeMediaBootstrap()
 			audioDecoder_.reset();
 			audioEncoder_.reset();
 			audioFrame_.reset();
-			std::printf("WARN: audio FFmpeg init failed, audio disabled: %s\n", e.what());
+			spdlog::warn("audio FFmpeg init failed, audio disabled: {}", e.what());
 		}
 	}
 
@@ -413,27 +408,23 @@ bool PlainClientApp::InitializeMediaBootstrap()
 						initialVideoFps,
 						track.encBitrate)) {
 					if (ShouldFallbackToCopyMode(videoCodecMode_)) {
-						std::printf(
-							"WARN: video encoder init failed for %s, falling back to copy mode\n",
-							track.trackId.c_str());
+						spdlog::warn("video encoder init failed for {}, falling back to copy mode",
+							track.trackId);
 						copyMode_ = true;
 						break;
 					}
-					std::fprintf(stderr,
-						"VP8 encoder init failed for %s, cannot fall back to copy mode safely\n",
-						track.trackId.c_str());
+					spdlog::error("VP8 encoder init failed for {}, cannot fall back to copy mode safely",
+						track.trackId);
 					return false;
 				}
 			}
 			videoFrame_ = msff::MakeFrame();
 		} catch (const std::exception& e) {
 			if (!ShouldFallbackToCopyMode(videoCodecMode_)) {
-				std::fprintf(stderr,
-					"VP8 video FFmpeg init failed, refusing invalid copy fallback: %s\n",
-					e.what());
+				spdlog::error("VP8 video FFmpeg init failed, refusing invalid copy fallback: {}", e.what());
 				return false;
 			}
-			std::printf("WARN: video FFmpeg init failed, falling back to copy mode: %s\n", e.what());
+			spdlog::warn("video FFmpeg init failed, falling back to copy mode: {}", e.what());
 			videoDecoder_.reset();
 			videoFrame_.reset();
 			copyMode_ = true;
@@ -442,7 +433,7 @@ bool PlainClientApp::InitializeMediaBootstrap()
 
 	const char* codecName =
 		videoCodecMode_ == VideoCodecMode::VP8 ? "VP8" : "H264";
-	std::printf("Mode: %s, videoCodec=%s\n",
+	spdlog::info("Mode: {}, videoCodec={}",
 		copyMode_ ? "copy (no QoS bitrate control)" : "re-encode (QoS enabled)",
 		codecName);
 	return true;
@@ -490,9 +481,8 @@ void PlainClientApp::ConfigureQosControllers()
 
 					if (requiresRecreate) {
 						if (!RecreateVideoEncoder(track, nextWidth, nextHeight, nextFps, nextBitrate)) {
-							std::printf(
-								"[QoS:%s] encoder reconfigure failed (br=%d fps=%d scale=%.2f size=%dx%d)\n",
-								track.trackId.c_str(), nextBitrate, nextFps, nextScale, nextWidth, nextHeight);
+							spdlog::warn("[QoS:{}] encoder reconfigure failed (br={} fps={} scale={:.2f} size={}x{})",
+								track.trackId, nextBitrate, nextFps, nextScale, nextWidth, nextHeight);
 							return false;
 						}
 						track.encBitrate = nextBitrate;
@@ -507,22 +497,21 @@ void PlainClientApp::ConfigureQosControllers()
 						encoderCtx->rc_max_rate = track.encBitrate;
 						encoderCtx->rc_buffer_size = track.encBitrate;
 					}
-					std::printf("[QoS:%s] encoder params → br=%d fps=%d scale=%.2f size=%dx%d\n",
-						track.trackId.c_str(),
+					spdlog::info("[QoS:{}] encoder params → br={} fps={} scale={:.2f} size={}x{}",
+						track.trackId,
 						track.encBitrate,
 						track.configuredVideoFps,
 						track.scaleResolutionDownBy,
 						encoderCtx ? encoderCtx->width : nextWidth,
 						encoderCtx ? encoderCtx->height : nextHeight);
 				} else if (action.type == qos::ActionType::SetMaxSpatialLayer) {
-					std::printf("[QoS:%s] spatial layer request ignored in single-layer plain client\n",
-						track.trackId.c_str());
+					spdlog::info("[QoS:{}] spatial layer request ignored in single-layer plain client",
+						track.trackId);
 				} else if (action.type == qos::ActionType::EnterAudioOnly ||
 					action.type == qos::ActionType::PauseUpstream) {
 					if (!track.videoSuppressed) {
 						track.videoSuppressed = true;
-						std::printf("[QoS:%s] video suppressed (%s)\n",
-							track.trackId.c_str(), actionStr(action.type));
+						spdlog::info("[QoS:{}] video suppressed ({})", track.trackId, actionStr(action.type));
 					}
 				} else if (action.type == qos::ActionType::ExitAudioOnly ||
 					action.type == qos::ActionType::ResumeUpstream) {
@@ -530,8 +519,7 @@ void PlainClientApp::ConfigureQosControllers()
 						track.videoSuppressed = false;
 						track.forceNextVideoKeyframe = true;
 						track.nextVideoEncodePtsSec = -1.0;
-						std::printf("[QoS:%s] video resumed (%s)\n",
-							track.trackId.c_str(), actionStr(action.type));
+						spdlog::info("[QoS:{}] video resumed ({})", track.trackId, actionStr(action.type));
 					}
 				}
 				return true;
@@ -556,20 +544,19 @@ void PlainClientApp::ConfigureNotifications()
 				auto policy = qos::parseQosPolicy(data);
 				for (auto& track : videoTracks_)
 					if (track.qosCtrl) track.qosCtrl->handlePolicy(policy);
-				std::printf("[QoS] policy updated: sampleMs=%d snapshotMs=%d\n",
+				spdlog::info("[QoS] policy updated: sampleMs={} snapshotMs={}",
 					policy.sampleIntervalMs, policy.snapshotIntervalMs);
 			} catch (const std::exception& e) {
-				std::printf("[QoS] policy parse error: %s\n", e.what());
+				spdlog::warn("[QoS] policy parse error: {}", e.what());
 			}
 		} else if (method == "qosOverride" && !matrixLocalOnly_) {
 			try {
 				auto override = qos::parseQosOverride(data);
 				for (auto& track : videoTracks_)
 					if (track.qosCtrl) track.qosCtrl->handleOverride(override);
-				std::printf("[QoS] override: reason=%s ttl=%d\n",
-					override.reason.c_str(), override.ttlMs);
+				spdlog::info("[QoS] override: reason={} ttl={}", override.reason, override.ttlMs);
 			} catch (const std::exception& e) {
-				std::printf("[QoS] override parse error: %s\n", e.what());
+				spdlog::warn("[QoS] override parse error: {}", e.what());
 			}
 		}
 	});
@@ -607,7 +594,7 @@ void PlainClientApp::RequestServerProducerStats()
 					cached->updatedAtSteadyMs = steadyNowMs();
 				}
 			}
-			if (!ok) std::printf("[QoS] getStats failed: %s\n", error.c_str());
+			if (!ok) spdlog::warn("[QoS] getStats failed: {}", error);
 		});
 
 	if (!queued) {
@@ -627,7 +614,7 @@ void PlainClientApp::StartTestHelperThreads()
 				if (!running_.load()) break;
 				ws_.requestAsync("clientStats", entry.payload,
 					[](bool ok, const json&, const std::string& error) {
-						if (!ok) std::printf("[QoS] test clientStats failed: %s\n", error.c_str());
+						if (!ok) spdlog::warn("[QoS] test clientStats failed: {}", error);
 					});
 			}
 		});
@@ -642,7 +629,7 @@ void PlainClientApp::StartTestHelperThreads()
 				if (!running_.load()) break;
 				ws_.requestAsync(entry.method, entry.data,
 					[method = entry.method](bool ok, const json&, const std::string& error) {
-						if (!ok) std::printf("[QoS] test %s failed: %s\n", method.c_str(), error.c_str());
+						if (!ok) spdlog::warn("[QoS] test {} failed: {}", method, error);
 					});
 			}
 		});
@@ -660,10 +647,10 @@ void PlainClientApp::StopTestHelperThreads()
 bool PlainClientApp::InitializeSession()
 {
 	if (!ws_.connect(serverIp_, serverPort_, "/ws")) {
-		std::fprintf(stderr, "WS connect failed\n");
+		spdlog::error("WS connect failed");
 		return false;
 	}
-	std::printf("WS connected to %s:%d\n", serverIp_.c_str(), serverPort_);
+	spdlog::info("WS connected to {}:{}", serverIp_, serverPort_);
 
 	ws_.request("join", {
 		{"roomId", roomId_},
@@ -671,7 +658,7 @@ bool PlainClientApp::InitializeSession()
 		{"displayName", peerId_},
 		{"rtpCapabilities", json::object()}
 	});
-	std::printf("Joined room=%s peer=%s\n", roomId_.c_str(), peerId_.c_str());
+	spdlog::info("Joined room={} peer={}", roomId_, peerId_);
 
 	std::vector<uint32_t> videoSsrcs(videoTracks_.size(), 0);
 	for (size_t i = 0; i < videoTracks_.size(); ++i)
@@ -692,10 +679,10 @@ bool PlainClientApp::InitializeSession()
 		static_cast<uint8_t>(pub.value("videoTransportCcExtId", 0));
 	audioTransportCcExtensionId_ =
 		static_cast<uint8_t>(pub.value("audioTransportCcExtId", 0));
-	std::printf("Publish → %s:%d (announced=%s) videoTracks=%zu videoPt=%d aPt=%d\n",
-		serverIp_.c_str(),
+	spdlog::info("Publish → {}:{} (announced={}) videoTracks={} videoPt={} aPt={}",
+		serverIp_,
 		serverPort,
-		announcedIp.c_str(),
+		announcedIp,
 		videoTracks_.size(),
 		defaultVideoPt,
 		audioPt_);
@@ -740,10 +727,7 @@ void PlainClientApp::Cleanup()
 		udpFd_ = -1;
 	}
 	for (auto& track : videoTracks_) {
-		if (track.swsCtx) {
-			sws_freeContext(track.swsCtx);
-			track.swsCtx = nullptr;
-		}
+			track.swsCtx.reset();
 	}
 }
 
@@ -764,7 +748,7 @@ int PlainClientApp::Run()
 			return 1;
 		exitCode = threadedMode_ ? RunThreadedMode() : RunLegacyMode();
 	} catch (const std::exception& e) {
-		std::fprintf(stderr, "Error: %s\n", e.what());
+		spdlog::error("Error: {}", e.what());
 		exitCode = 1;
 	}
 

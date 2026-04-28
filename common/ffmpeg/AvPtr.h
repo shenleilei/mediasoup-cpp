@@ -9,6 +9,7 @@ extern "C" {
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+#include <libswscale/swscale.h>
 }
 
 #include <memory>
@@ -39,10 +40,17 @@ struct BitstreamFilterContextDeleter {
 	}
 };
 
+struct SwsContextDeleter {
+	void operator()(SwsContext* ctx) const {
+		if (ctx) sws_freeContext(ctx);
+	}
+};
+
 using PacketPtr = std::unique_ptr<AVPacket, PacketDeleter>;
 using FramePtr = std::unique_ptr<AVFrame, FrameDeleter>;
 using CodecContextPtr = std::unique_ptr<AVCodecContext, CodecContextDeleter>;
 using BitstreamFilterContextPtr = std::unique_ptr<AVBSFContext, BitstreamFilterContextDeleter>;
+using SwsContextPtr = std::unique_ptr<SwsContext, SwsContextDeleter>;
 
 inline PacketPtr MakePacket()
 {

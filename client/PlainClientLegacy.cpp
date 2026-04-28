@@ -1,8 +1,10 @@
 #include "PlainClientApp.h"
 
 #include "NetworkThread.h"
+#include "QosTrace.h"
 #include "UdpSendHelpers.h"
 
+#include <spdlog/spdlog.h>
 #include <limits>
 #include <map>
 
@@ -11,7 +13,7 @@ namespace msff = mediasoup::ffmpeg;
 int PlainClientApp::RunLegacyMode()
 {
 	if (!inputFormat_) {
-		std::fprintf(stderr, "legacy mode requires input media bootstrap\n");
+		spdlog::error("legacy mode requires input media bootstrap");
 		return 1;
 	}
 
@@ -76,7 +78,7 @@ int PlainClientApp::RunLegacyMode()
 			std::this_thread::sleep_for(std::chrono::milliseconds(20));
 		}
 	}
-	std::printf("Sent probe packets for comedia across %zu video tracks\n", videoTracks_.size());
+	spdlog::info("Sent probe packets for comedia across {} video tracks", videoTracks_.size());
 	std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
 	auto packet = msff::MakePacket();
@@ -124,8 +126,8 @@ int PlainClientApp::RunLegacyMode()
 							encoderCtx->height != videoFrame_->height ||
 							videoFrame_->format != AV_PIX_FMT_YUV420P) {
 							msff::FrameMakeWritable(track.scaledFrame.get());
-							track.swsCtx = sws_getCachedContext(
-								track.swsCtx,
+							track.swsCtx.reset(sws_getCachedContext(
+								track.swsCtx.get(),
 								videoFrame_->width,
 								videoFrame_->height,
 								static_cast<AVPixelFormat>(videoFrame_->format),
@@ -135,10 +137,10 @@ int PlainClientApp::RunLegacyMode()
 								SWS_BILINEAR,
 								nullptr,
 								nullptr,
-								nullptr);
+								nullptr));
 							if (!track.swsCtx) continue;
 							sws_scale(
-								track.swsCtx,
+								track.swsCtx.get(),
 								videoFrame_->data,
 								videoFrame_->linesize,
 								0,
@@ -371,23 +373,23 @@ int PlainClientApp::RunLegacyMode()
 							const double traceLossRate = track.qosCtrl->lastSignals().has_value()
 								? track.qosCtrl->lastSignals()->lossRate
 								: 0.0;
-							std::printf("[QOS_TRACE] tsMs=%lld track=%s state=%s level=%d mode=%s sample=%s bitrateBps=%d sendBps=%.0f lossRate=%.6f packetsLost=%llu rttMs=%.1f jitterMs=%.1f width=%d height=%d fps=%d suppressed=%d\n",
-								static_cast<long long>(wallNowMs()),
+							spdlog::info("{}", mediasoup::plainclient::formatQosTraceLine(
+								static_cast<int64_t>(wallNowMs()),
 								track.trackId.c_str(),
 								qos::stateStr(track.qosCtrl->currentState()),
 								track.qosCtrl->currentLevel(),
-							track.videoSuppressed ? "audio-only" : "audio-video",
+								track.videoSuppressed ? "audio-only" : "audio-video",
 								usingMatrixTestProfile ? "matrix" : (usingServerStats ? "server" : "local"),
 								track.encBitrate,
 								observedBitrateBps > 0.0 ? observedBitrateBps : snap.targetBitrateBps,
 								traceLossRate,
-								static_cast<unsigned long long>(snap.packetsLost),
+								snap.packetsLost,
 								snap.roundTripTimeMs,
-							snap.jitterMs,
-							track.encoder.has_value() ? track.encoder->get()->width : 0,
-							track.encoder.has_value() ? track.encoder->get()->height : 0,
-							track.configuredVideoFps,
-							track.videoSuppressed ? 1 : 0);
+								snap.jitterMs,
+								track.encoder.has_value() ? track.encoder->get()->width : 0,
+								track.encoder.has_value() ? track.encoder->get()->height : 0,
+								track.configuredVideoFps,
+								track.videoSuppressed ? 1 : 0));
 					}
 
 					if (trackBudgetRequests.size() > 1) {
@@ -420,7 +422,7 @@ int PlainClientApp::RunLegacyMode()
 						static constexpr size_t kMaxPendingClientStats = 8;
 						static int peerSnapshotSeq = 0;
 						if (ws_.pendingRequestCount() >= kMaxPendingClientStats) {
-							std::printf("[QoS] clientStats dropped: too many pending requests (%zu)\n",
+							spdlog::warn("[QoS] clientStats dropped: too many pending requests ({})",
 								ws_.pendingRequestCount());
 						} else {
 							auto peerDecision = qos::buildPeerDecision(peerTrackStates);
@@ -437,7 +439,7 @@ int PlainClientApp::RunLegacyMode()
 								(audIdx_ >= 0 && audioDecoder_.has_value() && audioEncoder_.has_value()));
 							ws_.requestAsync("clientStats", peerSnapshot,
 								[](bool ok, const json&, const std::string& error) {
-									if (!ok) std::printf("[QoS] clientStats failed: %s\n", error.c_str());
+									if (!ok) spdlog::error("[QoS] clientStats failed: {}", error);
 								});
 						}
 					}
@@ -445,7 +447,7 @@ int PlainClientApp::RunLegacyMode()
 			}
 
 			if (++frameCnt % 100 == 0)
-				std::printf("sent %d frames [nack=%d pli=%d tracks=%zu]\n",
+				spdlog::info("sent {} frames [nack={} pli={} tracks={}]",
 					frameCnt, rtcp.nackRetransmitted, rtcp.pliResponded, videoTracks_.size());
 		} else if (packet->stream_index == audIdx_ &&
 			audioDecoder_.has_value() && audioEncoder_.has_value() && audioFrame_) {
@@ -473,6 +475,6 @@ int PlainClientApp::RunLegacyMode()
 	}
 
 	rtcpContext_ = nullptr;
-	std::printf("Done: %d video frames sent\n", frameCnt);
+	spdlog::info("Done: {} video frames sent", frameCnt);
 	return 0;
 }

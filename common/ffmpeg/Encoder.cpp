@@ -59,4 +59,12 @@ bool Encoder::ReceivePacket(AVPacket* packet)
 	return false;
 }
 
+void Encoder::setBitRate(int64_t br)
+{
+	auto* ctx = RequireEncoderContext(context_.get(), "setBitRate");
+	ctx->bit_rate = br;
+	ctx->rc_max_rate = br;
+	ctx->rc_buffer_size = br;
+}
+
 } // namespace mediasoup::ffmpeg

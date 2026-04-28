@@ -20,6 +20,13 @@ public:
 	explicit Encoder(CodecContextPtr context);
 
 	AVCodecContext* get() const { return context_.get(); }
+	explicit operator bool() const { return context_ != nullptr; }
+
+	int width() const { return context_ ? context_->width : 0; }
+	int height() const { return context_ ? context_->height : 0; }
+	int64_t bitRate() const { return context_ ? context_->bit_rate : 0; }
+	void setBitRate(int64_t br);
+
 	bool SendFrame(const AVFrame* frame);
 	bool ReceivePacket(AVPacket* packet);
 

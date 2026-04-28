@@ -11,7 +11,7 @@
 #include "QosProtocol.h"
 #include <functional>
 #include <chrono>
-#include <cstdio>
+#include <spdlog/spdlog.h>
 #include <map>
 
 namespace qos {
@@ -201,7 +201,7 @@ public:
 				smCtx_.state = State::Congested;
 				smCtx_.enteredAtMs = now;
 				smCtx_.lastCongestedAtMs = now;
-				printf("[QoS] probe failed → rollback level %d, recovery suppressed\n", currentLevel_);
+				spdlog::debug("[QoS] probe failed → rollback level {}, recovery suppressed", currentLevel_);
 				sampleCount_++;
 				return;
 			}
@@ -214,7 +214,7 @@ public:
 				currentLevel_ = probeCtx_.targetLevel;
 				inAudioOnlyMode_ = probeCtx_.targetAudioOnlyMode;
 				probeCtx_.active = false;
-				printf("[QoS] probe successful → level %d\n", currentLevel_);
+				spdlog::info("[QoS] probe successful → level {}", currentLevel_);
 			}
 		}
 
@@ -272,11 +272,11 @@ public:
 			int reqHealthy = (recoveryProbeSuccessStreak_ > 0 && isStrongRecoverySignal(signals)) ? 2 : 3;
 			probeCtx_ = beginProbe(prevLevel, currentLevel_, prevAudioOnly, inAudioOnlyMode_, now);
 			probeCtx_.requiredHealthySamples = reqHealthy;
-			printf("[QoS] probe started: level %d → %d\n", prevLevel, currentLevel_);
+			spdlog::info("[QoS] probe started: level {} → {}", prevLevel, currentLevel_);
 		}
 
 		if (currentLevel_ != prevLevel) {
-			printf("[QoS] %s level %d→%d (loss=%.1f%% rtt=%.0fms state=%s)\n",
+			spdlog::info("[QoS] {} level {}→{} (loss={:.1f}% rtt={:.0f}ms state={})",
 				sourceStr(source_), prevLevel, currentLevel_,
 				signals.lossEwma * 100, signals.rttEwma, stateStr(smCtx_.state));
 		}
