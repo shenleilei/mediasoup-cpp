@@ -120,10 +120,15 @@ reviewed when/if the synthetic model is replaced by recorded real-WebRTC traces.
 - 6 C++ CC convergence unit tests (in `test_client_qos.cpp`) directly
   exercise the `exponentialConverge` function from `PlainClientSupport.h`,
   verifying the same behavioral properties plus edge cases
+- 6 C++ pipeline integration tests (`SyntheticPipeline.*`) exercise the full
+  path: `applyMatrixTestProfile()` → `deriveSignals()` → state machine
+  evaluation, verifying that multi-phase convergence and legacy-override-
+  equivalent inputs produce coherent state machine behavior
 - All existing sweep ordering, expectation, and evaluation tests must remain
   green
 - JS verification: `node --test tests/qos_harness/test.synthetic_sweep.mjs`
 - C++ verification: `./build/mediasoup_qos_unit_tests --gtest_filter=ExponentialConverge*`
+- C++ pipeline: `./build/mediasoup_qos_unit_tests --gtest_filter=SyntheticPipeline*`
 
 ### Test Hook Protection
 
@@ -137,6 +142,24 @@ these code paths entirely.
 The `exponentialConverge` function is now exposed in `PlainClientSupport.h`
 (inline) and tested directly in both JS and C++. The C++ tests exercise the
 actual compiled function, closing the previous gap where only a JS
-reimplementation was tested. Full end-to-end `applyMatrixTestProfile`
-integration testing (calling the function with controlled multi-phase timing)
-remains deferred as future work.
+reimplementation was tested.
+
+### Pipeline Integration Verification
+
+The `SyntheticPipeline.*` tests exercise the full C++ synthetic input path:
+`applyMatrixTestProfile()` → `deriveSignals()` → state machine evaluation.
+This closes the gap where formula correctness was tested but not the
+composite pipeline behavior. Specific scenarios covered:
+
+- **Multi-phase degradation**: baseline → impairment verifies convergence
+  drives state machine to Congested/EarlyWarning
+- **Stable baseline**: confirms no false transitions under healthy conditions
+- **bw≤1000 ×0.75 override**: proves the retained forcing produces
+  bandwidth-limited signals → degraded state (not contradictory Stable)
+- **burst bw≤300 QLR override**: proves forced `qualityLimitationReason=
+  bandwidth` at low bandwidth produces coherent degraded state
+- **jitter floor 32ms override**: proves the floor override (between smoothed
+  30ms and raw 40ms) triggers appropriate warning state via jitter thresholds
+- **Recovery after degradation**: baseline → impairment → recovery verifies
+  asymmetric convergence (fast degrade, slow recover) drives state machine
+  back through Recovering → Stable

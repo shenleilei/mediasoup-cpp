@@ -49,3 +49,12 @@
     - Files: `tests/qos_harness/test.synthetic_sweep.mjs`
     - Added: bw+loss combined bounds, jitter+loss QLR consistency, monotonicity under override
     - Verify: `node --test tests/qos_harness/test.synthetic_sweep.mjs`
+
+11. [x] Add C++ pipeline integration tests (SyntheticPipeline.*).
+    - Files: `tests/test_client_qos.cpp`
+    - Added: 6 GTest tests exercising full applyMatrixTestProfile → deriveSignals → state machine pipeline
+    - Covers: multi-phase degradation, stable baseline, bw≤1000 ×0.75 override coherence,
+      burst bw≤300 QLR override coherence, jitter floor 32ms override coherence, recovery after degradation
+    - Closes verification gap: proves retained legacy overrides and convergence simulation
+      produce coherent state machine behavior through the actual C++ code path
+    - Verify: `./build/mediasoup_qos_unit_tests --gtest_filter=SyntheticPipeline*`

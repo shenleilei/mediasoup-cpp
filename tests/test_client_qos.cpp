@@ -1927,3 +1927,291 @@ TEST(ExponentialConverge, ZeroOrNegativeTauReturnsTarget) {
 EXPECT_DOUBLE_EQ(exponentialConverge(900000.0, 300000.0, 100.0, 0.0), 300000.0);
 EXPECT_DOUBLE_EQ(exponentialConverge(900000.0, 300000.0, 100.0, -1.0), 300000.0);
 }
+
+// --- Synthetic pipeline integration tests ---
+// These tests exercise the full C++ synthetic input path:
+//   applyMatrixTestProfile() → deriveSignals() → state machine evaluation
+// This closes the verification gap where only exponentialConverge formula
+// correctness was tested, not the composite pipeline behavior.
+
+namespace {
+
+// Helper: build a MatrixTestProfile from phases.
+MatrixTestProfile buildProfile(int64_t warmupMs, std::vector<MatrixTestPhase> phases) {
+	MatrixTestProfile p;
+	p.warmupMs = warmupMs;
+	p.phases = std::move(phases);
+	return p;
+}
+
+// Helper: create a base snapshot with realistic packet/byte counts at a given time.
+RawSenderSnapshot MakePipelineSnapshot(
+	int64_t timestampMs,
+	uint64_t bytesSent,
+	uint64_t packetsSent,
+	uint64_t packetsLost = 0,
+	double targetBitrateBps = 900000,
+	double roundTripTimeMs = 20,
+	double jitterMs = 5)
+{
+	RawSenderSnapshot snap;
+	snap.timestampMs = timestampMs;
+	snap.trackId = "video";
+	snap.producerId = "producer";
+	snap.source = Source::Camera;
+	snap.kind = TrackKind::Video;
+	snap.bytesSent = bytesSent;
+	snap.packetsSent = packetsSent;
+	snap.packetsLost = packetsLost;
+	snap.targetBitrateBps = targetBitrateBps;
+	snap.configuredBitrateBps = 900000;
+	snap.roundTripTimeMs = roundTripTimeMs;
+	snap.jitterMs = jitterMs;
+	snap.qualityLimitationReason = QualityLimitationReason::None;
+	return snap;
+}
+
+// Simulate N samples through applyMatrixTestProfile then deriveSignals,
+// tracking state machine context and returning final state.
+State runPipelineSimulation(
+	const MatrixTestProfile& profile,
+	int encBitrate,
+	int durationMs,
+	int sampleIntervalMs = 1000)
+{
+	MatrixTestRuntimeState runtime;
+	runtime.startMs = 0;
+
+	Profile qosProfile; // default thresholds
+	StateMachineContext smCtx = createInitialQosStateMachineContext(0);
+
+	RawSenderSnapshot prevSnap{};
+	DerivedSignals prevSig{};
+	bool hasPrev = false;
+
+	int warmupRemaining = 5; // match warmup sample count
+
+	for (int64_t t = sampleIntervalMs; t <= durationMs; t += sampleIntervalMs) {
+		// Build a baseline snapshot with realistic traffic flow
+		uint64_t bytes = static_cast<uint64_t>(static_cast<double>(encBitrate) / 8.0 * static_cast<double>(t) / 1000.0);
+		uint64_t packets = static_cast<uint64_t>(t / sampleIntervalMs) * 100;
+		auto snap = MakePipelineSnapshot(t, bytes, packets);
+
+		// Apply the matrix profile: this modifies snap in-place
+		applyMatrixTestProfile(snap, encBitrate, profile, runtime, t);
+
+		// Derive signals
+		DerivedSignals sig = deriveSignals(snap, hasPrev ? &prevSnap : nullptr,
+			hasPrev ? &prevSig : nullptr);
+
+		prevSnap = snap;
+		prevSig = sig;
+		hasPrev = true;
+
+		// Skip warmup samples before state machine evaluation
+		if (warmupRemaining > 0) { warmupRemaining--; continue; }
+
+		auto result = evaluateStateTransition(smCtx, sig, qosProfile, t);
+		smCtx = result.context;
+	}
+
+	return smCtx.state;
+}
+
+} // namespace
+
+// Test: Multi-phase degradation drives state machine to Congested or EarlyWarning.
+// Exercises applyMatrixTestProfile convergence → deriveSignals → state machine.
+TEST(SyntheticPipeline, DegradationPhaseReachesWarningOrCongested) {
+	MatrixTestPhase baseline;
+	baseline.name = "baseline";
+	baseline.durationMs = 5000;
+	baseline.sendCeilingBps = 900000;
+	baseline.rttMs = 20;
+	baseline.jitterMs = 5;
+	baseline.lossRate = 0.0;
+	baseline.qualityLimitationReason = QualityLimitationReason::None;
+
+	MatrixTestPhase impairment;
+	impairment.name = "impairment";
+	impairment.durationMs = 20000;
+	impairment.sendCeilingBps = 300000;
+	impairment.rttMs = 350;
+	impairment.jitterMs = 80;
+	impairment.lossRate = 0.10;
+	impairment.qualityLimitationReason = QualityLimitationReason::Bandwidth;
+
+	auto profile = buildProfile(0, {baseline, impairment});
+	State finalState = runPipelineSimulation(profile, 900000, 25000);
+
+	// After 20s of heavy impairment, state machine should be in Congested or EarlyWarning
+	EXPECT_TRUE(finalState == State::Congested || finalState == State::EarlyWarning)
+		<< "Expected Congested or EarlyWarning, got state " << static_cast<int>(finalState);
+}
+
+// Test: Stable baseline stays Stable.
+TEST(SyntheticPipeline, StableBaselineRemainsStable) {
+	MatrixTestPhase baseline;
+	baseline.name = "baseline";
+	baseline.durationMs = 15000;
+	baseline.sendCeilingBps = 900000;
+	baseline.rttMs = 20;
+	baseline.jitterMs = 5;
+	baseline.lossRate = 0.0;
+	baseline.qualityLimitationReason = QualityLimitationReason::None;
+
+	auto profile = buildProfile(0, {baseline});
+	State finalState = runPipelineSimulation(profile, 900000, 15000);
+
+	EXPECT_EQ(finalState, State::Stable);
+}
+
+// Test: bw≤1000 with ×0.75 override (legacy forcing).
+// The runner applies sendCeilingBps *= 0.75 for bw≤1000.  With convergence,
+// this should produce bandwidth-limited signals that drive the state machine
+// appropriately without creating contradictory state.
+TEST(SyntheticPipeline, LowBandwidthOverrideProducesCoherentState) {
+	// Simulate what the JS runner does for bw=800 with ×0.75 override:
+	// Model output ~600kbps, ×0.75 → 450kbps ceiling
+	MatrixTestPhase baseline;
+	baseline.name = "baseline";
+	baseline.durationMs = 5000;
+	baseline.sendCeilingBps = 900000;
+	baseline.rttMs = 20;
+	baseline.jitterMs = 5;
+	baseline.lossRate = 0.0;
+	baseline.qualityLimitationReason = QualityLimitationReason::None;
+
+	MatrixTestPhase impairment;
+	impairment.name = "impairment";
+	impairment.durationMs = 20000;
+	// sendCeiling after ×0.75 override at bw=800
+	impairment.sendCeilingBps = 450000;
+	impairment.rttMs = 30;
+	impairment.jitterMs = 8;
+	impairment.lossRate = 0.01;
+	impairment.qualityLimitationReason = QualityLimitationReason::Bandwidth;
+
+	auto profile = buildProfile(0, {baseline, impairment});
+	State finalState = runPipelineSimulation(profile, 900000, 25000);
+
+	// With bandwidth-limited QLR and reduced ceiling, state should degrade
+	// (EarlyWarning or Congested).  The key assertion is that the ×0.75
+	// override does not produce a contradictory "Stable" state when QLR is
+	// bandwidth-limited.
+	EXPECT_NE(finalState, State::Stable)
+		<< "bw<=1000 x0.75 override should not produce Stable when bandwidthLimited";
+}
+
+// Test: burst bw≤300 with qualityLimitationReason='bandwidth'.
+// The runner forces QLR=bandwidth for burst cases with bw≤300.
+// Verify this produces degraded state coherent with the model's own caps.
+TEST(SyntheticPipeline, BurstLowBandwidthOverrideIsCoherent) {
+	MatrixTestPhase baseline;
+	baseline.name = "baseline";
+	baseline.durationMs = 5000;
+	baseline.sendCeilingBps = 900000;
+	baseline.rttMs = 20;
+	baseline.jitterMs = 5;
+	baseline.lossRate = 0.0;
+	baseline.qualityLimitationReason = QualityLimitationReason::None;
+
+	MatrixTestPhase burst;
+	burst.name = "impairment";
+	burst.durationMs = 15000;
+	// bw=300 → model produces very low utilization, ceiling ~150kbps
+	burst.sendCeilingBps = 150000;
+	burst.rttMs = 25;
+	burst.jitterMs = 5;
+	burst.lossRate = 0.0;
+	// This is the legacy override: force QLR=bandwidth for bw≤300 burst
+	burst.qualityLimitationReason = QualityLimitationReason::Bandwidth;
+
+	auto profile = buildProfile(0, {baseline, burst});
+	State finalState = runPipelineSimulation(profile, 900000, 20000);
+
+	// Should be degraded (EarlyWarning or Congested), not contradictory Stable
+	EXPECT_NE(finalState, State::Stable)
+		<< "burst bw<=300 override should produce degraded state";
+}
+
+// Test: jitter sweep with floor override (jitterMs=32 for raw≥40).
+// The runner enforces jitterMs≥32 for jitter_sweep when raw jitter≥40.
+// After smoothing (×0.75), raw 40→smoothed 30; floor 32 undoes part of
+// smoothing.  Verify this stays within model bounds and produces
+// appropriate state machine behavior.
+TEST(SyntheticPipeline, JitterFloorOverrideProducesCoherentState) {
+	MatrixTestPhase baseline;
+	baseline.name = "baseline";
+	baseline.durationMs = 5000;
+	baseline.sendCeilingBps = 900000;
+	baseline.rttMs = 20;
+	baseline.jitterMs = 5;
+	baseline.lossRate = 0.0;
+	baseline.qualityLimitationReason = QualityLimitationReason::None;
+
+	MatrixTestPhase jitterPhase;
+	jitterPhase.name = "impairment";
+	jitterPhase.durationMs = 15000;
+	jitterPhase.sendCeilingBps = 900000;
+	jitterPhase.rttMs = 30;
+	// jitter floor override: 32ms (between smoothed 30 and raw 40)
+	jitterPhase.jitterMs = 32;
+	jitterPhase.lossRate = 0.0;
+	jitterPhase.qualityLimitationReason = QualityLimitationReason::None;
+
+	auto profile = buildProfile(0, {baseline, jitterPhase});
+	State finalState = runPipelineSimulation(profile, 900000, 20000);
+
+	// jitter=32ms is above warnJitterMs=30 threshold, so should produce
+	// EarlyWarning after sustained exposure, but not necessarily Congested
+	// (congestedJitterMs=60 is much higher).
+	// The key assertion is coherence: state reflects the jitter level.
+	// With jitter=32 > warn=30 and sustained, expect at least EarlyWarning.
+	EXPECT_TRUE(finalState == State::EarlyWarning || finalState == State::Congested)
+		<< "jitter floor 32ms > warnJitter 30ms should produce warning/congested, got "
+		<< static_cast<int>(finalState);
+}
+
+// Test: Recovery after degradation transitions back toward Stable.
+// Exercises the full baseline → impairment → recovery pipeline
+// with convergence asymmetry (fast degradation, slow recovery).
+TEST(SyntheticPipeline, RecoveryAfterDegradationMovesBackToStable) {
+	MatrixTestPhase baseline;
+	baseline.name = "baseline";
+	baseline.durationMs = 6000;
+	baseline.sendCeilingBps = 900000;
+	baseline.rttMs = 20;
+	baseline.jitterMs = 5;
+	baseline.lossRate = 0.0;
+	baseline.qualityLimitationReason = QualityLimitationReason::None;
+
+	MatrixTestPhase impairment;
+	impairment.name = "impairment";
+	impairment.durationMs = 12000;
+	impairment.sendCeilingBps = 300000;
+	impairment.rttMs = 350;
+	impairment.jitterMs = 80;
+	impairment.lossRate = 0.10;
+	impairment.qualityLimitationReason = QualityLimitationReason::Bandwidth;
+
+	MatrixTestPhase recovery;
+	recovery.name = "recovery";
+	recovery.durationMs = 40000;
+	recovery.sendCeilingBps = 900000;
+	recovery.rttMs = 20;
+	recovery.jitterMs = 5;
+	recovery.lossRate = 0.0;
+	recovery.qualityLimitationReason = QualityLimitationReason::None;
+
+	auto profile = buildProfile(0, {baseline, impairment, recovery});
+	// Run for total 58s = 6s baseline + 12s impairment + 40s recovery
+	State finalState = runPipelineSimulation(profile, 900000, 58000);
+
+	// After 40s of recovery (slow convergence τ_recover=6s → 3τ=18s fully
+	// converged) plus cooldown, should have transitioned back through
+	// Recovering toward Stable.
+	EXPECT_TRUE(finalState == State::Stable || finalState == State::Recovering)
+		<< "After 40s recovery, expected Stable or Recovering, got "
+		<< static_cast<int>(finalState);
+}
