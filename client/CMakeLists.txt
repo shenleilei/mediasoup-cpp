@@ -32,6 +32,12 @@ mediasoup_add_interface_target(plain_client_build_pthread
     LINK_LIBRARIES pthread
 )
 
+add_subdirectory(
+    ${MEDIASOUP_REPO_ROOT}/third_party/spdlog
+    ${CMAKE_CURRENT_BINARY_DIR}/third_party/spdlog
+    EXCLUDE_FROM_ALL
+)
+
 mediasoup_collect_common_media_sources(PLAIN_CLIENT_COMMON_MEDIA_SOURCES ${MEDIASOUP_REPO_ROOT})
 mediasoup_collect_common_ffmpeg_sources(PLAIN_CLIENT_COMMON_FFMPEG_SOURCES ${MEDIASOUP_REPO_ROOT})
 
@@ -50,4 +56,9 @@ mediasoup_add_configured_executable(plain-client
         plain_client_build_ffmpeg_extended
         plain_client_build_ssl_crypto
         plain_client_build_pthread
+        spdlog::spdlog
 )
+
+if(BUILD_TESTING OR BUILD_TESTS)
+	target_compile_definitions(plain-client PRIVATE MEDIASOUP_TEST_HOOKS)
+endif()

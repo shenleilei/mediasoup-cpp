@@ -414,7 +414,9 @@ build_targets() {
     mediasoup_review_fix_tests \
     mediasoup_qos_accuracy_tests \
     mediasoup_qos_recording_accuracy_tests \
-    mediasoup_thread_integration_tests
+    mediasoup_thread_integration_tests \
+    mediasoup_source_worker_failure_tests \
+    mediasoup_source_worker_integration_tests
   cmake --build "$CLIENT_BUILD_DIR" -j"$JOBS" --target plain-client
   log_system_snapshot "post-build"
 }
