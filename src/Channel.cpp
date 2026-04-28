@@ -388,36 +388,53 @@ bool Channel::processAvailableData() {
 		return false;
 	}
 
-	// Process complete messages from recvBuf_. Remove each frame before dispatch
-	// so notification callbacks can safely re-enter requestWait/processAvailableData
-	// without re-processing the same buffered message.
-	while (recvBuf_.size() >= 4) {
+	const bool outermostDispatch = !recvBufProcessing_;
+	if (outermostDispatch) {
+		recvBufProcessing_ = true;
+		recvBufDispatchOffset_ = 0;
+	}
+
+	bool ok = true;
+	while (recvBufDispatchOffset_ + 4 <= recvBuf_.size()) {
 		uint32_t msgLen;
-		std::memcpy(&msgLen, recvBuf_.data(), 4);
+		std::memcpy(&msgLen, recvBuf_.data() + recvBufDispatchOffset_, 4);
 		if (msgLen == 0 || msgLen > MESSAGE_MAX_LEN) {
 			MS_WARN(logger_,
 				"invalid frame length [pid:{} msgLen:{} max:{}], closing channel",
 				pid_, msgLen, MESSAGE_MAX_LEN);
 			close();
-			return false;
+			ok = false;
+			break;
 		}
-		if (recvBuf_.size() < 4 + msgLen) break;
+		if (recvBufDispatchOffset_ + 4 + msgLen > recvBuf_.size()) break;
 
+		const size_t payloadOffset = recvBufDispatchOffset_ + 4;
 		std::vector<uint8_t> message(
-			recvBuf_.begin() + 4,
-			recvBuf_.begin() + static_cast<ptrdiff_t>(4 + msgLen));
-		recvBuf_.erase(
-			recvBuf_.begin(),
-			recvBuf_.begin() + static_cast<ptrdiff_t>(4 + msgLen));
+			recvBuf_.begin() + static_cast<ptrdiff_t>(payloadOffset),
+			recvBuf_.begin() + static_cast<ptrdiff_t>(payloadOffset + msgLen));
+		// Advance the shared offset before dispatch so re-entrant callbacks do not replay
+		// already-consumed buffered messages.
+		recvBufDispatchOffset_ += 4 + msgLen;
 
 		if (!processMessage(message.data(), msgLen)) {
 			MS_WARN(logger_, "invalid FlatBuffers message [pid:{} len:{}], closing channel", pid_, msgLen);
 			close();
-			return false;
+			ok = false;
+			break;
 		}
 	}
 
-	return true;
+	if (outermostDispatch) {
+		if (recvBufDispatchOffset_ > 0) {
+			recvBuf_.erase(
+				recvBuf_.begin(),
+				recvBuf_.begin() + static_cast<ptrdiff_t>(recvBufDispatchOffset_));
+		}
+		recvBufDispatchOffset_ = 0;
+		recvBufProcessing_ = false;
+	}
+
+	return ok;
 }
 
 void Channel::readLoop() {

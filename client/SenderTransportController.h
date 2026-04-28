@@ -18,6 +18,8 @@ namespace mediasoup::plainclient {
 
 class SenderTransportController {
 public:
+	static constexpr uint32_t kDefaultTrackTargetBitrateBps = 900000u;
+
 	struct Config {
 		int64_t pacingIntervalMs{ 2 };
 		int64_t audioQueueDeadlineMs{ 40 };
@@ -304,7 +306,6 @@ public:
 
 private:
 	static constexpr size_t kMaxPacketBytes = 1500;
-	static constexpr uint32_t kDefaultTrackTargetBitrateBps = 900000;
 
 	struct Packet {
 		uint32_t ssrc{ 0 };
@@ -394,11 +395,22 @@ private:
 
 	void FlushAudioQueue()
 	{
+		int64_t audioBytesSent = 0;
+		const bool reserveFreshVideoOpportunity = queuedFreshVideoPackets_ > 0;
 		while (!audioQueue_.empty()) {
 			auto& packet = audioQueue_.front();
+			if (reserveFreshVideoOpportunity) {
+				if (audioBytesSent > 0) {
+					break;
+				}
+				if (static_cast<int64_t>(packet.len) > mediaBudgetBytes_) {
+					break;
+				}
+			}
 			const auto result = SendPacket(PacketClass::AudioRtp, packet);
 			if (result.status == SendStatus::Sent) {
 				mediaBudgetBytes_ -= static_cast<int64_t>(packet.len);
+				audioBytesSent += static_cast<int64_t>(packet.len);
 				if (onAudioSent_) {
 					onAudioSent_(packet.len > 12 ? packet.len - 12 : 0, packet.rtpTimestamp);
 				}

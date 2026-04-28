@@ -38,8 +38,8 @@ void RoomRegistry::start()
 	{
 		std::lock_guard<std::mutex> lock(command_.mutex);
 		registerNode();
-		syncAllUnlocked();
 	}
+	syncAllSnapshot();
 	startSubscriber();
 }
 
@@ -220,10 +220,8 @@ RoomRegistry::ResolveResult RoomRegistry::resolveRoom(
 		shouldRefreshNodes = true;
 	}
 	if (shouldRefreshNodes) {
-		std::lock_guard<std::mutex> lock(command_.mutex);
-		(void)lock;
 		MS_DEBUG(logger_, "resolveRoom syncNodes start [roomId:{} clientIp:{}]", roomId, clientIp);
-		syncNodesUnlocked();
+		syncNodesSnapshot();
 		MS_DEBUG(logger_, "resolveRoom syncNodes done [roomId:{} elapsedMs:{}]",
 			roomId, std::chrono::duration_cast<std::chrono::milliseconds>(
 				std::chrono::steady_clock::now() - start).count());

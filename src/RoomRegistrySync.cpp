@@ -11,8 +11,7 @@ namespace mediasoup {
 
 void RoomRegistry::syncAll()
 {
-	std::lock_guard<std::mutex> lock(command_.mutex);
-	syncAllUnlocked();
+	syncAllSnapshot();
 }
 
 void RoomRegistry::evictDeadNodes()
@@ -45,6 +44,8 @@ void RoomRegistry::evictDeadNodes()
 
 redisReply* RoomRegistry::mgetArgv(const std::vector<std::string>& keys)
 {
+	if (keys.empty()) return nullptr;
+
 	std::vector<const char*> argv;
 	std::vector<size_t> argvLen;
 	argv.push_back("MGET");
@@ -53,8 +54,14 @@ redisReply* RoomRegistry::mgetArgv(const std::vector<std::string>& keys)
 		argv.push_back(key.c_str());
 		argvLen.push_back(key.size());
 	}
-	return command_.commandArgv(
+	std::lock_guard<std::mutex> lock(command_.mutex);
+	if (!ensureConnected()) return nullptr;
+	auto* reply = command_.commandArgv(
 		static_cast<int>(argv.size()), argv.data(), argvLen.data());
+	if (!reply) {
+		handleDisconnect();
+	}
+	return reply;
 }
 
 std::vector<std::string> RoomRegistry::scanKeys(const char* pattern)
@@ -62,8 +69,16 @@ std::vector<std::string> RoomRegistry::scanKeys(const char* pattern)
 	std::vector<std::string> keys;
 	std::string cursor = "0";
 	do {
-		auto* reply = command_.command(
-			"SCAN %s MATCH %s COUNT 100", cursor.c_str(), pattern);
+		redisReply* reply = nullptr;
+		{
+			std::lock_guard<std::mutex> lock(command_.mutex);
+			if (!ensureConnected()) break;
+			reply = command_.command(
+				"SCAN %s MATCH %s COUNT 100", cursor.c_str(), pattern);
+			if (!reply) {
+				handleDisconnect();
+			}
+		}
 		if (!reply || reply->type != REDIS_REPLY_ARRAY || reply->elements != 2) {
 			if (reply) freeReplyObject(reply);
 			break;
@@ -87,9 +102,12 @@ std::vector<std::string> RoomRegistry::scanKeys(const char* pattern)
 	return keys;
 }
 
-void RoomRegistry::syncNodesUnlocked()
+void RoomRegistry::syncNodesSnapshot()
 {
-	if (!ensureConnected()) return;
+	{
+		std::lock_guard<std::mutex> lock(command_.mutex);
+		if (!ensureConnected()) return;
+	}
 
 	std::unordered_map<std::string, NodeInfo> tmpNodes;
 	auto nodeKeys = scanKeys("sfu:node:*");
@@ -112,9 +130,12 @@ void RoomRegistry::syncNodesUnlocked()
 	cache_.mergeNodes(tmpNodes);
 }
 
-void RoomRegistry::syncAllUnlocked()
+void RoomRegistry::syncAllSnapshot()
 {
-	if (!ensureConnected()) return;
+	{
+		std::lock_guard<std::mutex> lock(command_.mutex);
+		if (!ensureConnected()) return;
+	}
 
 	std::unordered_map<std::string, NodeInfo> tmpNodes;
 	auto nodeKeys = scanKeys("sfu:node:*");

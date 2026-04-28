@@ -716,7 +716,10 @@ TEST(NetworkThreadIntegration, DisableTransportControllerUsesLegacyPacingFallbac
 	net.start();
 	net.wakeup();
 	std::this_thread::sleep_for(std::chrono::milliseconds(120));
+	auto stopStart = std::chrono::steady_clock::now();
 	net.stop();
+	auto stopElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+		std::chrono::steady_clock::now() - stopStart).count();
 
 	int rtpCount = 0;
 	uint8_t buf[1500];
@@ -726,6 +729,8 @@ TEST(NetworkThreadIntegration, DisableTransportControllerUsesLegacyPacingFallbac
 		}
 	}
 	EXPECT_GT(rtpCount, 0) << "legacy pacing fallback should still transmit RTP packets";
+	EXPECT_LT(stopElapsedMs, 1000)
+		<< "legacy pacing fallback shutdown should not busy-spin";
 
 	const auto& metrics = net.transportMetrics();
 	uint64_t sentTotal = 0;
@@ -741,6 +746,73 @@ TEST(NetworkThreadIntegration, DisableTransportControllerUsesLegacyPacingFallbac
 	EXPECT_EQ(hardErrorTotal, 0u);
 	EXPECT_EQ(net.queuedAudioPackets(), 0u);
 	EXPECT_EQ(net.queuedRetransmissionPackets(), 0u);
+
+	close(sendFd);
+	close(recvFd);
+}
+
+TEST(NetworkThreadIntegration, LegacyPacingShutdownWithZeroTargetDoesNotSpin) {
+	int sendFd = -1, recvFd = -1;
+	uint16_t port = 0;
+	ASSERT_EQ(createConnectedUdpPair(sendFd, recvFd, port), 0);
+
+	mt::SpscQueue<mt::EncodedAccessUnit, mt::kEncodedAuQueueCapacity> auQueue;
+	mt::SpscQueue<mt::NetworkToSourceCommand, mt::kNetworkSourceQueueCapacity> netCmdQueue;
+	mt::SpscQueue<mt::NetworkControlCommand, mt::kControlCommandQueueCapacity> controlQueue;
+
+	NetworkThread::Config cfg;
+	cfg.udpFd = sendFd;
+	cfg.enableTransportController = false;
+
+	NetworkThread net(cfg);
+	net.registerVideoTrack(0, 11111111, 96);
+	net.controlQueue = &controlQueue;
+
+	NetworkThread::SourceInput sourceInput;
+	sourceInput.auQueue = &auQueue;
+	sourceInput.keyframeQueue = &netCmdQueue;
+	net.addSourceInput(sourceInput);
+
+	mt::NetworkControlCommand zeroBudget;
+	zeroBudget.type = mt::NetworkControlCommand::TrackTransportConfig;
+	zeroBudget.trackIndex = 0;
+	zeroBudget.ssrc = 11111111;
+	zeroBudget.targetBitrateBps = 0;
+	ASSERT_TRUE(controlQueue.tryPush(std::move(zeroBudget)));
+
+	mt::EncodedAccessUnit au;
+	au.trackIndex = 0;
+	au.ssrc = 11111111;
+	au.payloadType = 96;
+	au.rtpTimestamp = 90000;
+	au.isKeyframe = true;
+	std::vector<uint8_t> bigNal(10000, 0xBC);
+	bigNal[0] = 0x00; bigNal[1] = 0x00; bigNal[2] = 0x00; bigNal[3] = 0x01;
+	bigNal[4] = 0x65;
+	au.assign(bigNal.data(), bigNal.size());
+	ASSERT_TRUE(auQueue.tryPush(std::move(au)));
+
+	net.start();
+	net.wakeup();
+	std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+	int rtpBeforeStop = 0;
+	uint8_t buf[1500];
+	while (recv(recvFd, buf, sizeof(buf), MSG_DONTWAIT) > 0) {
+		if ((buf[0] & 0xC0) == 0x80) {
+			rtpBeforeStop++;
+		}
+	}
+	EXPECT_EQ(rtpBeforeStop, 0)
+		<< "zero legacy target bitrate should prevent pacing progress before shutdown";
+
+	auto stopStart = std::chrono::steady_clock::now();
+	net.stop();
+	auto stopElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+		std::chrono::steady_clock::now() - stopStart).count();
+
+	EXPECT_LT(stopElapsedMs, 1000)
+		<< "legacy shutdown guardrail should not spin when pacing budget is zero";
 
 	close(sendFd);
 	close(recvFd);

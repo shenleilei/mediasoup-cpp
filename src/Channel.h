@@ -158,6 +158,8 @@ private:
 
 	// Non-threaded mode receive buffer (owned by WorkerThread event loop thread).
 	std::vector<uint8_t> recvBuf_;
+	bool recvBufProcessing_ = false;
+	size_t recvBufDispatchOffset_ = 0;
 	std::thread readThread_;
 	EventEmitter emitter_;
 	std::shared_ptr<spdlog::logger> logger_;
