@@ -41,6 +41,11 @@
   - `desiredIncreaseBps = max(transitionDeltaBps * ProbeOveragePct / 100, ProbeMinBps)`
   - `desiredBps = expectedUsageBps + desiredIncreaseBps`
 
+### 音频优先与新视频前进 (Audio Priority And Fresh-Video Progress)
+
+- 在正常的 pacing tick 中，如果音频 RTP 与 fresh video 同时排队，音频**必须**仍然先于 fresh video 获得发送机会。
+- 连续的音频积压**严禁**单独导致 fresh video 永久没有发送机会；当 fresh video 仍在排队时，调度器**必须**保留有界的前进机会。
+
 ### 观测性 (Observability)
 
 - 线程化的纯客户端（plain-client）追踪路径**必须**暴露传输估计值（transport-estimate）以及用于进行针对性效果审计所需的白盒字段，包括：
@@ -55,4 +60,4 @@
 
 - 本规范**不**主张与 LiveKit 下行链路中的 `streamallocator` 对象模型达到完全对等。
 - 上行链路中用于承载探测 RTP 的载体轨道选择（Carrier-track selection），仅是发送端特定上下文中的等效映射，而**并非**字面意义上对 LiveKit 缺陷轨道选择逻辑的直接照搬。
-- 本规范**未**定义在全局传输带宽上限下、基于权重的多轨道媒体调度器（multi-track media scheduler）；现有的多轨道平滑发送（pacing）和公平性行为仍然在此认可范围之外。
+- 本规范**未**定义在全局传输带宽上限下、基于权重的完整多轨道媒体调度器（multi-track media scheduler）；除上文明确要求的“音频优先且 fresh video 不得被单独饿死”护栏外，其余多轨道公平性行为仍然在此认可范围之外。

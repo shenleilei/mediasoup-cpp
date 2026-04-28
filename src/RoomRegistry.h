@@ -87,8 +87,8 @@ private:
 	void evictDeadNodes();
 	redisReply* mgetArgv(const std::vector<std::string>& keys);
 	std::vector<std::string> scanKeys(const char* pattern);
-	void syncNodesUnlocked();
-	void syncAllUnlocked();
+	void syncNodesSnapshot();
+	void syncAllSnapshot();
 	bool refreshCachedRemoteRoomAddressUnlocked(
 		const std::string& roomId,
 		const std::string& cachedAddress,

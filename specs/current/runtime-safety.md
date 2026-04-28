@@ -21,6 +21,8 @@
 - 在并发关闭期间，`Channel` 的发送与关闭路径**严禁 (SHALL NOT)** 向已经失效的 Producer 文件描述符进行写入。
 - 非线程化（Non-threaded）的 `Channel` 消息抽取器**必须 (SHALL)** 能够容忍重入 `requestWait()` 的通知回调，且不会重复执行（Replay）同一条缓冲消息。
 - `WorkerThread` 事件循环**必须 (SHALL)** 显式处理 `epoll_wait` 异常；应当重试 `EINTR` 错误，对于不可恢复的严重错误应当记录日志并打破循环，以避免陷入静默降级的死循环中。
+- 纯 C++ 客户端 `NetworkThread` 的关闭路径**必须 (SHALL)** 有界完成；即使 legacy pacing 队列仍有残留包或当前 pacing budget 无法推进，关闭流程也**严禁 (SHALL NOT)** busy-spin。
+- 当纯 C++ 客户端关闭 transport controller、退回 legacy pacing fallback 时，已注册的视频 track **必须 (SHALL)** 具备非零的默认 pacing 目标码率，使其在显式 transport hint 到来前仍可发送 RTP。
 
 ## 运维日志 (Operational Logging)
 
@@ -40,6 +42,7 @@
 ## 输入淬火与安全防护 (Input Hardening)
 
 - `/api/resolve` 接口与 WS `join` 握手**严禁 (SHALL NOT)** 盲目信任用户直接提供的 IP 查询参数或 JSON 字段来做地理路由（Geo-routing）决策。系统**必须 (MUST)** 从底层的 Socket 远端地址，或者从被明确验证过的反向代理 `X-Forwarded-For` HTTP 头中提取用户位置。
+- 纯 C++ 客户端的 `SourceWorker` 在文件输入或摄像头输入路径上，如果 FFmpeg decoder 参数导入或 `avcodec_open2()` 失败，**必须 (SHALL)** 安全停止，且**严禁 (SHALL NOT)** 继续进入后续 decode/send 循环。
 - 长期运行的录制器 RTP 时间戳**必须 (SHALL)** 被拓宽映射为 64 位整数精度，以防止大于 6 小时的有符号 32 位整数算术溢出 Bug。
 - 生成的录制产物文件名**必须 (SHALL)** 包含毫秒级精度或 UUID，以避免客户端短时间快速重连时发生文件覆盖碰撞。
 

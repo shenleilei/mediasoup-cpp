@@ -1800,13 +1800,13 @@ TEST(SenderTransportControllerTest, BitrateAllocationControlBypassesBacklogAcros
 	}
 }
 
-TEST(SenderTransportControllerTest, BitrateAllocationPrefersAudioOverFreshVideoAtLowBitrate) {
+TEST(SenderTransportControllerTest, BitrateAllocationPreservesAudioPriorityWithoutStarvingFreshVideo) {
 	const auto result = runBitrateAllocationScenario(64000u, 500);
 	const size_t audioIndex = mediasoup::plainclient::PacketClassIndex(PacketClass::AudioRtp);
 	const size_t videoIndex = mediasoup::plainclient::PacketClassIndex(PacketClass::VideoMedia);
 
-	EXPECT_EQ(result.packetsByClass[audioIndex], result.audioPacketsEnqueued);
 	EXPECT_GT(result.packetsByClass[audioIndex], result.packetsByClass[videoIndex]);
+	EXPECT_GT(result.packetsByClass[videoIndex], 0u);
 	EXPECT_EQ(result.metrics.audioDeadlineDrops, 0u);
 }
 

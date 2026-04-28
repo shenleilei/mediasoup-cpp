@@ -21,7 +21,7 @@
 #include <atomic>
 #include <algorithm>
 #include <limits>
-#include <cstdio>
+#include <spdlog/spdlog.h>
 #include <cstring>
 #include <deque>
 #include <functional>
@@ -154,6 +154,8 @@ public:
 		t.ssrc = ssrc;
 		t.payloadType = pt;
 		t.transportCcExtensionId = transportCcExtensionId;
+		t.targetBitrateBps =
+			mediasoup::plainclient::SenderTransportController::kDefaultTrackTargetBitrateBps;
 		t.rtcpState.ssrc = ssrc;
 		t.rtcpState.payloadType = pt;
 		tracks_.push_back(std::move(t));
@@ -209,8 +211,7 @@ public:
 		if (useTransportController_) {
 			transportController_.FlushForShutdown(steadyNowMs());
 		} else {
-			// Flush remaining paced packets before closing
-			while (!pacingQueue_.empty()) pacingFlush();
+			flushLegacyPacingForShutdown();
 		}
 		if (epollFd_ >= 0) { ::close(epollFd_); epollFd_ = -1; }
 		if (wakeupFd_ >= 0) { ::close(wakeupFd_); wakeupFd_ = -1; }
@@ -783,7 +784,7 @@ private:
 				if (errno == EINTR) {
 					continue;
 				}
-				std::fprintf(stderr, "NetworkThread epoll_wait failed: %d\n", errno);
+				spdlog::error("NetworkThread epoll_wait failed: {}", errno);
 				std::this_thread::sleep_for(std::chrono::milliseconds(10));
 				continue;
 			}
@@ -867,6 +868,36 @@ private:
 			}
 			pacingQueue_.pop_front();
 		}
+	}
+
+	void flushLegacyPacingForShutdown()
+	{
+		if (pacingQueue_.empty()) {
+			return;
+		}
+
+		// Shutdown must not depend on runtime pacing budget progression.
+		// 4 passes with maxed budget drains any reasonable queue; more would
+		// indicate a stuck sender and just delay shutdown.
+		constexpr size_t kMaxShutdownFlushPasses = 4;
+		for (size_t pass = 0; pass < kMaxShutdownFlushPasses && !pacingQueue_.empty(); ++pass) {
+			const size_t pendingBefore = pacingQueue_.size();
+			legacyPacingBudgetBytes_ = std::numeric_limits<int64_t>::max() / 4;
+			pacingFlush();
+			if (pacingQueue_.size() >= pendingBefore) {
+				break;
+			}
+		}
+
+		if (!pacingQueue_.empty()) {
+			spdlog::warn(
+				"NetworkThread dropping {} legacy paced packets during shutdown",
+				pacingQueue_.size());
+			pacingQueue_.clear();
+		}
+
+		legacyPacingBudgetBytes_ = 0;
+		lastLegacyPacingBudgetUpdateMs_ = 0;
 	}
 
 	void RefreshLegacyPacingBudget()
