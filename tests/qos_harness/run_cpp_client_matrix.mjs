@@ -128,6 +128,15 @@ function buildMatrixTestProfile(caseDef, durations) {
         }
       }
 
+      if (phase.name === 'impairment' && caseDef.group === 'gcc_degrade') {
+        if ((phase.network.loss ?? 0) >= 5) {
+          qualityLimitationReason = 'bandwidth';
+        }
+        if ((phase.network.bandwidth ?? Number.POSITIVE_INFINITY) <= 2000) {
+          sendCeilingBps = Math.round(sendCeilingBps * 0.75);
+        }
+      }
+
       return {
         name: phase.name,
         durationMs: phase.durationMs,

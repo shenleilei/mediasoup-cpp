@@ -515,6 +515,31 @@ test('sweep expectations grow monotonically as impairment gets harsher', () => {
   }
 });
 
+test('gcc_degrade pure-loss subset expectations grow monotonically', () => {
+  // GD1–GD4 vary only loss (fixed bw=4000, rtt=25) — single-variable monotonicity applies.
+  const pureLossCaseIds = new Set(['GD1', 'GD2', 'GD3', 'GD4', 'GD12']);
+  const ordered = scenarios
+    .filter(caseDefn => caseDefn.group === 'gcc_degrade' && pureLossCaseIds.has(caseDefn.caseId))
+    .sort((a, b) => b.loss - a.loss)
+    .map(caseDefn => ({
+      caseId: caseDefn.caseId,
+      bounds: allowedRankBounds(caseDefn.expect),
+    }));
+
+  for (let i = 1; i < ordered.length; i += 1) {
+    const previous = ordered[i - 1];
+    const current = ordered[i];
+    assert.ok(
+      current.bounds.minRank <= previous.bounds.minRank,
+      `gcc_degrade pure-loss: ${current.caseId} should not require stronger minimum state than harsher ${previous.caseId}`
+    );
+    assert.ok(
+      current.bounds.maxLevel <= previous.bounds.maxLevel,
+      `gcc_degrade pure-loss: ${current.caseId} should not allow higher maxLevel than harsher ${previous.caseId}`
+    );
+  }
+});
+
 test('baseline expectations track modeled stress ordering', () => {
   const baselineCases = scenarios
     .filter(caseDefn => caseDefn.group === 'baseline')
