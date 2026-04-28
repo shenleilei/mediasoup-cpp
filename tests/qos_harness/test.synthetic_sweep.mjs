@@ -273,6 +273,9 @@ test('runner-specific expectations merge with base expectations', () => {
       loopback: {
         maxActionCount: 5,
       },
+      cpp_client: {
+        maxActionCount: 8,
+      },
     },
   };
 
@@ -288,6 +291,49 @@ test('runner-specific expectations merge with base expectations', () => {
   assert.equal(evaluation.expectation.stateMatch, true);
   assert.equal(evaluation.expectation.levelMatch, true);
   assert.equal(evaluation.maxActionCountPassed, true);
+});
+
+test('cpp_client O1 allows monotonic ladder round-trip while default runner stays strict', () => {
+  const caseDefn = {
+    caseId: 'O1',
+    group: 'oscillation',
+    expect: {
+      states: ['stable', 'early_warning', 'congested'],
+      maxLevel: 4,
+      maxActionCount: 5,
+    },
+    expectByRunner: {
+      cpp_client: {
+        maxActionCount: 8,
+      },
+    },
+  };
+
+  const baseline = { state: 'stable', level: 0 };
+  const impaired = { state: 'congested', level: 4 };
+  const recovered = { state: 'stable', level: 0 };
+
+  const defaultEval = deriveCaseEvaluation(
+    caseDefn,
+    baseline,
+    impaired,
+    recovered,
+    'default',
+    { actionCount: 8 }
+  );
+  const cppEval = deriveCaseEvaluation(
+    caseDefn,
+    baseline,
+    impaired,
+    recovered,
+    'cpp_client',
+    { actionCount: 8 }
+  );
+
+  assert.equal(defaultEval.maxActionCountPassed, false);
+  assert.equal(defaultEval.passed, false);
+  assert.equal(cppEval.maxActionCountPassed, true);
+  assert.equal(cppEval.passed, true);
 });
 
 test('maxActionCount participates in verdict', () => {
