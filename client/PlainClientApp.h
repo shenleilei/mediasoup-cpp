@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DimensionUtils.h"
 #include "PlainClientSupport.h"
 #include "RtcpHandler.h"
 #include "Vp8Packetizer.h"
@@ -8,6 +9,8 @@
 #include "ffmpeg/Decoder.h"
 #include "ffmpeg/Encoder.h"
 #include "ffmpeg/InputFormat.h"
+
+#include <spdlog/spdlog.h>
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -64,7 +67,7 @@ private:
 		mediasoup::plainclient::Vp8PacketizerState vp8PacketizerState;
 		std::optional<mediasoup::ffmpeg::Encoder> encoder;
 		mediasoup::ffmpeg::FramePtr scaledFrame;
-		SwsContext* swsCtx = nullptr;
+		mediasoup::ffmpeg::SwsContextPtr swsCtx;
 		std::unique_ptr<qos::PublisherQosController> qosCtrl;
 		bool snapshotRequested = false;
 	};

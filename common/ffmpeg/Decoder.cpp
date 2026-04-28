@@ -2,6 +2,7 @@
 
 #include "ffmpeg/AvError.h"
 
+#include <atomic>
 #include <stdexcept>
 
 namespace mediasoup::ffmpeg {
@@ -13,12 +14,23 @@ AVCodecContext* RequireDecoderContext(AVCodecContext* context, const char* metho
 	throw std::runtime_error(std::string("Decoder::") + method + " on empty decoder");
 }
 
+#ifdef MEDIASOUP_TEST_HOOKS
+std::atomic<Decoder::OpenFailureHook> gOpenFailureHook{nullptr};
+#endif
+
 } // namespace
 
 Decoder::Decoder(CodecContextPtr context)
 	: context_(std::move(context))
 {
 }
+
+#ifdef MEDIASOUP_TEST_HOOKS
+Decoder::OpenFailureHook Decoder::SetOpenFailureHook(OpenFailureHook hook)
+{
+	return gOpenFailureHook.exchange(hook, std::memory_order_acq_rel);
+}
+#endif
 
 Decoder Decoder::OpenFromParameters(const AVCodecParameters* parameters)
 {
@@ -35,6 +47,12 @@ Decoder Decoder::OpenFromParameters(const AVCodecParameters* parameters)
 
 	CheckError(avcodec_parameters_to_context(context.get(), parameters),
 		"avcodec_parameters_to_context");
+#ifdef MEDIASOUP_TEST_HOOKS
+	if (auto hook = gOpenFailureHook.load(std::memory_order_acquire)) {
+		if (const int injectedErr = hook(context.get(), codec); injectedErr < 0)
+			CheckError(injectedErr, "avcodec_open2(decoder)");
+	}
+#endif
 	CheckError(avcodec_open2(context.get(), codec, nullptr), "avcodec_open2(decoder)");
 	return Decoder(std::move(context));
 }

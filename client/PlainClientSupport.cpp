@@ -137,7 +137,7 @@ std::optional<ServerProducerStats> parseServerProducerStats(
 
 std::optional<MatrixTestProfile> loadMatrixTestProfileFromEnv()
 {
-	const char* raw = std::getenv("QOS_TEST_MATRIX_PROFILE");
+	const char* raw = loadTestHookEnv("QOS_TEST_MATRIX_PROFILE");
 	if (!raw || std::strlen(raw) == 0) return std::nullopt;
 
 	try {
@@ -273,7 +273,7 @@ std::optional<double> applyMatrixTestProfile(
 std::vector<TestClientStatsPayloadEntry> loadTestClientStatsPayloadsFromEnv()
 {
 	std::vector<TestClientStatsPayloadEntry> entries;
-	const char* raw = std::getenv("QOS_TEST_CLIENT_STATS_PAYLOADS");
+	const char* raw = loadTestHookEnv("QOS_TEST_CLIENT_STATS_PAYLOADS");
 	if (!raw || std::strlen(raw) == 0) return entries;
 
 	try {
@@ -301,7 +301,7 @@ std::vector<TestClientStatsPayloadEntry> loadTestClientStatsPayloadsFromEnv()
 std::vector<TestWsRequestEntry> loadTestWsRequestsFromEnv()
 {
 	std::vector<TestWsRequestEntry> entries;
-	const char* raw = std::getenv("QOS_TEST_SELF_REQUESTS");
+	const char* raw = loadTestHookEnv("QOS_TEST_SELF_REQUESTS");
 	if (!raw || std::strlen(raw) == 0) return entries;
 
 	try {

@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+#include "TestHooks.h"
+
 using json = nlohmann::json;
 
 struct ServerProducerStats {
