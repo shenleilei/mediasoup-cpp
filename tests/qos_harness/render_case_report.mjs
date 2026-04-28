@@ -187,6 +187,18 @@ function deriveEvaluation(result, scenario) {
   );
 }
 
+function resolvedVerdict(result, scenario) {
+  if (!result || result.error) return null;
+  if (typeof result.verdict?.passed === 'boolean') {
+    return {
+      passed: result.verdict.passed,
+      reason: result.verdict.reason ?? 'unknown',
+      analysis: result.analysis ?? null,
+    };
+  }
+  return deriveEvaluation(result, scenario);
+}
+
 function actualQosText(result) {
   if (!result) return '未产出结果';
   if (result.error) return `执行错误：${result.error}`;
@@ -200,7 +212,7 @@ function actualQosText(result) {
 function actualResultText(result, scenario) {
   if (!result) return '未产出结果';
   if (result.error) return `ERROR：${result.error}`;
-  const evaluation = deriveEvaluation(result, scenario);
+  const evaluation = resolvedVerdict(result, scenario);
   return evaluation?.passed === true
     ? `PASS（${evaluation.analysis?.verdict ?? '符合'}）`
     : `FAIL（${evaluation?.reason ?? 'unknown'}）`;
@@ -223,8 +235,8 @@ function keyAnalysisText(result, scenario) {
   if (result.error) {
     return `执行失败。浏览器/runner 在该 case 中断，错误：${result.error}`;
   }
-  const evaluation = deriveEvaluation(result, scenario);
-  const verdict = evaluation?.analysis?.verdict ?? '未标记';
+  const evaluation = resolvedVerdict(result, scenario);
+  const verdict = evaluation?.analysis?.verdict ?? evaluation?.reason ?? '未标记';
   const impaired = fmtState(result.phaseSummary?.impairment?.peak);
   const recovered = fmtState(result.phaseSummary?.recovery?.best);
   const recoveryCurrent = fmtState(result.phaseSummary?.recovery?.current);
@@ -423,7 +435,7 @@ const casesWithEvaluation = scenarios.map(scenario => {
   return {
     scenario,
     result,
-    evaluation: deriveEvaluation(result, scenario),
+    evaluation: resolvedVerdict(result, scenario),
   };
 });
 
