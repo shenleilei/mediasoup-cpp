@@ -90,7 +90,6 @@ int64_t wallNowMs();
 std::optional<ServerProducerStats> parseServerProducerStats(
 	const json& peerStats, const std::string& producerId, const std::string& expectedKind);
 
-std::optional<MatrixTestProfile> loadMatrixTestProfileFromEnv();
 bool envFlagEnabled(const char* name);
 size_t loadVideoTrackCountFromEnv();
 std::vector<double> loadVideoTrackWeightsFromEnv(size_t trackCount);
@@ -101,5 +100,9 @@ std::optional<double> applyMatrixTestProfile(
 	const MatrixTestProfile& profile,
 	MatrixTestRuntimeState& runtime,
 	int64_t nowMs);
+
+#ifdef MEDIASOUP_TEST_HOOKS
+std::optional<MatrixTestProfile> loadMatrixTestProfileFromEnv();
 std::vector<TestClientStatsPayloadEntry> loadTestClientStatsPayloadsFromEnv();
 std::vector<TestWsRequestEntry> loadTestWsRequestsFromEnv();
+#endif

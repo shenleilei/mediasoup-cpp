@@ -146,6 +146,7 @@ std::optional<ServerProducerStats> parseServerProducerStats(
 	return std::nullopt;
 }
 
+#ifdef MEDIASOUP_TEST_HOOKS
 std::optional<MatrixTestProfile> loadMatrixTestProfileFromEnv()
 {
 	const char* raw = std::getenv("QOS_TEST_MATRIX_PROFILE");
@@ -180,6 +181,7 @@ std::optional<MatrixTestProfile> loadMatrixTestProfileFromEnv()
 		return std::nullopt;
 	}
 }
+#endif // MEDIASOUP_TEST_HOOKS
 
 bool envFlagEnabled(const char* name)
 {
@@ -323,6 +325,7 @@ std::optional<double> applyMatrixTestProfile(
 	return mergedSendBps;
 }
 
+#ifdef MEDIASOUP_TEST_HOOKS
 std::vector<TestClientStatsPayloadEntry> loadTestClientStatsPayloadsFromEnv()
 {
 	std::vector<TestClientStatsPayloadEntry> entries;
@@ -374,3 +377,4 @@ std::vector<TestWsRequestEntry> loadTestWsRequestsFromEnv()
 
 	return entries;
 }
+#endif // MEDIASOUP_TEST_HOOKS

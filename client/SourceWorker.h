@@ -481,6 +481,10 @@ private:
 	bool encoderRecreated_ = false;
 	uint64_t configGeneration_ = 0;
 	std::optional<uint32_t> rejectFirstSetEncodingTrackIndex_ =
+#ifdef MEDIASOUP_TEST_HOOKS
 		loadOptionalTrackIndexEnv("QOS_TEST_REJECT_FIRST_SET_ENCODING_TRACK_INDEX");
+#else
+		std::nullopt;
+#endif
 	bool rejectedFirstSetEncoding_ = false;
 };

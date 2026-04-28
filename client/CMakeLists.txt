@@ -4,6 +4,8 @@ project(plain-client LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+option(MEDIASOUP_TEST_HOOKS "Enable QOS_TEST_* environment variable hooks (test builds only)" OFF)
+
 get_filename_component(MEDIASOUP_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 set(JSON_INCLUDE ${MEDIASOUP_REPO_ROOT}/third_party/nlohmann_json/include)
 
@@ -51,3 +53,7 @@ mediasoup_add_configured_executable(plain-client
         plain_client_build_ssl_crypto
         plain_client_build_pthread
 )
+
+if(MEDIASOUP_TEST_HOOKS)
+    target_compile_definitions(plain-client PRIVATE MEDIASOUP_TEST_HOOKS)
+endif()

@@ -235,12 +235,14 @@ bool PlainClientApp::ParseArguments(int argc, char* argv[])
 
 	videoTrackCount_ = loadVideoTrackCountFromEnv();
 	videoTrackWeights_ = loadVideoTrackWeightsFromEnv(videoTrackCount_);
+#ifdef MEDIASOUP_TEST_HOOKS
 	matrixTestProfile_ = loadMatrixTestProfileFromEnv();
 	matrixLocalOnly_ = envFlagEnabled("QOS_TEST_MATRIX_LOCAL_ONLY");
 	testClientStatsPayloads_ = loadTestClientStatsPayloadsFromEnv();
 	testWsRequests_ = loadTestWsRequestsFromEnv();
 	forcedStaleTrackIndex_ =
 		LoadOptionalTrackIndexEnv("QOS_TEST_FORCE_STALE_TRACK_INDEX", videoTrackCount_);
+#endif
 	videoSourcePaths_ = loadVideoSourcePathsFromEnv();
 	matrixTestRuntime_.startMs = steadyNowMs();
 	threadedRequested_ =

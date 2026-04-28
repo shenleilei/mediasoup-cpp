@@ -114,7 +114,8 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
 
 # Build plain-client (threaded multi-source publisher)
-cmake -B client/build -S client -DCMAKE_BUILD_TYPE=Release
+# Enable MEDIASOUP_TEST_HOOKS so QOS_TEST_* env vars are accessible for test harness.
+cmake -B client/build -S client -DCMAKE_BUILD_TYPE=Release -DMEDIASOUP_TEST_HOOKS=ON
 cmake --build client/build -j$(nproc)
 
 echo ""
