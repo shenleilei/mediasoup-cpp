@@ -8,6 +8,7 @@ import { createRequire } from 'node:module';
 import {
   acquireNetemGuard,
   clearRootQdisc,
+  preflightNetemGuard,
   releaseNetemGuard,
 } from './netem_guard.mjs';
 
@@ -22,6 +23,7 @@ const chromiumPath = '/usr/lib64/chromium-browser/headless_shell';
 const tcPath = '/usr/sbin/tc';
 const RECOVERY_SETTLE_MS = 2000;
 const PUPPETEER_PROTOCOL_TIMEOUT_MS = 10 * 60 * 1000;
+const forceClearLiveNetemGuards = process.env.QOS_FORCE_CLEAR_NETEM_GUARDS === '1';
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -214,6 +216,10 @@ async function launchBrowser() {
 }
 
 async function runScenario() {
+  preflightNetemGuard({
+    iface: 'lo',
+    forceClearLive: forceClearLiveNetemGuards,
+  });
   const netemGuard = await acquireNetemGuard({ label: 'browser-loopback', iface: 'lo' });
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qos-browser-'));
   const bundlePath = buildBundle(tmpDir);

@@ -114,6 +114,21 @@ function actualQosText(result) {
 function actualResultText(result, scenario) {
   if (!result) return '未产出结果';
   if (result.error) return `ERROR：${result.error}`;
+  const evaluation = resolvedVerdict(result, scenario);
+  return evaluation.passed
+    ? `PASS（${evaluation.analysis?.verdict ?? '符合'}）`
+    : `FAIL（${evaluation.reason}）`;
+}
+
+function resolvedVerdict(result, scenario) {
+  if (!result || result.error) return null;
+  if (typeof result.verdict?.passed === 'boolean') {
+    return {
+      passed: result.verdict.passed,
+      reason: result.verdict.reason ?? 'unknown',
+      analysis: result.analysis ?? null,
+    };
+  }
 
   const baselineState = result.phaseSummary?.baseline?.current ?? result.baseline?.state;
   const impairedState = getImpairedStateForEvaluation(
@@ -122,16 +137,13 @@ function actualResultText(result, scenario) {
     result.phaseSummary?.baseline
   );
   const recoveredState = result.phaseSummary?.recovery?.best ?? result.recovery?.state;
-  const evaluation = deriveCaseEvaluation(
+  return deriveCaseEvaluation(
     scenario,
     baselineState,
     impairedState,
     recoveredState,
     'cpp_client'
   );
-  return evaluation.passed
-    ? `PASS（${evaluation.analysis?.verdict ?? '符合'}）`
-    : `FAIL（${evaluation.reason}）`;
 }
 
 function actualActionText(result) {
@@ -159,11 +171,26 @@ function diagnosticsText(result) {
 }
 
 const lines = [];
-const summary = matrixReport.summary ?? {};
-const failedCases = scenarios.filter(scenario => {
+const casesWithEvaluation = scenarios.map(scenario => {
   const result = resultByCaseId.get(scenario.caseId);
-  return result?.error || (result && !result.verdict?.passed);
+  return {
+    scenario,
+    result,
+    evaluation: resolvedVerdict(result, scenario),
+  };
 });
+const summary = {
+  total: scenarios.length,
+  executed: casesWithEvaluation.filter(item => item.result && !item.result.error).length,
+  passed: casesWithEvaluation.filter(item => item.evaluation?.passed === true).length,
+  failed: casesWithEvaluation.filter(
+    item => item.result && !item.result.error && item.evaluation?.passed !== true
+  ).length,
+  errors: casesWithEvaluation.filter(item => item.result?.error).length,
+};
+const failedCases = casesWithEvaluation.filter(
+  item => item.result?.error || (item.result && item.evaluation?.passed !== true)
+);
 
 lines.push('# PlainTransport C++ Client QoS Matrix 逐 Case 结果');
 lines.push('');
@@ -184,12 +211,11 @@ if (failedCases.length > 0) {
   lines.push('');
   lines.push('| Case ID | 结果 | 说明 |');
   lines.push('|---|---|---|');
-  for (const scenario of failedCases) {
-    const result = resultByCaseId.get(scenario.caseId);
-    if (result?.error) {
-      lines.push(`| ${caseLink(scenario.caseId)} | \`ERROR\` | ${result.error} |`);
+  for (const item of failedCases) {
+    if (item.result?.error) {
+      lines.push(`| ${caseLink(item.scenario.caseId)} | \`ERROR\` | ${item.result.error} |`);
     } else {
-      lines.push(`| ${caseLink(scenario.caseId)} | \`FAIL\` | ${result?.verdict?.reason ?? 'unknown'} |`);
+      lines.push(`| ${caseLink(item.scenario.caseId)} | \`FAIL\` | ${item.evaluation?.reason ?? 'unknown'} |`);
     }
   }
   lines.push('');
@@ -199,7 +225,7 @@ lines.push('## 2. 快速跳转');
 lines.push('');
 lines.push(
   failedCases.length > 0
-    ? `- 失败 / 错误：${failedCases.map(scenario => caseLink(scenario.caseId)).join('、')}`
+    ? `- 失败 / 错误：${failedCases.map(item => caseLink(item.scenario.caseId)).join('、')}`
     : '- 失败 / 错误：无'
 );
 for (const group of groupOrder) {

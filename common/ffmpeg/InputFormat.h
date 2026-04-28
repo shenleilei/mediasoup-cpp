@@ -11,6 +11,12 @@ namespace mediasoup::ffmpeg {
 class InputFormat {
 public:
 	static InputFormat Open(const std::string& path);
+	static InputFormat OpenWithFormat(const std::string& path,
+		const AVInputFormat* fmt, AVDictionary** opts);
+
+#ifdef MEDIASOUP_TEST_HOOKS
+	static int SetReadFailureCountdown(int readsBeforeFailure);
+#endif
 
 	InputFormat() = default;
 	~InputFormat();

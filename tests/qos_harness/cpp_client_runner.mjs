@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import {
   acquireNetemGuard,
   clearRootQdisc,
+  preflightNetemGuard,
   releaseNetemGuard,
 } from './netem_guard.mjs';
 
@@ -18,6 +19,7 @@ const DEFAULT_HARNESS_MP4_PATH = path.join(repoRoot, 'tests', 'fixtures', 'media
 const DEFAULT_HARNESS_AV_MP4_PATH = path.join(repoRoot, 'tests', 'fixtures', 'media', 'test_sweep_av.mp4');
 const DEFAULT_MATRIX_MP4_PATH = path.join(repoRoot, 'tests', 'fixtures', 'media', 'test_sweep_cpp_matrix.mp4');
 const activeNetemGuards = new Map();
+const forceClearLiveNetemGuards = process.env.QOS_FORCE_CLEAR_NETEM_GUARDS === '1';
 
 function runTc(args) {
   execFileSync(tcPath, args, { stdio: 'inherit' });
@@ -245,12 +247,14 @@ function tailLines(lines, count = 20) {
 }
 
 function parseQosTraceLine(line) {
-  if (!line.startsWith('[QOS_TRACE]')) {
+  const traceMarkerIndex = line.indexOf('[QOS_TRACE]');
+  if (traceMarkerIndex === -1) {
     return null;
   }
 
+  const tracePayload = line.slice(traceMarkerIndex);
   const fields = {};
-  for (const token of line.replace('[QOS_TRACE]', '').trim().split(/\s+/)) {
+  for (const token of tracePayload.replace('[QOS_TRACE]', '').trim().split(/\s+/)) {
     const separatorIndex = token.indexOf('=');
     if (separatorIndex === -1) {
       continue;
@@ -410,6 +414,10 @@ function buildTrace(lines) {
   };
 }
 
+export function buildClientTraceFromLogs({ clientStdout = [], clientStderr = [] } = {}) {
+  return buildTrace([...clientStdout, ...clientStderr]);
+}
+
 export function latestStateBefore(samples, endMs, fallbackState) {
   let latest = null;
   for (const sample of samples) {
@@ -446,6 +454,10 @@ export async function createCppClientHarness({
   if (!fs.existsSync(mp4Path)) {
     throw new Error(`mp4 file not found: ${mp4Path}`);
   }
+  preflightNetemGuard({
+    iface,
+    forceClearLive: forceClearLiveNetemGuards,
+  });
   const netemGuard = await acquireNetemGuard({
     label: `cpp-client:${roomId ?? peerId ?? 'unknown'}`,
     iface,
@@ -487,7 +499,7 @@ export async function createCppClientHarness({
   );
 
   const rebuildTraceCache = () => {
-    traceCache = buildTrace(diagnostics.clientStdout);
+    traceCache = buildClientTraceFromLogs(diagnostics);
   };
 
   sfu.stdout.on('data', createLineCollector(diagnostics.sfuStdout));
@@ -556,7 +568,7 @@ export async function createCppClientHarness({
     );
 
     client.stdout.on('data', createLineCollector(diagnostics.clientStdout, rebuildTraceCache));
-    client.stderr.on('data', createLineCollector(diagnostics.clientStderr));
+    client.stderr.on('data', createLineCollector(diagnostics.clientStderr, rebuildTraceCache));
     client.once('close', code => {
       diagnostics.clientExitCode = code;
     });

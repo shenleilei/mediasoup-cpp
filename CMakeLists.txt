@@ -154,6 +154,9 @@ if(BUILD_TESTS)
     add_subdirectory(third_party/googletest EXCLUDE_FROM_ALL)
     enable_testing()
 
+    target_compile_definitions(mediasoup_common_ffmpeg PRIVATE MEDIASOUP_TEST_HOOKS)
+    target_compile_definitions(mediasoup_build_test_support INTERFACE MEDIASOUP_TEST_HOOKS)
+
     set(MEDIASOUP_QOS_UNIT_TEST_SOURCES
         tests/test_client_qos.cpp
         tests/test_downlink_allocator.cpp
@@ -253,11 +256,19 @@ if(BUILD_TESTS)
     )
 
     mediasoup_add_gtest_target(mediasoup_review_fix_tests
-        SOURCES tests/test_review_fixes_integration.cpp
+        SOURCES
+            tests/test_review_fixes_integration.cpp
+            tests/test_room_registry_sync.cpp
+            src/RoomRegistry.cpp
+            src/RoomRegistryConnection.cpp
+            src/RoomRegistryPubSub.cpp
+            src/RoomRegistrySync.cpp
         LINK_LIBRARIES
             mediasoup_build_test_support
             mediasoup_build_pthread
             hiredis
+            ip2region
+            spdlog::spdlog
     )
 
     mediasoup_add_configured_executable(mediasoup_bench
@@ -291,5 +302,23 @@ if(BUILD_TESTS)
             mediasoup_lib
             mediasoup_build_pthread
             mediasoup_build_ffmpeg_extended
+    )
+
+    mediasoup_add_gtest_target(mediasoup_source_worker_failure_tests
+        SOURCES tests/test_source_worker_failure.cpp
+        LINK_LIBRARIES
+            mediasoup_build_test_support
+            mediasoup_build_pthread
+            mediasoup_build_ffmpeg_extended
+            spdlog::spdlog
+    )
+
+    mediasoup_add_gtest_target(mediasoup_source_worker_integration_tests
+        SOURCES tests/test_source_worker_integration.cpp
+        LINK_LIBRARIES
+            mediasoup_build_test_support
+            mediasoup_build_pthread
+            mediasoup_build_ffmpeg_extended
+            spdlog::spdlog
     )
 endif()
