@@ -7,7 +7,31 @@
 #include <hiredis/hiredis.h>
 #include <poll.h>
 
+#include <functional>
+
 namespace mediasoup {
+
+namespace {
+
+int MakeSubscriberReconnectJitterMs()
+{
+	uint32_t randomValue = 0;
+	if (FILE* f = fopen("/dev/urandom", "r")) {
+		if (fread(&randomValue, sizeof(randomValue), 1, f) != 1) {
+			randomValue = 0;
+		}
+		fclose(f);
+	}
+	if (randomValue == 0) {
+		const auto nowTicks = static_cast<uint64_t>(
+			std::chrono::steady_clock::now().time_since_epoch().count());
+		randomValue = static_cast<uint32_t>(
+			nowTicks ^ std::hash<std::thread::id>{}(std::this_thread::get_id()));
+	}
+	return static_cast<int>(randomValue % 2000u);
+}
+
+} // namespace
 
 void RoomRegistry::startSubscriber()
 {
@@ -40,17 +64,9 @@ void RoomRegistry::subscriberLoop()
 		int flags = fcntl(subscriber->fd, F_GETFL, 0);
 		fcntl(subscriber->fd, F_SETFL, flags | O_NONBLOCK);
 
-		MS_DEBUG(logger_, "Subscriber connected, adding random jitter before syncAll");
-		
-		// Add 0-2000ms random jitter to prevent thundering herd / sync storm
-		// when all nodes reconnect to Redis simultaneously.
-		uint32_t r = 0;
-		if (FILE* f = fopen("/dev/urandom", "r")) {
-			if (fread(&r, sizeof(r), 1, f) != 1) r = 0;
-			fclose(f);
-		}
-		int jitterMs = r % 2000;
-		std::this_thread::sleep_for(std::chrono::milliseconds(jitterMs));
+			MS_DEBUG(logger_, "Subscriber connected, adding random jitter before syncAll");
+			const int jitterMs = MakeSubscriberReconnectJitterMs();
+			std::this_thread::sleep_for(std::chrono::milliseconds(jitterMs));
 
 		syncAll();
 

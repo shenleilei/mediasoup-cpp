@@ -50,6 +50,8 @@ bool Encoder::SendFrame(const AVFrame* frame)
 
 bool Encoder::ReceivePacket(AVPacket* packet)
 {
+	if (!packet)
+		throw std::runtime_error("Encoder::ReceivePacket missing output packet");
 	const int err = avcodec_receive_packet(
 		RequireEncoderContext(context_.get(), "ReceivePacket"),
 		packet);

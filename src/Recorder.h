@@ -90,8 +90,10 @@ private:
 	AVStream* audioStream_{nullptr};
 	AVStream* videoStream_{nullptr};
 	std::mutex muxMutex_;
-	bool headerDeferred_{false};
-	std::vector<std::pair<uint32_t, std::vector<uint8_t>>> pendingAudio_;
+		bool headerDeferred_{false};
+		std::vector<std::pair<uint32_t, std::vector<uint8_t>>> pendingAudio_;
+		size_t pendingAudioDrops_{0};
+		bool pendingAudioOverflowLogged_{false};
 
 	uint32_t audioBaseTs_{0};
 	uint32_t videoBaseTs_{0};

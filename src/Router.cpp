@@ -151,7 +151,7 @@ std::shared_ptr<WebRtcTransport> Router::createWebRtcTransport(
 		transports_.erase(transportId);
 	});
 
-	channel_->emitter().on(transportId, [transport](const std::vector<std::any>& args) {
+	transport->setChannelListenerId(channel_->emitter().on(transportId, [transport](const std::vector<std::any>& args) {
 		try {
 			FBS::Notification::Event event;
 			const FBS::Notification::Notification* notif = nullptr;
@@ -164,7 +164,7 @@ std::shared_ptr<WebRtcTransport> Router::createWebRtcTransport(
 		} catch (...) {
 			spdlog::warn("WebRtcTransport notification dropped [id:{}]: unknown error", transport->id());
 		}
-	});
+	}));
 
 	MS_DEBUG(logger_, "WebRtcTransport created [id:{}]", transportId);
 	return transport;
@@ -261,10 +261,16 @@ void Router::close() {
 
 	MS_DEBUG(logger_, "close() [id:{}]", id_);
 
-	for (auto& [id, transport] : transports_)
-		transport->routerClosed();
+	std::vector<std::shared_ptr<Transport>> transportsToClose;
+	transportsToClose.reserve(transports_.size());
+	for (auto& [transportId, transport] : transports_) {
+		transportsToClose.push_back(transport);
+	}
 	transports_.clear();
 	producers_.clear();
+	for (auto& transport : transportsToClose) {
+		transport->routerClosed();
+	}
 
 	try {
 		channel_->requestBuildWait(FBS::Request::Method::WORKER_CLOSE_ROUTER,
@@ -280,18 +286,25 @@ void Router::close() {
 		MS_WARN(logger_, "Router::close() request failed [id:{}]: unknown error", id_);
 	}
 
-	emitter_.emit("@close");
+	emitter_.emitChecked("@close", {std::any(std::string("close"))});
 }
 
 void Router::workerClosed() {
 	if (closed_) return;
 	closed_ = true;
 
-	for (auto& [id, transport] : transports_)
-		transport->routerClosed();
+	std::vector<std::shared_ptr<Transport>> transportsToClose;
+	transportsToClose.reserve(transports_.size());
+	for (auto& [transportId, transport] : transports_) {
+		transportsToClose.push_back(transport);
+	}
 	transports_.clear();
 	producers_.clear();
+	for (auto& transport : transportsToClose) {
+		transport->routerClosed();
+	}
 
+	emitter_.emitChecked("@close", {std::any(std::string("workerclose"))});
 	emitter_.emit("workerclose");
 }
 

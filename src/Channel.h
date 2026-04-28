@@ -15,8 +15,14 @@
 #include <vector>
 #include <atomic>
 #include <cstdint>
+#include <cerrno>
 
 namespace mediasoup {
+
+inline bool IsRecoverableChannelWriteError(int errorCode)
+{
+	return errorCode == EINTR || errorCode == EAGAIN || errorCode == EWOULDBLOCK;
+}
 
 class Channel {
 public:
@@ -119,6 +125,10 @@ public:
 	// Read and process available data from the consumer fd (non-blocking).
 	// Returns true if the fd is still open; false if EOF (worker died).
 	bool processAvailableData();
+
+#ifdef MEDIASOUP_TEST_HOOKS
+	void setNextIdForTest(uint32_t nextId) { nextId_ = nextId; }
+#endif
 
 private:
 	void init(int producerFd, int consumerFd, int pid, bool threaded);

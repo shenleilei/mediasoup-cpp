@@ -14,6 +14,7 @@
 
 struct redisContext;
 struct redisReply;
+class RoomRegistrySyncIntegration_FullSyncPreservesExistingCacheWhenSnapshotIncomplete_Test;
 
 namespace spdlog {
 class logger;
@@ -54,6 +55,8 @@ public:
 	void stop();
 
 private:
+	friend class ::RoomRegistrySyncIntegration_FullSyncPreservesExistingCacheWhenSnapshotIncomplete_Test;
+
 	bool reconnect();
 	bool ensureConnected();
 	void handleDisconnect();
@@ -86,7 +89,11 @@ private:
 	void syncAll();
 	void evictDeadNodes();
 	redisReply* mgetArgv(const std::vector<std::string>& keys);
-	std::vector<std::string> scanKeys(const char* pattern);
+	struct ScanKeysResult {
+		std::vector<std::string> keys;
+		bool complete{ false };
+	};
+	ScanKeysResult scanKeys(const char* pattern);
 	void syncNodesSnapshot();
 	void syncAllSnapshot();
 	bool refreshCachedRemoteRoomAddressUnlocked(

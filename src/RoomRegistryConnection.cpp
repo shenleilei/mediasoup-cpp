@@ -150,7 +150,8 @@ RoomRegistry::NodeInfo RoomRegistry::parseNodeValue(const std::string& val)
 
 void RoomRegistry::registerNode()
 {
-	if (!command_.connected()) return;
+	std::lock_guard<std::mutex> lock(command_.mutex);
+	if (!ensureConnected()) return;
 	std::string key = std::string(kKeyPrefixNode) + nodeId_;
 	auto* reply = command_.command("EXPIRE %s %d", key.c_str(), nodeTTL_);
 	if (reply && reply->type == REDIS_REPLY_INTEGER && reply->integer == 0) {

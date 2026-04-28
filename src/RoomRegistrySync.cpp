@@ -9,6 +9,19 @@
 
 namespace mediasoup {
 
+namespace {
+
+constexpr size_t kRedisKeyPrefixLen = 9;
+
+bool HasExpectedArrayReply(const redisReply* reply, size_t expectedElements)
+{
+	return reply &&
+		reply->type == REDIS_REPLY_ARRAY &&
+		reply->elements == expectedElements;
+}
+
+} // namespace
+
 void RoomRegistry::syncAll()
 {
 	syncAllSnapshot();
@@ -16,24 +29,33 @@ void RoomRegistry::syncAll()
 
 void RoomRegistry::evictDeadNodes()
 {
-	if (!command_.connected()) return;
-
 	std::vector<std::string> nodeIds = cache_.otherNodeIds(nodeId_);
 	if (nodeIds.empty()) return;
 
-	for (auto& nodeId : nodeIds)
-		command_.appendCommand("EXISTS %s", (std::string(kKeyPrefixNode) + nodeId).c_str());
-
 	std::vector<std::string> deadNodeIds;
-	for (auto& nodeId : nodeIds) {
-		redisReply* reply = nullptr;
-		if (command_.getReply((void**)&reply) != REDIS_OK || !reply) {
-			handleDisconnect();
-			return;
+	{
+		std::lock_guard<std::mutex> lock(command_.mutex);
+		if (!ensureConnected()) return;
+
+		for (const auto& nodeId : nodeIds) {
+			if (command_.appendCommand(
+				"EXISTS %s",
+				(std::string(kKeyPrefixNode) + nodeId).c_str()) != REDIS_OK) {
+				handleDisconnect();
+				return;
+			}
 		}
-		if (!(reply->type == REDIS_REPLY_INTEGER && reply->integer == 1))
-			deadNodeIds.push_back(nodeId);
-		freeReplyObject(reply);
+
+		for (const auto& nodeId : nodeIds) {
+			redisReply* reply = nullptr;
+			if (command_.getReply((void**)&reply) != REDIS_OK || !reply) {
+				handleDisconnect();
+				return;
+			}
+			if (!(reply->type == REDIS_REPLY_INTEGER && reply->integer == 1))
+				deadNodeIds.push_back(nodeId);
+			freeReplyObject(reply);
+		}
 	}
 	if (deadNodeIds.empty()) return;
 
@@ -64,15 +86,19 @@ redisReply* RoomRegistry::mgetArgv(const std::vector<std::string>& keys)
 	return reply;
 }
 
-std::vector<std::string> RoomRegistry::scanKeys(const char* pattern)
+RoomRegistry::ScanKeysResult RoomRegistry::scanKeys(const char* pattern)
 {
-	std::vector<std::string> keys;
+	ScanKeysResult result;
+	result.complete = true;
 	std::string cursor = "0";
 	do {
 		redisReply* reply = nullptr;
 		{
 			std::lock_guard<std::mutex> lock(command_.mutex);
-			if (!ensureConnected()) break;
+			if (!ensureConnected()) {
+				result.complete = false;
+				break;
+			}
 			reply = command_.command(
 				"SCAN %s MATCH %s COUNT 100", cursor.c_str(), pattern);
 			if (!reply) {
@@ -81,25 +107,28 @@ std::vector<std::string> RoomRegistry::scanKeys(const char* pattern)
 		}
 		if (!reply || reply->type != REDIS_REPLY_ARRAY || reply->elements != 2) {
 			if (reply) freeReplyObject(reply);
+			result.complete = false;
 			break;
 		}
 		if (!redisreply::GetTextElement(reply, 0, cursor)) {
 			freeReplyObject(reply);
+			result.complete = false;
 			break;
 		}
 		const auto* arr = redisreply::GetArrayElement(reply, 1, REDIS_REPLY_ARRAY);
 		if (!arr) {
 			freeReplyObject(reply);
+			result.complete = false;
 			break;
 		}
 		for (size_t i = 0; i < arr->elements; ++i) {
 			std::string key;
 			if (redisreply::GetTextElement(arr, i, key))
-				keys.push_back(std::move(key));
+				result.keys.push_back(std::move(key));
 		}
 		freeReplyObject(reply);
 	} while (cursor != "0");
-	return keys;
+	return result;
 }
 
 void RoomRegistry::syncNodesSnapshot()
@@ -110,22 +139,31 @@ void RoomRegistry::syncNodesSnapshot()
 	}
 
 	std::unordered_map<std::string, NodeInfo> tmpNodes;
-	auto nodeKeys = scanKeys("sfu:node:*");
-	if (!nodeKeys.empty()) {
+	const auto nodeScan = scanKeys("sfu:node:*");
+	if (!nodeScan.complete) {
+		MS_WARN(logger_, "Skipping node snapshot merge due to incomplete Redis scan");
+		return;
+	}
+	if (!nodeScan.keys.empty()) {
 		std::vector<std::string> nodeIds;
-		for (auto& key : nodeKeys) {
-			nodeIds.push_back(key.substr(9));
+		for (const auto& key : nodeScan.keys) {
+			nodeIds.push_back(key.substr(kRedisKeyPrefixLen));
 		}
-		auto* reply = mgetArgv(nodeKeys);
-		if (reply && reply->type == REDIS_REPLY_ARRAY) {
+		std::unique_ptr<redisReply, decltype(&freeReplyObject)> reply(
+			mgetArgv(nodeScan.keys),
+			&freeReplyObject);
+		if (!HasExpectedArrayReply(reply.get(), nodeIds.size())) {
+			MS_WARN(logger_, "Skipping node snapshot merge due to incomplete Redis MGET reply");
+			return;
+		}
+		if (reply) {
 			for (size_t i = 0; i < reply->elements && i < nodeIds.size(); ++i) {
 				std::string value;
-				if (redisreply::GetTextElement(reply, i, value)) {
+				if (redisreply::GetTextElement(reply.get(), i, value)) {
 					tmpNodes[nodeIds[i]] = parseNodeValue(value);
 				}
 			}
 		}
-		if (reply) freeReplyObject(reply);
 	}
 	cache_.mergeNodes(tmpNodes);
 }
@@ -138,43 +176,61 @@ void RoomRegistry::syncAllSnapshot()
 	}
 
 	std::unordered_map<std::string, NodeInfo> tmpNodes;
-	auto nodeKeys = scanKeys("sfu:node:*");
-	if (!nodeKeys.empty()) {
+	const auto nodeScan = scanKeys("sfu:node:*");
+	if (!nodeScan.complete) {
+		MS_WARN(logger_, "Skipping full snapshot publish due to incomplete node scan");
+		return;
+	}
+	if (!nodeScan.keys.empty()) {
 		std::vector<std::string> nodeIds;
-		for (auto& key : nodeKeys) {
-			nodeIds.push_back(key.substr(9));
+		for (const auto& key : nodeScan.keys) {
+			nodeIds.push_back(key.substr(kRedisKeyPrefixLen));
 		}
-		auto* reply = mgetArgv(nodeKeys);
-		if (reply && reply->type == REDIS_REPLY_ARRAY) {
+		std::unique_ptr<redisReply, decltype(&freeReplyObject)> reply(
+			mgetArgv(nodeScan.keys),
+			&freeReplyObject);
+		if (!HasExpectedArrayReply(reply.get(), nodeIds.size())) {
+			MS_WARN(logger_, "Skipping full snapshot publish due to incomplete node MGET reply");
+			return;
+		}
+		if (reply) {
 			for (size_t i = 0; i < reply->elements && i < nodeIds.size(); ++i) {
 				std::string value;
-				if (redisreply::GetTextElement(reply, i, value)) {
+				if (redisreply::GetTextElement(reply.get(), i, value)) {
 					tmpNodes[nodeIds[i]] = parseNodeValue(value);
 				}
 			}
 		}
-		if (reply) freeReplyObject(reply);
 	}
 
 	std::unordered_map<std::string, std::string> tmpRooms;
-	auto roomKeys = scanKeys("sfu:room:*");
-	if (!roomKeys.empty()) {
+	const auto roomScan = scanKeys("sfu:room:*");
+	if (!roomScan.complete) {
+		MS_WARN(logger_, "Skipping full snapshot publish due to incomplete room scan");
+		return;
+	}
+	if (!roomScan.keys.empty()) {
 		std::vector<std::string> roomIds;
-		for (auto& key : roomKeys) {
-			roomIds.push_back(key.substr(9));
+		for (const auto& key : roomScan.keys) {
+			roomIds.push_back(key.substr(kRedisKeyPrefixLen));
 		}
-		auto* reply = mgetArgv(roomKeys);
-		if (reply && reply->type == REDIS_REPLY_ARRAY) {
+		std::unique_ptr<redisReply, decltype(&freeReplyObject)> reply(
+			mgetArgv(roomScan.keys),
+			&freeReplyObject);
+		if (!HasExpectedArrayReply(reply.get(), roomIds.size())) {
+			MS_WARN(logger_, "Skipping full snapshot publish due to incomplete room MGET reply");
+			return;
+		}
+		if (reply) {
 			for (size_t i = 0; i < reply->elements && i < roomIds.size(); ++i) {
 				std::string ownerNodeId;
-				if (redisreply::GetTextElement(reply, i, ownerNodeId)) {
+				if (redisreply::GetTextElement(reply.get(), i, ownerNodeId)) {
 					auto nit = tmpNodes.find(ownerNodeId);
 					if (nit != tmpNodes.end())
 						tmpRooms[roomIds[i]] = nit->second.address;
 				}
 			}
 		}
-		if (reply) freeReplyObject(reply);
 	}
 
 	size_t syncedNodeCount = tmpNodes.size();

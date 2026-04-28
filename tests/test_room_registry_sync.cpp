@@ -3,10 +3,15 @@
 #include "RoomRegistry.h"
 #include "TestRedisServer.h"
 
+#include <arpa/inet.h>
 #include <hiredis/hiredis.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 #include <atomic>
 #include <chrono>
+#include <cerrno>
 #include <future>
 #include <string>
 #include <thread>
@@ -50,6 +55,99 @@ bool seedRemoteNodeKeys(int redisPort, size_t nodeCount)
 	redisFree(ctx);
 	return true;
 }
+
+class DisconnectingRedisServer {
+public:
+	DisconnectingRedisServer() = default;
+
+	~DisconnectingRedisServer()
+	{
+		stop();
+	}
+
+	DisconnectingRedisServer(const DisconnectingRedisServer&) = delete;
+	DisconnectingRedisServer& operator=(const DisconnectingRedisServer&) = delete;
+
+	bool start()
+	{
+		listenFd_ = ::socket(AF_INET, SOCK_STREAM, 0);
+		if (listenFd_ < 0) {
+			return false;
+		}
+
+		int reuse = 1;
+		::setsockopt(listenFd_, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+
+		sockaddr_in addr{};
+		addr.sin_family = AF_INET;
+		addr.sin_port = 0;
+		addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+		if (::bind(listenFd_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
+			::close(listenFd_);
+			listenFd_ = -1;
+			return false;
+		}
+		if (::listen(listenFd_, 4) != 0) {
+			::close(listenFd_);
+			listenFd_ = -1;
+			return false;
+		}
+
+		socklen_t addrLen = sizeof(addr);
+		if (::getsockname(listenFd_, reinterpret_cast<sockaddr*>(&addr), &addrLen) != 0) {
+			::close(listenFd_);
+			listenFd_ = -1;
+			return false;
+		}
+		port_ = ntohs(addr.sin_port);
+		thread_ = std::thread([this] { run(); });
+		return true;
+	}
+
+	void stop()
+	{
+		stop_.store(true, std::memory_order_relaxed);
+		if (listenFd_ >= 0) {
+			::shutdown(listenFd_, SHUT_RDWR);
+			::close(listenFd_);
+			listenFd_ = -1;
+		}
+		if (thread_.joinable()) {
+			thread_.join();
+		}
+	}
+
+	int port() const
+	{
+		return port_;
+	}
+
+private:
+	void run()
+	{
+		while (!stop_.load(std::memory_order_relaxed)) {
+			int clientFd = ::accept(listenFd_, nullptr, nullptr);
+			if (clientFd < 0) {
+				if (stop_.load(std::memory_order_relaxed) || errno == EBADF || errno == EINVAL) {
+					return;
+				}
+				if (errno == EINTR) {
+					continue;
+				}
+				return;
+			}
+
+			uint8_t buffer[256];
+			(void)::read(clientFd, buffer, sizeof(buffer));
+			::close(clientFd);
+		}
+	}
+
+	std::atomic<bool> stop_{false};
+	int listenFd_{-1};
+	int port_{0};
+	std::thread thread_;
+};
 
 } // namespace
 
@@ -96,6 +194,35 @@ TEST(RoomRegistrySyncIntegration, ConcurrentUpdateLoadDoesNotWaitForWholeResolve
 	EXPECT_GE(totalResolveMs, 0);
 	EXPECT_LT(updateElapsedMs, totalResolveMs)
 		<< "updateLoad should complete before the whole sync-triggered resolve refresh";
+
+	registry.stop();
+}
+
+TEST(RoomRegistrySyncIntegration, FullSyncPreservesExistingCacheWhenSnapshotIncomplete)
+{
+	DisconnectingRedisServer fakeRedis;
+	ASSERT_TRUE(fakeRedis.start());
+
+	mediasoup::RoomRegistry registry(
+		"127.0.0.1",
+		fakeRedis.port(),
+		"self-node",
+		"ws://127.0.0.1:15000");
+
+	mediasoup::RoomRegistry::NodeInfo staleNode;
+	staleNode.address = "ws://127.0.0.1:19999";
+	staleNode.rooms = 1;
+	staleNode.maxRooms = 16;
+	registry.cache_.nodes["stale-node"] = staleNode;
+	registry.cache_.rooms["stale-room"] = staleNode.address;
+
+	registry.syncAllSnapshot();
+
+	const auto staleRoomAddress = registry.cache_.roomAddress("stale-room");
+	ASSERT_TRUE(staleRoomAddress.has_value());
+	EXPECT_EQ(*staleRoomAddress, staleNode.address);
+	EXPECT_EQ(registry.cache_.knownNodeCount(), 1u);
+	EXPECT_FALSE(registry.isReady());
 
 	registry.stop();
 }

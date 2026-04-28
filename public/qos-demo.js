@@ -47,6 +47,9 @@
     legacyStatsTimer: null,
     legacyDebugModeActive: false,
     usingFallbackStream: false,
+    desiredLocalPublish: false,
+    recoveryInFlight: null,
+    recoveryAttempt: 0,
   };
 
   const qosLib = window.mediasoupClient && window.mediasoupClient.qos;
@@ -66,6 +69,22 @@
     els.log.textContent += `${line}\n`;
     els.log.scrollTop = els.log.scrollHeight;
     console.log(message);
+  }
+
+  function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  function failPendingRequests(reason) {
+    const error = reason instanceof Error ? reason : new Error(String(reason || 'request cancelled'));
+    for (const [, pending] of state.pending) {
+      try {
+        pending.reject(error);
+      } catch {
+        // Ignore reject handler failures.
+      }
+    }
+    state.pending.clear();
   }
 
   function setStatus(text, level = 'warn') {
@@ -210,8 +229,10 @@
   }
 
   function updateControls() {
-    els.publishBtn.disabled = !state.device || hasActiveLocalPublish();
-    els.stopBtn.disabled = !state.qosSession && !state.legacyDebugModeActive;
+    const busyRecovering = Boolean(state.recoveryInFlight);
+    els.joinBtn.disabled = busyRecovering;
+    els.publishBtn.disabled = busyRecovering || !state.device || hasActiveLocalPublish();
+    els.stopBtn.disabled = busyRecovering || (!state.qosSession && !state.legacyDebugModeActive);
   }
 
   function createVideoCard({ title, subtitle, badgeText, stream, muted = false }) {
@@ -822,7 +843,7 @@
     };
   }
 
-  function resetLocalPublishState() {
+  function resetLocalPublishState({ stopTracks = true, clearIntent = true } = {}) {
     stopLegacyClientStatsReporting();
     stopLocalQosSession();
 
@@ -837,14 +858,27 @@
 
     state.publishedProducers.clear();
 
-    for (const stream of state.localCaptureStreams) {
-      stopMediaStream(stream);
+    if (stopTracks) {
+      for (const stream of state.localCaptureStreams) {
+        stopMediaStream(stream);
+      }
+      state.localCaptureStreams = [];
+      state.localVideoEntries = [];
+      state.localAudioActive = false;
+    } else {
+      state.localVideoEntries = state.localVideoEntries.map(entry => ({
+        ...entry,
+        producer: null,
+        qosBundle: null,
+        serverTrack: null,
+        serverProducer: null,
+      }));
     }
-    state.localCaptureStreams = [];
-    state.localVideoEntries = [];
-    state.localAudioActive = false;
+    if (clearIntent) {
+      state.desiredLocalPublish = false;
+    }
     state.debugInboundCounters.audio = createCounterMap();
-    renderLocalPreviewCards([]);
+    renderLocalPreviewCards(stopTracks ? [] : state.localVideoEntries);
     updateControls();
   }
 
@@ -883,6 +917,31 @@
     state.latestStatsReport = null;
     state.localDebugStats = null;
     state.debugInboundCounters = createEmptyDebugCounterState();
+  }
+
+  function collectReusableLocalCapture() {
+    const cameraEntries = state.localVideoEntries
+      .filter(entry => entry.track && entry.track.readyState === 'live')
+      .map(entry => ({
+        track: entry.track,
+        previewStream: entry.previewStream || new MediaStream([entry.track]),
+        label: entry.label || entry.track.label || 'Local camera',
+      }));
+
+    const audioTrack = state.localCaptureStreams
+      .flatMap(stream => (stream ? stream.getAudioTracks() : []))
+      .find(track => track && track.readyState === 'live') || null;
+
+    if (cameraEntries.length === 0) {
+      return null;
+    }
+
+    return {
+      audioTrack,
+      cameraEntries,
+      captureStreams: state.localCaptureStreams.slice(),
+      reused: true,
+    };
   }
 
   function supportsDownlinkQos() {
@@ -1085,9 +1144,15 @@
             return;
           }
           state.ws = null;
+          failPendingRequests('websocket closed');
           stopDownlinkReporting();
-          setStatus('Disconnected', 'err');
-          log('WebSocket closed');
+          if (state.recoveryInFlight) {
+            setStatus('Recovering after worker restart…', 'warn');
+            log('WebSocket closed during recovery');
+          } else {
+            setStatus('Disconnected', 'err');
+            log('WebSocket closed');
+          }
         };
         resolve();
       };
@@ -1180,6 +1245,11 @@
 
     if (message.method === 'peerLeft') {
       log(`Peer left: ${message.data.peerId}`);
+      return;
+    }
+
+    if (message.method === 'serverRestart') {
+      void recoverAfterServerRestart(message.data || {});
       return;
     }
 
@@ -1707,6 +1777,195 @@
     updateControls();
   }
 
+  async function establishJoinedSession(roomId, peerId) {
+    state.roomId = roomId;
+    state.peerId = peerId;
+    updateMeta();
+
+    setStatus(state.recoveryInFlight ? 'Recovering session…' : 'Connecting...', 'warn');
+    log(`Resolving room ${roomId}`);
+
+    const wsUrl = await resolveWsUrl(roomId);
+    await connectWs(wsUrl);
+    setStatus('Connected', 'ok');
+    log(`Connected to ${wsUrl}`);
+
+    const joinResponse = await wsRequest('join', {
+      roomId,
+      peerId,
+    });
+
+    state.latestQosPolicy = joinResponse.qosPolicy || null;
+    if (useFullQos) {
+      const demoPolicy = buildDemoQosPolicy(joinResponse.qosPolicy);
+      try {
+        await wsRequest('setQosPolicy', {
+          peerId,
+          policy: demoPolicy,
+        });
+        state.latestQosPolicy = demoPolicy;
+        log('Applied demo QoS policy: keep video visible, disable upstream video pause');
+      } catch (error) {
+        state.latestQosPolicy = demoPolicy;
+        log(`Demo QoS policy update failed (${error.message}), enforcing no-pause policy locally`);
+      }
+    }
+
+    state.device = new window.mediasoupClient.Device();
+    await state.device.load({
+      routerRtpCapabilities: joinResponse.routerRtpCapabilities,
+    });
+
+    const recvData = await wsRequest('createWebRtcTransport', {
+      producing: false,
+      consuming: true,
+      rtpCapabilities: state.device.rtpCapabilities,
+    });
+
+    state.recvTransport = state.device.createRecvTransport(recvData);
+    state.recvTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
+      try {
+        await wsRequest('connectWebRtcTransport', {
+          transportId: state.recvTransport.id,
+          dtlsParameters,
+        });
+        callback();
+      } catch (error) {
+        errback(error);
+      }
+    });
+
+    ensureDownlinkReporting();
+
+    const precreatedConsumers = recvData.consumers || [];
+    for (const consumerData of precreatedConsumers) {
+      await handleNewConsumer(consumerData);
+    }
+
+    if (state.pendingConsumers.length > 0) {
+      const queued = state.pendingConsumers.slice();
+      state.pendingConsumers = [];
+      for (const consumerData of queued) {
+        await handleNewConsumer(consumerData);
+      }
+    }
+
+    const precreatedProducerIds = new Set(precreatedConsumers.map(item => item.producerId));
+    for (const producerInfo of joinResponse.existingProducers || []) {
+      if (!precreatedProducerIds.has(producerInfo.producerId)) {
+        await consumeProducer(producerInfo.producerId, producerInfo.kind);
+      }
+    }
+
+    setStatus(`Joined room ${roomId}`, 'ok');
+    log(`Joined room ${roomId} as ${peerId}`);
+    startDebugStatsTimer();
+    renderQosPanel();
+    updateControls();
+  }
+
+  function mergePublishedVideoEntries(cameraEntries, videoProducers) {
+    const previousEntriesByTrackId = new Map(
+      state.localVideoEntries
+        .filter(entry => entry.track && entry.track.id)
+        .map(entry => [entry.track.id, entry])
+    );
+
+    return cameraEntries.map((entry, index) => {
+      const previous = entry.track?.id ? previousEntriesByTrackId.get(entry.track.id) : null;
+      return {
+        ...(previous || {}),
+        ...entry,
+        producer: videoProducers[index] || null,
+        qosBundle: null,
+        serverTrack: null,
+        serverProducer: null,
+        card: previous?.card || null,
+        titleEl: previous?.titleEl || null,
+        subtitleEl: previous?.subtitleEl || null,
+        badgeEl: previous?.badgeEl || null,
+        clientSummaryEl: previous?.clientSummaryEl || null,
+        serverSummaryEl: previous?.serverSummaryEl || null,
+        metricsGridEl: previous?.metricsGridEl || null,
+        errorSummaryEl: previous?.errorSummaryEl || null,
+      };
+    });
+  }
+
+  async function publishCapturedMedia({ audioTrack, cameraEntries, captureStreams }) {
+    if (!state.device) {
+      throw new Error('device is not ready');
+    }
+    if (!cameraEntries || cameraEntries.length === 0) {
+      throw new Error('no camera tracks available');
+    }
+
+    state.localCaptureStreams = captureStreams;
+    renderLocalPreviewCards(cameraEntries, Boolean(audioTrack));
+
+    const sendData = await wsRequest('createWebRtcTransport', {
+      producing: true,
+      consuming: false,
+    });
+
+    state.sendTransport = state.device.createSendTransport(sendData);
+    state.sendTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
+      try {
+        await wsRequest('connectWebRtcTransport', {
+          transportId: state.sendTransport.id,
+          dtlsParameters,
+        });
+        callback();
+      } catch (error) {
+        errback(error);
+      }
+    });
+    state.sendTransport.on('produce', async ({ kind, rtpParameters }, callback, errback) => {
+      try {
+        const response = await wsRequest('produce', {
+          transportId: state.sendTransport.id,
+          kind,
+          rtpParameters,
+        });
+        callback({ id: response.id });
+      } catch (error) {
+        errback(error);
+      }
+    });
+
+    if (audioTrack) {
+      const audioProducer = await state.sendTransport.produce({ track: audioTrack });
+      state.publishedProducers.set(audioProducer.id, audioProducer);
+      log(`Producing audio [${audioProducer.id}]`);
+    }
+
+    const videoProducers = [];
+    const preferredVideoCodec = selectPreferredVideoCodec();
+    if (preferredVideoCodec) {
+      log(`Publishing video with codec ${preferredVideoCodec.mimeType}`);
+    }
+    for (const [index, entry] of cameraEntries.entries()) {
+      const producer = await state.sendTransport.produce({
+        track: entry.track,
+        codec: preferredVideoCodec || undefined,
+      });
+      state.publishedProducers.set(producer.id, producer);
+      videoProducers.push(producer);
+      log(`Producing video #${index + 1} (${entry.label}) [${producer.id}]`);
+    }
+
+    state.desiredLocalPublish = true;
+    state.localAudioActive = Boolean(audioTrack);
+    state.localVideoEntries = mergePublishedVideoEntries(cameraEntries, videoProducers);
+    setupLocalQosSession(videoProducers);
+    syncLocalVideoEntries();
+    renderLocalPreviewCards();
+    setStatus(`Publishing ${cameraEntries.length} camera(s) in ${state.roomId}`, 'ok');
+    startDebugStatsTimer();
+    renderQosPanel();
+    updateControls();
+  }
+
   function createLocalQosSession(videoProducers) {
     if (!qosLib || videoProducers.length === 0) {
       return null;
@@ -1798,6 +2057,117 @@
     updateControls();
   }
 
+  async function buildFreshCaptureSelection() {
+    let audioTrack = null;
+    let cameraEntries = [];
+    let captureStreams = [];
+
+    try {
+      const capture = await captureAllLocalMedia();
+      audioTrack = capture.audioTrack;
+      cameraEntries = capture.cameraEntries;
+      captureStreams = capture.captureStreams;
+      state.usingFallbackStream = false;
+      log(`Using ${cameraEntries.length} camera(s)${audioTrack ? ' + microphone' : ''}`);
+    } catch (error) {
+      state.usingFallbackStream = true;
+      log(`getUserMedia failed (${error.message}), using fallback canvas stream`);
+      const fallbackStream = buildFallbackStream();
+      audioTrack = fallbackStream.getAudioTracks()[0] || null;
+      const fallbackVideoTrack = fallbackStream.getVideoTracks()[0] || null;
+      captureStreams = [fallbackStream];
+      cameraEntries = fallbackVideoTrack
+        ? [{
+            track: fallbackVideoTrack,
+            previewStream: new MediaStream([fallbackVideoTrack]),
+            label: 'Fallback canvas stream',
+          }]
+        : [];
+    }
+
+    return { audioTrack, cameraEntries, captureStreams };
+  }
+
+  async function recoverAfterServerRestart(data = {}) {
+    if (state.recoveryInFlight) {
+      return state.recoveryInFlight;
+    }
+    if (!state.roomId || !state.peerId) {
+      return Promise.resolve();
+    }
+
+    const roomId = state.roomId;
+    const peerId = state.peerId;
+    const shouldRepublish = state.desiredLocalPublish;
+    const recoveryReason = data.reason || 'worker crashed';
+
+    state.recoveryInFlight = (async () => {
+      log(`serverRestart received for room ${roomId}: ${recoveryReason}`);
+      setStatus(`Worker restarted, recovering ${roomId} as ${peerId}…`, 'warn');
+      stopDebugStatsTimer();
+      failPendingRequests(`serverRestart: ${recoveryReason}`);
+      resetRemoteMediaState();
+      resetLocalPublishState({ stopTracks: false, clearIntent: false });
+      resetQosState();
+      renderQosPanel();
+
+      if (state.ws) {
+        try {
+          state.ws.close();
+        } catch {
+          // Ignore close errors during recovery.
+        }
+      }
+      state.ws = null;
+
+      const maxAttempts = 20;
+      let recovered = false;
+      for (let attempt = 1; attempt <= maxAttempts; ++attempt) {
+        state.recoveryAttempt = attempt;
+        setStatus(`Recovering ${roomId} as ${peerId} (${attempt}/${maxAttempts})`, 'warn');
+        try {
+          log(`Recovery attempt ${attempt}/${maxAttempts}: rejoining ${roomId} as ${peerId}`);
+          await establishJoinedSession(roomId, peerId);
+          recovered = true;
+          break;
+        } catch (error) {
+          log(`Recovery attempt ${attempt}/${maxAttempts} failed: ${error.message}`);
+          setStatus(`Recovery attempt ${attempt}/${maxAttempts} failed`, 'warn');
+          await sleep(Math.min(1000 * attempt, 4000));
+        }
+      }
+
+      if (!recovered) {
+        throw new Error(`failed to recover room ${roomId} after ${maxAttempts} attempts`);
+      }
+
+      if (shouldRepublish) {
+        const reusable = collectReusableLocalCapture();
+        if (reusable) {
+          log(`Reusing existing local capture while recovering ${roomId} as ${peerId}`);
+        } else {
+          log(`No reusable capture remained; reacquiring local media for ${roomId} as ${peerId}`);
+        }
+        const capture = reusable || await buildFreshCaptureSelection();
+        await publishCapturedMedia(capture);
+      }
+
+      state.recoveryAttempt = 0;
+      setStatus(`Recovered ${roomId} as ${peerId}`, 'ok');
+      log(`Recovered room ${roomId} as original peer ${peerId}`);
+    })();
+
+    try {
+      await state.recoveryInFlight;
+    } catch (error) {
+      setStatus(`Recovery failed for ${roomId} as ${peerId}`, 'err');
+      log(`Recovery failed for ${roomId} as ${peerId}: ${error.message}`);
+    } finally {
+      state.recoveryInFlight = null;
+      updateControls();
+    }
+  }
+
   async function joinRoom() {
     const roomId = els.roomInput.value.trim() || 'test-room';
     const peerId = `peer-${Math.random().toString(36).slice(2, 8)}`;
@@ -1805,92 +2175,12 @@
     state.device = null;
     resetLocalPublishState();
     resetRemoteMediaState();
-    state.roomId = roomId;
-    state.peerId = peerId;
-    updateMeta();
     resetQosState();
     renderQosPanel();
 
-    setStatus('Connecting...', 'warn');
-    log(`Resolving room ${roomId}`);
-
     try {
-      const wsUrl = await resolveWsUrl(roomId);
-      await connectWs(wsUrl);
-      setStatus('Connected', 'ok');
-      log(`Connected to ${wsUrl}`);
-
-      const joinResponse = await wsRequest('join', {
-        roomId,
-        peerId,
-      });
-
-      state.latestQosPolicy = joinResponse.qosPolicy || null;
-      if (useFullQos) {
-        const demoPolicy = buildDemoQosPolicy(joinResponse.qosPolicy);
-        try {
-          await wsRequest('setQosPolicy', {
-            peerId,
-            policy: demoPolicy,
-          });
-          state.latestQosPolicy = demoPolicy;
-          log('Applied demo QoS policy: keep video visible, disable upstream video pause');
-        } catch (error) {
-          state.latestQosPolicy = demoPolicy;
-          log(`Demo QoS policy update failed (${error.message}), enforcing no-pause policy locally`);
-        }
-      }
-      state.device = new window.mediasoupClient.Device();
-      await state.device.load({
-        routerRtpCapabilities: joinResponse.routerRtpCapabilities,
-      });
-
-      const recvData = await wsRequest('createWebRtcTransport', {
-        producing: false,
-        consuming: true,
-        rtpCapabilities: state.device.rtpCapabilities,
-      });
-
-      state.recvTransport = state.device.createRecvTransport(recvData);
-      state.recvTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
-        try {
-          await wsRequest('connectWebRtcTransport', {
-            transportId: state.recvTransport.id,
-            dtlsParameters,
-          });
-          callback();
-        } catch (error) {
-          errback(error);
-        }
-      });
-
-      ensureDownlinkReporting();
-
-      const precreatedConsumers = recvData.consumers || [];
-      for (const consumerData of precreatedConsumers) {
-        await handleNewConsumer(consumerData);
-      }
-
-      if (state.pendingConsumers.length > 0) {
-        const queued = state.pendingConsumers.slice();
-        state.pendingConsumers = [];
-        for (const consumerData of queued) {
-          await handleNewConsumer(consumerData);
-        }
-      }
-
-      const precreatedProducerIds = new Set(precreatedConsumers.map(item => item.producerId));
-      for (const producerInfo of joinResponse.existingProducers || []) {
-        if (!precreatedProducerIds.has(producerInfo.producerId)) {
-          await consumeProducer(producerInfo.producerId, producerInfo.kind);
-        }
-      }
-
-      setStatus(`Joined room ${roomId}`, 'ok');
-      log(`Joined room ${roomId} as ${peerId}`);
-      startDebugStatsTimer();
-      renderQosPanel();
-      updateControls();
+      state.desiredLocalPublish = false;
+      await establishJoinedSession(roomId, peerId);
     } catch (error) {
       setStatus('Join failed', 'err');
       log(`Join failed: ${error.message}`);
@@ -1899,119 +2189,13 @@
   }
 
   async function publishMedia() {
-    if (!state.device || hasActiveLocalPublish()) {
+    if (!state.device || state.sendTransport || state.publishedProducers.size > 0) {
       return;
     }
 
     try {
-      let audioTrack = null;
-      let cameraEntries = [];
-      let captureStreams = [];
-
-      try {
-        const capture = await captureAllLocalMedia();
-        audioTrack = capture.audioTrack;
-        cameraEntries = capture.cameraEntries;
-        captureStreams = capture.captureStreams;
-        state.usingFallbackStream = false;
-        log(`Using ${cameraEntries.length} camera(s)${audioTrack ? ' + microphone' : ''}`);
-      } catch (error) {
-        state.usingFallbackStream = true;
-        log(`getUserMedia failed (${error.message}), using fallback canvas stream`);
-        const fallbackStream = buildFallbackStream();
-        audioTrack = fallbackStream.getAudioTracks()[0] || null;
-        const fallbackVideoTrack = fallbackStream.getVideoTracks()[0] || null;
-        captureStreams = [fallbackStream];
-        cameraEntries = fallbackVideoTrack
-          ? [{
-              track: fallbackVideoTrack,
-              previewStream: new MediaStream([fallbackVideoTrack]),
-              label: 'Fallback canvas stream',
-            }]
-          : [];
-      }
-
-      if (cameraEntries.length === 0) {
-        throw new Error('no camera tracks available');
-      }
-
-      state.localCaptureStreams = captureStreams;
-      renderLocalPreviewCards(cameraEntries, Boolean(audioTrack));
-
-      const sendData = await wsRequest('createWebRtcTransport', {
-        producing: true,
-        consuming: false,
-      });
-
-      state.sendTransport = state.device.createSendTransport(sendData);
-      state.sendTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
-        try {
-          await wsRequest('connectWebRtcTransport', {
-            transportId: state.sendTransport.id,
-            dtlsParameters,
-          });
-          callback();
-        } catch (error) {
-          errback(error);
-        }
-      });
-      state.sendTransport.on('produce', async ({ kind, rtpParameters }, callback, errback) => {
-        try {
-          const response = await wsRequest('produce', {
-            transportId: state.sendTransport.id,
-            kind,
-            rtpParameters,
-          });
-          callback({ id: response.id });
-        } catch (error) {
-          errback(error);
-        }
-      });
-
-      if (audioTrack) {
-        const audioProducer = await state.sendTransport.produce({ track: audioTrack });
-        state.publishedProducers.set(audioProducer.id, audioProducer);
-        log(`Producing audio [${audioProducer.id}]`);
-      }
-
-      const videoProducers = [];
-      const preferredVideoCodec = selectPreferredVideoCodec();
-      if (preferredVideoCodec) {
-        log(`Publishing video with codec ${preferredVideoCodec.mimeType}`);
-      }
-      for (const [index, entry] of cameraEntries.entries()) {
-        const producer = await state.sendTransport.produce({
-          track: entry.track,
-          codec: preferredVideoCodec || undefined,
-        });
-        state.publishedProducers.set(producer.id, producer);
-        videoProducers.push(producer);
-        log(`Producing video #${index + 1} (${entry.label}) [${producer.id}]`);
-      }
-
-      state.localAudioActive = Boolean(audioTrack);
-      state.localVideoEntries = cameraEntries.map((entry, index) => ({
-        ...entry,
-        producer: videoProducers[index] || null,
-        qosBundle: null,
-        serverTrack: null,
-        serverProducer: null,
-        card: null,
-        titleEl: null,
-        subtitleEl: null,
-        badgeEl: null,
-        clientSummaryEl: null,
-        serverSummaryEl: null,
-        metricsGridEl: null,
-        errorSummaryEl: null,
-      }));
-      setupLocalQosSession(videoProducers);
-      syncLocalVideoEntries();
-      renderLocalPreviewCards();
-      setStatus(`Publishing ${cameraEntries.length} camera(s) in ${state.roomId}`, 'ok');
-      startDebugStatsTimer();
-      renderQosPanel();
-      updateControls();
+      const capture = await buildFreshCaptureSelection();
+      await publishCapturedMedia(capture);
     } catch (error) {
       resetLocalPublishState();
       setStatus('Publish failed', 'err');

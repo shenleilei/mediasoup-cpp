@@ -1623,6 +1623,25 @@ TEST(ClientQosControllerTest, ServerTtlExpiredClearsAllActiveOverrides) {
 	EXPECT_FALSE(controller.getActiveOverride(monotonicNowMs).has_value());
 }
 
+TEST(ClientQosControllerTest, HousekeepExpiresOverridesWithoutNewSamples) {
+	int64_t monotonicNowMs = 1000;
+	PublisherQosController::Options options;
+	options.monotonicNowMs = [&]() { return monotonicNowMs; };
+	PublisherQosController controller(options);
+
+	QosOverride temporary;
+	temporary.scope = OverrideScope::Peer;
+	temporary.reason = "server_pause";
+	temporary.ttlMs = 500;
+	temporary.pauseUpstream = true;
+	controller.handleOverride(temporary);
+
+	ASSERT_TRUE(controller.getActiveOverride(monotonicNowMs).has_value());
+	monotonicNowMs += 1000;
+	controller.housekeep();
+	EXPECT_FALSE(controller.getActiveOverride(monotonicNowMs).has_value());
+}
+
 TEST(ClientQosControllerTest, ManualClearRemovesManualOverridesWithoutClearingServerOverrides) {
 	int64_t monotonicNowMs = 1000;
 	PublisherQosController::Options options;

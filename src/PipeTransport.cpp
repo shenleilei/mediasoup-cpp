@@ -1,4 +1,5 @@
 #include "PipeTransport.h"
+#include "TransportConnectResponseUtils.h"
 #include "pipeTransport_generated.h"
 #include "request_generated.h"
 #include "srtpParameters_generated.h"
@@ -7,7 +8,7 @@ namespace mediasoup {
 
 json PipeTransport::connect(const std::string& ip, uint16_t port, const json& srtpParameters) {
 	if (closed_) throw std::runtime_error("Transport closed");
-	channel_->requestBuildWait(
+	auto owned = channel_->requestBuildWait(
 		FBS::Request::Method::PIPETRANSPORT_CONNECT,
 		FBS::Request::Body::PipeTransport_ConnectRequest,
 		[ip, port, srtpParameters](flatbuffers::FlatBufferBuilder& builder) {
@@ -31,6 +32,7 @@ json PipeTransport::connect(const std::string& ip, uint16_t port, const json& sr
 				srtpOff);
 			return reqOff.Union();
 		}, id_);
+	transportconnect::ApplyValidatedPipeConnectResponse(owned, &tuple_);
 
 	return {{"connected", true}};
 }

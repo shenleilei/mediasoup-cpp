@@ -797,6 +797,17 @@ TEST(RtcpHandler, SenderReportsUpdateAttemptTimeBeforeSuccessTime) {
 	EXPECT_TRUE(stream->srNtpToSendTime.empty());
 }
 
+TEST(RtcpHandler, NtpClockDoesNotMoveBackwardAcrossCalls) {
+	const auto first = getNtpNow();
+	usleep(1000);
+	const auto second = getNtpNow();
+	const auto firstValue =
+		(static_cast<uint64_t>(first.sec) << 32) | first.frac;
+	const auto secondValue =
+		(static_cast<uint64_t>(second.sec) << 32) | second.frac;
+	EXPECT_GE(secondValue, firstValue);
+}
+
 TEST(UdpSendHelpers, EnobufsIsWouldBlock) {
 	EXPECT_TRUE(mediasoup::plainclient::IsWouldBlockErrno(ENOBUFS));
 }
@@ -1810,17 +1821,19 @@ TEST(SenderTransportControllerTest, BitrateAllocationPreservesAudioPriorityWitho
 	EXPECT_EQ(result.metrics.audioDeadlineDrops, 0u);
 }
 
-TEST(SenderTransportControllerTest, BitrateAllocationPrefersRetransmissionOverFreshVideoAcrossBitrates) {
+TEST(SenderTransportControllerTest, BitrateAllocationPrioritizesRetransmissionWithoutStarvingFreshVideoAcrossBitrates) {
 	const size_t retransmissionIndex =
 		mediasoup::plainclient::PacketClassIndex(PacketClass::VideoRetransmission);
 	const size_t videoIndex = mediasoup::plainclient::PacketClassIndex(PacketClass::VideoMedia);
 
 	for (const uint32_t bitrateBps : {64000u, 128000u, 256000u, 512000u, 1000000u}) {
 		const auto result = runBitrateAllocationScenario(bitrateBps, 500, 3);
-		EXPECT_EQ(result.packetsByClass[videoIndex], 0u)
-			<< "fresh video should remain blocked while retransmission backlog stays non-empty at bitrate "
+		EXPECT_GT(result.packetsByClass[videoIndex], 0u)
+			<< "fresh video should make bounded progress while retransmission backlog stays non-empty at bitrate "
 			<< bitrateBps;
-		EXPECT_GT(result.packetsByClass[retransmissionIndex], 0u);
+		EXPECT_GE(result.packetsByClass[retransmissionIndex], result.packetsByClass[videoIndex])
+			<< "retransmission should still retain at least equal service priority to fresh video at bitrate "
+			<< bitrateBps;
 	}
 }
 

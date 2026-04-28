@@ -444,7 +444,7 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 				}
 
 					const int workerThreadId = wt ? wt->id() : -1;
-					loop->defer([&server, workerThreadId, wsMap, ws, alive, respStr = std::move(respStr),
+					loop->defer([&server, id, workerThreadId, wsMap, ws, alive, respStr = std::move(respStr),
 						joinOk, joinFailed, newSessionId,
 						jRoomId = std::move(jRoomId), jPeerId = std::move(jPeerId),
 						joinQosPolicy = std::move(joinQosPolicy)]
@@ -463,51 +463,62 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 							if (!deferredWt) {
 								return;
 							}
-							deferredWt->post([deferredWt, jRoomId, jPeerId, newSessionId] {
-								try {
-									auto* rs = deferredWt->roomService();
-									if (!rs) return;
-									rs->leaveIfSessionMatches(jRoomId, jPeerId, newSessionId);
-								} catch (const std::exception& e) {
-								spdlog::error("[{} {}] rollback leave failed: {}", jRoomId, jPeerId, e.what());
-							} catch (...) {
-								spdlog::error("[{} {}] rollback leave failed: unknown error", jRoomId, jPeerId);
+								deferredWt->post([deferredWt, jRoomId, jPeerId, newSessionId] {
+									try {
+										auto* rs = deferredWt->roomService();
+										if (!rs) return;
+										rs->leaveIfSessionMatches(jRoomId, jPeerId, newSessionId);
+									} catch (const std::exception& e) {
+										spdlog::error("[{} {}] rollback leave failed: {}", jRoomId, jPeerId, e.what());
+									} catch (...) {
+										spdlog::error("[{} {}] rollback leave failed: unknown error", jRoomId, jPeerId);
+									}
+									deferredWt->updateRoomCount();
+								});
+								return;
 							}
-								deferredWt->updateRoomCount();
-							});
+
+						if (!socketAlive) {
 							return;
 						}
 
-					if (!socketAlive) {
-						return;
-					}
-
-					auto* socketData = ws->getUserData();
-					if (joinFailed) {
-						ClearPendingSocketJoinIfMatches(socketData, newSessionId);
-					}
+						auto* socketData = ws->getUserData();
+						if (joinFailed) {
+							ClearPendingSocketJoinIfMatches(socketData, newSessionId);
+						}
 						if (joinOk) {
-							auto oldWs = RegisterJoinedSocket(wsMap, ws, jRoomId, jPeerId, newSessionId);
-							if (!deferredWt) {
+							if (!PrepareSocketJoinCommit(
+								socketData,
+								newSessionId,
+								deferredWt != nullptr && deferredWt->roomService() != nullptr)) {
+								server.unassignRoom(jRoomId);
+								json joinResp = {
+									{"response", true},
+									{"id", id},
+									{"ok", false},
+									{"error", "worker unavailable during join completion"}
+								};
+								ws->send(joinResp.dump(), uWS::OpCode::TEXT);
 								return;
 							}
+							auto oldWs = RegisterJoinedSocket(wsMap, ws, jRoomId, jPeerId, newSessionId);
 							server.assignRoom(jRoomId, deferredWt);
 							spdlog::info("[{} {}] joined (session:{})", jRoomId, jPeerId, newSessionId);
-						if (oldWs) {
-							spdlog::info("[{} {}] kicking old connection (new session:{})", jRoomId, jPeerId, newSessionId);
-							oldWs->end(4000, "replaced");
+							if (oldWs) {
+								spdlog::info("[{} {}] kicking old connection (new session:{})", jRoomId, jPeerId, newSessionId);
+								oldWs->end(4000, "replaced");
+							}
 						}
-					}
-					ws->send(respStr, uWS::OpCode::TEXT);
-					if (joinOk && !joinQosPolicy.empty()) {
-						json msg = {
-							{"notification", true},
-							{"method", "qosPolicy"},
-							{"data", joinQosPolicy}
-						};
-						ws->send(msg.dump(), uWS::OpCode::TEXT);
-					}
-				});
+						ws->send(respStr, uWS::OpCode::TEXT);
+						if (joinOk && !joinQosPolicy.empty()) {
+							json msg = {
+								{"notification", true},
+								{"method", "qosPolicy"},
+								{"data", joinQosPolicy}
+							};
+							ws->send(msg.dump(), uWS::OpCode::TEXT);
+						}
+					});
 			});
 			} catch (const json::exception& e) {
 				spdlog::warn("dropping malformed websocket message: {}", e.what());

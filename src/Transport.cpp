@@ -11,6 +11,8 @@
 #include "plainTransport_generated.h"
 #include "transport_generated.h"
 
+#include <exception>
+
 namespace mediasoup {
 
 static std::string getRequiredString(const json& options, const char* key)
@@ -102,7 +104,7 @@ std::shared_ptr<Producer> Transport::produce(const json& options) {
 	});
 
 	// Register for notifications
-	channel_->emitter().on(producerId, [producer](const std::vector<std::any>& args) {
+	producer->setChannelListenerId(channel_->emitter().on(producerId, [producer](const std::vector<std::any>& args) {
 		try {
 			FBS::Notification::Event event;
 			const FBS::Notification::Notification* notif = nullptr;
@@ -115,7 +117,7 @@ std::shared_ptr<Producer> Transport::produce(const json& options) {
 		} catch (...) {
 			spdlog::warn("Producer notification dropped [id:{}]: unknown error", producer->id());
 		}
-	});
+	}));
 
 	return producer;
 }
@@ -202,7 +204,7 @@ std::shared_ptr<Consumer> Transport::consume(const json& options) {
 	});
 
 	// Register for notifications
-	channel_->emitter().on(consumerId, [consumer](const std::vector<std::any>& args) {
+	consumer->setChannelListenerId(channel_->emitter().on(consumerId, [consumer](const std::vector<std::any>& args) {
 		try {
 			FBS::Notification::Event event;
 			const FBS::Notification::Notification* notif = nullptr;
@@ -215,7 +217,7 @@ std::shared_ptr<Consumer> Transport::consume(const json& options) {
 		} catch (...) {
 			spdlog::warn("Consumer notification dropped [id:{}]: unknown error", consumer->id());
 		}
-	});
+	}));
 
 	return consumer;
 }
@@ -368,12 +370,56 @@ json Transport::getStats(int timeoutMs) {
 	return result;
 }
 
+void Transport::cleanupOwnedEntities() {
+	std::vector<std::shared_ptr<Producer>> producersToClose;
+	std::vector<std::shared_ptr<Consumer>> consumersToClose;
+	producersToClose.reserve(producers_.size());
+	consumersToClose.reserve(consumers_.size());
+	for (auto& [id, producer] : producers_) {
+		producersToClose.push_back(producer);
+	}
+	for (auto& [id, consumer] : consumers_) {
+		consumersToClose.push_back(consumer);
+	}
+	producers_.clear();
+	consumers_.clear();
+
+	std::exception_ptr firstException;
+	for (auto& producer : producersToClose) {
+		try {
+			producer->transportClosed();
+		} catch (...) {
+			if (!firstException) {
+				firstException = std::current_exception();
+			}
+		}
+	}
+	for (auto& consumer : consumersToClose) {
+		try {
+			consumer->transportClosed();
+		} catch (...) {
+			if (!firstException) {
+				firstException = std::current_exception();
+			}
+		}
+	}
+	if (firstException) {
+		std::rethrow_exception(firstException);
+	}
+}
+
+void Transport::emitTerminalClose(const char* reason) {
+	emitter_.emitChecked("@close", {std::any(std::string(reason))});
+}
+
 void Transport::close() {
 	if (closed_) return;
 	closed_ = true;
 
-	// Unregister channel listener to break shared_ptr cycle
-	channel_->emitter().off(id_);
+	if (channel_ && channelListenerId_ != 0) {
+		channel_->emitter().off(channelListenerId_);
+		channelListenerId_ = 0;
+	}
 
 	try {
 		channel_->requestBuild(FBS::Request::Method::ROUTER_CLOSE_TRANSPORT,
@@ -389,25 +435,21 @@ void Transport::close() {
 		spdlog::warn("Transport::close() request failed [id:{}]: unknown error", id_);
 	}
 
-	// Close all producers and consumers
-	for (auto& [id, p] : producers_) p->transportClosed();
-	producers_.clear();
-	for (auto& [id, c] : consumers_) c->transportClosed();
-	consumers_.clear();
-
-	emitter_.emit("@close");
+	cleanupOwnedEntities();
+	emitTerminalClose("close");
 }
 
 void Transport::routerClosed() {
 	if (closed_) return;
 	closed_ = true;
 
-	channel_->emitter().off(id_);
+	if (channel_ && channelListenerId_ != 0) {
+		channel_->emitter().off(channelListenerId_);
+		channelListenerId_ = 0;
+	}
 
-	for (auto& [id, p] : producers_) p->transportClosed();
-	producers_.clear();
-	for (auto& [id, c] : consumers_) c->transportClosed();
-	consumers_.clear();
+	cleanupOwnedEntities();
+	emitTerminalClose("routerclose");
 	emitter_.emit("routerclose");
 }
 

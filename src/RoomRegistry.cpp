@@ -35,10 +35,7 @@ RoomRegistry::~RoomRegistry()
 
 void RoomRegistry::start()
 {
-	{
-		std::lock_guard<std::mutex> lock(command_.mutex);
-		registerNode();
-	}
+	registerNode();
 	syncAllSnapshot();
 	startSubscriber();
 }
@@ -57,8 +54,6 @@ void RoomRegistry::heartbeat()
 {
 	auto start = std::chrono::steady_clock::now();
 	MS_DEBUG(logger_, "heartbeat start [nodeId:{}]", nodeId_);
-	std::lock_guard<std::mutex> lock(command_.mutex);
-	if (!ensureConnected()) return;
 
 	auto stepStart = std::chrono::steady_clock::now();
 	MS_DEBUG(logger_, "heartbeat registerNode start [nodeId:{}]", nodeId_);

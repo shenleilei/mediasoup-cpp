@@ -41,3 +41,23 @@ TEST(PlainClientVp8Test, Vp8ModeDoesNotAllowCopyFallback)
 	EXPECT_TRUE(PlainClientApp::ShouldFallbackToCopyMode(PlainClientApp::VideoCodecMode::H264));
 	EXPECT_FALSE(PlainClientApp::ShouldFallbackToCopyMode(PlainClientApp::VideoCodecMode::VP8));
 }
+
+TEST(PlainClientRecoveryTest, ServerRestartRecoveryRequiresNoSignalStop)
+{
+	EXPECT_TRUE(PlainClientApp::ShouldRecoverAfterServerRestart(true, false));
+	EXPECT_FALSE(PlainClientApp::ShouldRecoverAfterServerRestart(false, false));
+	EXPECT_FALSE(PlainClientApp::ShouldRecoverAfterServerRestart(true, true));
+}
+
+TEST(PlainClientRecoveryTest, RecoveryBackoffIsBounded)
+{
+	EXPECT_EQ(PlainClientApp::RecoveryBackoffMsForAttempt(0), 1000);
+	EXPECT_EQ(PlainClientApp::RecoveryBackoffMsForAttempt(1), 1000);
+	EXPECT_EQ(PlainClientApp::RecoveryBackoffMsForAttempt(3), 3000);
+	EXPECT_EQ(PlainClientApp::RecoveryBackoffMsForAttempt(10), 5000);
+}
+
+TEST(PlainClientRecoveryTest, RecoveryAttemptLimitIsFixed)
+{
+	EXPECT_EQ(PlainClientApp::RecoveryMaxAttempts(), 20);
+}

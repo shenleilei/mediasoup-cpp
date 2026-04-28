@@ -26,6 +26,7 @@ public:
 	Channel* channel() const { return channel_; }
 	const std::string& routerId() const { return routerId_; }
 	EventEmitter& emitter() { return emitter_; }
+	void setChannelListenerId(uint64_t listenerId) { channelListenerId_ = listenerId; }
 
 	std::shared_ptr<Producer> produce(const json& options);
 	std::shared_ptr<Consumer> consume(const json& options);
@@ -39,6 +40,9 @@ public:
 	const std::unordered_map<std::string, std::shared_ptr<Consumer>>& consumers() const { return consumers_; }
 
 protected:
+	void cleanupOwnedEntities();
+	void emitTerminalClose(const char* reason);
+
 	std::string id_;
 	Channel* channel_;
 	std::string routerId_;
@@ -48,6 +52,7 @@ protected:
 	std::unordered_map<std::string, std::shared_ptr<Consumer>> consumers_;
 	uint32_t nextMid_ = 0;
 	std::shared_ptr<spdlog::logger> logger_;
-};
+	uint64_t channelListenerId_{ 0 };
+	};
 
 } // namespace mediasoup

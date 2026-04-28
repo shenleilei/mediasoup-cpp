@@ -88,9 +88,10 @@ private:
 
 	WorkerThread* findWorkerThreadById(int workerThreadId) const;
 
-	// Room → WorkerThread dispatch table (only accessed from main uWS thread, no lock needed)
-	std::unordered_map<std::string, WorkerThread*> roomDispatch_;
-	std::unordered_set<std::string> destroyedRooms_;
+		// Room → WorkerThread dispatch table and destroyed-room markers are only
+		// accessed from the main uWS thread, so no extra lock is used here.
+		std::unordered_map<std::string, WorkerThread*> roomDispatch_;
+		std::unordered_set<std::string> destroyedRooms_;
 
 	std::mutex registryTaskMutex_;
 	std::condition_variable registryTaskCv_;

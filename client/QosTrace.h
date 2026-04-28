@@ -29,7 +29,7 @@ inline std::string formatQosTraceLine(
 	int height,
 	int fps,
 	int suppressed,
-	const SenderStatsSnapshot* transportStats = nullptr)
+	const mt::SenderStatsSnapshot* transportStats = nullptr)
 {
 	char buf[2048];
 	int n = std::snprintf(buf, sizeof(buf),
