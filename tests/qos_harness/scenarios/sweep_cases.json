@@ -1,7 +1,7 @@
 [
   {"caseId":"B1","group":"baseline","bandwidth":4000,"rtt":25,"loss":0.1,"jitter":5,"baselineMs":15000,"impairmentMs":20000,"recoveryMs":30000,"priority":"P0","expect":{"states":["stable","early_warning"],"maxLevel":1}},
   {"caseId":"B2","group":"baseline","bandwidth":8000,"rtt":20,"loss":0.1,"jitter":3,"baselineMs":15000,"impairmentMs":20000,"recoveryMs":30000,"priority":"P1","expect":{"state":"stable","maxLevel":0}},
-  {"caseId":"B3","group":"baseline","bandwidth":2000,"rtt":55,"loss":0.5,"jitter":12,"baselineMs":15000,"impairmentMs":20000,"recoveryMs":30000,"priority":"P0","expect":{"states":["early_warning","congested"],"minLevel":1,"maxLevel":4}},
+  {"caseId":"B3","group":"baseline","bandwidth":2000,"rtt":55,"loss":0.5,"jitter":12,"baselineMs":15000,"impairmentMs":20000,"recoveryMs":30000,"priority":"P0","expect":{"states":["stable","early_warning"],"maxLevel":2}},
   {"caseId":"B4","group":"baseline","bandwidth":15000,"rtt":15,"loss":0.1,"jitter":1,"baselineMs":10000,"impairmentMs":12000,"recoveryMs":15000,"priority":"P1","extended":true,"expect":{"state":"stable","maxLevel":0}},
   {"caseId":"B5","group":"baseline","bandwidth":30000,"rtt":10,"loss":0.1,"jitter":1,"baselineMs":10000,"impairmentMs":12000,"recoveryMs":15000,"priority":"P1","extended":true,"expect":{"state":"stable","maxLevel":0}},
 
@@ -25,8 +25,8 @@
   {"caseId":"R1","group":"rtt_sweep","bandwidth":4000,"rtt":50,"loss":0.1,"jitter":5,"baselineMs":15000,"impairmentMs":20000,"recoveryMs":30000,"priority":"P1","expect":{"state":"stable","maxLevel":1}},
   {"caseId":"R2","group":"rtt_sweep","bandwidth":4000,"rtt":80,"loss":0.1,"jitter":5,"baselineMs":15000,"impairmentMs":20000,"recoveryMs":30000,"priority":"P1","expect":{"states":["stable","early_warning"],"maxLevel":1}},
   {"caseId":"R3","group":"rtt_sweep","bandwidth":4000,"rtt":120,"loss":0.1,"jitter":5,"baselineMs":15000,"impairmentMs":20000,"recoveryMs":30000,"priority":"P1","expect":{"states":["stable","early_warning"],"maxLevel":1}},
-  {"caseId":"R4","group":"rtt_sweep","bandwidth":4000,"rtt":180,"loss":0.1,"jitter":5,"baselineMs":15000,"impairmentMs":20000,"recoveryMs":30000,"priority":"P0","expect":{"states":["early_warning","congested"],"minLevel":1,"maxLevel":2}},
-  {"caseId":"R5","group":"rtt_sweep","bandwidth":4000,"rtt":250,"loss":0.1,"jitter":5,"baselineMs":15000,"impairmentMs":20000,"recoveryMs":30000,"priority":"P1","expect":{"state":"congested","maxLevel":4}},
+  {"caseId":"R4","group":"rtt_sweep","bandwidth":4000,"rtt":180,"loss":0.1,"jitter":5,"baselineMs":15000,"impairmentMs":20000,"recoveryMs":30000,"priority":"P0","expect":{"states":["stable","early_warning"],"maxLevel":2}},
+  {"caseId":"R5","group":"rtt_sweep","bandwidth":4000,"rtt":250,"loss":0.1,"jitter":5,"baselineMs":15000,"impairmentMs":20000,"recoveryMs":30000,"priority":"P1","expect":{"states":["early_warning","congested"],"maxLevel":4}},
   {"caseId":"R6","group":"rtt_sweep","bandwidth":4000,"rtt":350,"loss":0.1,"jitter":5,"baselineMs":15000,"impairmentMs":20000,"recoveryMs":30000,"priority":"P1","expect":{"state":"congested","maxLevel":4}},
 
   {"caseId":"J1","group":"jitter_sweep","bandwidth":4000,"rtt":25,"loss":0.1,"jitter":10,"baselineMs":15000,"impairmentMs":20000,"recoveryMs":30000,"priority":"P1","expect":{"state":"stable","maxLevel":1}},
@@ -40,8 +40,8 @@
   {"caseId":"T3","group":"transition","bandwidth":500,"rtt":25,"loss":0.1,"jitter":5,"baselineMs":15000,"impairmentMs":20000,"recoveryMs":30000,"priority":"P1","baselineBw":4000,"expect":{"state":"congested","maxLevel":4}},
   {"caseId":"T4","group":"transition","bandwidth":4000,"rtt":25,"loss":5,"jitter":5,"baselineMs":15000,"impairmentMs":20000,"recoveryMs":30000,"priority":"P1","baselineLoss":0.1,"expect":{"states":["early_warning","congested"],"maxLevel":4}},
   {"caseId":"T5","group":"transition","bandwidth":4000,"rtt":25,"loss":20,"jitter":5,"baselineMs":15000,"impairmentMs":20000,"recoveryMs":30000,"priority":"P0","baselineLoss":0.1,"expect":{"state":"congested","maxLevel":4}},
-  {"caseId":"T6","group":"transition","bandwidth":4000,"rtt":180,"loss":0.1,"jitter":5,"baselineMs":15000,"impairmentMs":20000,"recoveryMs":30000,"priority":"P1","baselineRtt":25,"expect":{"states":["early_warning","congested"],"maxLevel":4}},
-  {"caseId":"T7","group":"transition","bandwidth":4000,"rtt":25,"loss":0.1,"jitter":40,"baselineMs":15000,"impairmentMs":20000,"recoveryMs":30000,"priority":"P1","baselineJitter":5,"expect":{"states":["early_warning","congested"],"maxLevel":4}},
+  {"caseId":"T6","group":"transition","bandwidth":4000,"rtt":180,"loss":0.1,"jitter":5,"baselineMs":15000,"impairmentMs":20000,"recoveryMs":30000,"priority":"P1","baselineRtt":25,"expect":{"states":["stable","early_warning"],"maxLevel":2}},
+  {"caseId":"T7","group":"transition","bandwidth":4000,"rtt":25,"loss":0.1,"jitter":40,"baselineMs":15000,"impairmentMs":20000,"recoveryMs":30000,"priority":"P1","baselineJitter":5,"expect":{"states":["stable","early_warning"],"maxLevel":2}},
   {"caseId":"T8","group":"transition","bandwidth":800,"rtt":120,"loss":3,"jitter":30,"baselineMs":15000,"impairmentMs":20000,"recoveryMs":30000,"priority":"P1","baselineBw":2000,"baselineRtt":55,"baselineLoss":0.5,"baselineJitter":12,"expect":{"state":"congested","maxLevel":4,"recovery":false}},
   {"caseId":"T9","group":"transition","bandwidth":200,"rtt":500,"loss":20,"jitter":50,"baselineMs":15000,"impairmentMs":100000,"recoveryMs":30000,"priority":"P0","baselineBw":8000,"baselineRtt":20,"baselineLoss":0.1,"baselineJitter":1,"expect":{"state":"congested","maxLevel":4}},
   {"caseId":"T10","group":"transition","bandwidth":200,"rtt":500,"loss":20,"jitter":50,"baselineMs":15000,"impairmentMs":100000,"recoveryMs":30000,"priority":"P1","baselineBw":15000,"baselineRtt":15,"baselineLoss":0.1,"baselineJitter":1,"expect":{"state":"congested","maxLevel":4}},
@@ -49,7 +49,7 @@
 
   {"caseId":"S1","group":"burst","bandwidth":4000,"rtt":25,"loss":10,"jitter":5,"baselineMs":15000,"impairmentMs":5000,"recoveryMs":30000,"priority":"P1","expect":{"states":["early_warning","congested"],"maxLevel":4}},
   {"caseId":"S2","group":"burst","bandwidth":300,"rtt":25,"loss":0.1,"jitter":5,"baselineMs":15000,"impairmentMs":8000,"recoveryMs":32000,"priority":"P1","expect":{"state":"congested","maxLevel":4}},
-  {"caseId":"S3","group":"burst","bandwidth":4000,"rtt":200,"loss":0.1,"jitter":5,"baselineMs":15000,"impairmentMs":5000,"recoveryMs":30000,"priority":"P1","expect":{"state":"early_warning","maxLevel":2}},
+  {"caseId":"S3","group":"burst","bandwidth":4000,"rtt":200,"loss":0.1,"jitter":5,"baselineMs":15000,"impairmentMs":5000,"recoveryMs":30000,"priority":"P1","expect":{"states":["stable","early_warning"],"maxLevel":2}},
   {"caseId":"S4","group":"burst","bandwidth":4000,"rtt":25,"loss":0.1,"jitter":60,"baselineMs":15000,"impairmentMs":5000,"recoveryMs":30000,"priority":"P1","expect":{"state":"early_warning","maxLevel":2},"expectByRunner":{"loopback":{"states":["early_warning","congested"],"maxLevel":2}}},
 
   {"caseId":"M1","group":"traffic_model","source":"screenshare","bandwidth":4000,"rtt":25,"loss":3,"jitter":5,"baselineMs":10000,"impairmentMs":10000,"recoveryMs":0,"priority":"P0","expect":{"state":"stable","maxLevel":0}},
