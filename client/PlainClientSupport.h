@@ -60,6 +60,11 @@ struct MatrixTestRuntimeState {
 	uint64_t syntheticBytesSent = 0;
 	uint64_t syntheticPacketsLost = 0;
 	bool initialized = false;
+	// CC convergence simulation state
+	double convergedCeilingBps = -1.0;
+	double convergedRttMs = -1.0;
+	double convergedJitterMs = -1.0;
+	std::string lastPhaseName;
 };
 
 struct TestClientStatsPayloadEntry {

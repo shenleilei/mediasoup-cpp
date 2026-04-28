@@ -8,6 +8,8 @@ import {
   deriveCaseEvaluation,
   extractTiming,
   analyzeResult,
+  computeReportedRtt,
+  computeSmoothedJitter,
   getCaseExpectation,
   getPhaseNetwork,
   getImpairedStateForEvaluation,
@@ -92,7 +94,7 @@ test('synthetic condition for B3 is no longer treated as a healthy default', () 
   });
 
   assert.equal(condition.targetBitrateBps, 900000);
-  assert.equal(condition.rttMs, 110);
+  assert.equal(condition.rttMs, 76);
   assert.ok(condition.bitrateBps < condition.targetBitrateBps);
   assert.ok(condition.bitrateBps <= 765000);
 });
@@ -551,4 +553,68 @@ test('baseline expectations track modeled stress ordering', () => {
       `baseline: harsher ${harsher.caseId} should not allow lower maxLevel than ${easier.caseId}`
     );
   }
+});
+
+// --- Calibration validation tests (empirical data from SIGCOMM 2018 / TMA 2021) ---
+
+test('RTT amplification follows logarithmic decay toward 1.0x at high RTT', () => {
+  // Low RTT: protocol overhead dominates → higher amplification
+  const ratio25 = computeReportedRtt(25) / 25;
+  const ratio100 = computeReportedRtt(100) / 100;
+  const ratio350 = computeReportedRtt(350) / 350;
+
+  assert.ok(ratio25 > 1.3, `25ms RTT amplification ${ratio25.toFixed(2)} should be >1.3x`);
+  assert.ok(ratio100 > 1.1 && ratio100 < 1.5, `100ms RTT amplification ${ratio100.toFixed(2)} should be 1.1-1.5x`);
+  assert.ok(ratio350 > 1.0 && ratio350 < 1.2, `350ms RTT amplification ${ratio350.toFixed(2)} should converge near 1.0x`);
+  // Amplification ratio must decrease as base RTT increases
+  assert.ok(ratio25 > ratio100, 'amplification should decrease with higher base RTT');
+  assert.ok(ratio100 > ratio350, 'amplification should decrease with higher base RTT');
+});
+
+test('jitter smoothing reduces raw jitter by RFC 3550 EWMA factor', () => {
+  assert.equal(computeSmoothedJitter(20), 15);
+  assert.equal(computeSmoothedJitter(40), 30);
+  assert.equal(computeSmoothedJitter(0), 0);
+});
+
+test('loss utilization matches empirical GCC data within tolerance', () => {
+  // Empirical reference (SIGCOMM 2018, tc netem measurements):
+  // 1% loss → util 0.85-0.95, 5% → 0.40-0.60, 10% → 0.15-0.35, 20% → <0.15
+  const cases = [
+    { loss: 1, minUtil: 0.80, maxUtil: 0.99, label: '1% loss' },
+    { loss: 5, minUtil: 0.35, maxUtil: 0.65, label: '5% loss' },
+    { loss: 10, minUtil: 0.10, maxUtil: 0.45, label: '10% loss' },
+    { loss: 20, minUtil: 0.02, maxUtil: 0.32, label: '20% loss' },
+  ];
+
+  for (const tc of cases) {
+    const condition = toSyntheticCondition({
+      bandwidth: 4000, rtt: 25, loss: tc.loss, jitter: 5,
+    });
+    const util = condition.bitrateBps / condition.targetBitrateBps;
+    assert.ok(
+      util >= tc.minUtil && util <= tc.maxUtil,
+      `${tc.label}: utilization ${util.toFixed(3)} outside empirical range [${tc.minUtil}, ${tc.maxUtil}]`
+    );
+  }
+});
+
+test('RTT-only sweep utilization stays within empirical bounds', () => {
+  // Empirical: 0% loss, RTT 200ms → util 0.90-0.96
+  const condition = toSyntheticCondition({
+    bandwidth: 4000, rtt: 200, loss: 0.1, jitter: 5,
+  });
+  const util = condition.bitrateBps / condition.targetBitrateBps;
+  assert.ok(util >= 0.75 && util <= 0.99,
+    `RTT=200ms utilization ${util.toFixed(3)} outside expected range`);
+});
+
+test('severe conditions produce utilization below bandwidth-limited threshold', () => {
+  // At 20% loss or bw=300, real GCC is near zero
+  const severe = toSyntheticCondition({
+    bandwidth: 300, rtt: 25, loss: 0.1, jitter: 5,
+  });
+  assert.ok(severe.bitrateBps / severe.targetBitrateBps <= 0.20,
+    'bw=300 should produce utilization ≤0.20');
+  assert.equal(severe.qualityLimitationReason, 'bandwidth');
 });

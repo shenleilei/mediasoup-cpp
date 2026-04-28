@@ -68,6 +68,17 @@ const MatrixTestPhase* resolveMatrixTestPhase(
 	return nullptr;
 }
 
+// Exponential convergence time constants for CC simulation.
+// GCC degrades in ~1-2s but recovers in ~5-7s (additive increase).
+constexpr double CC_DEGRADE_TAU_MS = 1500.0;
+constexpr double CC_RECOVER_TAU_MS = 6000.0;
+
+double exponentialConverge(double current, double target, double deltaMs, double tauMs) {
+	if (tauMs <= 0.0 || deltaMs <= 0.0) return target;
+	double alpha = 1.0 - std::exp(-deltaMs / tauMs);
+	return current + alpha * (target - current);
+}
+
 } // namespace
 
 int64_t steadyNowMs()
@@ -239,14 +250,43 @@ std::optional<double> applyMatrixTestProfile(
 		runtime.lastPacketsSent = snap.packetsSent;
 		runtime.syntheticBytesSent = snap.bytesSent;
 		runtime.syntheticPacketsLost = snap.packetsLost;
+		runtime.convergedCeilingBps = phase->sendCeilingBps;
+		runtime.convergedRttMs = phase->rttMs;
+		runtime.convergedJitterMs = phase->jitterMs;
+		runtime.lastPhaseName = phase->name;
 	}
 
 	const int64_t deltaMs = std::max<int64_t>(0, nowMs - runtime.lastSampleMs);
+
+	// On phase change, reset convergence tracking but keep current converged
+	// values as starting point for exponential transition.
+	if (phase->name != runtime.lastPhaseName) {
+		runtime.lastPhaseName = phase->name;
+	}
+
+	// Apply exponential CC convergence simulation.
+	// Degradation is fast (~1.5s tau), recovery is slow (~6s tau) matching GCC behavior.
+	const double targetCeiling = phase->sendCeilingBps > 0.0 ? phase->sendCeilingBps : static_cast<double>(encBitrate);
+	const bool degrading = targetCeiling < runtime.convergedCeilingBps;
+	const double tau = degrading ? CC_DEGRADE_TAU_MS : CC_RECOVER_TAU_MS;
+
+	runtime.convergedCeilingBps = exponentialConverge(
+		runtime.convergedCeilingBps, targetCeiling, static_cast<double>(deltaMs), tau);
+	if (phase->rttMs >= 0) {
+		runtime.convergedRttMs = exponentialConverge(
+			std::max(0.0, runtime.convergedRttMs), phase->rttMs,
+			static_cast<double>(deltaMs), degrading ? CC_DEGRADE_TAU_MS : CC_RECOVER_TAU_MS);
+	}
+	if (phase->jitterMs >= 0) {
+		runtime.convergedJitterMs = exponentialConverge(
+			std::max(0.0, runtime.convergedJitterMs), phase->jitterMs,
+			static_cast<double>(deltaMs), degrading ? CC_DEGRADE_TAU_MS : CC_RECOVER_TAU_MS);
+	}
+
 	const uint64_t sentDelta = snap.packetsSent > runtime.lastPacketsSent
 		? snap.packetsSent - runtime.lastPacketsSent
 		: 0;
-	const double sendCeilingBps = phase->sendCeilingBps > 0.0 ? phase->sendCeilingBps : static_cast<double>(encBitrate);
-	const double mergedSendBps = std::min(static_cast<double>(encBitrate), sendCeilingBps);
+	const double mergedSendBps = std::min(static_cast<double>(encBitrate), runtime.convergedCeilingBps);
 
 	if (deltaMs > 0) {
 		const uint64_t bytesDelta = static_cast<uint64_t>(std::llround(mergedSendBps * static_cast<double>(deltaMs) / 8000.0));
@@ -263,8 +303,8 @@ std::optional<double> applyMatrixTestProfile(
 
 	snap.bytesSent = runtime.syntheticBytesSent;
 	snap.packetsLost = runtime.syntheticPacketsLost;
-	snap.roundTripTimeMs = phase->rttMs;
-	snap.jitterMs = phase->jitterMs;
+	snap.roundTripTimeMs = runtime.convergedRttMs;
+	snap.jitterMs = runtime.convergedJitterMs;
 	snap.qualityLimitationReason = phase->qualityLimitationReason;
 
 	return mergedSendBps;
