@@ -239,6 +239,32 @@ scenario definition
 
 > “真实网络 `2000kbps / 55ms / 0.5% / 12ms` 下算法一定就是这个表现。”
 
+## 8. GCC-oriented expectation 对齐
+
+当前主线已进一步对齐一批 `cpp-client` synthetic 用例期望，使其符合更常见的 GCC 直觉，而不是更保守的产品级预警策略。
+
+已放宽的 case：
+
+- `B3`
+- `R4`
+- `R5`
+- `T6`
+- `T7`
+- `S3`
+
+这些 case 的共同点是：
+
+- 丢包仍然很低（`0.1%` 到 `0.5%`）
+- synthetic `qualityLimitationReason` 仍为 `none`
+- 主要压力来自稳定 RTT 或稳定 jitter，而不是强带宽不足或高丢包
+
+因此它们现在被解释为：
+
+- 允许保持 `stable`
+- 或最多进入 `early_warning`
+
+而不再强制要求 `warning/congested`，避免把“高 RTT 绝对值”直接等价为“拥塞严重度”。
+
 ## 8. 后续迁移方向
 
 后续仍然需要独立的 `physical-e2e` suite 来回答：
