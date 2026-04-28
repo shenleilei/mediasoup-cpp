@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import {
   acquireNetemGuard,
   clearRootQdisc,
+  preflightNetemGuard,
   releaseNetemGuard,
 } from './netem_guard.mjs';
 
@@ -28,6 +29,7 @@ const MAX_PROCESS_LINES = 40;
 const MAX_BROWSER_IO_LINES = 120;
 const RUNTIME_SNAPSHOT_INTERVAL_MS = 5000;
 let activeNetemGuard = null;
+const forceClearLiveNetemGuards = process.env.QOS_FORCE_CLEAR_NETEM_GUARDS === '1';
 
 function runTc(args) {
   execFileSync(tcPath, args, { stdio: 'inherit' });
@@ -700,6 +702,10 @@ export function applyNetemConfig(config = {}) {
 
 export async function createLoopbackHarness(options = {}) {
   const netemLabel = `loopback:${options.caseId ?? 'unknown'}`;
+  preflightNetemGuard({
+    iface: 'lo',
+    forceClearLive: forceClearLiveNetemGuards,
+  });
   const netemGuard = await acquireNetemGuard({ label: netemLabel, iface: 'lo' });
   activeNetemGuard = netemGuard;
   const diagnostics = {

@@ -6,16 +6,22 @@
 #include "ThreadTypes.h"
 
 extern "C" {
-#include <libavformat/avformat.h>
-#include <libavcodec/avcodec.h>
+#include <libavutil/error.h>
 #include <libavutil/opt.h>
-#include <libswscale/swscale.h>
 #include <libavdevice/avdevice.h>
 }
 
+#include "DimensionUtils.h"
+#include "TestHooks.h"
+#include "ffmpeg/AvPtr.h"
+#include "ffmpeg/Decoder.h"
+#include "ffmpeg/Encoder.h"
+#include "ffmpeg/InputFormat.h"
+
+#include <spdlog/spdlog.h>
+
 #include <atomic>
 #include <chrono>
-#include <cstdio>
 #include <cstring>
 #include <functional>
 #include <optional>
@@ -25,6 +31,8 @@ extern "C" {
 class SourceWorker {
 public:
 	enum class InputType { File, V4L2Camera };
+
+	enum class SourceKind { File, Camera };
 
 	struct Config {
 		uint32_t trackIndex = 0;
@@ -54,10 +62,19 @@ public:
 		if (running_.load()) return;
 		running_ = true;
 		thread_ = std::thread([this]() {
-			if (cfg_.inputType == InputType::V4L2Camera)
-				loopCamera();
-			else
-				loopFile();
+			try {
+				if (cfg_.inputType == InputType::V4L2Camera)
+					loopCamera();
+				else
+					loopFile();
+			} catch (const std::exception& e) {
+				spdlog::error("[src:{}] worker terminated after runtime failure: {}",
+					cfg_.trackIndex, e.what());
+			} catch (...) {
+				spdlog::error("[src:{}] worker terminated after unknown runtime failure",
+					cfg_.trackIndex);
+			}
+			running_ = false;
 		});
 	}
 
@@ -70,7 +87,7 @@ private:
 	// ─── Shared helpers ───────────────────────────────────
 
 	static std::optional<uint32_t> loadOptionalTrackIndexEnv(const char* name) {
-		const char* raw = std::getenv(name);
+		const char* raw = loadTestHookEnv(name);
 		if (!raw || std::strlen(raw) == 0) return std::nullopt;
 		char* end = nullptr;
 		long parsed = std::strtol(raw, &end, 10);
@@ -78,46 +95,44 @@ private:
 		return static_cast<uint32_t>(parsed);
 	}
 
-	static int scaledDim(int src, double scale) {
-		int s = (int)(src / std::max(1.0, scale));
-		if (s < 2) s = 2;
-		if (s % 2) s--;
-		return std::max(2, s);
-	}
-
 	bool initEncoder(int width, int height, int fps, int bitrate) {
-		auto* enc = avcodec_find_encoder(AV_CODEC_ID_H264);
-		if (!enc) return false;
-		auto* ctx = avcodec_alloc_context3(enc);
-		if (!ctx) return false;
-		ctx->width = width;
-		ctx->height = height;
-		ctx->pix_fmt = AV_PIX_FMT_YUV420P;
-		ctx->time_base = {1, std::max(1, fps)};
-		ctx->framerate = {std::max(1, fps), 1};
-		ctx->bit_rate = bitrate;
-		ctx->rc_max_rate = bitrate;
-		ctx->rc_buffer_size = bitrate;
-		ctx->gop_size = std::max(1, fps);
-		ctx->max_b_frames = 0;
-		av_opt_set(ctx->priv_data, "preset", "ultrafast", 0);
-		av_opt_set(ctx->priv_data, "tune", "zerolatency", 0);
-		av_opt_set(ctx->priv_data, "profile", "baseline", 0);
-		if (avcodec_open2(ctx, enc, nullptr) < 0) {
-			avcodec_free_context(&ctx);
+		try {
+			auto enc = mediasoup::ffmpeg::Encoder::Create(AV_CODEC_ID_H264,
+				[width, height, fps, bitrate](AVCodecContext* ctx) {
+					ctx->width = width;
+					ctx->height = height;
+					ctx->pix_fmt = AV_PIX_FMT_YUV420P;
+					ctx->time_base = {1, std::max(1, fps)};
+					ctx->framerate = {std::max(1, fps), 1};
+					ctx->bit_rate = bitrate;
+					ctx->rc_max_rate = bitrate;
+					ctx->rc_buffer_size = bitrate;
+					ctx->gop_size = std::max(1, fps);
+					ctx->max_b_frames = 0;
+					av_opt_set(ctx->priv_data, "preset", "ultrafast", 0);
+					av_opt_set(ctx->priv_data, "tune", "zerolatency", 0);
+					av_opt_set(ctx->priv_data, "profile", "baseline", 0);
+				});
+			encoder_ = std::move(enc);
+		} catch (const std::exception& e) {
+			spdlog::error("[src:{}] encoder creation failed: {}", cfg_.trackIndex, e.what());
 			return false;
 		}
-		if (encoder_) avcodec_free_context(&encoder_);
-		encoder_ = ctx;
 
-		if (scaledFrame_) av_frame_free(&scaledFrame_);
-		scaledFrame_ = av_frame_alloc();
+		scaledFrame_ = mediasoup::ffmpeg::MakeFrame();
 		scaledFrame_->format = AV_PIX_FMT_YUV420P;
 		scaledFrame_->width = width;
 		scaledFrame_->height = height;
-		av_frame_get_buffer(scaledFrame_, 32);
+		try {
+			mediasoup::ffmpeg::FrameGetBuffer(scaledFrame_.get(), 32);
+		} catch (const std::exception& e) {
+			spdlog::error("[src:{}] scaled frame buffer allocation failed: {}", cfg_.trackIndex, e.what());
+			encoder_ = mediasoup::ffmpeg::Encoder();
+			scaledFrame_.reset();
+			return false;
+		}
 
-		if (swsCtx_) { sws_freeContext(swsCtx_); swsCtx_ = nullptr; }
+		swsCtx_.reset();
 		fps_ = std::max(1, fps);
 		bitrate_ = bitrate;
 		encoderRecreated_ = true;
@@ -138,16 +153,16 @@ private:
 		if (encoder_) {
 			ack.actualBitrateBps = bitrate_;
 			ack.actualFps = fps_;
-			ack.actualWidth = encoder_->width;
-			ack.actualHeight = encoder_->height;
+			ack.actualWidth = encoder_.width();
+			ack.actualHeight = encoder_.height();
 			ack.actualScale = scaleDown_;
 		}
 		ackQueue->tryPush(std::move(ack));
 		if (type == mt::TrackCommandType::SetEncodingParameters) {
-			printf("[THREADED_ACK] track=%u cmdId=%llu gen=%llu applied=%d br=%d fps=%d scale=%.2f reason=%s\n",
+			spdlog::debug("[THREADED_ACK] track={} cmdId={} gen={} applied={} br={} fps={} scale={:.2f} reason={}",
 				cfg_.trackIndex,
-				static_cast<unsigned long long>(commandId),
-				static_cast<unsigned long long>(configGeneration_),
+				commandId,
+				configGeneration_,
 				applied ? 1 : 0,
 				bitrate_,
 				fps_,
@@ -193,9 +208,9 @@ private:
 				sendAck(le.type, false, le.commandId, "test-reject-first-set-encoding");
 				return;
 			}
-			int w = scaledDim(sourceWidth_, le.scaleResolutionDownBy);
-			int h = scaledDim(sourceHeight_, le.scaleResolutionDownBy);
-			bool needRecreate = !encoder_ || w != encoder_->width || h != encoder_->height || le.fps != fps_;
+			int w = mediasoup::scaledDimension(sourceWidth_, le.scaleResolutionDownBy);
+			int h = mediasoup::scaledDimension(sourceHeight_, le.scaleResolutionDownBy);
+			bool needRecreate = !encoder_ || w != encoder_.width() || h != encoder_.height() || le.fps != fps_;
 			bool ok = true;
 			if (needRecreate) {
 				ok = initEncoder(w, h, le.fps, le.bitrateBps);
@@ -205,9 +220,7 @@ private:
 				}
 			} else if (encoder_) {
 				bitrate_ = le.bitrateBps;
-				encoder_->bit_rate = bitrate_;
-				encoder_->rc_max_rate = bitrate_;
-				encoder_->rc_buffer_size = bitrate_;
+				encoder_.setBitRate(bitrate_);
 			}
 			scaleDown_ = le.scaleResolutionDownBy;
 			sendAck(le.type, ok, le.commandId, ok ? "" : "encoder-recreate-failed");
@@ -232,18 +245,25 @@ private:
 		uint32_t rtpTs = (uint32_t)(ptsSec * 90000);
 		AVFrame* frameToEncode = vframe;
 
-		if (encoder_->width != vframe->width || encoder_->height != vframe->height
+		if (encoder_.width() != vframe->width || encoder_.height() != vframe->height
 			|| vframe->format != AV_PIX_FMT_YUV420P) {
-			av_frame_make_writable(scaledFrame_);
-			swsCtx_ = sws_getCachedContext(swsCtx_,
+			try {
+				mediasoup::ffmpeg::FrameMakeWritable(scaledFrame_.get());
+			} catch (const std::exception& e) {
+				spdlog::warn("[src:{}] frame make writable failed: {}", cfg_.trackIndex, e.what());
+				return;
+			}
+			SwsContext* raw = swsCtx_.release();
+			SwsContext* result = sws_getCachedContext(raw,
 				vframe->width, vframe->height, (AVPixelFormat)vframe->format,
-				encoder_->width, encoder_->height, AV_PIX_FMT_YUV420P,
+				encoder_.width(), encoder_.height(), AV_PIX_FMT_YUV420P,
 				SWS_BILINEAR, nullptr, nullptr, nullptr);
+			swsCtx_.reset(result);
 			if (!swsCtx_) return;
-			sws_scale(swsCtx_, vframe->data, vframe->linesize, 0, vframe->height,
+			sws_scale(swsCtx_.get(), vframe->data, vframe->linesize, 0, vframe->height,
 				scaledFrame_->data, scaledFrame_->linesize);
 			scaledFrame_->pts = vframe->pts;
-			frameToEncode = scaledFrame_;
+			frameToEncode = scaledFrame_.get();
 		}
 
 		if (forceKeyframe_) {
@@ -253,14 +273,13 @@ private:
 			frameToEncode->pict_type = AV_PICTURE_TYPE_NONE;
 		}
 
-		if (avcodec_send_frame(encoder_, frameToEncode) == 0) {
-			AVPacket* encPkt = av_packet_alloc();
-			while (avcodec_receive_packet(encoder_, encPkt) == 0) {
+		if (encoder_.SendFrame(frameToEncode)) {
+			auto encPkt = mediasoup::ffmpeg::MakePacket();
+			while (encoder_.ReceivePacket(encPkt.get())) {
 				enqueueEncoded(encPkt->data, encPkt->size, rtpTs,
 					(encPkt->flags & AV_PKT_FLAG_KEY) != 0);
-				av_packet_unref(encPkt);
+				mediasoup::ffmpeg::PacketUnref(encPkt.get());
 			}
-			av_packet_free(&encPkt);
 		}
 	}
 
@@ -280,83 +299,119 @@ private:
 		if (networkWakeupFn) networkWakeupFn();
 	}
 
-	// ─── File source loop ─────────────────────────────────
+	// ─── Common decode/encode loop ─────────────────────────
 
-	void loopFile() {
-		AVFormatContext* fmtCtx = nullptr;
-		if (avformat_open_input(&fmtCtx, cfg_.inputPath.c_str(), nullptr, nullptr) < 0) {
-			printf("[src:%u] cannot open %s\n", cfg_.trackIndex, cfg_.inputPath.c_str());
-			running_ = false; return;
-		}
-		avformat_find_stream_info(fmtCtx, nullptr);
-
-		int vidIdx = -1;
-		for (unsigned i = 0; i < fmtCtx->nb_streams; i++)
-			if (fmtCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) { vidIdx = i; break; }
-		if (vidIdx < 0) {
-			printf("[src:%u] no video stream\n", cfg_.trackIndex);
-			avformat_close_input(&fmtCtx); running_ = false; return;
-		}
-
-		auto* par = fmtCtx->streams[vidIdx]->codecpar;
+	void runLoop(SourceKind kind,
+		mediasoup::ffmpeg::InputFormat fmtCtx, int vidIdx) {
+		auto* par = fmtCtx.StreamAt(vidIdx)->codecpar;
 		sourceWidth_ = par->width;
 		sourceHeight_ = par->height;
 
-		auto* dec = avcodec_find_decoder(par->codec_id);
-		AVCodecContext* vdec = avcodec_alloc_context3(dec);
-		avcodec_parameters_to_context(vdec, par);
-		avcodec_open2(vdec, dec, nullptr);
+		if (kind == SourceKind::Camera) {
+			spdlog::info("[src:{}] camera {} opened: {}x{} codec={}",
+				cfg_.trackIndex, cfg_.inputPath, sourceWidth_, sourceHeight_, static_cast<int>(par->codec_id));
+		}
 
-		int w = scaledDim(sourceWidth_, cfg_.scaleResolutionDownBy);
-		int h = scaledDim(sourceHeight_, cfg_.scaleResolutionDownBy);
-		initEncoder(w, h, cfg_.initialFps, cfg_.initialBitrate);
+		mediasoup::ffmpeg::Decoder vdec;
+		try {
+			vdec = mediasoup::ffmpeg::Decoder::OpenFromParameters(par);
+		} catch (const std::exception& e) {
+			spdlog::error("[src:{}] decoder init failed for {} source: {}",
+				cfg_.trackIndex,
+				kind == SourceKind::Camera ? "camera" : "file",
+				e.what());
+			running_ = false;
+			return;
+		}
+
+		int w = mediasoup::scaledDimension(sourceWidth_, cfg_.scaleResolutionDownBy);
+		int h = mediasoup::scaledDimension(sourceHeight_, cfg_.scaleResolutionDownBy);
+		if (!initEncoder(w, h, cfg_.initialFps, cfg_.initialBitrate)) {
+			spdlog::error("[src:{}] encoder initialization failed for {} source",
+				cfg_.trackIndex,
+				kind == SourceKind::Camera ? "camera" : "file");
+			running_ = false;
+			return;
+		}
 		scaleDown_ = cfg_.scaleResolutionDownBy;
 
-		AVFrame* vframe = av_frame_alloc();
-		AVPacket* pkt = av_packet_alloc();
+		auto vframe = mediasoup::ffmpeg::MakeFrame();
+		auto pkt = mediasoup::ffmpeg::MakePacket();
 		auto t0 = std::chrono::steady_clock::now();
 		double firstPts = -1;
 		double nextEncodePts = -1;
+		int64_t frameCount = 0;
 
-		while (running_.load() && av_read_frame(fmtCtx, pkt) >= 0) {
-			if (pkt->stream_index != vidIdx) { av_packet_unref(pkt); continue; }
+		while (running_.load() && fmtCtx.ReadPacket(pkt.get())) {
+			if (pkt->stream_index != vidIdx) { mediasoup::ffmpeg::PacketUnref(pkt.get()); continue; }
 			drainCommands();
 			if (!running_.load()) break;
 
-			double pts = pkt->pts * av_q2d(fmtCtx->streams[vidIdx]->time_base);
-			if (firstPts < 0) firstPts = pts;
+			// File: pace to source clock; Camera: real-time, no pacing
+			double pts = 0;
+			if (kind == SourceKind::File) {
+				pts = pkt->pts * av_q2d(fmtCtx.StreamAt(vidIdx)->time_base);
+				if (firstPts < 0) firstPts = pts;
+				auto target = t0 + std::chrono::microseconds((int64_t)((pts - firstPts) * 1e6));
+				std::this_thread::sleep_until(target);
+			}
 
-			// Pace to source clock
-			auto target = t0 + std::chrono::microseconds((int64_t)((pts - firstPts) * 1e6));
-			std::this_thread::sleep_until(target);
+			if (paused_) { mediasoup::ffmpeg::PacketUnref(pkt.get()); continue; }
 
-			if (paused_) { av_packet_unref(pkt); continue; }
+			// Camera: compute wall-clock pts for RTP timestamp
+			if (kind == SourceKind::Camera) {
+				auto now = std::chrono::steady_clock::now();
+				pts = std::chrono::duration<double>(now - t0).count();
+			}
 
-			if (avcodec_send_packet(vdec, pkt) == 0) {
-				while (avcodec_receive_frame(vdec, vframe) == 0) {
+			if (vdec.SendPacket(pkt.get())) {
+				while (vdec.ReceiveFrame(vframe.get())) {
 					double framePts = pts;
-					if (vframe->best_effort_timestamp != AV_NOPTS_VALUE)
-						framePts = vframe->best_effort_timestamp * av_q2d(fmtCtx->streams[vidIdx]->time_base);
+					if (kind == SourceKind::File) {
+						if (vframe->best_effort_timestamp != AV_NOPTS_VALUE)
+							framePts = vframe->best_effort_timestamp * av_q2d(fmtCtx.StreamAt(vidIdx)->time_base);
 
-					if (fps_ > 0 && !forceKeyframe_) {
-						if (nextEncodePts < 0) nextEncodePts = framePts;
-						if (framePts + 1e-6 < nextEncodePts) continue;
-						nextEncodePts = framePts + 1.0 / fps_;
+						if (fps_ > 0 && !forceKeyframe_) {
+							if (nextEncodePts < 0) nextEncodePts = framePts;
+							if (framePts + 1e-6 < nextEncodePts) continue;
+							nextEncodePts = framePts + 1.0 / fps_;
+						}
 					}
-					encodeAndEnqueue(vframe, framePts);
+
+					encodeAndEnqueue(vframe.get(), framePts);
+					if (kind == SourceKind::Camera) frameCount++;
 				}
 			}
-			av_packet_unref(pkt);
+			mediasoup::ffmpeg::PacketUnref(pkt.get());
+
+			if (kind == SourceKind::Camera && frameCount % 100 == 0) {
+				spdlog::info("[src:{}] camera frames captured: {}", cfg_.trackIndex, frameCount);
+			}
 		}
 
-		av_packet_free(&pkt);
-		av_frame_free(&vframe);
-		if (encoder_) avcodec_free_context(&encoder_);
-		if (scaledFrame_) av_frame_free(&scaledFrame_);
-		if (swsCtx_) sws_freeContext(swsCtx_);
-		avcodec_free_context(&vdec);
-		avformat_close_input(&fmtCtx);
-		printf("[src:%u] file worker finished\n", cfg_.trackIndex);
+		spdlog::info("[src:{}] {} worker finished", cfg_.trackIndex,
+			kind == SourceKind::Camera ? "camera" : "file");
+	}
+
+	// ─── File source loop ─────────────────────────────────
+
+	void loopFile() {
+		mediasoup::ffmpeg::InputFormat fmtCtx;
+		try {
+			fmtCtx = mediasoup::ffmpeg::InputFormat::Open(cfg_.inputPath);
+		} catch (const std::exception& e) {
+			spdlog::error("[src:{}] cannot open {}: {}", cfg_.trackIndex, cfg_.inputPath, e.what());
+			running_ = false; return;
+		}
+		fmtCtx.FindStreamInfo();
+
+		int vidIdx = fmtCtx.FindFirstStreamIndex(AVMEDIA_TYPE_VIDEO);
+		if (vidIdx < 0) {
+			spdlog::error("[src:{}] no video stream", cfg_.trackIndex);
+			running_ = false; return;
+		}
+
+		runLoop(SourceKind::File, std::move(fmtCtx), vidIdx);
 	}
 
 	// ─── V4L2 camera source loop ─────────────────────────
@@ -366,7 +421,7 @@ private:
 
 		auto* v4l2Fmt = av_find_input_format("v4l2");
 		if (!v4l2Fmt) {
-			printf("[src:%u] v4l2 input format not available\n", cfg_.trackIndex);
+			spdlog::error("[src:{}] v4l2 input format not available", cfg_.trackIndex);
 			running_ = false; return;
 		}
 
@@ -376,101 +431,44 @@ private:
 		snprintf(fpsBuf, sizeof(fpsBuf), "%d", cfg_.captureFps);
 		av_dict_set(&opts, "video_size", sizeBuf, 0);
 		av_dict_set(&opts, "framerate", fpsBuf, 0);
-		av_dict_set(&opts, "input_format", "mjpeg", 0); // prefer MJPEG for higher res
+		av_dict_set(&opts, "input_format", "mjpeg", 0);
 
-		AVFormatContext* fmtCtx = nullptr;
-		if (avformat_open_input(&fmtCtx, cfg_.inputPath.c_str(), v4l2Fmt, &opts) < 0) {
+		mediasoup::ffmpeg::InputFormat fmtCtx;
+		try {
+			fmtCtx = mediasoup::ffmpeg::InputFormat::OpenWithFormat(cfg_.inputPath, v4l2Fmt, &opts);
+		} catch (...) {
 			// Retry without MJPEG preference (fallback to YUYV etc)
 			av_dict_free(&opts);
 			opts = nullptr;
 			av_dict_set(&opts, "video_size", sizeBuf, 0);
 			av_dict_set(&opts, "framerate", fpsBuf, 0);
-			if (avformat_open_input(&fmtCtx, cfg_.inputPath.c_str(), v4l2Fmt, &opts) < 0) {
-				printf("[src:%u] cannot open camera %s\n", cfg_.trackIndex, cfg_.inputPath.c_str());
+			try {
+				fmtCtx = mediasoup::ffmpeg::InputFormat::OpenWithFormat(cfg_.inputPath, v4l2Fmt, &opts);
+			} catch (const std::exception& e) {
+				spdlog::error("[src:{}] cannot open camera {}: {}", cfg_.trackIndex, cfg_.inputPath, e.what());
 				av_dict_free(&opts);
 				running_ = false; return;
 			}
 		}
 		av_dict_free(&opts);
-		avformat_find_stream_info(fmtCtx, nullptr);
+		fmtCtx.FindStreamInfo();
 
-		int vidIdx = -1;
-		for (unsigned i = 0; i < fmtCtx->nb_streams; i++)
-			if (fmtCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) { vidIdx = i; break; }
+		int vidIdx = fmtCtx.FindFirstStreamIndex(AVMEDIA_TYPE_VIDEO);
 		if (vidIdx < 0) {
-			printf("[src:%u] no video stream from camera\n", cfg_.trackIndex);
-			avformat_close_input(&fmtCtx); running_ = false; return;
+			spdlog::error("[src:{}] no video stream from camera", cfg_.trackIndex);
+			running_ = false; return;
 		}
 
-		auto* par = fmtCtx->streams[vidIdx]->codecpar;
-		sourceWidth_ = par->width;
-		sourceHeight_ = par->height;
-		printf("[src:%u] camera %s opened: %dx%d codec=%d\n",
-			cfg_.trackIndex, cfg_.inputPath.c_str(), sourceWidth_, sourceHeight_, par->codec_id);
-
-		// Decoder for camera frames (MJPEG, YUYV, etc)
-		auto* dec = avcodec_find_decoder(par->codec_id);
-		if (!dec) {
-			printf("[src:%u] no decoder for camera codec %d\n", cfg_.trackIndex, par->codec_id);
-			avformat_close_input(&fmtCtx); running_ = false; return;
-		}
-		AVCodecContext* vdec = avcodec_alloc_context3(dec);
-		avcodec_parameters_to_context(vdec, par);
-		avcodec_open2(vdec, dec, nullptr);
-
-		int w = scaledDim(sourceWidth_, cfg_.scaleResolutionDownBy);
-		int h = scaledDim(sourceHeight_, cfg_.scaleResolutionDownBy);
-		initEncoder(w, h, cfg_.initialFps, cfg_.initialBitrate);
-		scaleDown_ = cfg_.scaleResolutionDownBy;
-
-		AVFrame* vframe = av_frame_alloc();
-		AVPacket* pkt = av_packet_alloc();
-		auto t0 = std::chrono::steady_clock::now();
-		int64_t frameCount = 0;
-
-		while (running_.load() && av_read_frame(fmtCtx, pkt) >= 0) {
-			if (pkt->stream_index != vidIdx) { av_packet_unref(pkt); continue; }
-			drainCommands();
-			if (!running_.load()) break;
-
-			if (paused_) { av_packet_unref(pkt); continue; }
-
-			// Camera frames are real-time — no pacing needed, use wall clock for RTP ts
-			auto now = std::chrono::steady_clock::now();
-			double ptsSec = std::chrono::duration<double>(now - t0).count();
-			uint32_t rtpTs = (uint32_t)(ptsSec * 90000);
-
-			if (avcodec_send_packet(vdec, pkt) == 0) {
-				while (avcodec_receive_frame(vdec, vframe) == 0) {
-					encodeAndEnqueue(vframe, ptsSec);
-					frameCount++;
-				}
-			}
-			av_packet_unref(pkt);
-
-			if (frameCount % 100 == 0) {
-				printf("[src:%u] camera frames captured: %lld\n",
-					cfg_.trackIndex, (long long)frameCount);
-			}
-		}
-
-		av_packet_free(&pkt);
-		av_frame_free(&vframe);
-		if (encoder_) avcodec_free_context(&encoder_);
-		if (scaledFrame_) av_frame_free(&scaledFrame_);
-		if (swsCtx_) sws_freeContext(swsCtx_);
-		avcodec_free_context(&vdec);
-		avformat_close_input(&fmtCtx);
-		printf("[src:%u] camera worker finished\n", cfg_.trackIndex);
+		runLoop(SourceKind::Camera, std::move(fmtCtx), vidIdx);
 	}
 
 	Config cfg_;
 	std::atomic<bool> running_{false};
 	std::thread thread_;
 
-	AVCodecContext* encoder_ = nullptr;
-	AVFrame* scaledFrame_ = nullptr;
-	SwsContext* swsCtx_ = nullptr;
+	mediasoup::ffmpeg::Encoder encoder_;
+	mediasoup::ffmpeg::FramePtr scaledFrame_;
+	mediasoup::ffmpeg::SwsContextPtr swsCtx_;
 	int fps_ = 25;
 	int bitrate_ = 900000;
 	double scaleDown_ = 1.0;

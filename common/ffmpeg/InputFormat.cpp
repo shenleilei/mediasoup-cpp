@@ -2,6 +2,7 @@
 
 #include "ffmpeg/AvError.h"
 
+#include <atomic>
 #include <stdexcept>
 
 namespace mediasoup::ffmpeg {
@@ -12,6 +13,10 @@ AVFormatContext* RequireInputContext(AVFormatContext* ctx, const char* method)
 	if (ctx) return ctx;
 	throw std::runtime_error(std::string("InputFormat::") + method + " on empty format");
 }
+
+#ifdef MEDIASOUP_TEST_HOOKS
+std::atomic<int> gReadFailureCountdown{-1};
+#endif
 
 } // namespace
 
@@ -27,6 +32,26 @@ InputFormat InputFormat::Open(const std::string& path)
 	CheckError(err, "avformat_open_input(" + path + ")");
 	return InputFormat(ctx);
 }
+
+InputFormat InputFormat::OpenWithFormat(const std::string& path,
+	const AVInputFormat* fmt, AVDictionary** opts)
+{
+	AVFormatContext* ctx = nullptr;
+	const int err = avformat_open_input(
+		&ctx,
+		path.c_str(),
+		const_cast<AVInputFormat*>(fmt),
+		opts);
+	CheckError(err, "avformat_open_input(" + path + ")");
+	return InputFormat(ctx);
+}
+
+#ifdef MEDIASOUP_TEST_HOOKS
+int InputFormat::SetReadFailureCountdown(int readsBeforeFailure)
+{
+	return gReadFailureCountdown.exchange(readsBeforeFailure, std::memory_order_acq_rel);
+}
+#endif
 
 InputFormat::~InputFormat()
 {
@@ -73,6 +98,22 @@ AVStream* InputFormat::StreamAt(int index) const
 
 bool InputFormat::ReadPacket(AVPacket* packet)
 {
+#ifdef MEDIASOUP_TEST_HOOKS
+	int countdown = gReadFailureCountdown.load(std::memory_order_acquire);
+	while (countdown >= 0) {
+		if (countdown == 0) {
+			CheckError(AVERROR(EIO), "av_read_frame");
+		}
+		if (gReadFailureCountdown.compare_exchange_weak(
+				countdown,
+				countdown - 1,
+				std::memory_order_acq_rel,
+				std::memory_order_acquire)) {
+			break;
+		}
+	}
+#endif
+
 	const int err = av_read_frame(RequireInputContext(ctx_, "ReadPacket"), packet);
 	if (err >= 0) return true;
 	if (err == AVERROR_EOF) return false;

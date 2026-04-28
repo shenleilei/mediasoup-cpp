@@ -18,6 +18,7 @@ import { spawn, execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import {
   acquireNetemGuard,
+  preflightNetemGuard,
   releaseNetemGuard,
 } from './netem_guard.mjs';
 
@@ -30,6 +31,7 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..', '..');
 const chromiumPath = '/usr/lib64/chromium-browser/headless_shell';
 let signalingPort = 0;
+const forceClearLiveNetemGuards = process.env.QOS_FORCE_CLEAR_NETEM_GUARDS === '1';
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -235,6 +237,10 @@ async function run() {
     console.log('WARNING: tc/netem not available; throttle tests will use degraded snapshot injection instead');
   }
 
+  preflightNetemGuard({
+    iface: 'lo',
+    forceClearLive: forceClearLiveNetemGuards,
+  });
   const netemGuard = await acquireNetemGuard({ label: 'browser-downlink-priority', iface: 'lo' });
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qos-priority-'));
   const bundlePath = buildBundle(tmpDir);

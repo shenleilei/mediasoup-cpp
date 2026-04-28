@@ -21,6 +21,10 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
 function isProcessAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) {
     return false;
@@ -50,6 +54,10 @@ function buildMetadata(label) {
   };
 }
 
+function sameMetadata(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 function releaseAllGuardsSync() {
   for (const guard of [...activeGuards]) {
     try {
@@ -77,19 +85,13 @@ function installCleanupHandlers() {
 }
 
 function removeStaleLock(lockPath, staleAfterMs) {
-  const metadataPath = path.join(lockPath, 'owner.json');
-  const metadata = safeReadJson(metadataPath);
-  const acquiredAtMs = Date.parse(metadata?.acquiredAt ?? '');
-  const ageMs = Number.isFinite(acquiredAtMs) ? Date.now() - acquiredAtMs : Number.POSITIVE_INFINITY;
-  const staleByAge = ageMs >= staleAfterMs;
-  const staleByPid = !isProcessAlive(metadata?.pid);
-
-  if (!staleByAge && !staleByPid) {
+  const state = inspectNetemGuard({ lockPath, staleAfterMs });
+  if (!state.isStale) {
     return false;
   }
 
-  const latestMetadata = safeReadJson(metadataPath);
-  if (JSON.stringify(latestMetadata) !== JSON.stringify(metadata)) {
+  const latestMetadata = safeReadJson(path.join(lockPath, 'owner.json'));
+  if (!sameMetadata(latestMetadata, state.owner)) {
     return false;
   }
 
@@ -97,8 +99,113 @@ function removeStaleLock(lockPath, staleAfterMs) {
   return true;
 }
 
+function clearLockIfUnchanged(lockPath, owner, onClear) {
+  const metadataPath = path.join(lockPath, 'owner.json');
+  const latestMetadata = safeReadJson(metadataPath);
+  if (!sameMetadata(latestMetadata, owner)) {
+    return false;
+  }
+
+  onClear?.();
+  fs.rmSync(lockPath, { recursive: true, force: true });
+  return true;
+}
+
+function ownerLabel(owner) {
+  return `owner=${owner?.label ?? 'unknown'} pid=${owner?.pid ?? 'unknown'} acquiredAt=${owner?.acquiredAt ?? 'unknown'}`;
+}
+
+function terminateOwnerProcessSync(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return true;
+  }
+  if (pid === process.pid) {
+    return true;
+  }
+  if (!isProcessAlive(pid)) {
+    return true;
+  }
+
+  try {
+    process.kill(pid, 'SIGTERM');
+  } catch {}
+  for (let attempt = 0; attempt < 15; ++attempt) {
+    if (!isProcessAlive(pid)) {
+      return true;
+    }
+    sleepSync(100);
+  }
+
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch {}
+  for (let attempt = 0; attempt < 15; ++attempt) {
+    if (!isProcessAlive(pid)) {
+      return true;
+    }
+    sleepSync(100);
+  }
+
+  return !isProcessAlive(pid);
+}
+
 export function getNetemLockPath({ iface = 'lo', lockRoot = DEFAULT_LOCK_ROOT } = {}) {
   return path.join(lockRoot, `${iface}.lock`);
+}
+
+export function inspectNetemGuard({
+  iface = 'lo',
+  lockRoot = DEFAULT_LOCK_ROOT,
+  lockPath = getNetemLockPath({ iface, lockRoot }),
+  staleAfterMs = DEFAULT_STALE_AFTER_MS,
+} = {}) {
+  const metadataPath = path.join(lockPath, 'owner.json');
+  if (!fs.existsSync(lockPath)) {
+    return {
+      iface,
+      lockPath,
+      metadataPath,
+      exists: false,
+      owner: null,
+      ageMs: null,
+      staleByAge: false,
+      staleByPid: false,
+      isStale: false,
+    };
+  }
+
+  const owner = safeReadJson(metadataPath);
+  const acquiredAtMs = Date.parse(owner?.acquiredAt ?? '');
+  const ageMs = Number.isFinite(acquiredAtMs)
+    ? Date.now() - acquiredAtMs
+    : Number.POSITIVE_INFINITY;
+  const staleByAge = ageMs >= staleAfterMs;
+  const staleByPid = !isProcessAlive(owner?.pid);
+
+  return {
+    iface,
+    lockPath,
+    metadataPath,
+    exists: true,
+    owner,
+    ageMs,
+    staleByAge,
+    staleByPid,
+    isStale: staleByAge || staleByPid,
+  };
+}
+
+export function describeNetemGuard(state) {
+  if (!state?.exists) {
+    return `iface=${state?.iface ?? 'lo'} status=free`;
+  }
+
+  return [
+    `iface=${state.iface}`,
+    ownerLabel(state.owner),
+    `staleByAge=${state.staleByAge ? 1 : 0}`,
+    `staleByPid=${state.staleByPid ? 1 : 0}`,
+  ].join(' ');
 }
 
 export function clearRootQdisc(iface = 'lo') {
@@ -116,6 +223,84 @@ export function readRootQdisc(iface = 'lo') {
   } catch {
     return '';
   }
+}
+
+export function sweepNetemGuard({
+  iface = 'lo',
+  lockRoot = DEFAULT_LOCK_ROOT,
+  staleAfterMs = DEFAULT_STALE_AFTER_MS,
+  forceClearLive = false,
+  onClear = () => clearRootQdisc(iface),
+} = {}) {
+  let firstState = null;
+  let clearedStale = false;
+  let clearedLive = false;
+
+  for (let attempt = 0; attempt < 4; ++attempt) {
+    const state = inspectNetemGuard({ iface, lockRoot, staleAfterMs });
+    if (!firstState) {
+      firstState = state;
+    }
+
+    if (!state.exists) {
+      return {
+        before: firstState,
+        after: state,
+        clearedStale,
+        clearedLive,
+      };
+    }
+
+    if (state.isStale) {
+      if (clearLockIfUnchanged(state.lockPath, state.owner, onClear)) {
+        clearedStale = true;
+      }
+      continue;
+    }
+
+    if (forceClearLive) {
+      if (!terminateOwnerProcessSync(state.owner?.pid)) {
+        return {
+          before: firstState,
+          after: state,
+          clearedStale,
+          clearedLive,
+          conflict: state,
+        };
+      }
+      if (clearLockIfUnchanged(state.lockPath, state.owner, onClear)) {
+        clearedLive = true;
+      }
+      continue;
+    }
+
+    return {
+      before: firstState,
+      after: state,
+      clearedStale,
+      clearedLive,
+      conflict: state,
+    };
+  }
+
+  const state = inspectNetemGuard({ iface, lockRoot, staleAfterMs });
+  return {
+    before: firstState ?? state,
+    after: state,
+    clearedStale,
+    clearedLive,
+    conflict: state.exists ? state : null,
+  };
+}
+
+export function preflightNetemGuard(options = {}) {
+  const result = sweepNetemGuard(options);
+  if (result.conflict?.exists) {
+    throw new Error(
+      `loopback netem guard busy: ${describeNetemGuard(result.conflict)}`
+    );
+  }
+  return result;
 }
 
 export async function acquireNetemGuard({

@@ -257,6 +257,22 @@ ensure_plain_client_built() {
   require_file "$binary"
 }
 
+run_loopback_netem_preflight() {
+  local label="$1"
+  local args=(
+    "$ROOT_DIR/tests/qos_harness/preflight_netem_guards.mjs"
+    "--iface=lo"
+  )
+  if [[ "${QOS_FORCE_CLEAR_NETEM_GUARDS:-0}" == "1" ]]; then
+    args+=("--force-clear-live")
+  fi
+
+  run_cmd \
+    "$label" \
+    --cwd "$ROOT_DIR" \
+    node "${args[@]}"
+}
+
 run_cmd() {
   local label="$1"
   shift
@@ -702,6 +718,10 @@ run_cpp_client_matrix() {
   ensure_plain_client_built
   prepare_test_port 14019 "QoS cpp-client matrix SFU port 14019"
   clear_loopback_root_qdisc
+  if ! run_loopback_netem_preflight "cpp-client-matrix:netem-preflight"; then
+    clear_loopback_root_qdisc
+    return 1
+  fi
   local matrix_args=()
   if ((MATRIX_INCLUDE_EXTENDED)); then
     matrix_args+=("--include-extended")
@@ -730,6 +750,9 @@ run_cpp_client_harness() {
     "$ROOT_DIR/src/RoomService.cpp"
   ensure_plain_client_built
   prepare_test_port 14020 "QoS cpp-client harness SFU port 14020"
+  if ! run_loopback_netem_preflight "cpp-client-harness:netem-preflight"; then
+    return 1
+  fi
   local scenarios=(
     publish_snapshot
     stale_seq
@@ -817,6 +840,10 @@ run_browser_harness() {
   prepare_test_port 14017 "Downlink v3 harness SFU port 14017"
   prepare_test_port 14022 "Public interop browser harness SFU port 14022"
   clear_loopback_root_qdisc
+  if ! run_loopback_netem_preflight "browser-harness:netem-preflight"; then
+    clear_loopback_root_qdisc
+    return 1
+  fi
   log_system_snapshot "pre-browser-harness"
   local failed=0
   if ! run_cmd \
@@ -882,6 +909,10 @@ run_browser_harness() {
 run_matrix() {
   prepare_test_port 14011 "QoS matrix loopback port 14011"
   clear_loopback_root_qdisc
+  if ! run_loopback_netem_preflight "matrix:netem-preflight"; then
+    clear_loopback_root_qdisc
+    return 1
+  fi
   local matrix_args=()
   if ((MATRIX_INCLUDE_EXTENDED)); then
     matrix_args+=("--include-extended")
@@ -1157,7 +1188,7 @@ CPP_CLIENT_CASE_REPORT_SCRIPT="$ROOT_DIR/tests/qos_harness/render_cpp_client_cas
 if ((GENERATE_CPP_CLIENT_CASE_REPORT)) && [[ -f "$CPP_CLIENT_CASE_REPORT_SCRIPT" ]]; then
   if [[ -n "$MATRIX_CASES" ]]; then
     CPP_CLIENT_CASE_REPORT_JSON="$ROOT_DIR/docs/generated/uplink-qos-cpp-client-matrix-report.targeted.json"
-    CPP_CLIENT_CASE_REPORT_OUTPUT="$ROOT_DIR/docs/generated/uplink-qos-cpp-client-case-results.targeted.md"
+    CPP_CLIENT_CASE_REPORT_OUTPUT="$ROOT_DIR/docs/generated/plain-client-qos-case-results.targeted.md"
   else
     CPP_CLIENT_CASE_REPORT_JSON="$ROOT_DIR/docs/generated/uplink-qos-cpp-client-matrix-report.json"
     CPP_CLIENT_CASE_REPORT_OUTPUT="$ROOT_DIR/docs/plain-client-qos-case-results.md"
