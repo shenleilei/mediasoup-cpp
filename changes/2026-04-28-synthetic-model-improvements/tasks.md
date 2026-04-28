@@ -18,9 +18,20 @@
 4. [x] Add CC convergence temporal simulation to C++ applyMatrixTestProfile.
    - Files: `client/PlainClientSupport.h`, `client/PlainClientSupport.cpp`
    - Change: instant phase values → exponential convergence (τ_down=1.5s, τ_up=6s)
-   - Verify: C++ syntax check
+   - Verify: JS behavioral tests for time constant properties (63% at 1τ, asymmetric degrade/recover)
+   - Note: C++ unit test deferred; JS reimplementation validates algorithm specification
 
 5. [x] Add empirical calibration validation tests.
    - Files: `tests/qos_harness/test.synthetic_sweep.mjs`
    - Added: RTT amplification bounds, jitter smoothing, loss utilization ranges, severe conditions
+   - Verify: `node --test tests/qos_harness/test.synthetic_sweep.mjs`
+
+6. [x] Add legacy override compatibility tests.
+   - Files: `tests/qos_harness/test.synthetic_sweep.mjs`
+   - Added: bw<=1000 sendCeiling override range, burst bw<=300 consistency, jitter floor range
+   - Verify: `node --test tests/qos_harness/test.synthetic_sweep.mjs`
+
+7. [x] Add CC convergence behavioral tests.
+   - Files: `tests/qos_harness/test.synthetic_sweep.mjs`
+   - Added: degrade 1τ, recover 1τ, asymmetry, 3τ convergence, loss rate convergence
    - Verify: `node --test tests/qos_harness/test.synthetic_sweep.mjs`

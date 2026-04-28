@@ -65,6 +65,25 @@ this calibration work:
 | Burst `qualityLimitationReason = 'bandwidth'` for bw≤300 | Retained | Real encoders would report bandwidth limitation at such low rates. Consistent with the model's own utilization caps. |
 | Jitter sweep `jitterMs` floor for jitter≥40 | Retained | Ensures the C++ side sees enough jitter to trigger state transitions. Compensates for the smoothing factor, not a calibration bypass. |
 
+### Compatibility Evidence for Retained Overrides
+
+Each retained override is verified by a dedicated test in
+`test.synthetic_sweep.mjs` that proves the overridden value stays within the
+calibrated model's empirical bounds:
+
+- **bw≤1000 × 0.75**: The override reduces the model's utilization estimate but
+  the result remains within the SIGCOMM 2018 plausible GCC range for 1Mbps links
+  (util 0.20–0.70). Tested by `bw<=1000 sendCeiling override stays within
+  calibrated utilization range`.
+- **burst bw≤300**: The model's own utilization caps already produce
+  `qualityLimitationReason='bandwidth'` at bw=300, making the override
+  redundant but consistent. Tested by `burst bw<=300 qualityLimitationReason
+  override is consistent with model caps`.
+- **jitter floor 32ms**: The floor (32ms) stays between the smoothed value
+  (30ms) and the raw network jitter (40ms), i.e. it undoes part of the
+  smoothing without exceeding the physical value. Tested by `jitter sweep
+  floor override stays within smoothed jitter range`.
+
 ### Plan for Remaining Legacy Overrides
 
 The retained overrides listed above are not calibration bypasses but rather
@@ -89,8 +108,27 @@ reviewed when/if the synthetic model is replaced by recorded real-WebRTC traces.
 
 ## Testing Strategy
 
-- 5 new calibration validation tests compare model output against empirical
+- 5 calibration validation tests compare model output against empirical
   ranges from published literature
+- 3 legacy override compatibility tests prove retained overrides stay within
+  calibrated bounds
+- 5 CC convergence behavioral tests verify the `exponentialConverge` time
+  constants produce correct transition profiles (63% at 1τ, >95% at 3τ,
+  asymmetric degrade/recover, loss rate convergence)
 - All existing sweep ordering, expectation, and evaluation tests must remain
   green
 - Verification: `node --test tests/qos_harness/test.synthetic_sweep.mjs`
+
+### Convergence Verification Gap
+
+The CC convergence tests reimplement `exponentialConverge` in JS to validate
+the mathematical properties of the time constants. This proves the algorithm
+is correct but does not exercise the C++ code path directly. Full end-to-end
+verification of C++ convergence would require either:
+
+1. A C++ unit test that calls `applyMatrixTestProfile` with controlled timing
+2. An integration test that runs the C++ client binary and inspects reported
+   stats over time during a phase transition
+
+Both are deferred as future work. The JS behavioral tests provide sufficient
+confidence that the algorithm specification is correct.

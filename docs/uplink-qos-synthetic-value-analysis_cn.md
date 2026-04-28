@@ -113,15 +113,25 @@ if (lossPct >= 10)               utilization = min(utilization, 0.42)
 
 **评估：权重系数已用 SIGCOMM 2018 经验数据校准（丢包利用率偏差从 ~2× 降至 ±30%），但模型仍为静态公式，无法复现 GCC 的动态探测行为。C++ 侧的指数收敛部分缓解了瞬时跳变问题。**
 
-### 5. qualityLimitationReason — ⚠️ 简化但方向正确
+### 5. qualityLimitationReason — ⚠️ 合成信号，非物理网络度量
 
 ```js
 qualityLimitationReason: severity >= 0.85 || utilization < 0.55 ? 'bandwidth' : 'none'
 ```
 
-二值判断在极端情况下正确，但在中间地带（severity 0.5-0.85, utilization 0.55-0.7）可能与真实编码器行为不一致。
+**重要限定**：此信号在合成测试框架中用于触发 QoS 状态机的状态转换，
+它不是从物理网络状况推导的度量，而是一个合成输入信号。在真实 WebRTC 中，
+`qualityLimitationReason` 是编码器基于当前帧率/分辨率/码率约束的即时状态
+报告（离散枚举），不是平滑网络度量。
 
-**评估：极端场景准确，中间地带可能有误判。**
+二值判断在极端情况下正确，但在中间地带（severity 0.5-0.85, utilization 0.55-0.7）
+可能与真实编码器行为不一致。因此此信号仅适合作为 synthetic regression 的触发器，
+不应被解释为物理网络状况的代理。
+
+C++ 侧注入时此字段瞬时设置（不做指数收敛），这与真实 WebRTC 行为一致：
+真实编码器的 qualityLimitationReason 也是基于当前状态即时切换的。
+
+**评估：适合 synthetic regression suite 用途；不适合作为物理网络输入的解释。**
 
 ---
 
@@ -137,7 +147,7 @@ qualityLimitationReason: severity >= 0.85 || utilization < 0.55 ? 'bandwidth' : 
 
 - 算法对 utilization 绝对值敏感（`bandwidthLimited` 判断依赖 `bitrateUtilization < 0.65`）
 - 需要验证算法在"中间地带"（轻微拥塞）的行为
-- 需要验证恢复时序（合成值瞬时跳变 vs 真实 CC 渐进恢复）
+- 需要验证恢复时序（C++ 侧已有指数收敛模拟，τ_recover=6s，但缺少 C++ 级行为验证）
 
 ---
 
