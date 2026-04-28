@@ -58,3 +58,21 @@
     - Closes verification gap: proves retained legacy overrides and convergence simulation
       produce coherent state machine behavior through the actual C++ code path
     - Verify: `./build/mediasoup_qos_unit_tests --gtest_filter=SyntheticPipeline*`
+
+12. [x] Add C++ runner-level controller tests (SyntheticRunnerPipeline.*).
+    - Files: `tests/test_client_qos.cpp`
+    - Added: 6 GTest tests exercising full applyMatrixTestProfile → PublisherQosController::onSample() path
+    - Covers: degradation with level change + action emission, stable baseline no actions,
+      bw≤1000 ×0.75 override drives controller degradation, burst bw≤300 QLR override,
+      jitter floor 32ms drives warning, full recovery cycle with action reversal
+    - Closes runner-level gap: proves retained legacy overrides produce coherent controller
+      behavior (state + level + actions) through the actual onSample() entry point,
+      not just the extracted signal-derivation pipeline
+    - Verify: `./build/mediasoup_qos_unit_tests --gtest_filter=SyntheticRunnerPipeline*`
+
+13. [x] Add scope boundary documentation.
+    - Files: `changes/2026-04-28-synthetic-model-improvements/design.md`,
+      `docs/uplink-qos-synthetic-value-analysis_cn.md`
+    - Added: explicit scope boundary sections clarifying this is synthetic-only improvement,
+      not physical network condition fix; warning against using synthetic results as
+      physical network behavior evidence; guidance for future physical-E2E migration

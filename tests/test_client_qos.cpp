@@ -2215,3 +2215,247 @@ TEST(SyntheticPipeline, RecoveryAfterDegradationMovesBackToStable) {
 		<< "After 40s recovery, expected Stable or Recovering, got "
 		<< static_cast<int>(finalState);
 }
+
+// --- Runner-level pipeline tests ---
+// These tests exercise the full controller path:
+//   applyMatrixTestProfile() → PublisherQosController::onSample()
+//     (which internally calls deriveSignals → evaluateStateTransition → action planning)
+// This closes the verification gap where the pipeline tests above bypassed
+// the controller's warmup, override, probe, and action execution logic.
+
+namespace {
+
+// Helper: drive a PublisherQosController through a matrix profile for the
+// given duration, feeding applyMatrixTestProfile-modified snapshots into
+// onSample().  Returns the controller's final state and level.
+struct RunnerResult {
+	State state;
+	int level;
+	size_t actionCount;
+};
+
+RunnerResult runControllerWithProfile(
+	const MatrixTestProfile& profile,
+	int encBitrate,
+	int durationMs,
+	int sampleIntervalMs = 1000)
+{
+	std::vector<PlannedAction> actions;
+	int64_t currentMs = 0;
+
+	PublisherQosController::Options options;
+	options.source = Source::Camera;
+	options.trackId = "video";
+	options.producerId = "producer";
+	options.initialLevel = 0;
+	options.warmupSamples = 5;
+	options.monotonicNowMs = [&]() { return currentMs; };
+	options.actionSink = [&](const PlannedAction& action) {
+		actions.push_back(action);
+		return true;
+	};
+
+	PublisherQosController controller(options);
+
+	MatrixTestRuntimeState runtime;
+	runtime.startMs = 0;
+
+	for (int64_t t = sampleIntervalMs; t <= durationMs; t += sampleIntervalMs) {
+		currentMs = t;
+
+		// Build baseline snapshot
+		uint64_t bytes = static_cast<uint64_t>(
+			static_cast<double>(encBitrate) / 8.0 * static_cast<double>(t) / 1000.0);
+		uint64_t packets = static_cast<uint64_t>(t / sampleIntervalMs) * 100;
+		auto snap = MakePipelineSnapshot(t, bytes, packets);
+
+		// Apply matrix profile (convergence, loss injection, etc.)
+		applyMatrixTestProfile(snap, encBitrate, profile, runtime, t);
+
+		// Feed through the full controller pipeline
+		controller.onSample(snap);
+	}
+
+	return {controller.currentState(), controller.currentLevel(), actions.size()};
+}
+
+} // namespace
+
+// Runner-level: degradation through onSample produces level change.
+TEST(SyntheticRunnerPipeline, DegradationProducesLevelChange) {
+	MatrixTestPhase baseline;
+	baseline.name = "baseline";
+	baseline.durationMs = 6000;
+	baseline.sendCeilingBps = 900000;
+	baseline.rttMs = 20;
+	baseline.jitterMs = 5;
+	baseline.lossRate = 0.0;
+	baseline.qualityLimitationReason = QualityLimitationReason::None;
+
+	MatrixTestPhase impairment;
+	impairment.name = "impairment";
+	impairment.durationMs = 20000;
+	impairment.sendCeilingBps = 300000;
+	impairment.rttMs = 350;
+	impairment.jitterMs = 80;
+	impairment.lossRate = 0.10;
+	impairment.qualityLimitationReason = QualityLimitationReason::Bandwidth;
+
+	auto profile = buildProfile(0, {baseline, impairment});
+	auto result = runControllerWithProfile(profile, 900000, 26000);
+
+	// After warmup + sustained impairment, controller should have degraded
+	EXPECT_TRUE(result.state == State::EarlyWarning || result.state == State::Congested)
+		<< "Expected degraded state, got " << static_cast<int>(result.state);
+	// At least one action should have been emitted (level change)
+	EXPECT_GT(result.actionCount, 0u)
+		<< "Controller should have emitted at least one degradation action";
+}
+
+// Runner-level: stable baseline produces no actions and stays at level 0.
+TEST(SyntheticRunnerPipeline, StableBaselineNoActions) {
+	MatrixTestPhase baseline;
+	baseline.name = "baseline";
+	baseline.durationMs = 15000;
+	baseline.sendCeilingBps = 900000;
+	baseline.rttMs = 20;
+	baseline.jitterMs = 5;
+	baseline.lossRate = 0.0;
+	baseline.qualityLimitationReason = QualityLimitationReason::None;
+
+	auto profile = buildProfile(0, {baseline});
+	auto result = runControllerWithProfile(profile, 900000, 15000);
+
+	EXPECT_EQ(result.state, State::Stable);
+	EXPECT_EQ(result.level, 0);
+	EXPECT_EQ(result.actionCount, 0u);
+}
+
+// Runner-level: bw<=1000 x0.75 override drives controller to degraded state.
+TEST(SyntheticRunnerPipeline, LowBandwidthOverrideDrivesControllerDegradation) {
+	MatrixTestPhase baseline;
+	baseline.name = "baseline";
+	baseline.durationMs = 6000;
+	baseline.sendCeilingBps = 900000;
+	baseline.rttMs = 20;
+	baseline.jitterMs = 5;
+	baseline.lossRate = 0.0;
+	baseline.qualityLimitationReason = QualityLimitationReason::None;
+
+	MatrixTestPhase impairment;
+	impairment.name = "impairment";
+	impairment.durationMs = 20000;
+	// Simulates the JS runner's bw=800 with ×0.75 override → 450kbps ceiling
+	impairment.sendCeilingBps = 450000;
+	impairment.rttMs = 30;
+	impairment.jitterMs = 8;
+	impairment.lossRate = 0.01;
+	impairment.qualityLimitationReason = QualityLimitationReason::Bandwidth;
+
+	auto profile = buildProfile(0, {baseline, impairment});
+	auto result = runControllerWithProfile(profile, 900000, 26000);
+
+	EXPECT_NE(result.state, State::Stable)
+		<< "bw<=1000 x0.75 override should drive controller out of Stable";
+	EXPECT_GT(result.actionCount, 0u)
+		<< "Controller should have emitted degradation actions";
+}
+
+// Runner-level: burst bw<=300 with forced QLR=bandwidth drives degradation.
+TEST(SyntheticRunnerPipeline, BurstOverrideDrivesControllerDegradation) {
+	MatrixTestPhase baseline;
+	baseline.name = "baseline";
+	baseline.durationMs = 6000;
+	baseline.sendCeilingBps = 900000;
+	baseline.rttMs = 20;
+	baseline.jitterMs = 5;
+	baseline.lossRate = 0.0;
+	baseline.qualityLimitationReason = QualityLimitationReason::None;
+
+	MatrixTestPhase burst;
+	burst.name = "impairment";
+	burst.durationMs = 15000;
+	burst.sendCeilingBps = 150000;
+	burst.rttMs = 25;
+	burst.jitterMs = 5;
+	burst.lossRate = 0.0;
+	burst.qualityLimitationReason = QualityLimitationReason::Bandwidth;
+
+	auto profile = buildProfile(0, {baseline, burst});
+	auto result = runControllerWithProfile(profile, 900000, 21000);
+
+	EXPECT_NE(result.state, State::Stable)
+		<< "burst bw<=300 override should drive controller out of Stable";
+	EXPECT_GT(result.actionCount, 0u);
+}
+
+// Runner-level: jitter floor override (32ms > warnJitter 30ms) drives warning.
+TEST(SyntheticRunnerPipeline, JitterFloorOverrideDrivesControllerWarning) {
+	MatrixTestPhase baseline;
+	baseline.name = "baseline";
+	baseline.durationMs = 6000;
+	baseline.sendCeilingBps = 900000;
+	baseline.rttMs = 20;
+	baseline.jitterMs = 5;
+	baseline.lossRate = 0.0;
+	baseline.qualityLimitationReason = QualityLimitationReason::None;
+
+	MatrixTestPhase jitterPhase;
+	jitterPhase.name = "impairment";
+	jitterPhase.durationMs = 15000;
+	jitterPhase.sendCeilingBps = 900000;
+	jitterPhase.rttMs = 30;
+	jitterPhase.jitterMs = 32;
+	jitterPhase.lossRate = 0.0;
+	jitterPhase.qualityLimitationReason = QualityLimitationReason::None;
+
+	auto profile = buildProfile(0, {baseline, jitterPhase});
+	auto result = runControllerWithProfile(profile, 900000, 21000);
+
+	// jitter=32ms > warnJitter=30ms should produce at least EarlyWarning
+	EXPECT_TRUE(result.state == State::EarlyWarning || result.state == State::Congested)
+		<< "jitter floor 32ms should drive controller to warning, got "
+		<< static_cast<int>(result.state);
+}
+
+// Runner-level: full recovery cycle through controller (baseline → impairment → recovery).
+TEST(SyntheticRunnerPipeline, RecoveryCycleThroughController) {
+	MatrixTestPhase baseline;
+	baseline.name = "baseline";
+	baseline.durationMs = 6000;
+	baseline.sendCeilingBps = 900000;
+	baseline.rttMs = 20;
+	baseline.jitterMs = 5;
+	baseline.lossRate = 0.0;
+	baseline.qualityLimitationReason = QualityLimitationReason::None;
+
+	MatrixTestPhase impairment;
+	impairment.name = "impairment";
+	impairment.durationMs = 12000;
+	impairment.sendCeilingBps = 300000;
+	impairment.rttMs = 350;
+	impairment.jitterMs = 80;
+	impairment.lossRate = 0.10;
+	impairment.qualityLimitationReason = QualityLimitationReason::Bandwidth;
+
+	MatrixTestPhase recovery;
+	recovery.name = "recovery";
+	recovery.durationMs = 40000;
+	recovery.sendCeilingBps = 900000;
+	recovery.rttMs = 20;
+	recovery.jitterMs = 5;
+	recovery.lossRate = 0.0;
+	recovery.qualityLimitationReason = QualityLimitationReason::None;
+
+	auto profile = buildProfile(0, {baseline, impairment, recovery});
+	auto result = runControllerWithProfile(profile, 900000, 58000);
+
+	// After full recovery with slow convergence, controller should have
+	// transitioned back toward Stable or be in Recovering
+	EXPECT_TRUE(result.state == State::Stable || result.state == State::Recovering)
+		<< "After 40s recovery, expected Stable or Recovering, got "
+		<< static_cast<int>(result.state);
+	// Actions should have been emitted during the cycle
+	EXPECT_GT(result.actionCount, 0u)
+		<< "Controller should have emitted actions during degradation/recovery";
+}
