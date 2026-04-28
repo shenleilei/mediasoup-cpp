@@ -42,7 +42,7 @@ protected:
 			" --workerBin=./mediasoup-worker"
 			" --announcedIp=127.0.0.1"
 			" --listenIp=127.0.0.1"
-			" --redisHost=0.0.0.0 --redisPort=1"
+			" --redisHost=0.0.0.0 --redisPort=1 --noRedisRequired"
 			" > /dev/null 2>&1 & echo $!";
 		FILE* fp = popen(cmd.c_str(), "r");
 		ASSERT_NE(fp, nullptr);
@@ -109,6 +109,23 @@ protected:
 		auto resp = c.ws->request("join", {
 			{"roomId", roomId}, {"peerId", peerId},
 			{"displayName", peerId}, {"rtpCapabilities", rtpCaps}
+		});
+		EXPECT_TRUE(resp.value("ok", false)) << "join failed: " << resp.dump();
+		if (resp.contains("data") && resp["data"].contains("routerRtpCapabilities"))
+			c.routerRtpCapabilities = resp["data"]["routerRtpCapabilities"];
+		return c;
+	}
+
+	JoinedClient joinRoomWithoutRtpCapabilities(const std::string& roomId, const std::string& peerId) {
+		JoinedClient c;
+		c.roomId = roomId;
+		c.peerId = peerId;
+		c.ws = std::make_unique<TestWsClient>();
+		EXPECT_TRUE(c.ws->connect(HOST, SFU_PORT));
+
+		auto resp = c.ws->request("join", {
+			{"roomId", roomId}, {"peerId", peerId},
+			{"displayName", peerId}
 		});
 		EXPECT_TRUE(resp.value("ok", false)) << "join failed: " << resp.dump();
 		if (resp.contains("data") && resp["data"].contains("routerRtpCapabilities"))
@@ -366,6 +383,44 @@ TEST_F(IntegrationTest, ProduceAndAutoSubscribe) {
 	EXPECT_EQ(consumerNotif["data"]["kind"], "audio");
 }
 
+TEST_F(IntegrationTest, RecvTransportRequestCanPopulateRtpCapabilitiesForLaterAutoSubscribe) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoomWithoutRtpCapabilities(testRoom_, "bob");
+
+	auto bobRecv = bob.ws->request("createWebRtcTransport", {
+		{"producing", false},
+		{"consuming", true},
+		{"rtpCapabilities", defaultRtpCapabilities()}
+	});
+	ASSERT_TRUE(bobRecv.value("ok", false)) << bobRecv.dump();
+
+	auto aliceSend = alice.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(aliceSend.value("ok", false)) << aliceSend.dump();
+
+	json audioRtpParams = {
+		{"codecs", {{
+			{"mimeType", "audio/opus"}, {"clockRate", 48000}, {"channels", 2},
+			{"payloadType", 100}
+		}}},
+		{"encodings", {{{"ssrc", 44444444}}}},
+		{"mid", "0"}
+	};
+	auto produceResp = alice.ws->request("produce", {
+		{"transportId", aliceSend["data"]["id"]},
+		{"kind", "audio"},
+		{"rtpParameters", audioRtpParams}
+	});
+	ASSERT_TRUE(produceResp.value("ok", false)) << produceResp.dump();
+
+	auto consumerNotif = bob.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(consumerNotif.empty()) << "Bob did not receive newConsumer";
+	EXPECT_EQ(consumerNotif["data"]["peerId"], "alice");
+	EXPECT_EQ(consumerNotif["data"]["producerId"], produceResp["data"]["id"]);
+	EXPECT_EQ(consumerNotif["data"]["kind"], "audio");
+}
+
 // ─── Test 4: Pause and resume producer ───
 TEST_F(IntegrationTest, PauseResumeProducer) {
 	auto alice = joinRoom(testRoom_, "alice");
@@ -396,6 +451,18 @@ TEST_F(IntegrationTest, PauseResumeProducer) {
 	// Resume
 	auto resumeResp = alice.ws->request("resumeProducer", {{"producerId", producerId}});
 	EXPECT_TRUE(resumeResp.value("ok", false));
+}
+
+TEST_F(IntegrationTest, PauseResumeMissingProducerFailsExplicitly) {
+	auto alice = joinRoom(testRoom_, "alice");
+
+	auto pauseResp = alice.ws->request("pauseProducer", {{"producerId", "missing-producer"}});
+	EXPECT_FALSE(pauseResp.value("ok", true)) << pauseResp.dump();
+	EXPECT_EQ(pauseResp.value("error", ""), "producer not found");
+
+	auto resumeResp = alice.ws->request("resumeProducer", {{"producerId", "missing-producer"}});
+	EXPECT_FALSE(resumeResp.value("ok", true)) << resumeResp.dump();
+	EXPECT_EQ(resumeResp.value("error", ""), "producer not found");
 }
 
 // ─── Test 5: Multiple peers, verify participants list ───
@@ -808,7 +875,7 @@ protected:
 			" --port=" + std::to_string(SFU_PORT) +
 			" --workers=1 --workerBin=./mediasoup-worker"
 			" --announcedIp=127.0.0.1 --listenIp=127.0.0.1"
-			" --redisHost=0.0.0.0 --redisPort=1"
+			" --redisHost=0.0.0.0 --redisPort=1 --noRedisRequired"
 			" --recordDir=" + recordDir_ +
 			" > /dev/null 2>&1 & echo $!";
 		FILE* fp = popen(cmd.c_str(), "r");

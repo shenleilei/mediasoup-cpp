@@ -7,7 +7,7 @@
 - [uplink-qos-matrix-report.json](./uplink-qos-matrix-report.json)
 - [uplink-qos-cpp-client-matrix-report.json](./uplink-qos-cpp-client-matrix-report.json)
 - [uplink-qos-cpp-client-matrix-report.targeted.json](./uplink-qos-cpp-client-matrix-report.targeted.json)
-- [uplink-qos-cpp-client-case-results.targeted.md](./uplink-qos-cpp-client-case-results.targeted.md)
+- [plain-client-qos-case-results.md](../plain-client-qos-case-results.md)
 - downlink-qos-matrix-report.json（由 `run_downlink_matrix.mjs` 生成）
 
 说明：

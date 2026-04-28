@@ -20,7 +20,7 @@ public:
 		int degradeLevel) const;
 
 private:
-	double computeBudgetBps(const DownlinkSnapshot& snapshot) const;
+	double computeBudgetBps(const DownlinkSnapshot& snapshot, int degradeLevel) const;
 	double computeUtility(const DownlinkSubscription& sub) const;
 	double estimateLayerBitrateBps(const DownlinkSubscription& sub,
 		uint8_t spatialLayer, uint8_t temporalLayer) const;

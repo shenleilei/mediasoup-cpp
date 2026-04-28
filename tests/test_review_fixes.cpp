@@ -9,15 +9,91 @@
 #include "RoomRegistryReplyUtils.h"
 #include "RuntimeOptionParsers.h"
 #include "RoomRegistrySelection.h"
+#include "RoomStatsQosHelpers.h"
 #include "response_generated.h"
+#include "SignalingSocketState.h"
 #include "StaticFileResponder.h"
+#include "WorkerThread.h"
+#include "../client/ccutils/Prober.h"
 #include "../client/RtcpHandler.h"
+#include "../src/Recorder.h"
+#include <algorithm>
 #include <future>
 #include <chrono>
+#include <cerrno>
 #include <hiredis/hiredis.h>
+#include <mutex>
 #include <unistd.h>
 
 using namespace mediasoup;
+
+namespace {
+
+class BlockingProbeListener : public mediasoup::ccutils::ProberListener {
+public:
+	void OnProbeClusterSwitch(const mediasoup::ccutils::ProbeClusterInfo& info) override
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		startedIds_.push_back(info.id);
+		cv_.notify_all();
+	}
+
+	void OnSendProbe(int) override
+	{
+		std::unique_lock<std::mutex> lock(mutex_);
+		sendCount_++;
+		if (sendCount_ == 1) {
+			firstSendEntered_ = true;
+			cv_.notify_all();
+			cv_.wait(lock, [&] { return releaseFirstSend_; });
+		} else {
+			cv_.notify_all();
+		}
+	}
+
+	bool waitForFirstSend(std::chrono::milliseconds timeout)
+	{
+		std::unique_lock<std::mutex> lock(mutex_);
+		return cv_.wait_for(lock, timeout, [&] { return firstSendEntered_; });
+	}
+
+	void releaseFirstSend()
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		releaseFirstSend_ = true;
+		cv_.notify_all();
+	}
+
+	bool waitForClusterStart(
+		mediasoup::ccutils::ProbeClusterId clusterId,
+		std::chrono::milliseconds timeout)
+	{
+		std::unique_lock<std::mutex> lock(mutex_);
+		return cv_.wait_for(lock, timeout, [&] {
+			return std::find(startedIds_.begin(), startedIds_.end(), clusterId) != startedIds_.end();
+		});
+	}
+
+private:
+	std::mutex mutex_;
+	std::condition_variable cv_;
+	std::vector<mediasoup::ccutils::ProbeClusterId> startedIds_;
+	int sendCount_{ 0 };
+	bool firstSendEntered_{ false };
+	bool releaseFirstSend_{ false };
+};
+
+mediasoup::ccutils::ProbeClusterGoal MakeTestProbeGoal()
+{
+	mediasoup::ccutils::ProbeClusterGoal goal;
+	goal.availableBandwidthBps = 500000;
+	goal.expectedUsageBps = 100000;
+	goal.desiredBps = 250000;
+	goal.duration = std::chrono::milliseconds(60);
+	return goal;
+}
+
+} // namespace
 
 // ═══════════════════════════════════════════════════════════════
 // Fix 1: Room::addPeer closes old peer before replacing
@@ -169,6 +245,73 @@ TEST(WorkerCountTest, NoCoresUnderflow) {
 	EXPECT_EQ(calc(8), 6);
 }
 
+TEST(WorkerThreadEpollWaitTest, RecoverableErrorClassification) {
+	EXPECT_TRUE(IsRecoverableEpollWaitError(EINTR));
+	EXPECT_FALSE(IsRecoverableEpollWaitError(EBADF));
+	EXPECT_FALSE(IsRecoverableEpollWaitError(EINVAL));
+}
+
+TEST(SocketPendingJoinStateTest, PendingJoinDoesNotCommitSessionState) {
+	PerSocketData socketData;
+
+	SetPendingSocketJoin(&socketData, "room-a", "peer-a", 42);
+	EXPECT_EQ(socketData.sessionId, kInvalidSessionId);
+	EXPECT_TRUE(socketData.roomId.empty());
+	EXPECT_TRUE(socketData.peerId.empty());
+	EXPECT_EQ(socketData.pendingSessionId, 42u);
+	EXPECT_EQ(socketData.pendingRoomId, "room-a");
+	EXPECT_EQ(socketData.pendingPeerId, "peer-a");
+
+	ClearPendingSocketJoinIfMatches(&socketData, 7);
+	EXPECT_EQ(socketData.pendingSessionId, 42u);
+
+	ClearPendingSocketJoinIfMatches(&socketData, 42);
+	EXPECT_EQ(socketData.pendingSessionId, kInvalidSessionId);
+	EXPECT_TRUE(socketData.pendingRoomId.empty());
+	EXPECT_TRUE(socketData.pendingPeerId.empty());
+}
+
+TEST(DownlinkRateLimitStateTest, PendingSequenceDoesNotAdvanceAcceptedBaselineUntilMarked) {
+	DownlinkStatsRateLimitState state;
+	MarkAcceptedDownlinkSeq(state, 10);
+
+	state.pending = true;
+	state.pendingSeq = 11;
+	state.pendingSinceMs = 1234;
+
+	EXPECT_EQ(state.lastAcceptedSeq, 10u);
+	EXPECT_TRUE(state.hasAcceptedSeq);
+	EXPECT_FALSE(IsAdvancingDownlinkSeq(state, 10))
+		<< "pending seq should be the temporary advancing baseline";
+	EXPECT_TRUE(IsAdvancingDownlinkSeq(state, 12));
+
+	ClearPendingDownlinkSeqIfMatches(state, 11);
+	EXPECT_FALSE(state.pending);
+	EXPECT_EQ(state.lastAcceptedSeq, 10u)
+		<< "clearing pending must not mutate the accepted sequence";
+	EXPECT_FALSE(IsAdvancingDownlinkSeq(state, 10));
+	EXPECT_TRUE(IsAdvancingDownlinkSeq(state, 11));
+}
+
+TEST(DownlinkRateLimitStateTest, AcceptedSequenceMovesOnlyWhenExplicitlyMarked) {
+	DownlinkStatsRateLimitState state;
+	state.pending = true;
+	state.pendingSeq = 77;
+	state.pendingSinceMs = 500;
+
+	EXPECT_EQ(state.lastAcceptedSeq, 0u);
+	EXPECT_FALSE(state.hasAcceptedSeq);
+
+	ClearPendingDownlinkSeqIfMatches(state, 77);
+	EXPECT_FALSE(state.pending);
+	EXPECT_EQ(state.lastAcceptedSeq, 0u);
+	EXPECT_FALSE(state.hasAcceptedSeq);
+
+	MarkAcceptedDownlinkSeq(state, 77);
+	EXPECT_TRUE(state.hasAcceptedSeq);
+	EXPECT_EQ(state.lastAcceptedSeq, 77u);
+}
+
 TEST(RoomRegistrySelectionTest, NoGeoComparatorPreservesStrictWeakOrderingForSelf) {
 	mediasoup::roomregistry::LoadCandidate self{"ws://self", 3, 0};
 	mediasoup::roomregistry::LoadCandidate peer{"ws://peer", 3, 0};
@@ -176,6 +319,39 @@ TEST(RoomRegistrySelectionTest, NoGeoComparatorPreservesStrictWeakOrderingForSel
 	EXPECT_FALSE(mediasoup::roomregistry::CompareNoGeoCandidates(self, self, "ws://self"));
 	EXPECT_TRUE(mediasoup::roomregistry::CompareNoGeoCandidates(self, peer, "ws://self"));
 	EXPECT_FALSE(mediasoup::roomregistry::CompareNoGeoCandidates(peer, self, "ws://self"));
+}
+
+TEST(ProberConcurrencyFixTest, ResetRestartsWorkerForClusterQueuedDuringReset) {
+	BlockingProbeListener listener;
+	mediasoup::ccutils::Prober prober(&listener);
+
+	const auto first = prober.AddCluster(
+		mediasoup::ccutils::ProbeClusterMode::Uniform,
+		MakeTestProbeGoal());
+	ASSERT_TRUE(first.IsValid());
+	ASSERT_TRUE(listener.waitForFirstSend(std::chrono::milliseconds(500)));
+
+	auto resetFuture = std::async(std::launch::async, [&prober] {
+		prober.Reset();
+	});
+	EXPECT_EQ(
+		resetFuture.wait_for(std::chrono::milliseconds(20)),
+		std::future_status::timeout);
+
+	const auto queuedDuringReset = prober.AddCluster(
+		mediasoup::ccutils::ProbeClusterMode::Uniform,
+		MakeTestProbeGoal());
+	ASSERT_TRUE(queuedDuringReset.IsValid());
+
+	listener.releaseFirstSend();
+	EXPECT_EQ(
+		resetFuture.wait_for(std::chrono::seconds(1)),
+		std::future_status::ready);
+	EXPECT_TRUE(listener.waitForClusterStart(
+		queuedDuringReset.id,
+		std::chrono::seconds(1)));
+
+	prober.Reset();
 }
 
 TEST(ChannelThreadSafetyFixTest, ProcessAvailableDataRejectedInThreadedMode) {
@@ -385,6 +561,30 @@ TEST(RoomRegistryReplyUtilsTest, CopiesTextReplyUsingDeclaredLength) {
 	EXPECT_EQ(out, "message");
 }
 
+TEST(RoomStatsQosHelpersTest, ClearPeerAutomaticOverrideRecordsRemovesPeerAndRoomPressureKeys) {
+	std::unordered_map<std::string, int> records = {
+		{roomstatsqos::MakePeerKey("room", "alice"), 1},
+		{roomstatsqos::MakeRoomPressureKey("room", "alice"), 2},
+		{roomstatsqos::MakePeerKey("room", "bob"), 3}
+	};
+
+	roomstatsqos::ClearPeerAutomaticOverrideRecords(records, "room", "alice");
+
+	EXPECT_EQ(records.count(roomstatsqos::MakePeerKey("room", "alice")), 0u);
+	EXPECT_EQ(records.count(roomstatsqos::MakeRoomPressureKey("room", "alice")), 0u);
+	EXPECT_EQ(records.count(roomstatsqos::MakePeerKey("room", "bob")), 1u);
+}
+
+TEST(RoomStatsQosHelpersTest, BuildStatsStoreResponseDataIncludesReasonOnlyWhenPresent) {
+	const auto stored = roomstatsqos::BuildStatsStoreResponseData(true);
+	EXPECT_TRUE(stored.value("stored", false));
+	EXPECT_FALSE(stored.contains("reason"));
+
+	const auto rejected = roomstatsqos::BuildStatsStoreResponseData(false, "stale-seq");
+	EXPECT_FALSE(rejected.value("stored", true));
+	EXPECT_EQ(rejected.value("reason", ""), "stale-seq");
+}
+
 TEST(StaticFileResponderTest, MatchesOnlyRealSuffixes) {
 	EXPECT_EQ(ContentTypeForPath("/assets/app.css"), "text/css");
 	EXPECT_EQ(ContentTypeForPath("/assets/app.css.backup"), "application/octet-stream");
@@ -458,4 +658,76 @@ TEST(RtcpSuppressionFixTest, SuppressedVideoSkipsPliAndNackRetransmissions) {
 
 	::close(sv[0]);
 	::close(sv[1]);
+}
+
+// ── F1: unwrapTimestamp backward-wrap state consistency ─────────────
+
+TEST(UnwrapTimestamp, ForwardWrapUpdatesState)
+{
+	uint32_t lastTs = 0xFFFFFFF0u;
+	uint64_t wrapCount = 0;
+	const uint32_t baseTs = 0;
+
+	// Forward wrap: jump from near-max to near-zero crossing half-range
+	auto ticks = PeerRecorder::unwrapTimestamp(0x00000010u, baseTs, lastTs, wrapCount);
+	EXPECT_GT(ticks, 0u);
+	EXPECT_EQ(lastTs, 0x00000010u);
+	EXPECT_EQ(wrapCount, 1u);
+}
+
+TEST(UnwrapTimestamp, BackwardWrapUpdatesLastTsAndWrapCount)
+{
+	uint32_t lastTs = 0x00000010u;
+	uint64_t wrapCount = 1;
+	const uint32_t baseTs = 0;
+
+	// Backward wrap: jump from near-zero back to near-max crossing half-range
+	auto ticks = PeerRecorder::unwrapTimestamp(0xFFFFFFF0u, baseTs, lastTs, wrapCount);
+
+	// Key invariant: lastTs must be updated (was the F1 bug)
+	EXPECT_EQ(lastTs, 0xFFFFFFF0u);
+	// wrapCount must decrement (backward wrap undoes one forward wrap)
+	EXPECT_EQ(wrapCount, 0u);
+	// ticks should be near the top of the uint32 range (before baseTs subtraction)
+	// With wrapCount=0, ticks = 0xFFFFFFF0 which is >= baseTs(0), so result = 0xFFFFFFF0
+	EXPECT_EQ(ticks, static_cast<uint64_t>(0xFFFFFFF0u));
+}
+
+TEST(UnwrapTimestamp, BackwardWrapGuardedAtWrapCountZero)
+{
+	uint32_t lastTs = 0x00000010u;
+	uint64_t wrapCount = 0;
+	const uint32_t baseTs = 0;
+
+	// Large forward jump when wrapCount==0: treat as normal forward, don't decrement
+	auto ticks = PeerRecorder::unwrapTimestamp(0xFFFFFFF0u, baseTs, lastTs, wrapCount);
+	EXPECT_EQ(lastTs, 0xFFFFFFF0u);
+	EXPECT_EQ(wrapCount, 0u);  // No decrement below zero
+}
+
+TEST(UnwrapTimestamp, SmallBackwardJumpNoWrap)
+{
+	uint32_t lastTs = 1000u;
+	uint64_t wrapCount = 2;
+	const uint32_t baseTs = 0;
+
+	// Small backward jump (within half-range): genuine reorder, no wrap change
+	auto ticks = PeerRecorder::unwrapTimestamp(990u, baseTs, lastTs, wrapCount);
+	EXPECT_EQ(lastTs, 990u);
+	EXPECT_EQ(wrapCount, 2u);  // Unchanged
+}
+
+TEST(UnwrapTimestamp, MonotonicSequenceNoWrap)
+{
+	uint32_t lastTs = 0;
+	uint64_t wrapCount = 0;
+	const uint32_t baseTs = 0;
+
+	// Simple increasing sequence
+	auto t1 = PeerRecorder::unwrapTimestamp(100u, baseTs, lastTs, wrapCount);
+	auto t2 = PeerRecorder::unwrapTimestamp(200u, baseTs, lastTs, wrapCount);
+	auto t3 = PeerRecorder::unwrapTimestamp(300u, baseTs, lastTs, wrapCount);
+	EXPECT_LT(t1, t2);
+	EXPECT_LT(t2, t3);
+	EXPECT_EQ(wrapCount, 0u);
 }

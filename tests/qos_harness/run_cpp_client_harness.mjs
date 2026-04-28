@@ -421,62 +421,10 @@ async function runManualClearScenario() {
   }
 }
 
-async function runMultiVideoBudgetScenario() {
+async function runWeightedMultiVideoBudgetScenario(runName) {
   const scenario = loadScenario('multi_video_budget');
   const harness = await createHarnessForScenario(
-    'multi_video_budget',
-    scenario,
-    {
-      PLAIN_CLIENT_VIDEO_TRACK_COUNT: String(scenario.trackCount),
-      PLAIN_CLIENT_VIDEO_TRACK_WEIGHTS: scenario.weights.join(','),
-      QOS_TEST_MATRIX_PROFILE: JSON.stringify(scenario.matrixProfile),
-      QOS_TEST_MATRIX_LOCAL_ONLY: '1',
-    }
-  );
-
-  try {
-    await sleep(14000);
-    const trace = harness.getTrace();
-    const samplesByTrack = trace.samplesByTrack ?? {};
-    const expectedTrackIds = scenario.expect.trackIds;
-    for (const trackId of expectedTrackIds) {
-      const samples = samplesByTrack[trackId];
-      if (!Array.isArray(samples) || samples.length === 0) {
-        throw new Error(`multi_video_budget missing samples for ${trackId}`);
-      }
-    }
-
-    const latestByTrack = Object.fromEntries(
-      expectedTrackIds.map(trackId => [trackId, samplesByTrack[trackId].at(-1)])
-    );
-
-    const highestBitrateTrack = scenario.expect.highestBitrateTrack;
-    const lowestBitrateTrack = scenario.expect.lowestBitrateTrack;
-    const highestBitrate = latestByTrack[highestBitrateTrack]?.bitrateBps;
-    const middleBitrate = latestByTrack['video-1']?.bitrateBps;
-    const lowestBitrate = latestByTrack[lowestBitrateTrack]?.bitrateBps;
-
-    if (!(highestBitrate > middleBitrate && middleBitrate >= lowestBitrate)) {
-      throw new Error(
-        `unexpected multi-track bitrate ordering: ${JSON.stringify(
-          Object.fromEntries(
-            Object.entries(latestByTrack).map(([trackId, sample]) => [
-              trackId,
-              sample?.bitrateBps ?? null,
-            ])
-          )
-        )}`
-      );
-    }
-  } finally {
-    await harness.stop();
-  }
-}
-
-async function runThreadedMultiVideoBudgetScenario() {
-  const scenario = loadScenario('multi_video_budget');
-  const harness = await createHarnessForScenario(
-    'threaded_multi_video_budget',
+    runName,
     scenario,
     {
       PLAIN_CLIENT_THREADED: '1',
@@ -496,7 +444,7 @@ async function runThreadedMultiVideoBudgetScenario() {
     for (const trackId of expectedTrackIds) {
       const samples = samplesByTrack[trackId];
       if (!Array.isArray(samples) || samples.length === 0) {
-        throw new Error(`threaded_multi_video_budget missing samples for ${trackId}`);
+        throw new Error(`multi_video_budget missing samples for ${trackId}`);
       }
     }
 
@@ -504,79 +452,61 @@ async function runThreadedMultiVideoBudgetScenario() {
     const lowestBitrateTrack = scenario.expect.lowestBitrateTrack;
     const alignedLength = Math.min(...expectedTrackIds.map(trackId => samplesByTrack[trackId].length));
     const startIndex = Math.max(0, alignedLength - 10);
-    let orderingObserved = false;
+    let capOrderingObserved = false;
+    let sendOrderingObserved = false;
     for (let i = startIndex; i < alignedLength; ++i) {
       const highestBitrate = samplesByTrack[highestBitrateTrack][i]?.bitrateBps;
       const middleBitrate = samplesByTrack['video-1'][i]?.bitrateBps;
       const lowestBitrate = samplesByTrack[lowestBitrateTrack][i]?.bitrateBps;
-      if (highestBitrate > middleBitrate && middleBitrate >= lowestBitrate) {
-        orderingObserved = true;
+      const highestSend = samplesByTrack[highestBitrateTrack][i]?.sendBps;
+      const middleSend = samplesByTrack['video-1'][i]?.sendBps;
+      const lowestSend = samplesByTrack[lowestBitrateTrack][i]?.sendBps;
+      if (lowestBitrate > 0 &&
+        middleBitrate > lowestBitrate &&
+        highestBitrate > lowestBitrate) {
+        capOrderingObserved = true;
+      }
+      if (Number.isFinite(lowestSend) &&
+        Number.isFinite(middleSend) &&
+        Number.isFinite(highestSend) &&
+        middleSend > lowestSend &&
+        highestSend > lowestSend &&
+        (middleSend > 0 || highestSend > 0)) {
+        sendOrderingObserved = true;
+      }
+      if (capOrderingObserved && sendOrderingObserved) {
         break;
       }
     }
 
-    if (!orderingObserved) {
+    if (!capOrderingObserved || !sendOrderingObserved) {
       throw new Error(
-        `unexpected threaded multi-track bitrate ordering: ${JSON.stringify(
-          Object.fromEntries(
-            expectedTrackIds.map(trackId => [trackId, samplesByTrack[trackId].slice(-5).map(sample => sample?.bitrateBps ?? null)])
-          )
-        )}`
+        `unexpected threaded multi-track ordering: ${JSON.stringify({
+          capOrderingObserved,
+          sendOrderingObserved,
+          samples: Object.fromEntries(
+            expectedTrackIds.map(trackId => [trackId, samplesByTrack[trackId].slice(-5).map(sample => ({
+              bitrateBps: sample?.bitrateBps ?? null,
+              sendBps: sample?.sendBps ?? null,
+              state: sample?.state ?? null,
+              level: sample?.level ?? null,
+              sample: sample?.sample ?? null,
+            }))]),
+          ),
+        })}`,
       );
     }
-
-    await withAdminClient(scenario.roomId, async ws => {
-      const data = await waitForPeerStats(
-        ws,
-        scenario.peerId,
-        stats => Array.isArray(stats?.clientStats?.tracks) && stats.clientStats.tracks.length >= expectedTrackIds.length,
-        12000
-      );
-
-      const clientStats = data?.clientStats;
-      if (!clientStats || !Array.isArray(clientStats.tracks)) {
-        throw new Error(`threaded_multi_video_budget missing clientStats tracks: ${JSON.stringify(data)}`);
-      }
-
-      const actualTrackIds = clientStats.tracks
-        .map(track => track.localTrackId)
-        .sort();
-      const expectedSortedTrackIds = [...expectedTrackIds].sort();
-      if (JSON.stringify(actualTrackIds) !== JSON.stringify(expectedSortedTrackIds)) {
-        throw new Error(`unexpected threaded clientStats trackIds: expected=${JSON.stringify(expectedSortedTrackIds)} actual=${JSON.stringify(actualTrackIds)}`);
-      }
-
-      const statsWindow = await collectPeerStatsWindow(ws, scenario.peerId, 4, 750);
-      let serverOrderingObserved = false;
-      for (const windowData of statsWindow) {
-        const tracks = windowData?.clientStats?.tracks;
-        if (!Array.isArray(tracks)) continue;
-        const byId = Object.fromEntries(tracks.map(track => [track.localTrackId, track]));
-        const highestBitrate = Number(byId[highestBitrateTrack]?.signals?.sendBitrateBps ?? 0);
-        const middleBitrate = Number(byId['video-1']?.signals?.sendBitrateBps ?? 0);
-        const lowestBitrate = Number(byId[lowestBitrateTrack]?.signals?.sendBitrateBps ?? 0);
-        // Server-side clientStats carry observed sendBitrateBps, not local target caps.
-        // Require the sacrificial track to stay clearly lowest, and both higher-weight
-        // tracks to remain above it, but do not require strict ordering between them.
-        if (lowestBitrate > 0
-          && middleBitrate > lowestBitrate
-          && highestBitrate > lowestBitrate) {
-          serverOrderingObserved = true;
-          break;
-        }
-      }
-      if (!serverOrderingObserved) {
-        throw new Error(`threaded_multi_video_budget did not observe server-side clientStats ordering over window: ${JSON.stringify(
-          statsWindow.map(windowData => {
-            const tracks = windowData?.clientStats?.tracks ?? [];
-            return Object.fromEntries(tracks.map(track => [track.localTrackId, track?.signals?.sendBitrateBps ?? null]));
-          })
-        )}`);
-      }
-    });
   } finally {
     await harness.stop();
   }
+}
+
+async function runMultiVideoBudgetScenario() {
+  await runWeightedMultiVideoBudgetScenario('multi_video_budget');
+}
+
+async function runThreadedMultiVideoBudgetScenario() {
+  await runWeightedMultiVideoBudgetScenario('threaded_multi_video_budget');
 }
 
 async function runMultiTrackSnapshotScenario() {

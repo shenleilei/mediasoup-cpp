@@ -14,6 +14,8 @@ constexpr double kBaseBitrateBps = 100'000.0; // 100 kbps assumed base
 constexpr double kScreenShareBaseBps = 100'000.0;
 constexpr int kMaxSpatial = 2;
 constexpr int kMaxTemporal = 2;
+constexpr uint64_t kUnknownBitrateWarmupSeqLimit = 3;
+constexpr uint64_t kBootstrapBitrateGraceSeqLimit = 6;
 
 struct UpgradeStep {
 	size_t subIdx;
@@ -44,12 +46,62 @@ double GetScreenShareBaseBitrateBps()
 	return LoadBitrateOverride("MEDIASOUP_QOS_SCREENSHARE_BASE_BITRATE_BPS", kScreenShareBaseBps);
 }
 
+bool IsVisibleVideoBootstrapState(const DownlinkSubscription& sub)
+{
+	if (!sub.visible || sub.kind != "video")
+		return false;
+	if (sub.targetWidth == 0 && sub.targetHeight == 0)
+		return false;
+
+	return sub.framesPerSecond <= 0.0 &&
+		sub.frameWidth == 0 &&
+		sub.frameHeight == 0;
+}
+
+bool VisibleVideosAreStillBootstrapping(const DownlinkSnapshot& snapshot)
+{
+	bool hasVisibleVideo = false;
+	for (const auto& sub : snapshot.subscriptions) {
+		if (!sub.visible || sub.kind != "video")
+			continue;
+		hasVisibleVideo = true;
+		if (!IsVisibleVideoBootstrapState(sub))
+			return false;
+	}
+	return hasVisibleVideo;
+}
+
+bool HasVisibleVideo(const DownlinkSnapshot& snapshot)
+{
+	for (const auto& sub : snapshot.subscriptions) {
+		if (sub.visible && sub.kind == "video")
+			return true;
+	}
+	return false;
+}
+
 } // namespace
 
-double SubscriberBudgetAllocator::computeBudgetBps(const DownlinkSnapshot& snapshot) const {
+double SubscriberBudgetAllocator::computeBudgetBps(
+	const DownlinkSnapshot& snapshot,
+	int degradeLevel) const
+{
 	double budget = kDefaultSafetyCap;
 	if (snapshot.availableIncomingBitrate > 0.0)
 		budget = std::min(budget, snapshot.availableIncomingBitrate * kAlpha);
+	else if (snapshot.availableIncomingBitrate == 0.0 && snapshot.seq > 0) {
+		// Browser startup can report candidate-pair bitrate as zero before the
+		// transport has produced a trustworthy estimate. Treat that as "unknown"
+		// until the planner is already in a degraded state; otherwise visible
+		// subscribers can be paused immediately on a healthy join path.
+		if (snapshot.seq <= kUnknownBitrateWarmupSeqLimit && HasVisibleVideo(snapshot))
+			return budget;
+		if (snapshot.seq <= kBootstrapBitrateGraceSeqLimit &&
+			VisibleVideosAreStillBootstrapping(snapshot))
+			return budget;
+		if (degradeLevel > 0)
+			budget = 0.0;
+	}
 	return budget;
 }
 
@@ -86,7 +138,7 @@ SubscriberBudgetPlan SubscriberBudgetAllocator::Allocate(
 	const DownlinkSnapshot& snapshot, int degradeLevel) const
 {
 	SubscriberBudgetPlan plan;
-	plan.budgetBps = computeBudgetBps(snapshot);
+	plan.budgetBps = computeBudgetBps(snapshot, degradeLevel);
 	if (snapshot.subscriptions.empty()) return plan;
 
 	const auto& subs = snapshot.subscriptions;
@@ -142,6 +194,7 @@ SubscriberBudgetPlan SubscriberBudgetAllocator::Allocate(
 
 		for (size_t i = 0; i < n; ++i) {
 			if (!allocs[i].active) continue;
+			if (subs[i].kind != "video") continue; // Audio tracks don't have spatial/temporal layers
 			// Try spatial upgrade
 			if (allocs[i].spatial < maxSpatialCap) {
 				uint8_t ns = allocs[i].spatial + 1;

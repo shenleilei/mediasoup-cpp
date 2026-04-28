@@ -22,13 +22,12 @@ std::atomic<uint64_t> g_nextResolveRequestId{1};
 template<typename Response, typename Request>
 std::string ResolveClientIp(Response* res, Request* req)
 {
-	std::string clientIp(req->getQuery("clientIp"));
-	if (clientIp.empty()) {
-		std::string xff(req->getHeader("x-forwarded-for"));
-		if (!xff.empty()) {
-			auto comma = xff.find(',');
-			clientIp = (comma != std::string::npos) ? xff.substr(0, comma) : xff;
-		}
+	std::string clientIp;
+	// Ignore the query parameter "clientIp" to avoid spoofing
+	std::string xff(req->getHeader("x-forwarded-for"));
+	if (!xff.empty()) {
+		auto comma = xff.find(',');
+		clientIp = (comma != std::string::npos) ? xff.substr(0, comma) : xff;
 	}
 	if (clientIp.empty()) {
 		clientIp = std::string(res->getRemoteAddressAsText());
@@ -50,10 +49,17 @@ void SignalingServerHttp::RegisterHttpRoutes(uWS::App& app, SignalingServer& ser
 		}
 		const std::string clientIp = ResolveClientIp(res, req);
 		const auto requestStart = std::chrono::steady_clock::now();
-		spdlog::warn("api.resolve received [req:{} roomId:{} clientIp:{} registry:{}]",
+		spdlog::debug("api.resolve received [req:{} roomId:{} clientIp:{} registry:{}]",
 			requestId, roomId, clientIp, server.registry_ != nullptr);
 
 		if (!server.registry_) {
+			if (server.redisRequired_) {
+				res->writeStatus("503 Service Unavailable")
+					->writeHeader("Content-Type", "application/json")
+					->writeHeader("Access-Control-Allow-Origin", "*")
+					->end(R"({"error":"room registry unavailable","wsUrl":"","isNew":false})");
+				return;
+			}
 			res->writeHeader("Content-Type", "application/json")
 				->writeHeader("Access-Control-Allow-Origin", "*")
 				->end(R"({"wsUrl":"","isNew":true})");
@@ -67,40 +73,51 @@ void SignalingServerHttp::RegisterHttpRoutes(uWS::App& app, SignalingServer& ser
 
 		server.enqueueRegistryTask([&server, loop, res, aborted, roomId, clientIp, requestId, requestStart] {
 			RoomRegistry::ResolveResult result{"", true};
+			bool unavailable = false;
 			const auto resolveStart = std::chrono::steady_clock::now();
-			spdlog::warn("api.resolve executing [req:{} roomId:{} clientIp:{}]",
+			spdlog::debug("api.resolve executing [req:{} roomId:{} clientIp:{}]",
 				requestId, roomId, clientIp);
 			try {
 				result = server.registry_->resolveRoom(roomId, clientIp);
+				if (result.isNew && result.wsUrl.empty()) {
+					unavailable = true;
+				}
 			} catch (const std::exception& e) {
 				spdlog::warn("api.resolve failed [req:{} roomId:{} error:{}]",
 					requestId, roomId, e.what());
+				unavailable = true;
 			} catch (...) {
 				spdlog::warn("api.resolve failed [req:{} roomId:{} error:unknown]",
 					requestId, roomId);
+				unavailable = true;
 			}
 			const auto resolveMs = std::chrono::duration_cast<std::chrono::milliseconds>(
 				std::chrono::steady_clock::now() - resolveStart).count();
-			spdlog::warn("api.resolve resolved [req:{} roomId:{} wsUrl:{} isNew:{} resolveMs:{}]",
+			spdlog::debug("api.resolve resolved [req:{} roomId:{} wsUrl:{} isNew:{} resolveMs:{}]",
 				requestId, roomId, result.wsUrl, result.isNew, resolveMs);
 
 			json responseBody;
-			if (!result.wsUrl.empty()) {
+			std::string status = "200 OK";
+			if (unavailable) {
+				status = "503 Service Unavailable";
+				responseBody = {{"error", "room registry unavailable"}, {"wsUrl", ""}, {"isNew", false}};
+			} else if (!result.wsUrl.empty()) {
 				responseBody = {{"wsUrl", result.wsUrl}, {"isNew", result.isNew}};
 			} else {
 				responseBody = {{"wsUrl", ""}, {"isNew", true}};
 			}
 			std::string body = responseBody.dump();
 
-			loop->defer([res, aborted, body = std::move(body)] {
+			loop->defer([res, aborted, status = std::move(status), body = std::move(body)] {
 				if (aborted->load(std::memory_order_relaxed)) return;
-				res->writeHeader("Content-Type", "application/json")
+				res->writeStatus(status)
+					->writeHeader("Content-Type", "application/json")
 					->writeHeader("Access-Control-Allow-Origin", "*")
 					->end(body);
 			});
 			const auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(
 				std::chrono::steady_clock::now() - requestStart).count();
-			spdlog::warn("api.resolve response scheduled [req:{} roomId:{} totalMs:{}]",
+			spdlog::debug("api.resolve response scheduled [req:{} roomId:{} totalMs:{}]",
 				requestId, roomId, totalMs);
 		}, "api.resolve#" + std::to_string(requestId) + " room=" + roomId);
 	});
@@ -115,9 +132,12 @@ void SignalingServerHttp::RegisterHttpRoutes(uWS::App& app, SignalingServer& ser
 			{"availableWorkerThreads", snapshot.availableWorkerThreads},
 			{"knownNodes", snapshot.knownNodes},
 			{"registryEnabled", snapshot.registryEnabled},
+			{"redisRequired", snapshot.redisRequired},
+			{"redisReady", snapshot.redisReady},
 			{"startupSucceeded", snapshot.startupSucceeded},
 			{"shutdownRequested", snapshot.shutdownRequested},
 			{"healthy", server.isHealthy(snapshot)},
+			{"ready", server.isReady(snapshot)},
 			{"dispatchRooms", snapshot.dispatchRooms},
 			{"staleRequestDrops", snapshot.staleRequestDrops},
 			{"rejectedClientStats", snapshot.rejectedClientStats},
@@ -137,6 +157,9 @@ void SignalingServerHttp::RegisterHttpRoutes(uWS::App& app, SignalingServer& ser
 			{"startupSucceeded", snapshot.startupSucceeded},
 			{"shutdownRequested", snapshot.shutdownRequested},
 			{"registryEnabled", snapshot.registryEnabled},
+			{"redisRequired", snapshot.redisRequired},
+			{"redisReady", snapshot.redisReady},
+			{"ready", server.isReady(snapshot)},
 			{"workers", snapshot.totalWorkers},
 			{"workerThreads", server.workerThreads_.size()},
 			{"availableWorkerThreads", snapshot.availableWorkerThreads},
@@ -149,6 +172,29 @@ void SignalingServerHttp::RegisterHttpRoutes(uWS::App& app, SignalingServer& ser
 			res->writeStatus("503 Service Unavailable")
 				->writeHeader("Content-Type", "application/json")
 				->end(health.dump());
+		}
+	});
+
+	app.get("/readyz", [&server](auto* res, auto*) {
+		auto snapshot = server.collectRuntimeSnapshot();
+		bool ready = server.isReady(snapshot);
+		json readiness = {
+			{"ok", ready},
+			{"startupSucceeded", snapshot.startupSucceeded},
+			{"shutdownRequested", snapshot.shutdownRequested},
+			{"registryEnabled", snapshot.registryEnabled},
+			{"redisRequired", snapshot.redisRequired},
+			{"redisReady", snapshot.redisReady},
+			{"workers", snapshot.totalWorkers},
+			{"workerThreads", server.workerThreads_.size()},
+			{"availableWorkerThreads", snapshot.availableWorkerThreads}
+		};
+		if (ready) {
+			res->writeHeader("Content-Type", "application/json")->end(readiness.dump());
+		} else {
+			res->writeStatus("503 Service Unavailable")
+				->writeHeader("Content-Type", "application/json")
+				->end(readiness.dump());
 		}
 	});
 

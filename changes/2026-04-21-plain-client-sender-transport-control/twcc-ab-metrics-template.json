@@ -1,0 +1,124 @@
+{
+  "schema": "mediasoup.twcc.ab.v1",
+  "generatedAt": "<ISO8601>",
+  "baseline": {
+    "label": "baseline",
+    "commit": "<git-commit-or-tag>"
+  },
+  "candidate": {
+    "label": "candidate",
+    "commit": "<git-commit-or-tag>"
+  },
+  "environment": {
+    "host": "<hostname>",
+    "os": "<distro>",
+    "kernel": "<kernel>",
+    "cpu": "<cpu-model>",
+    "memoryGb": 0,
+    "networkSetup": "<tc/netem setup>",
+    "inputMedia": "<path + codec + resolution + fps>"
+  },
+  "runConfig": {
+    "repetitionsPerScenario": 10,
+    "scenarios": [
+      "AB-001",
+      "AB-002",
+      "AB-003",
+      "AB-004",
+      "AB-005"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "AB-001",
+      "name": "steady_state",
+      "network": {
+        "bandwidthKbps": 0,
+        "rttMs": 0,
+        "lossRate": 0.0,
+        "jitterMs": 0
+      },
+      "baseline": {
+        "goodputKbps": { "mean": 0, "p50": 0, "p90": 0 },
+        "lossPercent": { "mean": 0, "p50": 0, "p90": 0 },
+        "recoveryTimeMs": { "mean": 0, "p50": 0, "p90": 0 },
+        "stabilityKbpsP90MinusP50": 0,
+        "queuePressure": {
+          "wouldBlockTotal": 0,
+          "queuedVideoRetentions": 0,
+          "audioDeadlineDrops": 0,
+          "retransmissionDrops": 0
+        },
+        "fairnessDeviation": 0
+      },
+      "candidate": {
+        "goodputKbps": { "mean": 0, "p50": 0, "p90": 0 },
+        "lossPercent": { "mean": 0, "p50": 0, "p90": 0 },
+        "recoveryTimeMs": { "mean": 0, "p50": 0, "p90": 0 },
+        "stabilityKbpsP90MinusP50": 0,
+        "queuePressure": {
+          "wouldBlockTotal": 0,
+          "queuedVideoRetentions": 0,
+          "audioDeadlineDrops": 0,
+          "retransmissionDrops": 0
+        },
+        "fairnessDeviation": 0
+      },
+      "delta": {
+        "goodputPercent": 0,
+        "lossPercent": 0,
+        "recoveryTimePercent": 0,
+        "queuePressurePercent": 0,
+        "fairnessDeviationPercent": 0
+      },
+      "pass": true,
+      "notes": "<analysis>"
+    }
+  ],
+  "gates": [
+    {
+      "id": "gate-AB-002-loss-queue",
+      "description": "AB-002 congestion loss + queue pressure improves >=20%",
+      "target": ">=20%",
+      "actual": "<value>",
+      "pass": true
+    },
+    {
+      "id": "gate-AB-003-recovery",
+      "description": "AB-003 recovery time not worse, target >=15% improvement",
+      "target": "not worse, ideally >=15%",
+      "actual": "<value>",
+      "pass": true
+    },
+    {
+      "id": "gate-AB-001-steady-goodput",
+      "description": "AB-001 steady-state goodput regression <=5%",
+      "target": "<=5% regression",
+      "actual": "<value>",
+      "pass": true
+    },
+    {
+      "id": "gate-AB-005-fairness",
+      "description": "AB-005 fairness deviation not increased",
+      "target": "no increase",
+      "actual": "<value>",
+      "pass": true
+    },
+    {
+      "id": "gate-regression-safety",
+      "description": "pause/shutdown/generation regression checks all green",
+      "target": "all pass",
+      "actual": "<value>",
+      "pass": true
+    }
+  ],
+  "overall": {
+    "pass": true,
+    "summary": "<final verdict>"
+  },
+  "artifacts": {
+    "rawMetricsPath": "<path>",
+    "comparisonReportPath": "<path>",
+    "logsPath": "<path>"
+  }
+}

@@ -36,7 +36,7 @@
 curl -s http://127.0.0.1:3000/healthz | jq
 curl -s http://127.0.0.1:3000/api/node-load | jq
 curl -s http://127.0.0.1:3000/metrics
-curl -s "http://127.0.0.1:3000/api/resolve?roomId=test-room&clientIp=1.2.3.4" | jq
+curl -H "X-Forwarded-For: 1.2.3.4" -s "http://127.0.0.1:3000/api/resolve?roomId=test-room" | jq
 ```
 
 ### 1.3 最有用的几个观察字段
@@ -188,7 +188,7 @@ curl -s "http://127.0.0.1:3000/api/resolve?roomId=test-room&clientIp=1.2.3.4" | 
 
 排查顺序：
 
-1. 直接请求 `/api/resolve?roomId=...&clientIp=...`
+1. 携带 `X-Forwarded-For` 请求头直接请求 `/api/resolve?roomId=...`
 2. 看返回的 `wsUrl` 和 `isNew`
 3. 看目标节点的 `/api/node-load`
 4. 看 Redis 中 node / room key 是否合理
@@ -413,13 +413,13 @@ env PLAIN_CLIENT_VIDEO_TRACK_COUNT=3 \
 
 ### 8.3 Redis 不可用时的表现
 
-系统会降级成单节点：
+默认运行契约下，Redis 不可用不会再隐式降级成单节点：
 
-- 本机房间仍可跑
-- `/api/resolve` 会退化
-- 多节点 redirect / room takeover 会失效
+- 启动阶段：进程直接启动失败
+- 运行阶段：`/readyz` 返回 `503`
+- 新的 `/api/resolve` / `join` 等依赖 room-registry 的路径会显式失败
 
-所以“Redis 故障”不一定表现为服务完全不可用，更常见的是“跨节点行为错了”。
+只有显式使用 `redisRequired=false` 时，才允许 local-only 模式继续运行。
 
 ### 8.4 subscriber 忙循环
 
@@ -548,3 +548,4 @@ redis-cli SUBSCRIBE sfu:ch:nodes sfu:ch:rooms
 - 是否需要把慢逻辑从 `WorkerThread` 挪走
 - 是否需要补指标
 - 是否需要给多节点缓存和 subscriber 加更强的一致性保护
+�

@@ -12,6 +12,6 @@
 当前主报告仍使用：
 
 - `docs/generated/uplink-qos-matrix-report.json`
-- `docs/generated/uplink-qos-matrix-report.targeted.json`
+- `docs/generated/uplink-qos-matrix-report.json`
 - `docs/uplink-qos-case-results.md`
-- `docs/generated/uplink-qos-case-results.targeted.md`
+- `docs/uplink-qos-case-results.md`

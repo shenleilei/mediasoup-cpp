@@ -24,7 +24,7 @@
 
 这里的“BW2 仍保留观察”指的是：
 
-- 历史 dedicated strict targeted artifact [generated/uplink-qos-matrix-report.targeted.json](./generated/uplink-qos-matrix-report.targeted.json) 在 `generatedAt=2026-04-12T15:33:19.265Z` 时曾明确显示 `BW2 FAIL`
+- 历史 dedicated strict targeted artifact [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json) 在 `generatedAt=2026-04-12T15:33:19.265Z` 时曾明确显示 `BW2 FAIL`
 - latest 组合 targeted regression 在 `generatedAt=2026-04-13T00:31:10.077Z` 时，对 `T9,T10,T11,J3,J4,J5,BW2,T1,S4` 这 `9` 个 case 得到 `9 / 9 PASS`
 - 由于 `BW2` 仍然存在跨轮次波动，当前更合理的口径是“历史证据混合，继续作为 extended sentinel 观察”，而不是直接回退进默认 blocking gate
 
@@ -155,12 +155,12 @@
 - client JS 单测实际执行结果：`27 / 27 PASS`
 - Node/browser harness 实际执行结果：全部通过
 - full matrix 主 gate 当前重渲染结果：[uplink-qos-case-results.md](./uplink-qos-case-results.md)
-- latest targeted 组合回归结果：[generated/uplink-qos-case-results.targeted.md](./generated/uplink-qos-case-results.targeted.md)
+- latest targeted 组合回归结果：[uplink-qos-case-results.md](./uplink-qos-case-results.md)
 
 补充说明：
 
 - full matrix 原始机器输出保留在 [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json)。
-- targeted rerun 原始机器输出保留在 [generated/uplink-qos-matrix-report.targeted.json](./generated/uplink-qos-matrix-report.targeted.json)。
+- targeted rerun 原始机器输出保留在 [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json)。
 - 每次报告生成都会按 `generatedAt` 归档到 [archive/uplink-qos-runs](./archive/uplink-qos-runs)。
 - `T1 / S4` 的边界波动依据，来自至少两份不同 full matrix 快照的对比。
 - `BW2` 的边界结论来自 dedicated strict targeted fail、latest 组合 targeted regression pass，以及 [uplink-qos-loopback-boundary-investigation.md](./uplink-qos-loopback-boundary-investigation.md) 中的专项排查。

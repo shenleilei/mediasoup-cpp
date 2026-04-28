@@ -85,8 +85,11 @@ public:
 		const std::string& displayName, const json& rtpCapabilities,
 		const std::string& clientIp = "");
 	Result leave(const std::string& roomId, const std::string& peerId);
+	Result leaveIfSessionMatches(const std::string& roomId, const std::string& peerId,
+		uint64_t expectedSessionId);
 	Result createTransport(const std::string& roomId, const std::string& peerId,
-		bool producing, bool consuming);
+		bool producing, bool consuming,
+		const json& rtpCapabilities = json::object());
 	Result connectTransport(const std::string& roomId, const std::string& peerId,
 		const std::string& transportId, const DtlsParameters& dtlsParams);
 	Result produce(const std::string& roomId, const std::string& peerId,
@@ -106,7 +109,8 @@ public:
 
 	// PlainTransport: one-shot publish (create transport + produce one or more video tracks + audio)
 	Result plainPublish(const std::string& roomId, const std::string& peerId,
-		const std::vector<uint32_t>& videoSsrcs, uint32_t audioSsrc);
+		const std::vector<uint32_t>& videoSsrcs, uint32_t audioSsrc,
+		const std::string& videoCodec = "h264");
 	// PlainTransport: one-shot subscribe (create transport + consume all)
 	Result plainSubscribe(const std::string& roomId, const std::string& peerId,
 		const std::string& recvIp, uint16_t recvPort);
@@ -128,14 +132,16 @@ public:
 	std::shared_ptr<Room> getRoom(const std::string& roomId) { return roomManager_.getRoom(roomId); }
 	void cleanOldRecordings(uint64_t maxBytes = kMaxRecordingDirBytes);
 	// Expects a snapshot already validated on the signaling thread.
-	void setClientStats(
+	Result setClientStats(
 		const std::string& roomId,
 		const std::string& peerId,
 		qos::ClientQosSnapshot stats);
-	void setDownlinkClientStats(const std::string& roomId, const std::string& peerId, const json& stats);
+	Result setDownlinkClientStats(
+		const std::string& roomId,
+		const std::string& peerId,
+		qos::DownlinkSnapshot stats);
 	json collectPeerStats(const std::string& roomId, const std::string& peerId);
 	void broadcastStats();
-	void heartbeatRegistry();
 
 	// Multi-node: resolve room location
 	json resolveRoom(const std::string& roomId, const std::string& clientIp = "");

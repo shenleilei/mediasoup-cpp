@@ -46,8 +46,8 @@
 补充说明：
 
 - latest full matrix `generatedAt=2026-04-13T03:34:38.058Z`，当前重渲染结果见 [uplink-qos-case-results.md](./uplink-qos-case-results.md)。
-- latest targeted 组合回归结果见 [generated/uplink-qos-case-results.targeted.md](./generated/uplink-qos-case-results.targeted.md)。
-- full / targeted 的原始机器 artifact 仍分别保留在 [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json) 和 [generated/uplink-qos-matrix-report.targeted.json](./generated/uplink-qos-matrix-report.targeted.json)。
+- latest targeted 组合回归结果见 [uplink-qos-case-results.md](./uplink-qos-case-results.md)。
+- full / targeted 的原始机器 artifact 仍分别保留在 [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json) 和 [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json)。
 - latest 组合 targeted regression 覆盖：
   `T9,T10,T11,J3,J4,J5,BW2,T1,S4`
   当前结果为 `9 / 9 PASS`。

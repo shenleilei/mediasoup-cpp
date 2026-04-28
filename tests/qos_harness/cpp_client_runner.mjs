@@ -3,6 +3,11 @@ import path from 'node:path';
 import net from 'node:net';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import {
+  acquireNetemGuard,
+  clearRootQdisc,
+  releaseNetemGuard,
+} from './netem_guard.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,6 +17,7 @@ const HARNESS_WARMUP_MS = 2000;
 const DEFAULT_HARNESS_MP4_PATH = path.join(repoRoot, 'tests', 'fixtures', 'media', 'test_sweep.mp4');
 const DEFAULT_HARNESS_AV_MP4_PATH = path.join(repoRoot, 'tests', 'fixtures', 'media', 'test_sweep_av.mp4');
 const DEFAULT_MATRIX_MP4_PATH = path.join(repoRoot, 'tests', 'fixtures', 'media', 'test_sweep_cpp_matrix.mp4');
+const activeNetemGuards = new Map();
 
 function runTc(args) {
   execFileSync(tcPath, args, { stdio: 'inherit' });
@@ -126,12 +132,13 @@ export function sleep(ms) {
 }
 
 export function clearNetem(iface = 'lo') {
-  try {
-    execFileSync(tcPath, ['qdisc', 'del', 'dev', iface, 'root'], { stdio: 'ignore' });
-  } catch {}
+  clearRootQdisc(iface);
 }
 
 export function applyNetemConfig(config = {}, iface = 'lo') {
+  if (!activeNetemGuards.has(iface)) {
+    throw new Error(`cpp-client netem guard not acquired before applyNetemConfig() on ${iface}`);
+  }
   const { bandwidth, rtt, loss, jitter } = config;
   clearNetem(iface);
 
@@ -273,9 +280,28 @@ function parseQosTraceLine(line) {
     sample: fields.sample ?? 'unknown',
     bitrateBps: readNumber('bitrateBps'),
     sendBps: readNumber('sendBps'),
+    lossRate: readNumber('lossRate'),
     packetsLost: readNumber('packetsLost'),
     rttMs: readNumber('rttMs'),
     jitterMs: readNumber('jitterMs'),
+    senderUsageBps: readNumber('senderUsageBps'),
+    transportEstimateBps: readNumber('transportEstimateBps'),
+    effectivePacingBps: readNumber('effectivePacingBps'),
+    feedbackReports: readNumber('feedbackReports'),
+    probePackets: readNumber('probePackets'),
+    probeActive: readNumber('probeActive') === 1,
+    probeClusterStarts: readNumber('probeClusterStarts'),
+    probeClusterCompletes: readNumber('probeClusterCompletes'),
+    probeClusterEarlyStops: readNumber('probeClusterEarlyStops'),
+    probeBytesSent: readNumber('probeBytesSent'),
+    wouldBlockTotal: readNumber('wouldBlockTotal'),
+    queuedVideoRetentions: readNumber('queuedVideoRetentions'),
+    audioDeadlineDrops: readNumber('audioDeadlineDrops'),
+    retransmissionDrops: readNumber('retransmissionDrops'),
+    retransmissionSent: readNumber('retransmissionSent'),
+    queuedFreshVideoPackets: readNumber('queuedFreshVideoPackets'),
+    queuedAudioPackets: readNumber('queuedAudioPackets'),
+    queuedRetransmissionPackets: readNumber('queuedRetransmissionPackets'),
     width: readNumber('width'),
     height: readNumber('height'),
     fps: readNumber('fps'),
@@ -318,9 +344,28 @@ function buildTraceFromSamples(samples) {
         source: sample.sample,
         bitrateBps: sample.bitrateBps,
         sendBps: sample.sendBps,
+        lossRate: sample.lossRate,
         packetsLost: sample.packetsLost,
         rttMs: sample.rttMs,
         jitterMs: sample.jitterMs,
+        senderUsageBps: sample.senderUsageBps,
+        transportEstimateBps: sample.transportEstimateBps,
+        effectivePacingBps: sample.effectivePacingBps,
+        feedbackReports: sample.feedbackReports,
+        probePackets: sample.probePackets,
+        probeActive: sample.probeActive,
+        probeClusterStarts: sample.probeClusterStarts,
+        probeClusterCompletes: sample.probeClusterCompletes,
+        probeClusterEarlyStops: sample.probeClusterEarlyStops,
+        probeBytesSent: sample.probeBytesSent,
+        wouldBlockTotal: sample.wouldBlockTotal,
+        queuedVideoRetentions: sample.queuedVideoRetentions,
+        audioDeadlineDrops: sample.audioDeadlineDrops,
+        retransmissionDrops: sample.retransmissionDrops,
+        retransmissionSent: sample.retransmissionSent,
+        queuedFreshVideoPackets: sample.queuedFreshVideoPackets,
+        queuedAudioPackets: sample.queuedAudioPackets,
+        queuedRetransmissionPackets: sample.queuedRetransmissionPackets,
         width: sample.width,
         height: sample.height,
         fps: sample.fps,
@@ -401,6 +446,11 @@ export async function createCppClientHarness({
   if (!fs.existsSync(mp4Path)) {
     throw new Error(`mp4 file not found: ${mp4Path}`);
   }
+  const netemGuard = await acquireNetemGuard({
+    label: `cpp-client:${roomId ?? peerId ?? 'unknown'}`,
+    iface,
+  });
+  activeNetemGuards.set(iface, netemGuard);
 
   const diagnostics = {
     sfuStdout: [],
@@ -414,6 +464,7 @@ export async function createCppClientHarness({
     signalingPort,
   };
 
+  const workerBin = process.env.QOS_CPP_CLIENT_WORKER_BIN || './mediasoup-worker';
   let traceCache = { samples: [], trace: [] };
   let client = null;
   const sfu = spawn(
@@ -422,11 +473,12 @@ export async function createCppClientHarness({
       '--nodaemon',
       `--port=${signalingPort}`,
       '--workers=1',
-      '--workerBin=./mediasoup-worker',
+      `--workerBin=${workerBin}`,
       '--announcedIp=127.0.0.1',
       '--listenIp=127.0.0.1',
       '--redisHost=0.0.0.0',
       '--redisPort=1',
+      '--noRedisRequired',
     ],
     {
       cwd: repoRoot,
@@ -465,9 +517,16 @@ export async function createCppClientHarness({
   };
 
   const stopHarness = async () => {
-    clearNetem(iface);
-    await stopChild(client);
-    await stopChild(sfu);
+    try {
+      clearNetem(iface);
+      await stopChild(client);
+      await stopChild(sfu);
+    } finally {
+      await releaseNetemGuard(netemGuard);
+      if (activeNetemGuards.get(iface) === netemGuard) {
+        activeNetemGuards.delete(iface);
+      }
+    }
   };
 
   try {

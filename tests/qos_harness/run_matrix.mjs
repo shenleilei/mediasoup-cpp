@@ -12,8 +12,10 @@ import {
   getCaseExpectation,
   getPhaseNetwork,
   getImpairedStateForEvaluation,
+  summarizeMeaningfulActions,
   summarizePhaseState,
 } from './synthetic_sweep_shared.mjs';
+import { readRootQdisc } from './netem_guard.mjs';
 import {
   archiveCurrentReportSet,
   backupLatestReportSet,
@@ -66,6 +68,40 @@ function compactJson(value) {
   } catch {
     return String(value);
   }
+}
+
+function isMildBaselineNetwork(network = {}) {
+  return (
+    (network.bandwidth ?? 0) >= 2000 &&
+    (network.rtt ?? 0) <= 80 &&
+    (network.loss ?? 0) <= 2 &&
+    (network.jitter ?? 0) <= 20
+  );
+}
+
+function detectBaselineContamination(caseDef, baselineState) {
+  if (!baselineState) {
+    return null;
+  }
+
+  if (baselineState.state === 'recovering') {
+    return 'baseline entered recovering before any impairment';
+  }
+
+  const baselineNetwork = getPhaseNetwork(caseDef, 'baseline');
+  if (!isMildBaselineNetwork(baselineNetwork)) {
+    return null;
+  }
+
+  if (baselineState.state === 'congested') {
+    return `mild baseline network reported congested/L${baselineState.level}`;
+  }
+
+  if ((baselineState.level ?? 0) > 1) {
+    return `mild baseline network reported level L${baselineState.level}`;
+  }
+
+  return null;
 }
 
 function classifyInfrastructureFailure(diagnostics) {
@@ -314,7 +350,10 @@ async function runCase(caseDef) {
   };
 
   try {
-    harness = await createLoopbackHarness({ caseId: caseDef.caseId });
+    harness = await createLoopbackHarness({
+      caseId: caseDef.caseId,
+      source: caseDef.source ?? 'camera',
+    });
     const baselineNetwork = getPhaseNetwork(caseDef, 'baseline');
     const impairedNetwork = getPhaseNetwork(caseDef, 'impaired');
     const recoveryNetwork = getPhaseNetwork(caseDef, 'recovery');
@@ -325,6 +364,13 @@ async function runCase(caseDef) {
       toNetemConfig(baselineNetwork),
       scaleDuration(caseDef.baselineMs, 15000)
     );
+    const baselineInfraFailure = detectBaselineContamination(caseDef, baseline.state);
+    if (baselineInfraFailure) {
+      throw new Error(
+        `baseline contamination detected for ${caseDef.caseId}: ${baselineInfraFailure}; ` +
+        `state=${fmtState(baseline.state)} qdisc=${readRootQdisc('lo') || '<empty>'}`
+      );
+    }
     const impairment = await runPhase(
       harness,
       'impairment',
@@ -378,15 +424,14 @@ async function runCase(caseDef) {
       impairmentSummary,
       baselineSummary
     );
-    const actionTypes = fullTrace
-      .map(entry => entry?.plannedAction?.type)
-      .filter(type => type && type !== 'noop');
+    const actionSummary = summarizeMeaningfulActions(fullTrace);
     const evaluation = deriveCaseEvaluation(
       caseDef,
       baselineSummary.current,
       impairedStateForEvaluation,
       recoverySummary.best,
-      'loopback'
+      'loopback',
+      { actionCount: actionSummary.actionCount },
     );
 
     result.baseline = baseline;
@@ -405,8 +450,8 @@ async function runCase(caseDef) {
           : extractTiming(fullTrace, recovery.startMs),
     };
     result.analysis = evaluation.analysis;
-    result.actionCount = actionTypes.length;
-    result.actionTypes = actionTypes;
+    result.actionCount = actionSummary.actionCount;
+    result.actionTypes = actionSummary.actionTypes;
     result.verdict = {
       passed: evaluation.passed,
       reason: evaluation.reason,

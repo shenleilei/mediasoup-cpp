@@ -17,6 +17,9 @@ struct PerSocketData {
 	std::string peerId;
 	std::string roomId;
 	uint64_t sessionId = kInvalidSessionId;
+	std::string pendingPeerId;
+	std::string pendingRoomId;
+	uint64_t pendingSessionId = kInvalidSessionId;
 	std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>>(true);
 };
 
@@ -52,13 +55,28 @@ inline bool IsDownlinkSeqWrapOrReset(uint64_t prevSeq, uint64_t nextSeq)
 
 inline bool IsAdvancingDownlinkSeq(const DownlinkStatsRateLimitState& state, uint64_t seq)
 {
-	if (!state.hasAcceptedSeq) return true;
-	if (seq > state.lastAcceptedSeq) return true;
-	if (seq < state.lastAcceptedSeq &&
-		IsDownlinkSeqWrapOrReset(state.lastAcceptedSeq, seq)) {
+	const uint64_t baselineSeq = state.pending
+		? state.pendingSeq
+		: state.lastAcceptedSeq;
+	if (!state.pending && !state.hasAcceptedSeq) return true;
+	if (seq > baselineSeq) return true;
+	if (seq < baselineSeq &&
+		IsDownlinkSeqWrapOrReset(baselineSeq, seq)) {
 		return true;
 	}
 	return false;
+}
+
+inline void MarkAcceptedDownlinkSeq(DownlinkStatsRateLimitState& state, uint64_t seq)
+{
+	state.lastAcceptedSeq = seq;
+	state.hasAcceptedSeq = true;
+}
+
+inline void ClearPendingDownlinkSeqIfMatches(DownlinkStatsRateLimitState& state, uint64_t seq)
+{
+	if (state.pending && state.pendingSeq == seq)
+		state.pending = false;
 }
 
 inline bool HasMappedSession(
@@ -72,6 +90,33 @@ inline bool HasMappedSession(
 	return it != wsMap->peers.end() &&
 		it->second == ws &&
 		it->second->getUserData()->sessionId == sessionId;
+}
+
+inline void SetPendingSocketJoin(
+	PerSocketData* socketData,
+	const std::string& roomId,
+	const std::string& peerId,
+	uint64_t sessionId)
+{
+	socketData->pendingRoomId = roomId;
+	socketData->pendingPeerId = peerId;
+	socketData->pendingSessionId = sessionId;
+}
+
+inline void ClearPendingSocketJoin(PerSocketData* socketData)
+{
+	socketData->pendingRoomId.clear();
+	socketData->pendingPeerId.clear();
+	socketData->pendingSessionId = kInvalidSessionId;
+}
+
+inline void ClearPendingSocketJoinIfMatches(
+	PerSocketData* socketData,
+	uint64_t sessionId)
+{
+	if (socketData->pendingSessionId == sessionId) {
+		ClearPendingSocketJoin(socketData);
+	}
 }
 
 inline void RemoveSocketFromRoomPeers(
@@ -96,12 +141,30 @@ inline SignalingWebSocket* RegisterJoinedSocket(
 	const std::string& peerId,
 	uint64_t sessionId)
 {
+	const auto mapKey = WsMap::key(roomId, peerId);
+	// Defensive cleanup: a socket should have at most one active mapping.
+	for (auto it = wsMap->peers.begin(); it != wsMap->peers.end();) {
+		if (it->second != ws || it->first == mapKey) {
+			++it;
+			continue;
+		}
+
+		const auto delimiterPos = it->first.find('/');
+		if (delimiterPos != std::string::npos) {
+			RemoveSocketFromRoomPeers(
+				wsMap,
+				ws,
+				it->first.substr(0, delimiterPos));
+		}
+		it = wsMap->peers.erase(it);
+	}
+
 	auto* socketData = ws->getUserData();
 	socketData->roomId = roomId;
 	socketData->peerId = peerId;
 	socketData->sessionId = sessionId;
+	ClearPendingSocketJoin(socketData);
 
-	const auto mapKey = WsMap::key(roomId, peerId);
 	SignalingWebSocket* oldWs = nullptr;
 	auto it = wsMap->peers.find(mapKey);
 	if (it != wsMap->peers.end() && it->second != ws) {

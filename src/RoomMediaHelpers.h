@@ -94,6 +94,17 @@ inline json ConsumeExistingProducers(
 				};
 				auto consumer = transport->consume(consumeOpts);
 				TrackPeerConsumer(peer, consumer);
+				if (consumer->kind() == "video") {
+					try {
+						consumer->requestKeyFrame();
+					} catch (const std::exception& e) {
+						MS_WARN(logger, "[{} {}] keyframe request failed for existing producer {}: {}",
+							roomId, peerId, producerKey, e.what());
+					} catch (...) {
+						MS_WARN(logger, "[{} {}] keyframe request failed for existing producer {}: unknown error",
+							roomId, peerId, producerKey);
+					}
+				}
 				consumers.push_back(BuildConsumerData(
 					other->id,
 					producer,
@@ -158,6 +169,17 @@ inline void AutoSubscribeProducerToOtherPeers(
 			};
 			auto consumer = recvTransport->consume(consumeOpts);
 			TrackPeerConsumer(other, consumer);
+			if (consumer->kind() == "video") {
+				try {
+					consumer->requestKeyFrame();
+				} catch (const std::exception& e) {
+					MS_WARN(logger, "[{} {}] keyframe request failed for {}: {}",
+						roomId, producerPeerId, other->id, e.what());
+				} catch (...) {
+					MS_WARN(logger, "[{} {}] keyframe request failed for {}: unknown error",
+						roomId, producerPeerId, other->id);
+				}
+			}
 
 			if (notify) {
 				notify(roomId, other->id, {

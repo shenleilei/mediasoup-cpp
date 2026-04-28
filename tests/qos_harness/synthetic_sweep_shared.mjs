@@ -115,12 +115,19 @@ export function toSyntheticCondition(network) {
 }
 
 export function getCaseExpectation(caseDefn, runner = 'default') {
+  const baseExpectation =
+    caseDefn?.expect && typeof caseDefn.expect === 'object'
+      ? caseDefn.expect
+      : {};
   const runnerSpecific = caseDefn?.expectByRunner?.[runner];
   if (runnerSpecific && typeof runnerSpecific === 'object') {
-    return runnerSpecific;
+    return {
+      ...baseExpectation,
+      ...runnerSpecific,
+    };
   }
 
-  return caseDefn?.expect ?? {};
+  return baseExpectation;
 }
 
 function expectsRecovery(caseDefn, runner = 'default') {
@@ -226,6 +233,37 @@ export function extractTiming(trace, phaseStartMs, phaseEndMs) {
   return timing;
 }
 
+export function summarizeMeaningfulActions(trace = []) {
+  const actionTypes = [];
+  let previousKey = null;
+
+  for (const entry of trace) {
+    const type = entry?.plannedAction?.type;
+    if (!type || type === 'noop') {
+      continue;
+    }
+
+    const level =
+      typeof entry?.plannedAction?.level === 'number'
+        ? entry.plannedAction.level
+        : 'na';
+    const applied = entry?.applied === false ? 'rejected' : 'applied';
+    const key = `${type}:${level}:${applied}`;
+
+    if (key === previousKey) {
+      continue;
+    }
+
+    previousKey = key;
+    actionTypes.push(type);
+  }
+
+  return {
+    actionCount: actionTypes.length,
+    actionTypes,
+  };
+}
+
 export function summarizePhaseState(trace, phaseStartMs, fallbackState, phaseEndMs) {
   const current = {
     state: fallbackState?.state ?? 'stable',
@@ -322,25 +360,35 @@ export function deriveCaseEvaluation(
   baselineState,
   impairedState,
   recoveredState,
-  runner = 'default'
+  runner = 'default',
+  context = {}
 ) {
   const expectation = getCaseExpectation(caseDefn, runner);
   const analysis = analyzeResult(caseDefn, baselineState, impairedState, recoveredState, runner);
   const expectationMatch = evaluateExpectation(impairedState, expectation);
   const recoveryPassed = recoveryPassedForCase(caseDefn, baselineState, recoveredState, runner);
+  const maxActionCountPassed =
+    typeof expectation.maxActionCount !== 'number' ||
+    !Number.isFinite(context.actionCount) ||
+    context.actionCount <= expectation.maxActionCount;
+  if (analysis.verdict === '符合' && !maxActionCountPassed) {
+    analysis.verdict = '过强';
+  }
   const passed =
     expectationMatch.stateMatch &&
     expectationMatch.levelMatch &&
     analysis.verdict === '符合' &&
-    recoveryPassed;
+    recoveryPassed &&
+    maxActionCountPassed;
 
   return {
     passed,
     analysis,
     expectation: expectationMatch,
     recoveryPassed,
+    maxActionCountPassed,
     reason: passed
       ? 'expectation satisfied'
-      : `stateMatch=${expectationMatch.stateMatch}, levelMatch=${expectationMatch.levelMatch}, recoveryPassed=${recoveryPassed}, analysis=${analysis.verdict}`,
+      : `stateMatch=${expectationMatch.stateMatch}, levelMatch=${expectationMatch.levelMatch}, recoveryPassed=${recoveryPassed}, maxActionCountPassed=${maxActionCountPassed}, analysis=${analysis.verdict}`,
   };
 }

@@ -3,9 +3,17 @@
 //        NetworkThread (offline), SourceWorker command handling
 #include <gtest/gtest.h>
 
+#include "TransportCcTestHelpers.h"
+
+#include "../client/ccutils/TrendDetector.h"
+#include "../client/ccutils/ProbeTypes.h"
+#include "../client/sendsidebwe/PacketTracker.h"
+#include "../client/sendsidebwe/SendSideBwe.h"
+#include "../client/sendsidebwe/TwccFeedbackTracker.h"
 #include "../client/ThreadTypes.h"
 #include "../client/NetworkThread.h"
 #include "../client/ThreadedControlHelpers.h"
+#include "../client/TransportCcHelpers.h"
 #include "../client/qos/QosController.h"
 
 #include <thread>
@@ -14,6 +22,13 @@
 #include <numeric>
 
 using namespace mt;
+using mediasoup::plainclient::PacketClass;
+using mediasoup::plainclient::SendResult;
+using mediasoup::plainclient::SendStatus;
+using mediasoup::plainclient::SenderTransportController;
+using mediasoup::plainclient::sendsidebwe::PacketTracker;
+using mediasoup::plainclient::sendsidebwe::SendSideBwe;
+using mediasoup::plainclient::sendsidebwe::TwccFeedbackTracker;
 
 // ═══════════════════════════════════════════════════════════
 // SpscQueue unit tests
@@ -729,6 +744,1130 @@ TEST(RtcpHandler, RtpPacketStoreEvictsOldEntries) {
 	const uint8_t* data; size_t len;
 	EXPECT_FALSE(store.get(0, data, len)) << "seq 0 should be evicted";
 	EXPECT_TRUE(store.get(RtpPacketStore::kMaxPackets + 99, data, len)) << "newest should exist";
+}
+
+TEST(RtcpHandler, HandleNackWithSenderCountsOnlySuccessfulSends) {
+	RtpPacketStore store;
+	for (uint16_t seq = 100; seq <= 104; ++seq) {
+		uint8_t pkt[20];
+		memset(pkt, 0, sizeof(pkt));
+		pkt[0] = 0x80; pkt[1] = 96;
+		pkt[2] = seq >> 8; pkt[3] = seq & 0xFF;
+		store.store(seq, pkt, sizeof(pkt));
+	}
+
+	uint8_t nack[16];
+	nack[0] = 0x81; nack[1] = 205;
+	nack[2] = 0; nack[3] = 3;
+	memset(nack + 4, 0, 8);
+	nack[12] = 0; nack[13] = 101;
+	nack[14] = 0x00; nack[15] = 0x05;
+
+	int callCount = 0;
+	int retransmitted = handleNackWithSender(
+		nack,
+		sizeof(nack),
+		store,
+		[&callCount](const uint8_t*, size_t) {
+			++callCount;
+			return callCount == 2
+				? SendResult{SendStatus::WouldBlock, EAGAIN, 0}
+				: SendResult{SendStatus::Sent, 0, 20};
+		});
+
+	EXPECT_EQ(callCount, 3);
+	EXPECT_EQ(retransmitted, 2);
+}
+
+TEST(RtcpHandler, SenderReportsUpdateAttemptTimeBeforeSuccessTime) {
+	RtcpContext rtcp;
+	uint32_t ssrc = 0x12345678;
+	uint16_t seq = 3456;
+	rtcp.registerVideoStream(ssrc, 96, &seq);
+	auto* stream = rtcp.getVideoStream(ssrc);
+	ASSERT_NE(stream, nullptr);
+	stream->packetCount = 5;
+	stream->octetCount = 500;
+	stream->lastRtpTs = 90000;
+
+	rtcp.maybeSendSR(-1);
+
+	EXPECT_GT(rtcp.lastSrAttemptMs, 0);
+	EXPECT_EQ(rtcp.lastSrSentMs, 0);
+	EXPECT_TRUE(stream->srNtpToSendTime.empty());
+}
+
+TEST(UdpSendHelpers, EnobufsIsWouldBlock) {
+	EXPECT_TRUE(mediasoup::plainclient::IsWouldBlockErrno(ENOBUFS));
+}
+
+TEST(TransportCcHelpers, RewriteRtpAddsTransportWideCcExtension) {
+	uint8_t input[20]{};
+	input[0] = 0x80;
+	input[1] = 96;
+	input[2] = 0x12;
+	input[3] = 0x34;
+	input[4] = 0x00;
+	input[5] = 0x00;
+	input[6] = 0x03;
+	input[7] = 0xE8;
+	input[8] = 0x01;
+	input[9] = 0x02;
+	input[10] = 0x03;
+	input[11] = 0x04;
+	for (size_t i = 12; i < sizeof(input); ++i) {
+		input[i] = static_cast<uint8_t>(i);
+	}
+
+	uint8_t output[64]{};
+	size_t outputLen = sizeof(output);
+	ASSERT_TRUE(mediasoup::plainclient::RewriteRtpWithTransportCcSequence(
+		input,
+		sizeof(input),
+		5,
+		0xBEEF,
+		output,
+		&outputLen));
+	ASSERT_EQ(outputLen, sizeof(input) + 8);
+
+	EXPECT_EQ(output[0] & 0x10, 0x10); // extension bit enabled
+	EXPECT_EQ(output[12], 0xBE);
+	EXPECT_EQ(output[13], 0xDE);
+	EXPECT_EQ(output[14], 0x00);
+	EXPECT_EQ(output[15], 0x01);
+	EXPECT_EQ(output[16], static_cast<uint8_t>((5 << 4) | 0x01));
+	EXPECT_EQ(output[17], 0xBE);
+	EXPECT_EQ(output[18], 0xEF);
+	EXPECT_EQ(output[19], 0x00);
+	EXPECT_EQ(std::memcmp(output + 20, input + 12, sizeof(input) - 12), 0);
+}
+
+TEST(TransportCcHelpers, RewriteRtpUpdatesExistingTransportWideCcExtension) {
+	uint8_t input[24]{};
+	input[0] = 0x90; // V=2, X=1
+	input[1] = 96;
+	input[2] = 0x12;
+	input[3] = 0x34;
+	input[8] = 0x01;
+	input[9] = 0x02;
+	input[10] = 0x03;
+	input[11] = 0x04;
+	input[12] = 0xBE;
+	input[13] = 0xDE;
+	input[14] = 0x00;
+	input[15] = 0x01;
+	input[16] = static_cast<uint8_t>((5 << 4) | 0x01);
+	input[17] = 0x00;
+	input[18] = 0x01;
+	input[19] = 0x00;
+	input[20] = 0xAA;
+	input[21] = 0xBB;
+	input[22] = 0xCC;
+	input[23] = 0xDD;
+
+	uint8_t output[64]{};
+	size_t outputLen = sizeof(output);
+	ASSERT_TRUE(mediasoup::plainclient::RewriteRtpWithTransportCcSequence(
+		input,
+		sizeof(input),
+		5,
+		0x1234,
+		output,
+		&outputLen));
+	ASSERT_EQ(outputLen, sizeof(input));
+	EXPECT_EQ(output[17], 0x12);
+	EXPECT_EQ(output[18], 0x34);
+	EXPECT_EQ(output[20], 0xAA);
+	EXPECT_EQ(output[23], 0xDD);
+}
+
+TEST(TransportCcHelpers, ParseTransportFeedbackSummaryHandlesRunLengthAndLoss) {
+	// RTPFB(TCC): fmt=15, pt=205, len=28 bytes => lengthWords=6
+	uint8_t packet[28]{};
+	packet[0] = 0x8F;
+	packet[1] = 205;
+	packet[2] = 0x00;
+	packet[3] = 0x06;
+	packet[4] = 0x11; packet[5] = 0x22; packet[6] = 0x33; packet[7] = 0x44; // sender ssrc
+	packet[8] = 0x55; packet[9] = 0x66; packet[10] = 0x77; packet[11] = 0x88; // media ssrc
+	packet[12] = 0x03; packet[13] = 0xE8; // base seq 1000
+	packet[14] = 0x00; packet[15] = 0x06; // packet status count 6
+	packet[16] = 0x00; packet[17] = 0x00; packet[18] = 0x01; // reference time
+	packet[19] = 0x10; // feedback packet count
+	// 2-bit vector chunk: [1,0,2,0,1,2]
+	packet[20] = 0xD2;
+	packet[21] = 0x18;
+	// deltas for symbols 1,2,1,2 => 1 + 2 + 1 + 2 = 6 bytes
+	packet[22] = 0x05;             // small
+	packet[23] = 0x00; packet[24] = 0x0A; // large
+	packet[25] = 0x06;             // small
+	packet[26] = 0x00; packet[27] = 0x0B; // large
+
+	mediasoup::plainclient::TransportCcFeedbackSummary summary;
+	ASSERT_TRUE(mediasoup::plainclient::ParseTransportCcFeedbackSummary(
+		packet,
+		sizeof(packet),
+		&summary));
+	EXPECT_EQ(summary.senderSsrc, 0x11223344u);
+	EXPECT_EQ(summary.mediaSsrc, 0x55667788u);
+	EXPECT_EQ(summary.baseSequenceNumber, 1000u);
+	EXPECT_EQ(summary.packetStatusCount, 6u);
+	EXPECT_EQ(summary.receivedPacketCount, 4u);
+	EXPECT_EQ(summary.lostPacketCount, 2u);
+
+	mediasoup::plainclient::TransportCcFeedback feedback;
+	ASSERT_TRUE(mediasoup::plainclient::ParseTransportCcFeedback(
+		packet,
+		sizeof(packet),
+		&feedback));
+	ASSERT_EQ(feedback.packets.size(), 6u);
+	EXPECT_TRUE(feedback.packets[0].received);
+	EXPECT_EQ(feedback.packets[0].sequenceNumber, 1000u);
+	EXPECT_EQ(feedback.packets[0].receiveTimeUs, 65250);
+	EXPECT_FALSE(feedback.packets[1].received);
+	EXPECT_TRUE(feedback.packets[2].received);
+	EXPECT_EQ(feedback.packets[2].receiveTimeUs, 67750);
+	EXPECT_TRUE(feedback.packets[4].received);
+	EXPECT_EQ(feedback.packets[4].receiveTimeUs, 69250);
+	EXPECT_TRUE(feedback.packets[5].received);
+	EXPECT_EQ(feedback.packets[5].receiveTimeUs, 72000);
+}
+
+TEST(TransportCcHelpers, ParseTransportFeedbackReconstructsDetailedTimestamps) {
+	const auto packet = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
+		{40, 60, std::nullopt, 80},
+		32000,
+		0x01020304u,
+		0x55667788u,
+		0x000000u,
+		0x21u);
+
+	mediasoup::plainclient::TransportCcFeedback feedback;
+	ASSERT_TRUE(mediasoup::plainclient::ParseTransportCcFeedback(
+		packet.data(),
+		packet.size(),
+		&feedback));
+	ASSERT_EQ(feedback.senderSsrc, 0x01020304u);
+	ASSERT_EQ(feedback.mediaSsrc, 0x55667788u);
+	ASSERT_EQ(feedback.baseSequenceNumber, 32000u);
+	ASSERT_EQ(feedback.packetStatusCount, 4u);
+	ASSERT_EQ(feedback.receivedPacketCount, 3u);
+	ASSERT_EQ(feedback.lostPacketCount, 1u);
+	ASSERT_EQ(feedback.packets.size(), 4u);
+	EXPECT_EQ(feedback.packets[0].receiveTimeUs, 10000);
+	EXPECT_EQ(feedback.packets[1].receiveTimeUs, 25000);
+	EXPECT_FALSE(feedback.packets[2].received);
+	EXPECT_EQ(feedback.packets[3].receiveTimeUs, 45000);
+}
+
+TEST(TwccFeedbackTracker, ExpandsReferenceTimeCyclesAndDetectsOutOfOrderReports) {
+	TwccFeedbackTracker tracker;
+
+	auto firstPacket = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
+		{40},
+		1000,
+		0x11111111u,
+		0x22222222u,
+		0xFFFFFEu,
+		0x20u);
+	mediasoup::plainclient::TransportCcFeedback firstFeedback;
+	ASSERT_TRUE(mediasoup::plainclient::ParseTransportCcFeedback(
+		firstPacket.data(),
+		firstPacket.size(),
+		&firstFeedback));
+	const auto [firstRefUs, firstOutOfOrder] = tracker.ProcessReport(firstFeedback, 1000000);
+	EXPECT_FALSE(firstOutOfOrder);
+	EXPECT_EQ(firstRefUs, static_cast<int64_t>(0xFFFFFEu) * 64000);
+
+	auto wrappedPacket = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
+		{40},
+		1001,
+		0x11111111u,
+		0x22222222u,
+		0x000001u,
+		0x21u);
+	mediasoup::plainclient::TransportCcFeedback wrappedFeedback;
+	ASSERT_TRUE(mediasoup::plainclient::ParseTransportCcFeedback(
+		wrappedPacket.data(),
+		wrappedPacket.size(),
+		&wrappedFeedback));
+	const auto [wrappedRefUs, wrappedOutOfOrder] = tracker.ProcessReport(wrappedFeedback, 1100000);
+	EXPECT_FALSE(wrappedOutOfOrder);
+	EXPECT_EQ(
+		wrappedRefUs,
+		static_cast<int64_t>((1u << 24) + 1u) * 64000);
+
+	auto outOfOrderPacket = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
+		{40},
+		999,
+		0x11111111u,
+		0x22222222u,
+		0xFFFFFDu,
+		0x10u);
+	mediasoup::plainclient::TransportCcFeedback outOfOrderFeedback;
+	ASSERT_TRUE(mediasoup::plainclient::ParseTransportCcFeedback(
+		outOfOrderPacket.data(),
+		outOfOrderPacket.size(),
+		&outOfOrderFeedback));
+	const auto [outOfOrderRefUs, outOfOrder] = tracker.ProcessReport(outOfOrderFeedback, 1200000);
+	EXPECT_TRUE(outOfOrder);
+	EXPECT_EQ(
+		outOfOrderRefUs,
+		static_cast<int64_t>(0xFFFFFDu) * 64000);
+	EXPECT_EQ(tracker.NumReportsOutOfOrder(), 1);
+}
+
+TEST(PacketTracker, RecordsSendsAndReceivedIndicationsUsingRelativeClocks) {
+	PacketTracker tracker;
+	const uint16_t seq0 = tracker.RecordPacketSendAndGetSequenceNumber(1000000, 1200, false, 0, false);
+	const uint16_t seq1 = tracker.RecordPacketSendAndGetSequenceNumber(1010000, 1200, false, 0, false);
+	const uint16_t seq2 = tracker.RecordPacketSendAndGetSequenceNumber(1020000, 1200, false, 0, false);
+	(void)seq2;
+
+	auto first = tracker.RecordPacketIndicationFromRemote(seq0, 2000000);
+	EXPECT_FALSE(first.valid);
+	EXPECT_EQ(first.sendDeltaUs, 0);
+	EXPECT_EQ(first.recvDeltaUs, 0);
+
+	auto second = tracker.RecordPacketIndicationFromRemote(seq1, 2012000);
+	EXPECT_TRUE(second.valid);
+	EXPECT_EQ(second.sendDeltaUs, 10000);
+	EXPECT_EQ(second.recvDeltaUs, 12000);
+
+	auto lost = tracker.RecordPacketIndicationFromRemote(seq2, 0);
+	EXPECT_TRUE(lost.valid);
+	EXPECT_EQ(lost.packetInfo.recvTimeUs, 0);
+}
+
+TEST(PacketTracker, AllocatedSequenceIsIgnoredUntilSendIsRecorded) {
+	PacketTracker tracker;
+	const uint16_t seq0 = tracker.GetNextSequenceNumber();
+	const uint16_t seq1 = tracker.GetNextSequenceNumber();
+
+	auto beforeRecord = tracker.RecordPacketIndicationFromRemote(seq1, 2000000);
+	EXPECT_FALSE(beforeRecord.valid);
+
+	tracker.RecordPacketSent(seq0, 1000000, 1200, false, 0, false);
+	tracker.RecordPacketSent(seq1, 1010000, 1200, false, 0, false);
+
+	auto first = tracker.RecordPacketIndicationFromRemote(seq0, 2000000);
+	EXPECT_FALSE(first.valid);
+	auto second = tracker.RecordPacketIndicationFromRemote(seq1, 2010000);
+	EXPECT_TRUE(second.valid);
+	EXPECT_EQ(second.sendDeltaUs, 10000);
+	EXPECT_EQ(second.recvDeltaUs, 10000);
+}
+
+TEST(ThreadedControlHelpers, ProbeSuppressionDisablesLocalAndServerSamples) {
+	mt::ThreadedTrackStatsState statsState;
+	statsState.latest.probeActive = true;
+	statsState.latest.probePacketCount = 5;
+
+	auto decision = mt::applyProbeSampleSuppression(
+		statsState,
+		/*statsFresh=*/true,
+		/*hasServerStats=*/true);
+
+	EXPECT_FALSE(decision.statsFresh);
+	EXPECT_FALSE(decision.hasServerStats);
+	EXPECT_TRUE(decision.suppressed);
+	EXPECT_EQ(statsState.localProbeSuppressionSamples, 1);
+	EXPECT_EQ(statsState.lastObservedProbePacketCount, 5u);
+}
+
+TEST(ThreadedControlHelpers, ProbeSuppressionCountdownContinuesWithoutFreshLocalStats) {
+	mt::ThreadedTrackStatsState statsState;
+	statsState.localProbeSuppressionSamples = 1;
+	statsState.lastObservedProbePacketCount = 5;
+
+	auto decision = mt::applyProbeSampleSuppression(
+		statsState,
+		/*statsFresh=*/false,
+		/*hasServerStats=*/true);
+
+	EXPECT_FALSE(decision.statsFresh);
+	EXPECT_FALSE(decision.hasServerStats);
+	EXPECT_TRUE(decision.suppressed);
+	EXPECT_EQ(statsState.localProbeSuppressionSamples, 0);
+	EXPECT_EQ(statsState.lastObservedProbePacketCount, 5u);
+}
+
+TEST(RtcpHandler, VideoProbeRtpDoesNotPopulateStoreOrOctetCount) {
+	RtcpContext rtcp;
+	uint32_t ssrc = 0x01020304;
+	uint16_t seq = 3456;
+	rtcp.registerVideoStream(ssrc, 96, &seq);
+
+	uint8_t packet[16]{};
+	packet[0] = 0xA0; // V=2, P=1
+	packet[1] = 96;
+	packet[2] = static_cast<uint8_t>(seq >> 8);
+	packet[3] = static_cast<uint8_t>(seq & 0xFF);
+	packet[4] = 0x00;
+	packet[5] = 0x01;
+	packet[6] = 0x5F;
+	packet[7] = 0x90;
+	packet[8] = static_cast<uint8_t>(ssrc >> 24);
+	packet[9] = static_cast<uint8_t>(ssrc >> 16);
+	packet[10] = static_cast<uint8_t>(ssrc >> 8);
+	packet[11] = static_cast<uint8_t>(ssrc & 0xFF);
+	packet[15] = 4;
+
+	rtcp.onVideoProbeRtpSent(packet, sizeof(packet));
+
+	const auto* stream = rtcp.getVideoStream(ssrc);
+	ASSERT_NE(stream, nullptr);
+	EXPECT_EQ(stream->packetCount, 0u);
+	EXPECT_EQ(stream->probePacketCount, 1u);
+	EXPECT_EQ(stream->octetCount, 0u);
+	EXPECT_EQ(stream->lastRtpTs, 0u);
+	const uint8_t* storedData = nullptr;
+	size_t storedLen = 0;
+	EXPECT_FALSE(stream->store.get(seq, storedData, storedLen));
+
+	uint8_t nack[16]{};
+	nack[0] = 0x81;
+	nack[1] = RTCP_PT_RTPFB;
+	nack[2] = 0x00;
+	nack[3] = 0x03;
+	nack[8] = static_cast<uint8_t>(ssrc >> 24);
+	nack[9] = static_cast<uint8_t>(ssrc >> 16);
+	nack[10] = static_cast<uint8_t>(ssrc >> 8);
+	nack[11] = static_cast<uint8_t>(ssrc & 0xFF);
+	nack[12] = static_cast<uint8_t>(seq >> 8);
+	nack[13] = static_cast<uint8_t>(seq & 0xFF);
+
+	int queued = enqueueNackPackets(
+		nack,
+		sizeof(nack),
+		stream->store,
+		[](const uint8_t*, size_t) { return true; });
+	EXPECT_EQ(queued, 0);
+}
+
+TEST(RtcpHandler, VideoProbeRtpDoesNotOverwriteLastMediaTimestamp) {
+	RtcpContext rtcp;
+	uint32_t ssrc = 0x11121314;
+	uint16_t seq = 4000;
+	rtcp.registerVideoStream(ssrc, 96, &seq);
+	auto* stream = rtcp.getVideoStream(ssrc);
+	ASSERT_NE(stream, nullptr);
+	stream->lastRtpTs = 0x10203040u;
+
+	uint8_t packet[16]{};
+	packet[0] = 0xA0; // V=2, P=1
+	packet[1] = 96;
+	packet[2] = static_cast<uint8_t>(seq >> 8);
+	packet[3] = static_cast<uint8_t>(seq & 0xFF);
+	packet[4] = 0x55;
+	packet[5] = 0x66;
+	packet[6] = 0x77;
+	packet[7] = 0x88;
+	packet[8] = static_cast<uint8_t>(ssrc >> 24);
+	packet[9] = static_cast<uint8_t>(ssrc >> 16);
+	packet[10] = static_cast<uint8_t>(ssrc >> 8);
+	packet[11] = static_cast<uint8_t>(ssrc & 0xFF);
+	packet[15] = 4;
+
+	rtcp.onVideoProbeRtpSent(packet, sizeof(packet));
+
+	EXPECT_EQ(stream->probePacketCount, 1u);
+	EXPECT_EQ(stream->lastRtpTs, 0x10203040u);
+}
+
+TEST(NetworkThreadProbeGoal, UsesLivekitPaddingProbeMath) {
+	mediasoup::ccutils::ProbeClusterGoal goal;
+	ASSERT_TRUE(NetworkThread::BuildProbeClusterGoalForTest(
+		900000u,
+		300000u,
+		300000u,
+		120,
+		200000,
+		std::chrono::milliseconds(100),
+		&goal));
+	EXPECT_EQ(goal.availableBandwidthBps, 300000);
+	EXPECT_EQ(goal.expectedUsageBps, 300000);
+	EXPECT_EQ(goal.desiredBps, 1020000);
+	EXPECT_EQ(goal.duration, std::chrono::milliseconds(100));
+}
+
+TEST(NetworkThreadProbeGoal, HonorsProbeMinBpsAndNoProbeConditions) {
+	mediasoup::ccutils::ProbeClusterGoal goal;
+	ASSERT_TRUE(NetworkThread::BuildProbeClusterGoalForTest(
+		350000u,
+		300000u,
+		300000u,
+		120,
+		200000,
+		std::chrono::milliseconds(100),
+		&goal));
+	EXPECT_EQ(goal.desiredBps, 500000);
+
+	EXPECT_FALSE(NetworkThread::BuildProbeClusterGoalForTest(
+		300000u,
+		300000u,
+		300000u,
+		120,
+		200000,
+		std::chrono::milliseconds(100),
+		&goal));
+	EXPECT_FALSE(NetworkThread::BuildProbeClusterGoalForTest(
+		250000u,
+		300000u,
+		250000u,
+		120,
+		200000,
+		std::chrono::milliseconds(100),
+		&goal));
+}
+
+TEST(SendSideBwe, CanProbeUsesProbeRegulatorDefaults) {
+	SendSideBwe bwe;
+	EXPECT_TRUE(bwe.CanProbe());
+	EXPECT_GT(bwe.ProbeDuration().count(), 0);
+}
+
+TEST(SendSideBwe, GoodProbeFinalizeKeepsHigherEstimatedCapacity) {
+	SendSideBwe bwe;
+	bwe.SeedEstimatedAvailableChannelCapacityForTest(100000);
+
+	mediasoup::ccutils::ProbeClusterInfo probeClusterInfo;
+	probeClusterInfo.id = 7;
+	probeClusterInfo.createdAt = std::chrono::steady_clock::now();
+	probeClusterInfo.goal.desiredBps = 200000;
+	probeClusterInfo.goal.duration = std::chrono::milliseconds(100);
+	probeClusterInfo.goal.desiredBytes = 3000;
+
+	bwe.ProbeClusterStarting(probeClusterInfo);
+	EXPECT_FALSE(bwe.CanProbe());
+
+	std::vector<uint16_t> sequences;
+	for (int i = 0; i < 5; ++i) {
+		sequences.push_back(bwe.RecordPacketSendAndGetSequenceNumber(
+			1000000 + static_cast<int64_t>(i) * 10000,
+			1200,
+			false,
+			probeClusterInfo.id,
+			true));
+	}
+
+	const auto packet = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
+		std::vector<std::optional<int16_t>>(5, int16_t{40}),
+		sequences.front(),
+		0x11111111u,
+		0x22222222u,
+		0x000000u,
+		0x40u);
+	mediasoup::plainclient::TransportCcFeedback feedback;
+	ASSERT_TRUE(mediasoup::plainclient::ParseTransportCcFeedback(
+		packet.data(),
+		packet.size(),
+		&feedback));
+	bwe.HandleTransportFeedback(feedback, 2000000);
+
+	probeClusterInfo.result.startTimeUs = 1000000;
+	probeClusterInfo.result.endTimeUs = 1100000;
+	probeClusterInfo.result.bytesProbe = 6000;
+	probeClusterInfo.result.isCompleted = true;
+	bwe.ProbeClusterDone(probeClusterInfo);
+	EXPECT_TRUE(bwe.ProbeClusterIsGoalReached(probeClusterInfo));
+
+	const auto [probeSignal, estimatedCapacity, finalized] = bwe.ProbeClusterFinalize();
+	EXPECT_TRUE(finalized);
+	EXPECT_EQ(probeSignal, mediasoup::ccutils::ProbeSignal::NotCongesting);
+	EXPECT_GT(estimatedCapacity, 100000);
+	EXPECT_EQ(estimatedCapacity, bwe.EstimatedAvailableChannelCapacityBps());
+}
+
+TEST(SendSideBwe, GoalReachedCanBeObservedBeforeProbeClusterDone) {
+	SendSideBwe bwe;
+	bwe.SeedEstimatedAvailableChannelCapacityForTest(100000);
+
+	mediasoup::ccutils::ProbeClusterInfo probeClusterInfo;
+	probeClusterInfo.id = 17;
+	probeClusterInfo.createdAt = std::chrono::steady_clock::now();
+	probeClusterInfo.goal.desiredBps = 200000;
+	probeClusterInfo.goal.duration = std::chrono::milliseconds(100);
+	probeClusterInfo.goal.desiredBytes = 3000;
+
+	bwe.ProbeClusterStarting(probeClusterInfo);
+
+	std::vector<uint16_t> sequences;
+	for (int i = 0; i < 5; ++i) {
+		sequences.push_back(bwe.RecordPacketSendAndGetSequenceNumber(
+			1000000 + static_cast<int64_t>(i) * 10000,
+			1200,
+			false,
+			probeClusterInfo.id,
+			true));
+	}
+
+	const auto packet = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
+		std::vector<std::optional<int16_t>>(5, int16_t{40}),
+		sequences.front(),
+		0x11111111u,
+		0x22222222u,
+		0x000000u,
+		0x42u);
+	mediasoup::plainclient::TransportCcFeedback feedback;
+	ASSERT_TRUE(mediasoup::plainclient::ParseTransportCcFeedback(
+		packet.data(),
+		packet.size(),
+		&feedback));
+	bwe.HandleTransportFeedback(feedback, 2000000);
+
+	probeClusterInfo.result.startTimeUs = 1000000;
+	probeClusterInfo.result.endTimeUs = 1100000;
+	probeClusterInfo.result.bytesProbe = 6000;
+	probeClusterInfo.result.isCompleted = true;
+
+	EXPECT_TRUE(bwe.ProbeClusterIsGoalReached(probeClusterInfo));
+}
+
+TEST(SendSideBwe, CongestingProbeDoesNotRaiseEstimatedCapacity) {
+	SendSideBwe bwe;
+	bwe.SeedEstimatedAvailableChannelCapacityForTest(300000);
+
+	mediasoup::ccutils::ProbeClusterInfo probeClusterInfo;
+	probeClusterInfo.id = 8;
+	probeClusterInfo.createdAt = std::chrono::steady_clock::now();
+	probeClusterInfo.goal.desiredBps = 350000;
+	probeClusterInfo.goal.duration = std::chrono::milliseconds(100);
+	probeClusterInfo.goal.desiredBytes = 3000;
+
+	bwe.ProbeClusterStarting(probeClusterInfo);
+
+	std::vector<uint16_t> sequences;
+	for (int i = 0; i < 5; ++i) {
+		sequences.push_back(bwe.RecordPacketSendAndGetSequenceNumber(
+			1000000 + static_cast<int64_t>(i) * 10000,
+			1200,
+			false,
+			probeClusterInfo.id,
+			true));
+	}
+
+	std::vector<std::optional<int16_t>> deltas250us;
+	for (int i = 0; i < 5; ++i) {
+		deltas250us.emplace_back(static_cast<int16_t>(400));
+	}
+	const auto packet = transportcc_test::BuildTransportCcFeedbackPacketFromPacketDeltas(
+		deltas250us,
+		sequences.front(),
+		0x11111111u,
+		0x22222222u,
+		0x000000u,
+		0x41u);
+	mediasoup::plainclient::TransportCcFeedback feedback;
+	ASSERT_TRUE(mediasoup::plainclient::ParseTransportCcFeedback(
+		packet.data(),
+		packet.size(),
+		&feedback));
+	bwe.HandleTransportFeedback(feedback, 2000000);
+
+	probeClusterInfo.result.startTimeUs = 1000000;
+	probeClusterInfo.result.endTimeUs = 1100000;
+	probeClusterInfo.result.bytesProbe = 6000;
+	probeClusterInfo.result.isCompleted = true;
+	bwe.ProbeClusterDone(probeClusterInfo);
+	EXPECT_FALSE(bwe.ProbeClusterIsGoalReached(probeClusterInfo));
+
+	const auto [probeSignal, estimatedCapacity, finalized] = bwe.ProbeClusterFinalize();
+	EXPECT_TRUE(finalized);
+	EXPECT_EQ(probeSignal, mediasoup::ccutils::ProbeSignal::Congesting);
+	EXPECT_EQ(estimatedCapacity, 300000);
+	EXPECT_EQ(estimatedCapacity, bwe.EstimatedAvailableChannelCapacityBps());
+}
+
+TEST(SendSideBwe, ProbeFinalizeWaitsUntilClusterDone) {
+	SendSideBwe bwe;
+	mediasoup::ccutils::ProbeClusterInfo probeClusterInfo;
+	probeClusterInfo.id = 9;
+	probeClusterInfo.createdAt = std::chrono::steady_clock::now();
+	probeClusterInfo.goal.desiredBps = 200000;
+	probeClusterInfo.goal.duration = std::chrono::milliseconds(100);
+	probeClusterInfo.goal.desiredBytes = 3000;
+	bwe.ProbeClusterStarting(probeClusterInfo);
+	EXPECT_FALSE(bwe.ProbeClusterIsGoalReached(probeClusterInfo));
+
+	const auto [probeSignal, estimatedCapacity, finalized] = bwe.ProbeClusterFinalize();
+	EXPECT_FALSE(finalized);
+	EXPECT_EQ(probeSignal, mediasoup::ccutils::ProbeSignal::Inconclusive);
+	EXPECT_EQ(estimatedCapacity, 0);
+}
+
+namespace {
+
+struct BitrateAllocationScenarioResult {
+	std::array<uint64_t, 4> packetsByClass{};
+	std::array<uint64_t, 4> bytesByClass{};
+	uint64_t audioPacketsEnqueued{ 0 };
+	uint64_t retransmissionPacketsEnqueued{ 0 };
+	uint64_t freshVideoPacketsEnqueued{ 0 };
+	mediasoup::plainclient::SenderTransportController::Metrics metrics;
+};
+
+BitrateAllocationScenarioResult runBitrateAllocationScenario(
+	uint32_t bitrateBps,
+	int tickCount,
+	int retransmissionPacketsPerTick = 0)
+{
+	BitrateAllocationScenarioResult result;
+	SenderTransportController::Config config;
+	config.maxFreshVideoPacketsTotal = static_cast<size_t>(tickCount * 2);
+	config.maxRetransmissionPackets = static_cast<size_t>(
+		std::max(1, retransmissionPacketsPerTick) * tickCount * 2);
+	SenderTransportController controller(config);
+	int64_t nowMs = 1000;
+	controller.SetNowFn([&nowMs] { return nowMs; });
+	controller.SetSendFn([&result](
+		PacketClass packetClass,
+		mediasoup::plainclient::PacketTransportMetadata*,
+		const uint8_t*,
+		size_t len) {
+		const size_t index = mediasoup::plainclient::PacketClassIndex(packetClass);
+		result.packetsByClass[index]++;
+		result.bytesByClass[index] += len;
+		return SendResult{SendStatus::Sent, 0, len};
+	});
+	controller.RegisterVideoTrack(0, 424242u, bitrateBps);
+	controller.UpdateTrackTransportHint(0, 424242u, bitrateBps, false);
+	controller.SetTransportEstimatedBitrateBps(bitrateBps);
+	controller.OnPacingTick(nowMs);
+
+	uint8_t audio[120] = {};
+	uint8_t retransmission[1000] = {};
+	uint8_t freshVideo[1000] = {};
+	for (int tick = 0; tick < tickCount; ++tick) {
+		EXPECT_TRUE(controller.EnqueueAudioPacket(
+			31337u,
+			960u * static_cast<uint32_t>(tick),
+			audio,
+			sizeof(audio)));
+		result.audioPacketsEnqueued++;
+		for (int i = 0; i < retransmissionPacketsPerTick; ++i) {
+			EXPECT_TRUE(controller.EnqueueVideoRetransmissionPacket(
+				424242u,
+				retransmission,
+				sizeof(retransmission)));
+			result.retransmissionPacketsEnqueued++;
+		}
+		EXPECT_TRUE(controller.EnqueueVideoMediaPacket(424242u, freshVideo, sizeof(freshVideo)));
+		result.freshVideoPacketsEnqueued++;
+		nowMs += 20;
+		controller.OnPacingTick(nowMs);
+	}
+
+	result.metrics = controller.GetMetrics();
+	return result;
+}
+
+} // namespace
+
+TEST(SenderTransportControllerTest, ControlSendBypassesMediaBacklog) {
+	SenderTransportController controller;
+	std::vector<PacketClass> sentClasses;
+	controller.SetNowFn([] { return int64_t{1000}; });
+	controller.SetSendFn([&sentClasses](
+		PacketClass packetClass,
+		mediasoup::plainclient::PacketTransportMetadata*,
+		const uint8_t*,
+		size_t len) {
+		sentClasses.push_back(packetClass);
+		return SendResult{SendStatus::Sent, 0, len};
+	});
+	controller.RegisterVideoTrack(0, 1111, 800000);
+	controller.UpdateTrackTransportHint(0, 1111, 800000, false);
+
+	uint8_t video[1200] = {};
+	ASSERT_TRUE(controller.EnqueueVideoMediaPacket(1111, video, sizeof(video)));
+	EXPECT_EQ(controller.QueuedFreshVideoPackets(), 1u);
+
+	uint8_t control[16] = {};
+	auto result = controller.SendControlPacket(control, sizeof(control));
+	EXPECT_EQ(result.status, SendStatus::Sent);
+	ASSERT_EQ(sentClasses.size(), 1u);
+	EXPECT_EQ(sentClasses[0], PacketClass::Control);
+	EXPECT_EQ(controller.QueuedFreshVideoPackets(), 1u);
+}
+
+TEST(SenderTransportControllerTest, AudioIsSentBeforeFreshVideo) {
+	SenderTransportController controller;
+	std::vector<PacketClass> sentClasses;
+	int64_t nowMs = 1000;
+	controller.SetNowFn([&nowMs] { return nowMs; });
+	controller.SetSendFn([&sentClasses](
+		PacketClass packetClass,
+		mediasoup::plainclient::PacketTransportMetadata*,
+		const uint8_t*,
+		size_t len) {
+		sentClasses.push_back(packetClass);
+		return SendResult{SendStatus::Sent, 0, len};
+	});
+	controller.RegisterVideoTrack(0, 2222, 800000);
+	controller.UpdateTrackTransportHint(0, 2222, 800000, false);
+
+	uint8_t video[1000] = {};
+	uint8_t audio[120] = {};
+	ASSERT_TRUE(controller.EnqueueVideoMediaPacket(2222, video, sizeof(video)));
+	ASSERT_TRUE(controller.EnqueueAudioPacket(3333, 960, audio, sizeof(audio)));
+
+	controller.OnPacingTick(nowMs);
+	nowMs += 20;
+	controller.OnPacingTick(nowMs);
+
+	ASSERT_GE(sentClasses.size(), 2u);
+	EXPECT_EQ(sentClasses[0], PacketClass::AudioRtp);
+	EXPECT_EQ(sentClasses[1], PacketClass::VideoMedia);
+}
+
+TEST(SenderTransportControllerTest, RetransmissionIsSentBeforeFreshVideo) {
+	SenderTransportController controller;
+	std::vector<PacketClass> sentClasses;
+	int64_t nowMs = 1000;
+	controller.SetNowFn([&nowMs] { return nowMs; });
+	controller.SetSendFn([&sentClasses](
+		PacketClass packetClass,
+		mediasoup::plainclient::PacketTransportMetadata*,
+		const uint8_t*,
+		size_t len) {
+		sentClasses.push_back(packetClass);
+		return SendResult{SendStatus::Sent, 0, len};
+	});
+	controller.RegisterVideoTrack(0, 4444, 800000);
+	controller.UpdateTrackTransportHint(0, 4444, 800000, false);
+
+	uint8_t freshVideo[1000] = {};
+	uint8_t rtx[300] = {};
+	ASSERT_TRUE(controller.EnqueueVideoMediaPacket(4444, freshVideo, sizeof(freshVideo)));
+	ASSERT_TRUE(controller.EnqueueVideoRetransmissionPacket(4444, rtx, sizeof(rtx)));
+
+	controller.OnPacingTick(nowMs);
+	nowMs += 20;
+	controller.OnPacingTick(nowMs);
+
+	ASSERT_GE(sentClasses.size(), 2u);
+	EXPECT_EQ(sentClasses[0], PacketClass::VideoRetransmission);
+	EXPECT_EQ(sentClasses[1], PacketClass::VideoMedia);
+}
+
+TEST(SenderTransportControllerTest, WouldBlockKeepsFreshVideoQueuedAndSkipsAccounting) {
+	SenderTransportController controller;
+	int64_t nowMs = 1000;
+	int videoSentCallbacks = 0;
+	controller.SetNowFn([&nowMs] { return nowMs; });
+	controller.SetSendFn([](PacketClass, mediasoup::plainclient::PacketTransportMetadata*, const uint8_t*, size_t) {
+		return SendResult{SendStatus::WouldBlock, EAGAIN, 0};
+	});
+	controller.SetOnVideoMediaSent([&videoSentCallbacks](const uint8_t*, size_t) {
+		++videoSentCallbacks;
+	});
+	controller.RegisterVideoTrack(0, 5555, 800000);
+	controller.UpdateTrackTransportHint(0, 5555, 800000, false);
+
+	uint8_t video[1000] = {};
+	ASSERT_TRUE(controller.EnqueueVideoMediaPacket(5555, video, sizeof(video)));
+	controller.OnPacingTick(nowMs);
+	nowMs += 20;
+	controller.OnPacingTick(nowMs);
+
+	EXPECT_EQ(videoSentCallbacks, 0);
+	EXPECT_EQ(controller.QueuedFreshVideoPackets(), 1u);
+	EXPECT_EQ(
+		controller.GetMetrics().wouldBlockByClass[mediasoup::plainclient::PacketClassIndex(PacketClass::VideoMedia)],
+		1u);
+	EXPECT_EQ(controller.GetMetrics().queuedVideoRetentions, 1u);
+}
+
+TEST(SenderTransportControllerTest, ControlHardErrorTracksErrnoAndCount) {
+	SenderTransportController controller;
+	controller.SetSendFn([](PacketClass, mediasoup::plainclient::PacketTransportMetadata*, const uint8_t*, size_t) {
+		return SendResult{SendStatus::HardError, ENOTCONN, 0};
+	});
+
+	uint8_t control[16] = {};
+	const auto result = controller.SendControlPacket(control, sizeof(control));
+	EXPECT_EQ(result.status, SendStatus::HardError);
+	EXPECT_EQ(
+		controller.GetMetrics().hardErrorByClass[mediasoup::plainclient::PacketClassIndex(PacketClass::Control)],
+		1u);
+	EXPECT_EQ(
+		controller.GetMetrics().lastHardErrorByClass[mediasoup::plainclient::PacketClassIndex(PacketClass::Control)],
+		ENOTCONN);
+}
+
+TEST(SenderTransportControllerTest, AudioWouldBlockKeepsQueueAndUpdatesMetrics) {
+	SenderTransportController controller;
+	int64_t nowMs = 1000;
+	controller.SetNowFn([&nowMs] { return nowMs; });
+	controller.SetSendFn([](
+		PacketClass packetClass,
+		mediasoup::plainclient::PacketTransportMetadata*,
+		const uint8_t*,
+		size_t) {
+		if (packetClass == PacketClass::AudioRtp) {
+			return SendResult{SendStatus::WouldBlock, EAGAIN, 0};
+		}
+		return SendResult{SendStatus::Sent, 0, 120};
+	});
+
+	uint8_t audio[120] = {};
+	ASSERT_TRUE(controller.EnqueueAudioPacket(3333, 960, audio, sizeof(audio)));
+	controller.OnPacingTick(nowMs);
+	nowMs += 20;
+	controller.OnPacingTick(nowMs);
+
+	EXPECT_EQ(controller.QueuedAudioPackets(), 1u);
+	EXPECT_EQ(
+		controller.GetMetrics().wouldBlockByClass[mediasoup::plainclient::PacketClassIndex(PacketClass::AudioRtp)],
+		2u);
+}
+
+TEST(SenderTransportControllerTest, RetransmissionHardErrorDropsAndCounts) {
+	SenderTransportController controller;
+	int64_t nowMs = 1000;
+	controller.SetNowFn([&nowMs] { return nowMs; });
+	controller.SetSendFn([](
+		PacketClass packetClass,
+		mediasoup::plainclient::PacketTransportMetadata*,
+		const uint8_t*,
+		size_t) {
+		if (packetClass == PacketClass::VideoRetransmission) {
+			return SendResult{SendStatus::HardError, EINVAL, 0};
+		}
+		return SendResult{SendStatus::Sent, 0, 300};
+	});
+
+	uint8_t rtx[300] = {};
+	ASSERT_TRUE(controller.EnqueueVideoRetransmissionPacket(4444, rtx, sizeof(rtx)));
+	controller.OnPacingTick(nowMs);
+	nowMs += 20;
+	controller.OnPacingTick(nowMs);
+
+	EXPECT_EQ(controller.QueuedRetransmissionPackets(), 0u);
+	EXPECT_EQ(controller.GetMetrics().retransmissionDrops, 1u);
+	EXPECT_EQ(
+		controller.GetMetrics().hardErrorByClass[
+			mediasoup::plainclient::PacketClassIndex(PacketClass::VideoRetransmission)],
+		1u);
+	EXPECT_EQ(
+		controller.GetMetrics().lastHardErrorByClass[
+			mediasoup::plainclient::PacketClassIndex(PacketClass::VideoRetransmission)],
+		EINVAL);
+}
+
+TEST(SenderTransportControllerTest, FreshVideoHardErrorDropsAndCounts) {
+	SenderTransportController controller;
+	int64_t nowMs = 1000;
+	controller.SetNowFn([&nowMs] { return nowMs; });
+	controller.SetSendFn([](
+		PacketClass packetClass,
+		mediasoup::plainclient::PacketTransportMetadata*,
+		const uint8_t*,
+		size_t) {
+		if (packetClass == PacketClass::VideoMedia) {
+			return SendResult{SendStatus::HardError, EMSGSIZE, 0};
+		}
+		return SendResult{SendStatus::Sent, 0, 1000};
+	});
+	controller.RegisterVideoTrack(0, 5555, 800000);
+	controller.UpdateTrackTransportHint(0, 5555, 800000, false);
+
+	uint8_t video[1000] = {};
+	ASSERT_TRUE(controller.EnqueueVideoMediaPacket(5555, video, sizeof(video)));
+	controller.OnPacingTick(nowMs);
+	nowMs += 20;
+	controller.OnPacingTick(nowMs);
+
+	EXPECT_EQ(controller.QueuedFreshVideoPackets(), 0u);
+	EXPECT_EQ(controller.GetMetrics().queuedVideoDiscards, 1u);
+	EXPECT_EQ(
+		controller.GetMetrics().hardErrorByClass[mediasoup::plainclient::PacketClassIndex(PacketClass::VideoMedia)],
+		1u);
+	EXPECT_EQ(
+		controller.GetMetrics().lastHardErrorByClass[mediasoup::plainclient::PacketClassIndex(PacketClass::VideoMedia)],
+		EMSGSIZE);
+}
+
+TEST(SenderTransportControllerTest, FreshVideoQueueIsBounded) {
+	SenderTransportController::Config config;
+	config.maxFreshVideoPacketsTotal = 2;
+	SenderTransportController controller(config);
+	controller.RegisterVideoTrack(0, 6666, 800000);
+	controller.UpdateTrackTransportHint(0, 6666, 800000, false);
+
+	uint8_t video[100] = {};
+	EXPECT_TRUE(controller.EnqueueVideoMediaPacket(6666, video, sizeof(video)));
+	EXPECT_TRUE(controller.EnqueueVideoMediaPacket(6666, video, sizeof(video)));
+	EXPECT_FALSE(controller.EnqueueVideoMediaPacket(6666, video, sizeof(video)));
+
+	EXPECT_EQ(controller.QueuedFreshVideoPackets(), 2u);
+	EXPECT_EQ(controller.GetMetrics().freshVideoQueueDrops, 1u);
+}
+
+TEST(SenderTransportControllerTest, RetransmissionQueueIsBounded) {
+	SenderTransportController::Config config;
+	config.maxRetransmissionPackets = 1;
+	SenderTransportController controller(config);
+
+	uint8_t rtx[200] = {};
+	EXPECT_TRUE(controller.EnqueueVideoRetransmissionPacket(7777, rtx, sizeof(rtx)));
+	EXPECT_FALSE(controller.EnqueueVideoRetransmissionPacket(7777, rtx, sizeof(rtx)));
+
+	EXPECT_EQ(controller.QueuedRetransmissionPackets(), 1u);
+	EXPECT_EQ(controller.GetMetrics().retransmissionQueueDrops, 1u);
+}
+
+TEST(SenderTransportControllerTest, PauseDropsQueuedRetransmissionsForTrack) {
+	SenderTransportController controller;
+	controller.RegisterVideoTrack(0, 8888, 800000);
+	controller.UpdateTrackTransportHint(0, 8888, 800000, false);
+
+	uint8_t freshVideo[200] = {};
+	uint8_t rtx[120] = {};
+	ASSERT_TRUE(controller.EnqueueVideoMediaPacket(8888, freshVideo, sizeof(freshVideo)));
+	ASSERT_TRUE(controller.EnqueueVideoRetransmissionPacket(8888, rtx, sizeof(rtx)));
+
+	controller.SetTrackPaused(8888, true);
+
+	EXPECT_EQ(controller.QueuedFreshVideoPackets(), 0u);
+	EXPECT_EQ(controller.QueuedRetransmissionPackets(), 0u);
+	EXPECT_EQ(controller.GetMetrics().queuedVideoDiscards, 1u);
+	EXPECT_EQ(controller.GetMetrics().retransmissionDrops, 1u);
+}
+
+TEST(SenderTransportControllerTest, FlushForShutdownDrainsQueuedVideoBeforeDiscardingRemainder) {
+	SenderTransportController controller;
+	int64_t nowMs = 1000;
+	controller.SetNowFn([&nowMs] { return nowMs; });
+	controller.SetSendFn([](
+		PacketClass,
+		mediasoup::plainclient::PacketTransportMetadata*,
+		const uint8_t*,
+		size_t len) {
+		return SendResult{SendStatus::Sent, 0, len};
+	});
+	controller.RegisterVideoTrack(0, 7777, 100000);
+	controller.UpdateTrackTransportHint(0, 7777, 100000, false);
+
+	uint8_t video[1000] = {};
+	for (int i = 0; i < 10; ++i) {
+		ASSERT_TRUE(controller.EnqueueVideoMediaPacket(7777, video, sizeof(video)));
+	}
+	ASSERT_EQ(controller.QueuedFreshVideoPackets(), 10u);
+
+	controller.FlushForShutdown(nowMs);
+
+	EXPECT_EQ(controller.QueuedFreshVideoPackets(), 0u);
+	EXPECT_EQ(
+		controller.GetMetrics().sentByClass[
+			mediasoup::plainclient::PacketClassIndex(PacketClass::VideoMedia)],
+		10u);
+	EXPECT_EQ(controller.GetMetrics().queuedVideoDiscards, 0u);
+}
+
+TEST(SenderTransportControllerTest, BitrateAllocationControlBypassesBacklogAcrossBitrates) {
+	for (const uint32_t bitrateBps : {64000u, 128000u, 512000u}) {
+		SenderTransportController controller;
+		std::vector<PacketClass> sentClasses;
+		controller.SetNowFn([] { return int64_t{1000}; });
+			controller.SetSendFn([&sentClasses](
+				PacketClass packetClass,
+				mediasoup::plainclient::PacketTransportMetadata*,
+				const uint8_t*,
+				size_t len) {
+			sentClasses.push_back(packetClass);
+			return SendResult{SendStatus::Sent, 0, len};
+		});
+		controller.RegisterVideoTrack(0, 10101u, bitrateBps);
+		controller.UpdateTrackTransportHint(0, 10101u, bitrateBps, false);
+		controller.SetTransportEstimatedBitrateBps(bitrateBps);
+
+		uint8_t freshVideo[1000] = {};
+		uint8_t retransmission[1000] = {};
+		for (int i = 0; i < 8; ++i) {
+			ASSERT_TRUE(controller.EnqueueVideoMediaPacket(10101u, freshVideo, sizeof(freshVideo)));
+			ASSERT_TRUE(controller.EnqueueVideoRetransmissionPacket(10101u, retransmission, sizeof(retransmission)));
+		}
+
+		uint8_t control[16] = {};
+		const auto result = controller.SendControlPacket(control, sizeof(control));
+		EXPECT_EQ(result.status, SendStatus::Sent);
+		ASSERT_FALSE(sentClasses.empty());
+		EXPECT_EQ(sentClasses.front(), PacketClass::Control);
+		EXPECT_EQ(controller.QueuedFreshVideoPackets(), 8u);
+		EXPECT_EQ(controller.QueuedRetransmissionPackets(), 8u);
+	}
+}
+
+TEST(SenderTransportControllerTest, BitrateAllocationPrefersAudioOverFreshVideoAtLowBitrate) {
+	const auto result = runBitrateAllocationScenario(64000u, 500);
+	const size_t audioIndex = mediasoup::plainclient::PacketClassIndex(PacketClass::AudioRtp);
+	const size_t videoIndex = mediasoup::plainclient::PacketClassIndex(PacketClass::VideoMedia);
+
+	EXPECT_EQ(result.packetsByClass[audioIndex], result.audioPacketsEnqueued);
+	EXPECT_GT(result.packetsByClass[audioIndex], result.packetsByClass[videoIndex]);
+	EXPECT_EQ(result.metrics.audioDeadlineDrops, 0u);
+}
+
+TEST(SenderTransportControllerTest, BitrateAllocationPrefersRetransmissionOverFreshVideoAcrossBitrates) {
+	const size_t retransmissionIndex =
+		mediasoup::plainclient::PacketClassIndex(PacketClass::VideoRetransmission);
+	const size_t videoIndex = mediasoup::plainclient::PacketClassIndex(PacketClass::VideoMedia);
+
+	for (const uint32_t bitrateBps : {64000u, 128000u, 256000u, 512000u, 1000000u}) {
+		const auto result = runBitrateAllocationScenario(bitrateBps, 500, 3);
+		EXPECT_EQ(result.packetsByClass[videoIndex], 0u)
+			<< "fresh video should remain blocked while retransmission backlog stays non-empty at bitrate "
+			<< bitrateBps;
+		EXPECT_GT(result.packetsByClass[retransmissionIndex], 0u);
+	}
+}
+
+TEST(SenderTransportControllerTest, BitrateAllocationFreshVideoAvailabilityIncreasesMonotonicallyWithBitrate) {
+	const size_t videoIndex = mediasoup::plainclient::PacketClassIndex(PacketClass::VideoMedia);
+	std::vector<uint64_t> freshVideoPackets;
+
+	for (const uint32_t bitrateBps : {64000u, 128000u, 256000u, 512000u, 1000000u}) {
+		const auto result = runBitrateAllocationScenario(bitrateBps, 500);
+		freshVideoPackets.push_back(result.packetsByClass[videoIndex]);
+	}
+
+	ASSERT_EQ(freshVideoPackets.size(), 5u);
+	for (size_t i = 1; i < freshVideoPackets.size(); ++i) {
+		EXPECT_GE(freshVideoPackets[i], freshVideoPackets[i - 1]);
+	}
+	EXPECT_GT(freshVideoPackets.back(), freshVideoPackets.front());
+}
+
+TEST(SenderTransportControllerTest, EffectivePacingBitrateUsesMinOfTargetEstimateAndCap) {
+	SenderTransportController controller;
+	int64_t nowMs = 1000;
+	controller.SetNowFn([&nowMs] { return nowMs; });
+	controller.SetSendFn([](
+		PacketClass,
+		mediasoup::plainclient::PacketTransportMetadata*,
+		const uint8_t*,
+		size_t len) {
+		return SendResult{SendStatus::Sent, 0, len};
+	});
+	controller.RegisterVideoTrack(0, 9999, 1000000);
+	controller.UpdateTrackTransportHint(0, 9999, 1000000, false);
+
+	EXPECT_EQ(controller.AggregateTargetBitrateBps(), 1000000u);
+	EXPECT_EQ(controller.EffectivePacingBitrateBps(), 1000000u);
+
+	controller.SetTransportEstimatedBitrateBps(700000);
+	EXPECT_EQ(controller.EffectivePacingBitrateBps(), 700000u);
+
+	controller.SetApplicationBitrateCapBps(500000);
+	EXPECT_EQ(controller.EffectivePacingBitrateBps(), 500000u);
+
+	controller.OnPacingTick(nowMs);
+	nowMs += 100;
+	controller.OnPacingTick(nowMs);
+
+	EXPECT_EQ(controller.MediaBudgetBytes(), 6250); // 500000 bps * 100ms / 8000
 }
 
 // ═══════════════════════════════════════════════════════════

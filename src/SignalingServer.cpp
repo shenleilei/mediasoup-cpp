@@ -27,8 +27,13 @@ namespace mediasoup {
 SignalingServer::SignalingServer(int port,
 	std::vector<std::unique_ptr<WorkerThread>>& workerThreads,
 	RoomRegistry* registry,
-	const std::string& recordDir)
-	: port_(port), workerThreads_(workerThreads), registry_(registry), recordDir_(recordDir)
+	const std::string& recordDir,
+	bool redisRequired)
+	: port_(port)
+	, workerThreads_(workerThreads)
+	, registry_(registry)
+	, recordDir_(recordDir)
+	, redisRequired_(redisRequired)
 {}
 
 SignalingServer::~SignalingServer() {
@@ -46,7 +51,7 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 		}
 	};
 
-	running_ = true;
+	running_.store(true, std::memory_order_relaxed);
 	startRegistryWorker();
 	auto downlinkStatsRateLimit = std::make_shared<
 		std::unordered_map<std::string, DownlinkStatsRateLimitState>>();
@@ -105,7 +110,7 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 	closeTimer(redisTimer);
 	closeTimer(shutdownTimer);
 
-	running_ = false;
+	running_.store(false, std::memory_order_relaxed);
 	if (!listenSucceeded) {
 		stopRegistryWorker();
 		return false;

@@ -58,7 +58,7 @@ protected:
 			" --workerBin=./mediasoup-worker"
 			" --announcedIp=127.0.0.1"
 			" --listenIp=127.0.0.1"
-			" --redisHost=0.0.0.0 --redisPort=1"
+			" --redisHost=0.0.0.0 --redisPort=1 --noRedisRequired"
 			" > /dev/null 2>&1 & echo $!";
 		FILE* fp = popen(cmd.c_str(), "r");
 		ASSERT_NE(fp, nullptr);
@@ -249,6 +249,81 @@ TEST_F(ReviewFixIntegration, ReconnectStaleRequestRejectedImmediately) {
 		<< "New session should still work: " << freshResp.dump();
 }
 
+TEST_F(ReviewFixIntegration, RepeatedJoinOnSameSocketRejected) {
+	TestWsClient ws;
+	ASSERT_TRUE(ws.connect(HOST, SFU_PORT));
+
+	auto firstJoin = ws.request("join", {
+		{"roomId", testRoom_},
+		{"peerId", "repeat_join_user"},
+		{"displayName", "repeat_join_user"},
+		{"rtpCapabilities", rtpCaps()}
+	});
+	ASSERT_TRUE(firstJoin.value("ok", false)) << firstJoin.dump();
+
+	auto secondJoin = ws.request("join", {
+		{"roomId", testRoom_ + "_other"},
+		{"peerId", "repeat_join_user_other"},
+		{"displayName", "repeat_join_user_other"},
+		{"rtpCapabilities", rtpCaps()}
+	});
+	EXPECT_FALSE(secondJoin.value("ok", false))
+		<< "Repeated join on same socket must be rejected: " << secondJoin.dump();
+	EXPECT_NE(secondJoin.value("error", "").find("already joined"), std::string::npos)
+		<< secondJoin.dump();
+
+	// Original joined session remains usable.
+	auto transportResp = ws.request("createWebRtcTransport", {
+		{"producing", true},
+		{"consuming", false}
+	});
+	EXPECT_TRUE(transportResp.value("ok", false))
+		<< "Original session should remain usable after rejected rejoin: "
+		<< transportResp.dump();
+}
+
+TEST_F(ReviewFixIntegration, EarlyCloseJoinDoesNotLeaveGhostParticipants) {
+	auto observer = joinRoom(testRoom_, "observer");
+
+	static constexpr int kGhostAttempts = 40;
+	for (int i = 0; i < kGhostAttempts; ++i) {
+		TestWsClient ghostWs;
+		ASSERT_TRUE(ghostWs.connect(HOST, SFU_PORT));
+		const std::string ghostPeerId = "ghost_" + std::to_string(i);
+		ghostWs.sendRequest("join", {
+			{"roomId", testRoom_},
+			{"peerId", ghostPeerId},
+			{"displayName", ghostPeerId},
+			{"rtpCapabilities", rtpCaps()}
+		});
+		ghostWs.close();
+	}
+
+	// Allow worker/main-loop cleanup to settle.
+	usleep(800000);
+
+	TestWsClient inspector;
+	ASSERT_TRUE(inspector.connect(HOST, SFU_PORT));
+	auto inspectJoin = inspector.request("join", {
+		{"roomId", testRoom_},
+		{"peerId", "inspector"},
+		{"displayName", "inspector"},
+		{"rtpCapabilities", rtpCaps()}
+	});
+	ASSERT_TRUE(inspectJoin.value("ok", false)) << inspectJoin.dump();
+	ASSERT_TRUE(inspectJoin.contains("data")) << inspectJoin.dump();
+	ASSERT_TRUE(inspectJoin["data"].contains("participants")) << inspectJoin.dump();
+
+	const auto& participants = inspectJoin["data"]["participants"];
+	ASSERT_TRUE(participants.is_array()) << inspectJoin.dump();
+	for (const auto& participant : participants) {
+		const std::string participantPeerId = participant.value("peerId", "");
+		EXPECT_FALSE(participantPeerId.rfind("ghost_", 0) == 0)
+			<< "Ghost participant leaked after early-close join race: "
+			<< inspectJoin.dump();
+	}
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Fix 3: restartIce returns fresh ICE parameters
 // ═══════════════════════════════════════════════════════════════
@@ -391,12 +466,12 @@ TEST_F(ReviewFixIntegration, EmptyPeerIdRejected) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Geo-aware resolve: /api/resolve accepts clientIp
+// Geo-aware resolve: /api/resolve accepts X-Forwarded-For
 // ═══════════════════════════════════════════════════════════════
 
-TEST_F(ReviewFixIntegration, ResolveAcceptsClientIp) {
-	// Single-node mode: resolve should return this node regardless of clientIp
-	// but the endpoint should accept the parameter without error
+TEST_F(ReviewFixIntegration, ResolveAcceptsXForwardedFor) {
+	// Single-node mode: resolve should return this node regardless of IP
+	// but the endpoint should accept the header without error
 	int fd = socket(AF_INET, SOCK_STREAM, 0);
 	sockaddr_in addr{};
 	addr.sin_family = AF_INET;
@@ -404,8 +479,9 @@ TEST_F(ReviewFixIntegration, ResolveAcceptsClientIp) {
 	inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
 	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
 
-	std::string req = "GET /api/resolve?roomId=geo_test&clientIp=36.110.147.0 HTTP/1.1\r\n"
-		"Host: 127.0.0.1\r\n\r\n";
+	std::string req = "GET /api/resolve?roomId=geo_test HTTP/1.1\r\n"
+		"Host: 127.0.0.1\r\n"
+		"X-Forwarded-For: 36.110.147.0\r\n\r\n";
 	::send(fd, req.data(), req.size(), 0);
 
 	std::string response = recvHttp(fd);
@@ -549,7 +625,8 @@ TEST_F(GeoJoinTest, ResolvePrefersSameIspNearest) {
 
 	// Beijing Telecom IP → should route to 杭州电信 (port A), not 广州联通 (port B)
 	std::string req = "GET /api/resolve?roomId=" + testRoom_ +
-		"&clientIp=36.110.147.0 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+		" HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+		"X-Forwarded-For: 36.110.147.0\r\n\r\n";
 	::send(fd, req.data(), req.size(), 0);
 
 	std::string response = recvHttp(fd);
@@ -715,7 +792,8 @@ TEST_F(CountryIsolationTest, ChinaClientOnUsNodeRoutedToChinaNode) {
 	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
 
 	std::string req = "GET /api/resolve?roomId=" + testRoom_ +
-		"&clientIp=36.110.147.0 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+		" HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+		"X-Forwarded-For: 36.110.147.0\r\n\r\n";
 	::send(fd, req.data(), req.size(), 0);
 
 	std::string response = recvHttp(fd);
@@ -737,8 +815,8 @@ TEST_F(CountryIsolationTest, UsClientOnCnNodeRoutedToUsNode) {
 	inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
 	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
 
-	std::string req = "GET /api/resolve?roomId=" + testRoom_ + "_us2" +
-		"&clientIp=8.8.8.8 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+	std::string req = "GET /api/resolve?roomId=" + testRoom_ + "_cn" +
+		" HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Forwarded-For: 8.8.8.8\r\n\r\n";
 	::send(fd, req.data(), req.size(), 0);
 
 	std::string response = recvHttp(fd);
@@ -761,7 +839,8 @@ TEST_F(CountryIsolationTest, ChinaClientRoutedToChinaNode) {
 	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
 
 	std::string req = "GET /api/resolve?roomId=" + testRoom_ +
-		"&clientIp=36.110.147.0 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+		" HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+		"X-Forwarded-For: 36.110.147.0\r\n\r\n";
 	::send(fd, req.data(), req.size(), 0);
 
 	std::string response = recvHttp(fd);
@@ -784,7 +863,7 @@ TEST_F(CountryIsolationTest, UsClientRoutedToUsNode) {
 	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
 
 	std::string req = "GET /api/resolve?roomId=" + testRoom_ + "_us" +
-		"&clientIp=8.8.8.8 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+		" HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Forwarded-For: 8.8.8.8\r\n\r\n";
 	::send(fd, req.data(), req.size(), 0);
 
 	std::string response = recvHttp(fd);
@@ -828,22 +907,8 @@ protected:
 		pclose(fp);
 		sfuPid_ = atoi(buf);
 		ASSERT_GT(sfuPid_, 0);
-
-		for (int i = 0; i < 50; ++i) {
-			usleep(100000);
-			int fd = socket(AF_INET, SOCK_STREAM, 0);
-			sockaddr_in addr{};
-			addr.sin_family = AF_INET;
-			addr.sin_port = htons(DEGRADE_PORT);
-			inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
-			if (::connect(fd, (sockaddr*)&addr, sizeof(addr)) == 0) {
-				::close(fd);
-				usleep(200000);
-				return;
-			}
-			::close(fd);
-		}
-		FAIL() << "SFU did not start";
+		EXPECT_FALSE(waitForTcpPortListening(DEGRADE_PORT, 20, 100000));
+		EXPECT_TRUE(waitForDirectChildExit(sfuPid_, 50, 100000));
 	}
 
 	void TearDown() override {
@@ -877,45 +942,16 @@ protected:
 	}
 };
 
-// /api/resolve should return a valid response even with Redis down
-TEST_F(RedisDegradeTest, ResolveWorksWithoutRedis) {
+TEST_F(RedisDegradeTest, StartupFailsWithoutRedisWhenRequired) {
 	int fd = socket(AF_INET, SOCK_STREAM, 0);
 	sockaddr_in addr{};
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(DEGRADE_PORT);
 	inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
-	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
-
-	std::string req = "GET /api/resolve?roomId=" + testRoom_ +
-		" HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
-	::send(fd, req.data(), req.size(), 0);
-
-	std::string response = recvHttp(fd);
+	EXPECT_NE(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
 	::close(fd);
-	ASSERT_FALSE(response.empty());
-
-	EXPECT_NE(response.find("200"), std::string::npos) << "Should return 200, got: " << response;
-	EXPECT_NE(response.find("wsUrl"), std::string::npos) << "Should contain wsUrl, got: " << response;
-}
-
-// Direct join should succeed locally even with Redis down
-TEST_F(RedisDegradeTest, JoinWorksWithoutRedis) {
 	TestWsClient ws;
-	ASSERT_TRUE(ws.connect("127.0.0.1", DEGRADE_PORT));
-
-	auto resp = ws.request("join", {
-		{"roomId", testRoom_}, {"peerId", "alice"},
-		{"displayName", "alice"}, {"rtpCapabilities", rtpCaps()}
-	});
-	ASSERT_TRUE(resp.value("ok", false))
-		<< "Join should succeed locally when Redis is down, got: " << resp.dump();
-
-	// Should also be able to create transport
-	auto transport = ws.request("createWebRtcTransport", {
-		{"producing", true}, {"consuming", false}
-	});
-	EXPECT_TRUE(transport.value("ok", false))
-		<< "createTransport should work after degraded join, got: " << transport.dump();
+	EXPECT_FALSE(ws.connect("127.0.0.1", DEGRADE_PORT));
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1143,6 +1179,51 @@ TEST_F(CacheTest, DirectJoinRedirectsViaCachedRoom) {
 		EXPECT_NE(redirect.find(std::to_string(CACHE_PORT_A)), std::string::npos)
 			<< "Should redirect to node A, got: " << redirect;
 	}
+}
+
+TEST_F(CacheTest, StaleCachedRedirectFallsBackToLocalClaimWhenNodeKeyMissing) {
+	TestWsClient alice;
+	ASSERT_TRUE(alice.connect("127.0.0.1", CACHE_PORT_A));
+	auto joinResp = alice.request("join", {
+		{"roomId", testRoom_}, {"peerId", "alice"},
+		{"displayName", "alice"}, {"rtpCapabilities", rtpCaps()}
+	});
+	ASSERT_TRUE(joinResp.value("ok", false)) << joinResp.dump();
+	usleep(500000);
+
+	redisContext* ctx = redisConnect("127.0.0.1", redisServer_.port());
+	ASSERT_NE(ctx, nullptr);
+	ASSERT_FALSE(ctx->err);
+
+	auto* owner = (redisReply*)redisCommand(
+		ctx,
+		"GET sfu:room:%s",
+		testRoom_.c_str());
+	ASSERT_NE(owner, nullptr);
+	ASSERT_EQ(owner->type, REDIS_REPLY_STRING);
+	ASSERT_NE(owner->str, nullptr);
+	const std::string ownerNodeId(owner->str, owner->len);
+	freeReplyObject(owner);
+
+	auto* del = (redisReply*)redisCommand(
+		ctx,
+		"DEL sfu:node:%s",
+		ownerNodeId.c_str());
+	ASSERT_NE(del, nullptr);
+	freeReplyObject(del);
+	redisFree(ctx);
+
+	TestWsClient bob;
+	ASSERT_TRUE(bob.connect("127.0.0.1", CACHE_PORT_B));
+	auto bobResp = bob.request("join", {
+		{"roomId", testRoom_}, {"peerId", "bob"},
+		{"displayName", "bob"}, {"rtpCapabilities", rtpCaps()}
+	});
+
+	EXPECT_TRUE(bobResp.value("ok", false))
+		<< "Stale cached redirect should be revalidated instead of sent to a missing node: "
+		<< bobResp.dump();
+	EXPECT_FALSE(bobResp.contains("redirect")) << bobResp.dump();
 }
 
 // ═══════════════════════════════════════════════════════════════

@@ -48,10 +48,7 @@ inline bool BuildJoinRequestContext(
 
 	joinRequest.displayName = data.value("displayName", joinRequest.peerId);
 	joinRequest.rtpCapabilities = data.value("rtpCapabilities", json::object());
-	joinRequest.clientIp = data.value("clientIp", "");
-	if (joinRequest.clientIp.empty()) {
-		joinRequest.clientIp = remoteAddress;
-	}
+	joinRequest.clientIp = remoteAddress;
 
 	return true;
 }
@@ -106,7 +103,8 @@ inline RoomService::Result DispatchRoomServiceRequest(
 		return roomService.createTransport(
 			roomId, peerId,
 			data.value("producing", false),
-			data.value("consuming", false));
+			data.value("consuming", false),
+			data.value("rtpCapabilities", json::object()));
 	}
 	if (method == "connectWebRtcTransport") {
 		return roomService.connectTransport(
@@ -201,7 +199,8 @@ inline RoomService::Result DispatchRoomServiceRequest(
 			roomId,
 			peerId,
 			ParseVideoSsrcs(data),
-			data.value("audioSsrc", 2222u));
+			data.value("audioSsrc", 2222u),
+			data.value("videoCodec", std::string("h264")));
 	}
 	if (method == "plainSubscribe") {
 		return roomService.plainSubscribe(

@@ -58,6 +58,9 @@ int main(int argc, char* argv[]) {
 	auto mediaCodecs = DefaultMediaCodecs();
 	auto listenInfos = BuildListenInfos(options);
 	auto runtimeServices = CreateRuntimeServices(options);
+	if (!runtimeServices.startupError.empty()) {
+		return failExit();
+	}
 	auto workerThreads = CreateWorkerThreadPool(options, mediaCodecs, listenInfos, runtimeServices.registry.get());
 
 	if (workerThreads.empty()) {
@@ -66,7 +69,12 @@ int main(int argc, char* argv[]) {
 	}
 
 	// Assemble and run
-	SignalingServer server(options.signalingPort, workerThreads, runtimeServices.registry.get(), options.recordDir);
+	SignalingServer server(
+		options.signalingPort,
+		workerThreads,
+		runtimeServices.registry.get(),
+		options.recordDir,
+		options.redisRequired);
 
 	spdlog::info("mediasoup-cpp SFU ready - {} WorkerThreads, {} total workers, signaling on port {}, nodeId={}",
 		workerThreads.size(), options.numWorkers, options.signalingPort, options.nodeId);

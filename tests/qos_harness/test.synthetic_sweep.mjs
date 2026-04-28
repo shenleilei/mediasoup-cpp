@@ -106,7 +106,7 @@ test('B3 expectation stays aligned with degraded weak-baseline behavior', () => 
   assert.equal(expectation?.maxLevel, 4);
 });
 
-test('runner-specific expectation overrides default expectation when provided', () => {
+test('runner-specific expectation merges with default expectation when provided', () => {
   const caseDefn = {
     caseId: 'X1',
     group: 'bw_sweep',
@@ -127,6 +127,7 @@ test('runner-specific expectation overrides default expectation when provided', 
     maxLevel: 0,
   });
   assert.deepEqual(getCaseExpectation(caseDefn, 'loopback'), {
+    state: 'stable',
     states: ['stable', 'early_warning'],
     maxLevel: 1,
   });
@@ -257,6 +258,63 @@ test('runner-specific loopback expectation can widen accepted boundary behavior'
     deriveCaseEvaluation(caseDefn, baseline, impaired, recovered, 'loopback').passed,
     true
   );
+});
+
+test('runner-specific expectations merge with base expectations', () => {
+  const caseDefn = {
+    caseId: 'O1',
+    group: 'oscillation',
+    expect: {
+      states: ['stable', 'early_warning', 'congested'],
+      maxLevel: 4,
+      maxActionCount: 5,
+    },
+    expectByRunner: {
+      loopback: {
+        maxActionCount: 5,
+      },
+    },
+  };
+
+  const evaluation = deriveCaseEvaluation(
+    caseDefn,
+    { state: 'stable', level: 0 },
+    { state: 'congested', level: 4 },
+    { state: 'stable', level: 0 },
+    'loopback',
+    { actionCount: 5 }
+  );
+
+  assert.equal(evaluation.expectation.stateMatch, true);
+  assert.equal(evaluation.expectation.levelMatch, true);
+  assert.equal(evaluation.maxActionCountPassed, true);
+});
+
+test('maxActionCount participates in verdict', () => {
+  const caseDefn = {
+    caseId: 'O1',
+    group: 'oscillation',
+    expect: {
+      states: ['stable', 'early_warning', 'congested'],
+      maxLevel: 4,
+      maxActionCount: 5,
+    },
+  };
+
+  const evaluation = deriveCaseEvaluation(
+    caseDefn,
+    { state: 'stable', level: 0 },
+    { state: 'congested', level: 4 },
+    { state: 'stable', level: 0 },
+    'default',
+    { actionCount: 6 }
+  );
+
+  assert.equal(evaluation.expectation.stateMatch, true);
+  assert.equal(evaluation.expectation.levelMatch, true);
+  assert.equal(evaluation.recoveryPassed, true);
+  assert.equal(evaluation.maxActionCountPassed, false);
+  assert.equal(evaluation.passed, false);
 });
 
 test('phase summary uses peak impaired severity instead of only final state', () => {

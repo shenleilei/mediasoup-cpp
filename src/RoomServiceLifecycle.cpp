@@ -15,7 +15,8 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 			std::string addr = registry_->claimRoom(roomId, clientIp);
 			if (!addr.empty()) return {false, {}, addr, ""};
 		} catch (const std::exception& e) {
-			MS_WARN(logger_, "[{} {}] claimRoom failed ({}), degrading to local", roomId, peerId, e.what());
+			MS_WARN(logger_, "[{} {}] claimRoom failed ({}), rejecting join", roomId, peerId, e.what());
+			return {false, {}, "", "room registry unavailable"};
 		}
 	}
 
@@ -67,7 +68,10 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 		std::string key = roomstatsqos::MakePeerKey(roomId, peerId);
 		roomrecording::RemovePeerRecorder(key, recorders_, recorderTransports_, logger_);
 		qosRegistry_.ErasePeer(roomId, peerId);
-		autoQosOverrideRecords_.erase(key);
+		roomstatsqos::ClearPeerAutomaticOverrideRecords(
+			autoQosOverrideRecords_,
+			roomId,
+			peerId);
 		lastConnectionQualitySignatures_.erase(key);
 		downlinkQosRegistry_.ErasePeer(roomId, peerId);
 		subscriberControllers_.erase(key);
@@ -115,7 +119,10 @@ RoomService::Result RoomService::leave(const std::string& roomId, const std::str
 	roomrecording::RemovePeerRecorder(key, recorders_, recorderTransports_, logger_);
 
 	qosRegistry_.ErasePeer(roomId, peerId);
-	autoQosOverrideRecords_.erase(roomstatsqos::MakePeerKey(roomId, peerId));
+	roomstatsqos::ClearPeerAutomaticOverrideRecords(
+		autoQosOverrideRecords_,
+		roomId,
+		peerId);
 	lastConnectionQualitySignatures_.erase(roomstatsqos::MakePeerKey(roomId, peerId));
 	downlinkQosRegistry_.ErasePeer(roomId, peerId);
 	subscriberControllers_.erase(roomstatsqos::MakePeerKey(roomId, peerId));
@@ -150,6 +157,26 @@ RoomService::Result RoomService::leave(const std::string& roomId, const std::str
 		if (roomLifecycle_) roomLifecycle_(roomId, false);
 	}
 	return {true, {}};
+}
+
+RoomService::Result RoomService::leaveIfSessionMatches(
+	const std::string& roomId,
+	const std::string& peerId,
+	uint64_t expectedSessionId)
+{
+	if (expectedSessionId == 0) {
+		return {true, {}};
+	}
+
+	auto room = roomManager_.getRoom(roomId);
+	if (!room) return {true, {}};
+	auto peer = room->getPeer(peerId);
+	if (!peer) return {true, {}};
+	if (peer->sessionId != expectedSessionId) {
+		return {true, {}};
+	}
+
+	return leave(roomId, peerId);
 }
 
 void RoomService::checkRoomHealth() {

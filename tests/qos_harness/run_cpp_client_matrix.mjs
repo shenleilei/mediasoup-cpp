@@ -9,6 +9,7 @@ import {
   getCaseExpectation,
   getPhaseNetwork,
   getImpairedStateForEvaluation,
+  summarizeMeaningfulActions,
   summarizePhaseState,
   toSyntheticCondition,
 } from './synthetic_sweep_shared.mjs';
@@ -282,11 +283,11 @@ async function runCase(caseDef) {
       baselineSummary.current,
       impairedStateForEvaluation,
       recoverySummary.best,
-      'cpp_client'
+      'cpp_client',
+      { actionCount: summarizeMeaningfulActions(trace).actionCount }
     );
-    const actionTypes = trace
-      .map(entry => entry?.plannedAction?.type)
-      .filter(type => type && type !== 'noop');
+    const actionSummary = summarizeMeaningfulActions(trace);
+    const actionTypes = actionSummary.actionTypes;
 
     result.baseline = {
       ...baseline,
@@ -319,7 +320,7 @@ async function runCase(caseDef) {
       recoverySummary.best,
       'cpp_client'
     );
-    result.actionCount = actionTypes.length;
+    result.actionCount = actionSummary.actionCount;
     result.actionTypes = actionTypes;
     result.trace = trace;
     result.samples = samples;
