@@ -100,10 +100,6 @@ function buildMatrixTestProfile(caseDef, durations) {
       let jitterMs = condition.jitterMs;
       let qualityLimitationReason = condition.qualityLimitationReason;
 
-      if (caseDef.caseId === 'B3') {
-        rttMs = Math.max(rttMs, 230);
-      }
-
       if (
         phase.name === 'impairment' &&
         (caseDef.group === 'bw_sweep' || caseDef.group === 'transition')

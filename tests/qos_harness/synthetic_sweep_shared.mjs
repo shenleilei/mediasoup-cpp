@@ -19,8 +19,10 @@ function normalizeBandwidthStress(bandwidthKbps) {
   return clamp((2500 - bandwidthKbps) / 2000, 0, 1);
 }
 
+// Calibrated against empirical GCC observations: loss impacts utilization
+// much more aggressively than the previous linear /10 model suggested.
 function normalizeLossStress(lossPct) {
-  return clamp(lossPct / 10, 0, 1);
+  return clamp(lossPct / 6, 0, 1);
 }
 
 function normalizeRttStress(reportedRttMs) {
@@ -73,29 +75,45 @@ export function getPhaseNetwork(caseDefn, phase) {
   };
 }
 
+// RTT amplification uses a logarithmic model: protocol overhead matters more at
+// low RTT, while higher RTT trends toward 1.0x amplification.
+export function computeReportedRtt(baseRttMs) {
+  return Math.round(baseRttMs + 5 + 15 * Math.log2(1 + baseRttMs / 50));
+}
+
+// Synthetic jitter should resemble reported WebRTC jitter rather than raw
+// network jitter, so apply a simple smoothing factor.
+export function computeSmoothedJitter(rawJitterMs) {
+  return rawJitterMs * 0.75;
+}
+
 export function toSyntheticCondition(network) {
   const bandwidthKbps = asFiniteNumber(network.bandwidth, DEFAULT_SYNTHETIC_BASELINE.bandwidth);
   const lossPct = asFiniteNumber(network.loss, DEFAULT_SYNTHETIC_BASELINE.loss);
-  const jitterMs = asFiniteNumber(network.jitter, DEFAULT_SYNTHETIC_BASELINE.jitter);
+  const rawJitterMs = asFiniteNumber(network.jitter, DEFAULT_SYNTHETIC_BASELINE.jitter);
   const baseRttMs = asFiniteNumber(network.rtt, DEFAULT_SYNTHETIC_BASELINE.rtt);
-  const reportedRttMs = Math.round(baseRttMs + Math.min(baseRttMs, 100));
+  const reportedRttMs = computeReportedRtt(baseRttMs);
+  const smoothedJitterMs = computeSmoothedJitter(rawJitterMs);
 
   const bandwidthStress = normalizeBandwidthStress(bandwidthKbps);
   const lossStress = normalizeLossStress(lossPct);
   const rttStress = normalizeRttStress(reportedRttMs);
-  const jitterStress = normalizeJitterStress(jitterMs);
+  const jitterStress = normalizeJitterStress(smoothedJitterMs);
 
+  // Empirically tuned synthetic-only utilization model.
   let utilization =
     0.98 -
     0.45 * bandwidthStress -
-    0.15 * lossStress -
+    0.40 * lossStress -
     0.2 * rttStress -
-    0.35 * jitterStress;
+    0.30 * jitterStress;
   utilization = clamp(utilization, 0.05, 1.05);
 
   if (bandwidthKbps <= 300 || lossPct >= 40) {
-    utilization = Math.min(utilization, 0.18);
+    utilization = Math.min(utilization, 0.12);
   } else if (bandwidthKbps <= 500 || lossPct >= 20) {
+    utilization = Math.min(utilization, 0.30);
+  } else if (lossPct >= 10) {
     utilization = Math.min(utilization, 0.42);
   }
 
@@ -108,7 +126,7 @@ export function toSyntheticCondition(network) {
     targetBitrateBps,
     lossRate: clamp(lossPct / 100, 0, 1),
     rttMs: reportedRttMs,
-    jitterMs,
+    jitterMs: smoothedJitterMs,
     qualityLimitationReason:
       severity >= 0.85 || utilization < 0.55 ? 'bandwidth' : 'none',
   };

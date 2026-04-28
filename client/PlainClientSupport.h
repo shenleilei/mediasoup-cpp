@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 #include "qos/QosController.h"
 
+#include <cmath>
 #include <cstdint>
 #include <mutex>
 #include <optional>
@@ -62,6 +63,11 @@ struct MatrixTestRuntimeState {
 	uint64_t syntheticBytesSent = 0;
 	uint64_t syntheticPacketsLost = 0;
 	bool initialized = false;
+	double convergedCeilingBps = -1.0;
+	double convergedRttMs = -1.0;
+	double convergedJitterMs = -1.0;
+	double convergedLossRate = 0.0;
+	std::string lastPhaseName;
 };
 
 struct TestClientStatsPayloadEntry {
@@ -77,6 +83,16 @@ struct TestWsRequestEntry {
 
 int64_t steadyNowMs();
 int64_t wallNowMs();
+
+constexpr double CC_DEGRADE_TAU_MS = 1500.0;
+constexpr double CC_RECOVER_TAU_MS = 6000.0;
+
+inline double exponentialConverge(double current, double target, double deltaMs, double tauMs)
+{
+	if (tauMs <= 0.0 || deltaMs <= 0.0) return target;
+	double alpha = 1.0 - std::exp(-deltaMs / tauMs);
+	return current + alpha * (target - current);
+}
 
 std::optional<ServerProducerStats> parseServerProducerStats(
 	const json& peerStats, const std::string& producerId, const std::string& expectedKind);
