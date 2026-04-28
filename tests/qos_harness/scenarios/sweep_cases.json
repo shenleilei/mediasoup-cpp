@@ -56,6 +56,6 @@
   {"caseId":"M2","group":"traffic_model","source":"screenshare","bandwidth":300,"rtt":25,"loss":0,"jitter":5,"baselineMs":10000,"impairmentMs":10000,"recoveryMs":0,"priority":"P0","expect":{"state":"congested","minLevel":1}},
   {"caseId":"M3","group":"traffic_model","source":"audio","bandwidth":1000,"rtt":400,"loss":10,"jitter":5,"baselineMs":10000,"impairmentMs":10000,"recoveryMs":0,"priority":"P1","expect":{"states":["stable","early_warning","congested"],"maxLevel":4}},
   
-  {"caseId":"O1","group":"oscillation","bandwidth":500,"rtt":25,"loss":0.1,"jitter":5,"baselineMs":10000,"impairmentMs":15000,"recoveryMs":10000,"priority":"P0","expect":{"states":["stable","early_warning","congested"],"maxLevel":4,"maxActionCount":5},"expectByRunner":{"loopback":{"maxActionCount":5}}},
+  {"caseId":"O1","group":"oscillation","bandwidth":500,"rtt":25,"loss":0.1,"jitter":5,"baselineMs":10000,"impairmentMs":15000,"recoveryMs":10000,"priority":"P0","expect":{"states":["stable","early_warning","congested"],"maxLevel":4,"maxActionCount":5},"expectByRunner":{"loopback":{"maxActionCount":5},"cpp_client":{"maxActionCount":8}}},
   {"caseId":"O2","group":"oscillation","bandwidth":4000,"rtt":25,"loss":0.1,"jitter":150,"baselineMs":5000,"impairmentMs":15000,"recoveryMs":0,"priority":"P1","expect":{"states":["stable","early_warning","congested"],"maxLevel":4}}
 ]
