@@ -155,6 +155,17 @@ uplink 相关能力覆盖：
 
 这组 case 由 [sweep_cases.json](../tests/qos_harness/scenarios/sweep_cases.json) 定义，由 `run_matrix.mjs` 驱动。
 
+当前默认 non-extended gate 已包含：
+
+- baseline
+- bw_sweep
+- loss_sweep
+- rtt_sweep
+- jitter_sweep
+- transition
+- burst
+- gcc_degrade
+
 统一测试方法：
 
 - browser loopback synthetic/hybrid 弱网场景
@@ -251,6 +262,23 @@ uplink 相关能力覆盖：
 | `S2` | 验证短时低带宽 burst 会触发严重退化 | burst 带宽 `300 kbps` | 如果 burst 期间没明显反应，说明短时冲击捕捉不足 |
 | `S3` | 验证短时高 RTT burst 会触发轻中度退化 | burst RTT `200 ms` | 如果过重，说明 burst RTT 过敏；如果无感，说明短 burst 感知不足 |
 | `S4` | 验证短时高 jitter burst 的边界响应 | burst jitter `60 ms` | 这是历史上存在 loopback 漂移的边界 case，重点看 runner-specific expectation 是否稳定 |
+
+#### GCC Degrade
+
+| Case | 测试目的 | 测试方法 | 结果分析口径 |
+|---|---|---|---|
+| `GD1` | 验证 `5% loss` 已进入 GCC 风格明显退化区间 | sustained impairment，丢包从 `0.1% -> 5%` | 应至少进入 `early_warning`，不能长期无感 |
+| `GD2` | 验证 `8% loss` 触发重度退化 | sustained impairment，丢包 `8%` | 应进入 `congested`，且 level 不应过低 |
+| `GD3` | 验证 `15% loss` 对 severe congestion 的稳定打击 | sustained impairment，丢包 `15%` | 主要看 severe 丢包是否稳定进入高 level |
+| `GD4` | 验证 `30% loss` 极端高丢包 | sustained impairment，丢包 `30%` | 如果仍无法进入 `congested`，说明高丢包 path 明显不足 |
+| `GD5` | 验证中等带宽下降叠加 `10% loss` 的 compound 退化 | `bw=2000 kbps` 且 `loss=10%` | 重点看 compound impairment 是否明显强于单一轻度退化 |
+| `GD6` | 验证 RTT 大跳变叠加 `5% loss` 的 delay+loss compound | `25 -> 300 ms RTT` + `5% loss` | 应出现明显退化，覆盖 RTT jump 与 loss 同时存在的路径 |
+| `GD7` | 验证超大 RTT step 本身可触发明显退化 | `25 -> 400 ms RTT` | 这是 GCC-oriented synthetic suite 中专门覆盖大 delay step 的 case |
+| `GD8` | 验证 RTT step + 高 jitter 的 compound 退化 | `25 -> 200 ms RTT` + `80 ms jitter` | 重点看 delay/jitter compound 是否能稳定触发退化 |
+| `GD9` | 验证多维度同时恶化的 severe case | `bw/rtt/loss/jitter` 同时恶化 | 应稳定进入高等级 `congested` |
+| `GD10` | 验证短时 `5% loss` burst 的 GCC degrade 边界 | `8s` burst，丢包 `5%` | 这是短 burst 边界 case，允许轻退化但不能与健康网络完全等价 |
+| `GD11` | 验证短时 `10% loss` burst 的明显退化 | `8s` burst，丢包 `10%` | 应明显强于 `GD10`，至少要覆盖 burst severe loss path |
+| `GD12` | 验证 `50% loss` 灾难性丢包 | sustained impairment，丢包 `50%` | 如果不能进入高等级 `congested`，说明极端丢包 path 失真 |
 
 ## 3. Downlink QoS
 

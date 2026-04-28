@@ -21,7 +21,7 @@
 - client QoS JS 单测：`27 / 27 PASS`
 - Node harness：`6 / 6 PASS`
 - browser harness：`2 / 2 PASS`
-- browser matrix 主 gate：`43 / 43 PASS`
+- browser matrix 主 gate：`55 case`；当前增量验证为原 `43 case` 主 gate `PASS` + `GD1-GD12` targeted `PASS`
 
 ### 2. browser matrix 主 gate 覆盖范围
 
@@ -32,6 +32,7 @@
 - jitter sweep：`J1-J5`
 - transition：`T1-T11`
 - burst：`S1-S4`
+- GCC degrade：`GD1-GD12`
 
 ### 3. 扩展边界哨兵
 

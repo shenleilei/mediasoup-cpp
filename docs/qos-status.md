@@ -16,8 +16,8 @@
 
 当前稳定口径：
 
-- browser uplink 主 gate：`43 / 43 PASS`
-- Linux plain-client matrix：`43 / 43 PASS`
+- browser uplink 主 gate：`55 case`；当前增量验证为原 `43 case` 主 gate `PASS` + `GD1-GD12` targeted `PASS`
+- Linux plain-client matrix：`55 case`；当前增量验证为原 `43 case` 主 gate `PASS` + `GD1-GD12` targeted `PASS`
 - downlink 当前范围：subscriber receive control + zero-demand publisher pause/resume coordination
 - `dynacast` 与 room-level global bitrate budgeting 仍是后续能力，不计入当前已完成口径
 
