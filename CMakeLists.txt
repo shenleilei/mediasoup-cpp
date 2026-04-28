@@ -158,6 +158,7 @@ if(BUILD_TESTS)
     target_compile_definitions(mediasoup_build_test_support INTERFACE MEDIASOUP_TEST_HOOKS)
 
     set(MEDIASOUP_QOS_UNIT_TEST_SOURCES
+        client/PlainClientSupport.cpp
         tests/test_client_qos.cpp
         tests/test_downlink_allocator.cpp
         tests/test_downlink_health.cpp

@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "../client/qos/QosController.h"
+#include "../client/PlainClientSupport.h"
 
 using namespace qos;
 
@@ -1845,4 +1846,310 @@ TEST(ClientQosControllerTest, ClearingCoordinationBitrateCapRestoresCurrentLevel
 	ASSERT_TRUE(appliedActions[1].encodingParameters.has_value());
 	ASSERT_TRUE(appliedActions[1].encodingParameters->maxBitrateBps.has_value());
 	EXPECT_EQ(*appliedActions[1].encodingParameters->maxBitrateBps, 900000u);
+}
+
+TEST(ExponentialConverge, DegradationReaches63PercentAtOneTau) {
+	double current = 900000.0;
+	const double target = 300000.0;
+	const double delta = current - target;
+
+	for (int t = 0; t < 1500; t += 100) {
+		current = exponentialConverge(current, target, 100.0, CC_DEGRADE_TAU_MS);
+	}
+
+	double fraction = (900000.0 - current) / delta;
+	EXPECT_GE(fraction, 0.55);
+	EXPECT_LE(fraction, 0.72);
+}
+
+TEST(ExponentialConverge, RecoveryReaches63PercentAtOneTau) {
+	double current = 300000.0;
+	const double target = 900000.0;
+	const double delta = target - current;
+
+	for (int t = 0; t < 6000; t += 100) {
+		current = exponentialConverge(current, target, 100.0, CC_RECOVER_TAU_MS);
+	}
+
+	double fraction = (current - 300000.0) / delta;
+	EXPECT_GE(fraction, 0.55);
+	EXPECT_LE(fraction, 0.72);
+}
+
+TEST(ExponentialConverge, DegradationIsFasterThanRecovery) {
+	const double start = 900000.0;
+	const double target = 300000.0;
+	const double delta = start - target;
+
+	double degraded = start;
+	for (int t = 0; t < 2000; t += 100) {
+		degraded = exponentialConverge(degraded, target, 100.0, CC_DEGRADE_TAU_MS);
+	}
+	double degradeFraction = (start - degraded) / delta;
+
+	double recovered = target;
+	for (int t = 0; t < 2000; t += 100) {
+		recovered = exponentialConverge(recovered, start, 100.0, CC_RECOVER_TAU_MS);
+	}
+	double recoverFraction = (recovered - target) / delta;
+
+	EXPECT_GT(degradeFraction, recoverFraction * 1.5);
+}
+
+TEST(ExponentialConverge, ConvergesWithinThreeTau) {
+	double degraded = 900000.0;
+	for (int t = 0; t < 4500; t += 100) {
+		degraded = exponentialConverge(degraded, 300000.0, 100.0, CC_DEGRADE_TAU_MS);
+	}
+	double remaining = std::abs(degraded - 300000.0) / 600000.0;
+	EXPECT_LT(remaining, 0.06);
+
+	double recovered = 300000.0;
+	for (int t = 0; t < 18000; t += 100) {
+		recovered = exponentialConverge(recovered, 900000.0, 100.0, CC_RECOVER_TAU_MS);
+	}
+	remaining = std::abs(recovered - 900000.0) / 600000.0;
+	EXPECT_LT(remaining, 0.06);
+}
+
+TEST(ExponentialConverge, ZeroOrNegativeDeltaReturnsTarget) {
+	EXPECT_DOUBLE_EQ(exponentialConverge(900000.0, 300000.0, 0.0, 1500.0), 300000.0);
+	EXPECT_DOUBLE_EQ(exponentialConverge(900000.0, 300000.0, -100.0, 1500.0), 300000.0);
+}
+
+TEST(ExponentialConverge, ZeroOrNegativeTauReturnsTarget) {
+	EXPECT_DOUBLE_EQ(exponentialConverge(900000.0, 300000.0, 100.0, 0.0), 300000.0);
+	EXPECT_DOUBLE_EQ(exponentialConverge(900000.0, 300000.0, 100.0, -1.0), 300000.0);
+}
+
+namespace {
+
+MatrixTestProfile BuildSyntheticProfile(
+	int64_t warmupMs,
+	std::vector<MatrixTestPhase> phases)
+{
+	MatrixTestProfile profile;
+	profile.warmupMs = warmupMs;
+	profile.phases = std::move(phases);
+	return profile;
+}
+
+RawSenderSnapshot MakePipelineSnapshot(
+	int64_t timestampMs,
+	uint64_t bytesSent,
+	uint64_t packetsSent,
+	uint64_t packetsLost = 0,
+	double targetBitrateBps = 900000,
+	double roundTripTimeMs = 20,
+	double jitterMs = 5)
+{
+	RawSenderSnapshot snap;
+	snap.timestampMs = timestampMs;
+	snap.trackId = "video";
+	snap.producerId = "producer";
+	snap.source = Source::Camera;
+	snap.kind = TrackKind::Video;
+	snap.bytesSent = bytesSent;
+	snap.packetsSent = packetsSent;
+	snap.packetsLost = packetsLost;
+	snap.targetBitrateBps = targetBitrateBps;
+	snap.configuredBitrateBps = 900000;
+	snap.roundTripTimeMs = roundTripTimeMs;
+	snap.jitterMs = jitterMs;
+	snap.qualityLimitationReason = QualityLimitationReason::None;
+	return snap;
+}
+
+State RunSyntheticPipelineSimulation(
+	const MatrixTestProfile& profile,
+	int encBitrate,
+	int durationMs,
+	int sampleIntervalMs = 1000)
+{
+	MatrixTestRuntimeState runtime;
+	runtime.startMs = 0;
+
+	Profile qosProfile;
+	StateMachineContext smCtx = createInitialQosStateMachineContext(0);
+
+	RawSenderSnapshot prevSnap{};
+	DerivedSignals prevSig{};
+	bool hasPrev = false;
+	int warmupRemaining = 5;
+
+	for (int64_t t = sampleIntervalMs; t <= durationMs; t += sampleIntervalMs) {
+		uint64_t bytes =
+			static_cast<uint64_t>(static_cast<double>(encBitrate) / 8.0 * static_cast<double>(t) / 1000.0);
+		uint64_t packets = static_cast<uint64_t>(t / sampleIntervalMs) * 100;
+		auto snap = MakePipelineSnapshot(t, bytes, packets);
+
+		applyMatrixTestProfile(snap, encBitrate, profile, runtime, t);
+
+		DerivedSignals sig = deriveSignals(
+			snap,
+			hasPrev ? &prevSnap : nullptr,
+			hasPrev ? &prevSig : nullptr);
+
+		prevSnap = snap;
+		prevSig = sig;
+		hasPrev = true;
+
+		if (warmupRemaining > 0) {
+			warmupRemaining--;
+			continue;
+		}
+
+		auto result = evaluateStateTransition(smCtx, sig, qosProfile, t);
+		smCtx = result.context;
+	}
+
+	return smCtx.state;
+}
+
+struct SyntheticRunnerResult {
+	State state;
+	int level;
+	size_t actionCount;
+};
+
+SyntheticRunnerResult RunControllerWithProfile(
+	const MatrixTestProfile& profile,
+	int encBitrate,
+	int durationMs,
+	int sampleIntervalMs = 1000)
+{
+	std::vector<PlannedAction> actions;
+	int64_t currentMs = 0;
+
+	PublisherQosController::Options options;
+	options.source = Source::Camera;
+	options.trackId = "video";
+	options.producerId = "producer";
+	options.initialLevel = 0;
+	options.warmupSamples = 5;
+	options.monotonicNowMs = [&]() { return currentMs; };
+	options.actionSink = [&](const PlannedAction& action) {
+		actions.push_back(action);
+		return true;
+	};
+
+	PublisherQosController controller(options);
+	MatrixTestRuntimeState runtime;
+	runtime.startMs = 0;
+
+	for (int64_t t = sampleIntervalMs; t <= durationMs; t += sampleIntervalMs) {
+		currentMs = t;
+		uint64_t bytes =
+			static_cast<uint64_t>(static_cast<double>(encBitrate) / 8.0 * static_cast<double>(t) / 1000.0);
+		uint64_t packets = static_cast<uint64_t>(t / sampleIntervalMs) * 100;
+		auto snap = MakePipelineSnapshot(t, bytes, packets);
+		applyMatrixTestProfile(snap, encBitrate, profile, runtime, t);
+		controller.onSample(snap);
+	}
+
+	return {controller.currentState(), controller.currentLevel(), actions.size()};
+}
+
+} // namespace
+
+TEST(SyntheticPipeline, DegradationPhaseReachesWarningOrCongested) {
+	MatrixTestPhase baseline{"baseline", 5000, 900000, 0.0, 20, 5, QualityLimitationReason::None};
+	MatrixTestPhase impairment{"impairment", 20000, 300000, 0.10, 350, 80, QualityLimitationReason::Bandwidth};
+	auto profile = BuildSyntheticProfile(0, {baseline, impairment});
+	State finalState = RunSyntheticPipelineSimulation(profile, 900000, 25000);
+	EXPECT_TRUE(finalState == State::Congested || finalState == State::EarlyWarning);
+}
+
+TEST(SyntheticPipeline, StableBaselineRemainsStable) {
+	MatrixTestPhase baseline{"baseline", 15000, 900000, 0.0, 20, 5, QualityLimitationReason::None};
+	auto profile = BuildSyntheticProfile(0, {baseline});
+	State finalState = RunSyntheticPipelineSimulation(profile, 900000, 15000);
+	EXPECT_EQ(finalState, State::Stable);
+}
+
+TEST(SyntheticPipeline, LowBandwidthOverrideProducesCoherentState) {
+	MatrixTestPhase baseline{"baseline", 5000, 900000, 0.0, 20, 5, QualityLimitationReason::None};
+	MatrixTestPhase impairment{"impairment", 20000, 450000, 0.01, 30, 8, QualityLimitationReason::Bandwidth};
+	auto profile = BuildSyntheticProfile(0, {baseline, impairment});
+	State finalState = RunSyntheticPipelineSimulation(profile, 900000, 25000);
+	EXPECT_NE(finalState, State::Stable);
+}
+
+TEST(SyntheticPipeline, BurstLowBandwidthOverrideIsCoherent) {
+	MatrixTestPhase baseline{"baseline", 5000, 900000, 0.0, 20, 5, QualityLimitationReason::None};
+	MatrixTestPhase burst{"impairment", 15000, 150000, 0.0, 25, 5, QualityLimitationReason::Bandwidth};
+	auto profile = BuildSyntheticProfile(0, {baseline, burst});
+	State finalState = RunSyntheticPipelineSimulation(profile, 900000, 20000);
+	EXPECT_NE(finalState, State::Stable);
+}
+
+TEST(SyntheticPipeline, ElevatedJitterProducesCoherentWarningPath) {
+	MatrixTestPhase baseline{"baseline", 5000, 900000, 0.0, 20, 5, QualityLimitationReason::None};
+	MatrixTestPhase jitterPhase{"impairment", 15000, 900000, 0.0, 30, 45, QualityLimitationReason::None};
+	auto profile = BuildSyntheticProfile(0, {baseline, jitterPhase});
+	State finalState = RunSyntheticPipelineSimulation(profile, 900000, 20000);
+	EXPECT_TRUE(finalState == State::EarlyWarning || finalState == State::Congested);
+}
+
+TEST(SyntheticPipeline, RecoveryAfterDegradationMovesBackToStable) {
+	MatrixTestPhase baseline{"baseline", 6000, 900000, 0.0, 20, 5, QualityLimitationReason::None};
+	MatrixTestPhase impairment{"impairment", 12000, 300000, 0.10, 350, 80, QualityLimitationReason::Bandwidth};
+	MatrixTestPhase recovery{"recovery", 40000, 900000, 0.0, 20, 5, QualityLimitationReason::None};
+	auto profile = BuildSyntheticProfile(0, {baseline, impairment, recovery});
+	State finalState = RunSyntheticPipelineSimulation(profile, 900000, 58000);
+	EXPECT_TRUE(finalState == State::Stable || finalState == State::Recovering);
+}
+
+TEST(SyntheticRunnerPipeline, DegradationProducesLevelChange) {
+	MatrixTestPhase baseline{"baseline", 6000, 900000, 0.0, 20, 5, QualityLimitationReason::None};
+	MatrixTestPhase impairment{"impairment", 20000, 300000, 0.10, 350, 80, QualityLimitationReason::Bandwidth};
+	auto profile = BuildSyntheticProfile(0, {baseline, impairment});
+	auto result = RunControllerWithProfile(profile, 900000, 26000);
+	EXPECT_TRUE(result.state == State::EarlyWarning || result.state == State::Congested);
+	EXPECT_GT(result.actionCount, 0u);
+}
+
+TEST(SyntheticRunnerPipeline, StableBaselineNoActions) {
+	MatrixTestPhase baseline{"baseline", 15000, 900000, 0.0, 20, 5, QualityLimitationReason::None};
+	auto profile = BuildSyntheticProfile(0, {baseline});
+	auto result = RunControllerWithProfile(profile, 900000, 15000);
+	EXPECT_EQ(result.state, State::Stable);
+	EXPECT_EQ(result.level, 0);
+	EXPECT_EQ(result.actionCount, 0u);
+}
+
+TEST(SyntheticRunnerPipeline, LowBandwidthOverrideDrivesControllerDegradation) {
+	MatrixTestPhase baseline{"baseline", 6000, 900000, 0.0, 20, 5, QualityLimitationReason::None};
+	MatrixTestPhase impairment{"impairment", 20000, 450000, 0.01, 30, 8, QualityLimitationReason::Bandwidth};
+	auto profile = BuildSyntheticProfile(0, {baseline, impairment});
+	auto result = RunControllerWithProfile(profile, 900000, 26000);
+	EXPECT_NE(result.state, State::Stable);
+	EXPECT_GT(result.actionCount, 0u);
+}
+
+TEST(SyntheticRunnerPipeline, BurstOverrideDrivesControllerDegradation) {
+	MatrixTestPhase baseline{"baseline", 6000, 900000, 0.0, 20, 5, QualityLimitationReason::None};
+	MatrixTestPhase burst{"impairment", 15000, 150000, 0.0, 25, 5, QualityLimitationReason::Bandwidth};
+	auto profile = BuildSyntheticProfile(0, {baseline, burst});
+	auto result = RunControllerWithProfile(profile, 900000, 21000);
+	EXPECT_NE(result.state, State::Stable);
+	EXPECT_GT(result.actionCount, 0u);
+}
+
+TEST(SyntheticRunnerPipeline, ElevatedJitterDrivesControllerWarning) {
+	MatrixTestPhase baseline{"baseline", 6000, 900000, 0.0, 20, 5, QualityLimitationReason::None};
+	MatrixTestPhase jitterPhase{"impairment", 15000, 900000, 0.0, 30, 45, QualityLimitationReason::None};
+	auto profile = BuildSyntheticProfile(0, {baseline, jitterPhase});
+	auto result = RunControllerWithProfile(profile, 900000, 21000);
+	EXPECT_TRUE(result.state == State::EarlyWarning || result.state == State::Congested);
+}
+
+TEST(SyntheticRunnerPipeline, RecoveryCycleThroughController) {
+	MatrixTestPhase baseline{"baseline", 6000, 900000, 0.0, 20, 5, QualityLimitationReason::None};
+	MatrixTestPhase impairment{"impairment", 12000, 300000, 0.10, 350, 80, QualityLimitationReason::Bandwidth};
+	MatrixTestPhase recovery{"recovery", 40000, 900000, 0.0, 20, 5, QualityLimitationReason::None};
+	auto profile = BuildSyntheticProfile(0, {baseline, impairment, recovery});
+	auto result = RunControllerWithProfile(profile, 900000, 58000);
+	EXPECT_TRUE(result.state == State::Stable || result.state == State::Recovering);
+	EXPECT_GT(result.actionCount, 0u);
 }

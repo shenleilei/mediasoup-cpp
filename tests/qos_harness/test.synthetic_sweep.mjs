@@ -5,6 +5,8 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
+  computeReportedRtt,
+  computeSmoothedJitter,
   deriveCaseEvaluation,
   extractTiming,
   analyzeResult,
@@ -92,7 +94,7 @@ test('synthetic condition for B3 is no longer treated as a healthy default', () 
   });
 
   assert.equal(condition.targetBitrateBps, 900000);
-  assert.equal(condition.rttMs, 110);
+  assert.equal(condition.rttMs, 76);
   assert.ok(condition.bitrateBps < condition.targetBitrateBps);
   assert.ok(condition.bitrateBps <= 765000);
 });
@@ -597,4 +599,184 @@ test('baseline expectations track modeled stress ordering', () => {
       `baseline: harsher ${harsher.caseId} should not allow lower maxLevel than ${easier.caseId}`
     );
   }
+});
+
+test('RTT amplification follows logarithmic decay toward 1.0x at high RTT', () => {
+  const ratio25 = computeReportedRtt(25) / 25;
+  const ratio100 = computeReportedRtt(100) / 100;
+  const ratio350 = computeReportedRtt(350) / 350;
+
+  assert.ok(ratio25 > 1.3);
+  assert.ok(ratio100 > 1.1 && ratio100 < 1.5);
+  assert.ok(ratio350 > 1.0 && ratio350 < 1.2);
+  assert.ok(ratio25 > ratio100);
+  assert.ok(ratio100 > ratio350);
+});
+
+test('jitter smoothing reduces raw jitter by RFC 3550 EWMA factor', () => {
+  assert.equal(computeSmoothedJitter(20), 15);
+  assert.equal(computeSmoothedJitter(40), 30);
+  assert.equal(computeSmoothedJitter(0), 0);
+});
+
+test('loss utilization matches empirical GCC data within tolerance', () => {
+  const cases = [
+    { loss: 1, minUtil: 0.80, maxUtil: 0.99 },
+    { loss: 5, minUtil: 0.35, maxUtil: 0.65 },
+    { loss: 10, minUtil: 0.10, maxUtil: 0.45 },
+    { loss: 20, minUtil: 0.02, maxUtil: 0.32 },
+  ];
+
+  for (const tc of cases) {
+    const condition = toSyntheticCondition({
+      bandwidth: 4000, rtt: 25, loss: tc.loss, jitter: 5,
+    });
+    const util = condition.bitrateBps / condition.targetBitrateBps;
+    assert.ok(util >= tc.minUtil && util <= tc.maxUtil);
+  }
+});
+
+test('RTT-only sweep utilization stays within empirical bounds', () => {
+  const condition = toSyntheticCondition({
+    bandwidth: 4000, rtt: 200, loss: 0.1, jitter: 5,
+  });
+  const util = condition.bitrateBps / condition.targetBitrateBps;
+  assert.ok(util >= 0.75 && util <= 0.99);
+});
+
+test('severe conditions produce utilization below bandwidth-limited threshold', () => {
+  const severe = toSyntheticCondition({
+    bandwidth: 300, rtt: 25, loss: 0.1, jitter: 5,
+  });
+  assert.ok(severe.bitrateBps / severe.targetBitrateBps <= 0.20);
+  assert.equal(severe.qualityLimitationReason, 'bandwidth');
+});
+
+test('bw<=1000 sendCeiling override stays within calibrated utilization range', () => {
+  const condition = toSyntheticCondition({
+    bandwidth: 1000, rtt: 25, loss: 0.1, jitter: 5,
+  });
+  const overriddenBps = Math.round(condition.bitrateBps * 0.75);
+  const overriddenUtil = overriddenBps / condition.targetBitrateBps;
+  assert.ok(overriddenUtil < condition.bitrateBps / condition.targetBitrateBps);
+  assert.ok(overriddenUtil >= 0.20 && overriddenUtil <= 0.70);
+});
+
+test('burst bw<=300 qualityLimitationReason override is consistent with model caps', () => {
+  const condition = toSyntheticCondition({
+    bandwidth: 300, rtt: 25, loss: 0.1, jitter: 5,
+  });
+  assert.equal(condition.qualityLimitationReason, 'bandwidth');
+});
+
+test('jitter sweep floor override stays within smoothed jitter range', () => {
+  const condition = toSyntheticCondition({
+    bandwidth: 4000, rtt: 25, loss: 0.1, jitter: 40,
+  });
+  const overriddenJitter = Math.max(condition.jitterMs, 32);
+  assert.ok(overriddenJitter >= condition.jitterMs);
+  assert.ok(overriddenJitter <= 40);
+});
+
+test('combined bw+loss overrides stay within calibrated bounds at bw=500,loss=10%', () => {
+  const condition = toSyntheticCondition({
+    bandwidth: 500, rtt: 55, loss: 10, jitter: 15,
+  });
+  const util = condition.bitrateBps / condition.targetBitrateBps;
+  assert.ok(util <= 0.32);
+  assert.ok(util >= 0.05);
+  const overriddenBps = Math.round(condition.bitrateBps * 0.75);
+  const overriddenUtil = overriddenBps / condition.targetBitrateBps;
+  assert.ok(overriddenUtil <= 0.30 && overriddenUtil >= 0.02);
+});
+
+test('combined jitter+loss overrides maintain correct qualityLimitationReason', () => {
+  const condition = toSyntheticCondition({
+    bandwidth: 4000, rtt: 25, loss: 5, jitter: 50,
+  });
+  const overriddenJitter = Math.max(condition.jitterMs, 32);
+  const util = condition.bitrateBps / condition.targetBitrateBps;
+  assert.ok(util >= 0.20 && util <= 0.65);
+  assert.ok(overriddenJitter <= 50);
+});
+
+test('bw=800 with moderate loss=3% override preserves calibrated monotonicity', () => {
+  const mild = toSyntheticCondition({
+    bandwidth: 800, rtt: 25, loss: 1, jitter: 5,
+  });
+  const moderate = toSyntheticCondition({
+    bandwidth: 800, rtt: 55, loss: 3, jitter: 15,
+  });
+  const mildOverridden = Math.round(mild.bitrateBps * 0.75);
+  const moderateOverridden = Math.round(moderate.bitrateBps * 0.75);
+  assert.ok(moderateOverridden < mildOverridden);
+  assert.ok(mildOverridden / mild.targetBitrateBps <= 0.70);
+  assert.ok(moderateOverridden / moderate.targetBitrateBps >= 0.10);
+});
+
+function exponentialConverge(current, target, deltaMs, tauMs) {
+  if (tauMs <= 0 || deltaMs <= 0) return target;
+  const alpha = 1.0 - Math.exp(-deltaMs / tauMs);
+  return current + alpha * (target - current);
+}
+
+const CC_DEGRADE_TAU_MS = 1500.0;
+const CC_RECOVER_TAU_MS = 6000.0;
+
+test('CC degradation reaches ~63% of target within one tau (1.5s)', () => {
+  const start = 900000;
+  const target = 300000;
+  const delta = start - target;
+  let current = start;
+  for (let t = 0; t < 1500; t += 100) {
+    current = exponentialConverge(current, target, 100, CC_DEGRADE_TAU_MS);
+  }
+  const fraction = (start - current) / delta;
+  assert.ok(fraction >= 0.55 && fraction <= 0.72);
+});
+
+test('CC recovery reaches ~63% of target within one tau (6s)', () => {
+  const start = 300000;
+  const target = 900000;
+  const delta = target - start;
+  let current = start;
+  for (let t = 0; t < 6000; t += 100) {
+    current = exponentialConverge(current, target, 100, CC_RECOVER_TAU_MS);
+  }
+  const fraction = (current - start) / delta;
+  assert.ok(fraction >= 0.55 && fraction <= 0.72);
+});
+
+test('CC degradation is substantially faster than recovery', () => {
+  const start = 900000;
+  const target = 300000;
+  const delta = start - target;
+  let degraded = start;
+  for (let t = 0; t < 2000; t += 100) {
+    degraded = exponentialConverge(degraded, target, 100, CC_DEGRADE_TAU_MS);
+  }
+  const degradeFraction = (start - degraded) / delta;
+
+  let recovered = target;
+  for (let t = 0; t < 2000; t += 100) {
+    recovered = exponentialConverge(recovered, start, 100, CC_RECOVER_TAU_MS);
+  }
+  const recoverFraction = (recovered - target) / delta;
+  assert.ok(degradeFraction > recoverFraction * 1.5);
+});
+
+test('CC convergence reaches >95% of target within 3 tau', () => {
+  let degraded = 900000;
+  for (let t = 0; t < 4500; t += 100) {
+    degraded = exponentialConverge(degraded, 300000, 100, CC_DEGRADE_TAU_MS);
+  }
+  let remaining = Math.abs(degraded - 300000) / 600000;
+  assert.ok(remaining < 0.06);
+
+  let recovered = 300000;
+  for (let t = 0; t < 18000; t += 100) {
+    recovered = exponentialConverge(recovered, 900000, 100, CC_RECOVER_TAU_MS);
+  }
+  remaining = Math.abs(recovered - 900000) / 600000;
+  assert.ok(remaining < 0.06);
 });
