@@ -1,6 +1,6 @@
 # WebRTC QoS SDK Plain 推拉流客户端实现验收清单
 
-> 状态：P1 已完成本地短链路验收；P2 已完成 consumer TWCC ext 修复、adapter RTCP 边界计数、video-only publish 和 P2 smoke 报告脚本。浏览器画面、真实弱网 smoke、SDK play 周期性 RR/TWCC 输出仍需后续验证。
+> 状态：P1 已完成本地短链路验收；P2 已完成 consumer TWCC ext 修复、adapter RTCP 边界计数、SDK play RR/TWCC 输出、SDK runtime 文件观测、video-only publish 和 P2 smoke 报告脚本。浏览器画面、真实弱网 smoke、实时编码器和 native QoE 仍需后续验证。
 
 ## 1. 已实现项
 
@@ -27,8 +27,10 @@
 | play 兼容历史 dummy audio producer | receive capabilities 暂保留 Opus，runtime 只选择 video | P1 历史 smoke 不再出现 audio auto-subscribe error |
 | consumer TWCC ext 透传 | `ortc::getConsumableRtpParameters()` 保留 producer/router 均支持的 header extension | P2 smoke：`selected_consumer ... twccExtId=5` |
 | consumer 无 TWCC ext 降级 | 保留 `consumer_without_twcc_ext` 日志，兼容异常环境继续启动 `VideoPlayClient` | 降级可播放，但不允许作为 QoS 主链路 PASS |
-| push RTCP feedback 输入计数 | `WebRtcQosPushRuntime` 记录 `rtcpFeedbackPacketsIn/BytesIn/Failures` | P2 smoke：`rtcpFeedbackPacketsIn=86 ... Failures=0` |
-| play RTCP 输出计数 | `WebRtcQosPlayRuntime` 记录 `rtcpPacketsOut/BytesOut/SendFailures` | P2 smoke 字段存在；当前 SDK baseline 输出为 0，列为 P2 后续项 |
+| push RTCP feedback 输入计数 | `WebRtcQosPushRuntime` 记录 `rtcpFeedbackPacketsIn/BytesIn/Failures` | P2 smoke：`rtcpFeedbackPacketsIn=66 ... Failures=0` |
+| play RTCP 输出计数 | `WebRtcQosPlayRuntime` 记录 `rtcpPacketsOut/BytesOut/SendFailures` | P2 smoke：`rtcpPacketsOut=98 ... SendFailures=0` |
+| SDK RR/TWCC counter | `webrtc_qos_sdk` play 生成 RR/TWCC，push 统计收到的 RR/TWCC | P2 smoke：play `transportFeedbackCountMax=92`、`receiverReportCountMax=6`；push `transportFeedbackCountMax=50`、`receiverReportCountMax=4` |
+| SDK runtime 文件观测 | dist 暴露 `logging/metrics/alerts`，adapter 自动启用 SDK runtime 文件 | P2 smoke：push/play 均 `sdk_runtime_files enabled=true`，各生成 log/metrics/alerts 文件 |
 | video-only plain publish | 服务端支持 `enableAudio=false`；新 push 默认不发 `audioSsrc`；旧请求默认仍启用 audio | P2-M4 smoke：`audioEnabled=false` 且 play 只收到 video consumer |
 | P2 smoke 报告脚本 | `scripts/run_webrtc_qos_plain_p2_smoke.sh` 统一启动 SFU/push/play/netem 并生成报告 | `docs/generated/webrtc-qos-plain-p2-smoke-report.{json,md}` |
 
@@ -64,7 +66,7 @@ MEDIASOUP_TEST_WORKER_BIN=./mediasoup-worker \
 scripts/run_webrtc_qos_plain_p2_smoke.sh \
   --cases baseline,delay_100ms \
   --duration-seconds 6 \
-  --artifact-root /tmp/webrtc-qos-plain-p2-smoke-final \
+  --artifact-root /tmp/webrtc-qos-plain-p2-sdk-smoke-v2 \
   --report-dir docs/generated
 ```
 
@@ -74,7 +76,7 @@ scripts/run_webrtc_qos_plain_p2_smoke.sh \
 - push/play 两个 target 编译通过。
 - ORTC standalone targeted test 通过。
 - P2-M4 targeted integration test 通过；非默认 build 目录下通过 `MEDIASOUP_TEST_SFU_BIN` / `MEDIASOUP_TEST_WORKER_BIN` 指定测试 SFU 和 worker。
-- P2 smoke 脚本短测通过：baseline 传输链路 PASS，未启用 netem 的 weak case 正确标记 SKIP。
+- P2 smoke 脚本短测通过：baseline 传输链路 PASS，`qosMainline=PASS`，`sdkRuntimeObservability=PASS`；未启用 netem 的 weak case 正确标记 SKIP。
 - 旧实现依赖门禁没有命中代码；只命中 `client/webrtc_qos_plain_client/README.md` 的说明文本。
 
 ## 3. P1 动态 smoke 结果（历史）
@@ -167,13 +169,13 @@ push/play：
 | push RTCP feedback 输入 | PASS | `push_runtime_stopped pushedAu=120 rtcpFeedbackPacketsIn=86 rtcpFeedbackBytesIn=2376 rtcpFeedbackFailures=0` |
 | push RTT/loss snapshot | PASS | `push_metrics ... rttMs=8 loss=0 rtcpFeedbackPacketsIn=77 ...` |
 | play RTP/AU | PASS | `play_runtime_stopped rtpPackets=236 rtcpPackets=7 ... outputAu=120` |
-| play RTCP 输出 | FAIL | `rtcpPacketsOut=0`；SDK play facade 当前只在 NACK/PLI 事件时输出 RTCP，没有周期性 RR/TWCC |
+| play RTCP 输出 | 早期 FAIL | 当时 SDK play facade 尚未输出周期性 RR/TWCC；当前结果以 3.3 的 `playRtcpPacketsOut=98` 为准 |
 
 结论：
 
 - P2-M1a 已完成：consumer 不再丢 TWCC header extension。
 - P2-M1c adapter 边界计数已完成：push/play 日志包含 RTCP I/O counters。
-- P2-M1d 未完成：需要 `webrtc_qos_sdk` play facade 补周期性 RR/TWCC 输出和 SDK counter 后，再在 mediasoup-cpp 集成验证。
+- P2-M1d 已在后续 SDK dist 更新后完成；当前签收以 3.3 报告为准。
 
 ## 3.2 P2-M4 video-only 动态 smoke 结果
 
@@ -218,7 +220,7 @@ push/play：
 scripts/run_webrtc_qos_plain_p2_smoke.sh \
   --cases baseline,delay_100ms \
   --duration-seconds 6 \
-  --artifact-root /tmp/webrtc-qos-plain-p2-smoke-final \
+  --artifact-root /tmp/webrtc-qos-plain-p2-sdk-smoke-v2 \
   --report-dir docs/generated
 ```
 
@@ -229,27 +231,28 @@ scripts/run_webrtc_qos_plain_p2_smoke.sh \
 | baseline 传输链路 | PASS | `pushedAu=90`、`outputAu=90`、`selectedTwccExtId=5` |
 | video-only | PASS | 报告中无 audio consumer，push `audioEnabled=false` |
 | push RTCP feedback 输入 | PASS | `pushRtcpFeedbackPacketsIn=66` |
-| play RTCP 输出 | FAIL | `playRtcpPacketsOut=0`，P2-M1d 未完成 |
+| play RTCP 输出 | PASS | `playRtcpPacketsOut=98`、`playRtcpSendFailures=0` |
+| SDK runtime 文件 | PASS | push/play 均 `sdk_runtime_files enabled=true`，各有 log/metrics/alerts 文件 |
+| SDK RR/TWCC counter | PASS | play `transportFeedbackCountMax=92`、`receiverReportCountMax=6`；push `transportFeedbackCountMax=50`、`receiverReportCountMax=4` |
 | 弱网 coverage | SKIP | 未传 `--enable-netem`，`delay_100ms` 不计 PASS |
 
 结论：
 
-- P2-M3 脚本入口和报告制品已完成，可以持续产出 PASS/FAIL/SKIP。
-- 当前结果不能签收完整 P2：QoS 主链路仍卡在 SDK play 周期性 RR/TWCC 输出；真实弱网 case 需要带 `--enable-netem` 在可控环境运行。
+- P2-M1d、P2-M2、P2-M3 的本地 baseline 主链路已闭环：TWCC 协商、play 反馈输出、push 反馈输入、SDK runtime 文件和 SDK counter 都可观测。
+- 当前结果仍不能签收完整 P2：真实弱网 case 需要带 `--enable-netem` 在可控环境运行，浏览器、实时编码器和 native QoE 仍未覆盖。
 
 ## 4. 版本差异
 
-当前 `/root/webrtc_qos_sdk/dist/linux-x86_64` 发布包头文件没有暴露
-`RuntimeLogConfig` / `RuntimeMetricsConfig` / `RuntimeAlertConfig` 字段；SDK 源码头文件有。
+当前 `/root/webrtc_qos_sdk/dist/linux-x86_64` 发布包已经暴露
+`RuntimeLogConfig` / `RuntimeMetricsConfig` / `RuntimeAlertConfig` 字段，且包含 play RR/TWCC 输出和 RR/TWCC counter。
 
-客户端已加兼容层：
+客户端仍保留兼容层：
 
 - 如果 SDK config 暴露 `logging/metrics/alerts` 字段，则启用 SDK runtime 文件输出。
 - 如果当前 dist 包不暴露，则日志里输出 `sdk_runtime_files enabled=false`，并使用 adapter 层
   spdlog 文件日志作为当前观测来源。
 
-这意味着文档中“SDK runtime 文件输出是主要观测来源”在当前 dist 包下只能部分满足。
-要完全满足，需要重新发布包含 runtime config 字段的 SDK dist 包，或改文档明确当前包降级策略。
+当前 smoke 已验证正常路径为 `sdk_runtime_files enabled=true`；降级路径只作为旧 SDK 包兼容策略，不允许作为 P2-M2 PASS。
 
 ## 5. 未覆盖项
 
@@ -257,5 +260,5 @@ scripts/run_webrtc_qos_plain_p2_smoke.sh \
 
 - browser receiver 可看到 push 画面。
 - netem 弱网 smoke：脚本已支持；当前机器未启用 `--enable-netem`，延迟、丢包、恢复 case 仍未实际签收。
-- SDK play 周期性 RR/TWCC 输出：当前 P2 smoke 中 `rtcpPacketsOut=0`，QoS 主链路不能签收。
-- 当前 SDK dist 包未暴露 runtime 文件配置字段，因此 SDK 内部 metrics/alerts 文件输出未覆盖；adapter spdlog 文件已覆盖。
+- realtime x264 encoder adaptation。
+- native decode/QoE 指标。

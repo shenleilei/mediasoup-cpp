@@ -7,11 +7,11 @@
         "samples": []
       },
       "artifacts": {
-        "caseDir": "/tmp/webrtc-qos-plain-p2-smoke-final-verify/20260523T120950Z/baseline",
-        "playLog": "/tmp/webrtc-qos-plain-p2-smoke-final-verify/20260523T120950Z/baseline/play/play.log",
-        "pushLog": "/tmp/webrtc-qos-plain-p2-smoke-final-verify/20260523T120950Z/baseline/push/push.log",
-        "readyz": "/tmp/webrtc-qos-plain-p2-smoke-final-verify/20260523T120950Z/baseline/readyz.json",
-        "sfuLog": "/tmp/webrtc-qos-plain-p2-smoke-final-verify/20260523T120950Z/baseline/sfu.stdout.log"
+        "caseDir": "/tmp/webrtc-qos-plain-p2-sdk-smoke-v2/20260523T122810Z/baseline",
+        "playLog": "/tmp/webrtc-qos-plain-p2-sdk-smoke-v2/20260523T122810Z/baseline/play/play.log",
+        "pushLog": "/tmp/webrtc-qos-plain-p2-sdk-smoke-v2/20260523T122810Z/baseline/push/push.log",
+        "readyz": "/tmp/webrtc-qos-plain-p2-sdk-smoke-v2/20260523T122810Z/baseline/readyz.json",
+        "sfuLog": "/tmp/webrtc-qos-plain-p2-sdk-smoke-v2/20260523T122810Z/baseline/sfu.stdout.log"
       },
       "checks": [
         {
@@ -45,7 +45,7 @@
           "status": "PASS"
         },
         {
-          "evidence": "rtpPackets=195",
+          "evidence": "rtpPackets=196",
           "name": "play-rtp-input",
           "status": "PASS"
         },
@@ -55,7 +55,7 @@
           "status": "PASS"
         },
         {
-          "evidence": "rtcpFeedbackPacketsIn=67",
+          "evidence": "rtcpFeedbackPacketsIn=66",
           "name": "push-rtcp-feedback-input",
           "status": "PASS"
         },
@@ -70,6 +70,36 @@
           "status": "PASS"
         },
         {
+          "evidence": "enabled=True",
+          "name": "sdk-push-runtime-enabled",
+          "status": "PASS"
+        },
+        {
+          "evidence": "enabled=True",
+          "name": "sdk-play-runtime-enabled",
+          "status": "PASS"
+        },
+        {
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 14736, \"metricsFiles\": 1, \"processTickCountMax\": 496, \"receiverReportCountMax\": 4, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 6, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 50}",
+          "name": "sdk-push-runtime-files",
+          "status": "PASS"
+        },
+        {
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 15026, \"metricsFiles\": 1, \"processTickCountMax\": 593, \"receiverReportCountMax\": 6, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 7, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 92}",
+          "name": "sdk-play-runtime-files",
+          "status": "PASS"
+        },
+        {
+          "evidence": "twcc=92 rr=6",
+          "name": "sdk-play-rtcp-generated",
+          "status": "PASS"
+        },
+        {
+          "evidence": "twcc=50 rr=4",
+          "name": "sdk-push-rtcp-counted",
+          "status": "PASS"
+        },
+        {
           "evidence": "ok",
           "name": "harness-no-failure",
           "status": "PASS"
@@ -77,8 +107,8 @@
       ],
       "metrics": {
         "finalTargetBps": {
-          "avg": 1894887.5,
-          "max": 2033865.0,
+          "avg": 1897205.8333333333,
+          "max": 2036647.0,
           "min": 1200000.0
         },
         "nack": 0,
@@ -89,23 +119,49 @@
         },
         "playMetricSamples": 14,
         "playOutputAu": 90,
-        "playRtcpBytesOut": 0,
-        "playRtcpPacketsIn": 4,
-        "playRtcpPacketsOut": 0,
+        "playRtcpBytesOut": 2500,
+        "playRtcpPacketsIn": 5,
+        "playRtcpPacketsOut": 98,
         "playRtcpSendFailures": 0,
-        "playRtpPackets": 195,
+        "playRtpPackets": 196,
         "pli": 0,
         "publishTwccExtId": 5,
         "pushMetricSamples": 12,
-        "pushRtcpFeedbackBytesIn": 1848,
+        "pushRtcpFeedbackBytesIn": 1832,
         "pushRtcpFeedbackFailures": 0,
-        "pushRtcpFeedbackPacketsIn": 67,
+        "pushRtcpFeedbackPacketsIn": 66,
         "pushedAu": 90,
         "retransmission": 0,
         "rttMs": {
-          "avg": 2.8333333333333335,
-          "max": 7.0,
+          "avg": 6.0,
+          "max": 9.0,
           "min": 0.0
+        },
+        "sdkRuntime": {
+          "play": {
+            "alertsFiles": 1,
+            "enabled": true,
+            "maxProcessTickGapUs": 15026,
+            "metricsFiles": 1,
+            "processTickCountMax": 593,
+            "receiverReportCountMax": 6,
+            "runtimeLogFiles": 1,
+            "sessionMetricSamples": 7,
+            "transportFailureCountMax": 0,
+            "transportFeedbackCountMax": 92
+          },
+          "push": {
+            "alertsFiles": 1,
+            "enabled": true,
+            "maxProcessTickGapUs": 14736,
+            "metricsFiles": 1,
+            "processTickCountMax": 496,
+            "receiverReportCountMax": 4,
+            "runtimeLogFiles": 1,
+            "sessionMetricSamples": 6,
+            "transportFailureCountMax": 0,
+            "transportFeedbackCountMax": 50
+          }
         },
         "selectedTwccExtId": 5,
         "senderLossFraction": {
@@ -114,8 +170,8 @@
           "min": 0.0
         },
         "targetBps": {
-          "avg": 1894887.5,
-          "max": 2033865.0,
+          "avg": 1897205.8333333333,
+          "max": 2036647.0,
           "min": 1200000.0
         }
       },
@@ -125,7 +181,7 @@
     },
     {
       "artifacts": {
-        "caseDir": "/tmp/webrtc-qos-plain-p2-smoke-final-verify/20260523T120950Z/delay_100ms"
+        "caseDir": "/tmp/webrtc-qos-plain-p2-sdk-smoke-v2/20260523T122810Z/delay_100ms"
       },
       "checks": [],
       "metrics": {},
@@ -145,8 +201,8 @@
   "gates": {
     "qosMainline": {
       "evidence": {
-        "baselinePlayRtcpPacketsOut": 0,
-        "baselinePushRtcpFeedbackPacketsIn": 67,
+        "baselinePlayRtcpPacketsOut": 98,
+        "baselinePushRtcpFeedbackPacketsIn": 66,
         "baselineSelectedTwccExtId": 5
       },
       "requirements": [
@@ -154,7 +210,29 @@
         "push RTCP feedback input > 0",
         "play RTCP feedback output > 0"
       ],
-      "status": "FAIL"
+      "status": "PASS"
+    },
+    "sdkRuntimeObservability": {
+      "evidence": {
+        "baselinePlayAlertsFiles": 1,
+        "baselinePlayMetricsFiles": 1,
+        "baselinePlayReceiverReportCountMax": 6,
+        "baselinePlayRuntimeEnabled": true,
+        "baselinePlayRuntimeLogFiles": 1,
+        "baselinePlayTransportFeedbackCountMax": 92,
+        "baselinePushAlertsFiles": 1,
+        "baselinePushMetricsFiles": 1,
+        "baselinePushReceiverReportCountMax": 4,
+        "baselinePushRuntimeEnabled": true,
+        "baselinePushRuntimeLogFiles": 1,
+        "baselinePushTransportFeedbackCountMax": 50
+      },
+      "requirements": [
+        "SDK runtime log/metrics/alerts files enabled for push and play",
+        "SDK push metrics count received TWCC and RR",
+        "SDK play metrics count generated TWCC and RR"
+      ],
+      "status": "PASS"
     },
     "weakNetworkCoverage": {
       "evidence": {
@@ -172,22 +250,22 @@
       "status": "SKIP"
     }
   },
-  "generatedAt": "2026-05-23T12:10:13Z",
+  "generatedAt": "2026-05-23T12:28:33Z",
   "overallStatus": "PARTIAL",
   "runConfig": {
-    "buildDir": "/root/mediasoup-cpp/build-webrtc-qos-plain",
+    "buildDir": "build-webrtc-qos-plain",
     "cases": [
       "baseline",
       "delay_100ms"
     ],
     "durationSeconds": 6,
     "enableNetem": false,
-    "inputFile": "/tmp/webrtc-qos-plain-p2-smoke-final-verify/input.mp4",
+    "inputFile": "/tmp/webrtc-qos-plain-p2-sdk-smoke-v2/input.mp4",
     "netemDev": "lo",
     "strict": false,
-    "workerBin": "/root/mediasoup-cpp/mediasoup-worker"
+    "workerBin": "./mediasoup-worker"
   },
-  "runDir": "/tmp/webrtc-qos-plain-p2-smoke-final-verify/20260523T120950Z",
+  "runDir": "/tmp/webrtc-qos-plain-p2-sdk-smoke-v2/20260523T122810Z",
   "schemaVersion": 1,
   "summary": {
     "attemptedCases": 1,
