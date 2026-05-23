@@ -70,6 +70,21 @@
 - 验证：给出可直接执行的命令，报告中每个 case 只能是 `PASS`、`FAIL` 或 `SKIP`。
 - 观测：写清楚 adapter log、SDK runtime metrics/alerts、smoke report 字段和定位链路。
 
+每个里程碑 review 时必须填满下面四项，不允许只写方向：
+
+| 字段 | 必填内容 | 不合格示例 |
+|---|---|---|
+| 实施边界 | 具体文件、模块、CLI、配置、依赖和兼容策略 | “补一下 QoS” |
+| 验证入口 | 可复制执行的命令、case 名、PASS/FAIL/SKIP 口径 | “本地看起来正常” |
+| 观测入口 | log 文件、metrics 字段、alerts 字段、报告字段 | “stdout 里能看到” |
+| 退出条件 | 该里程碑什么时候算完成，什么时候必须停下修前置 | “差不多可用” |
+
+方案 review 的最低标准：
+
+- 不能落到文件和接口的任务，不进入开发。
+- 没有自动化验证或明确 SKIP 规则的任务，不进入签收。
+- 不能从日志、metrics、alerts 或报告定位失败链路的任务，不进入 P2 完成范围。
+
 ## 3. 非目标
 
 第二期不做：
@@ -188,6 +203,26 @@ client/webrtc_qos_plain_client/
 | `QoeProbe` | 首帧、冻结、解码失败、输出帧率等基础 QoE 指标。 |
 | `WeakNetworkScenarioRunner` | 统一启动 SFU/push/play/netem，并生成报告。 |
 | `SmokeReportWriter` | 输出 markdown/json 结果，用于 review 和 CI 附件。 |
+
+### 4.3 文件级交付边界
+
+第二期每类改动的默认落点如下。review 时如果偏离这些路径，需要在 PR 或提交说明中解释原因。
+
+| 交付项 | mediasoup-cpp 落点 | SDK 落点 | 不允许 |
+|---|---|---|---|
+| Plain 信令 | `src/RoomService*.cpp`、`src/SignalingServer*.cpp`、相关集成测试 | 无 | 在客户端绕过服务端信令语义。 |
+| push adapter | `client/webrtc_qos_plain_client/push/*` | 只消费 public facade | include SDK internal header。 |
+| play adapter | `client/webrtc_qos_plain_client/play/*` | 只消费 public facade | 自研 jitter buffer / NACK / TWCC。 |
+| 公共 CLI/UDP/log glue | `client/webrtc_qos_plain_client/common/*` | 无 | 把业务状态藏在全局变量或 stdout。 |
+| 弱网 harness | `scripts/run_webrtc_qos_plain_p2_smoke.sh`，后续可拆到 `client/webrtc_qos_plain_client/harness/*` | 无 | 手工跑 case 后口头签收。 |
+| 报告 | `docs/generated/webrtc-qos-plain-p2-smoke-report.{json,md}` | 无 | 只保留临时目录日志。 |
+| SDK public API 缺口 | mediasoup-cpp 先记录缺口，不在 adapter 绕实现 | `include/`、`src/`、`dist/` | 在 mediasoup-cpp 复制 RTCP/TWCC 算法。 |
+
+每次交付至少包含：
+
+- 一条构建或单测命令。
+- 一条动态 smoke 或明确说明为什么该阶段只能静态验证。
+- 一处可追溯观测输出：adapter log、SDK jsonl、alerts 或 generated report。
 
 ## 5. P2-A：QoS 主链路补齐
 
@@ -373,6 +408,41 @@ docs/generated/webrtc-qos-plain-p2-smoke-report.md
 
 ## 7. P2-C：观测、日志、告警
 
+### 7.0 统一落盘规范
+
+第二期不再把 `std::cout` / `printf` 当作正式观测面。允许测试脚本采集 stdout/stderr
+作为附件，但正式排障入口必须是文件日志、metrics jsonl、alerts jsonl 和 smoke report。
+
+默认文件布局：
+
+```text
+<artifact-root>/<run-id>/<case>/
+  sfu.log
+  push.stdout.log
+  play.stdout.log
+  push/
+    push.log
+    push_metrics.*.jsonl
+    push_alerts.*.jsonl
+    push_runtime.*.log
+  play/
+    play.log
+    play_metrics.*.jsonl
+    play_alerts.*.jsonl
+    play_runtime.*.log
+  netem.log
+  case-summary.json
+```
+
+要求：
+
+- adapter 使用 spdlog 文件日志；stdout 只作为人工调试和 harness 附件。
+- SDK runtime logs/metrics/alerts 必须通过 public config 启用，不能在 adapter 里猜 SDK 内部状态。
+- 每条结构化日志至少包含 `ts`、`level`、`component`、`event`、`roomId`、`peerId`、`trackId/ssrc`、`status`。
+- metrics 用 jsonl，字段名稳定；新增字段只能追加，不能改旧字段语义。
+- alerts 用 jsonl，字段至少包含 `severity`、`code`、`message`、`component`、`roomId`、`peerId`、`recoverable`。
+- smoke report 汇总关键字段，不替代原始日志；失败时必须保留原始 artifact 目录。
+
 ### 7.1 SDK dist 更新
 
 已更新的 dist 包要求：
@@ -443,6 +513,50 @@ docs/generated/webrtc-qos-plain-p2-smoke-report.md
 - `encoder_keyframe_not_generated`
 
 这些 alerts 后续可以接入生产监控，但第二期先落本地文件和 smoke 报告。
+
+### 7.4 监控告警映射
+
+第二期先实现“本地可观测 + 报告门禁”，不强依赖生产 Prometheus/Grafana。字段设计要能平滑映射到后续监控系统。
+
+| 监控项 | 来源 | report 字段 | 告警规则 |
+|---|---|---|---|
+| 信令连接状态 | adapter log | `signalingConnected` | join/publish/subscribe 失败直接 case FAIL。 |
+| UDP hard error | adapter log / metrics | `udpSendErrors` | 任意 hard error FAIL。 |
+| RTCP feedback 输入 | push metrics | `pushRtcpFeedbackPacketsIn` | baseline 为 0 时 QoS 主链路 FAIL。 |
+| play RTCP 输出 | play metrics | `playRtcpPacketsOut` | baseline 为 0 时 QoS 主链路 FAIL。 |
+| SDK TWCC/RR counter | SDK metrics jsonl | `transportFeedbackCountMax`、`receiverReportCountMax` | 缺失或不增长时 SDK runtime observability FAIL。 |
+| target bitrate | SDK snapshot / push metrics | `targetBitrateMin/Avg/Max/Last` | bandwidth 不下探或 recovery 不回升时 FAIL。 |
+| pacer backpressure | SDK snapshot / push metrics | `droppedFrames` | bandwidth/recovery 下可非 0，但必须无 fatal alert 且 QoE 继续输出。 |
+| encoder 状态 | adapter encoder metrics | `encoderAccessUnits`、`encoderKeyframes`、`currentBitrateBps`、`currentFps` | AU/keyframe 为 0 或 adaptation 无法落到 encoder 时 FAIL。 |
+| RTP/AU 连续性 | play metrics | `rtpPackets`、`outputAu` | 长时间无 RTP/AU FAIL。 |
+| QoE 解码 | qoe metrics | `decodedFrames`、`decodeErrors`、`freezeCount`、`outputFps` | baseline decode error 非 0 FAIL；弱网恢复后 decoded frames 不增长 FAIL。 |
+
+告警分级：
+
+| 级别 | 含义 | smoke 行为 |
+|---|---|---|
+| `info` | 状态变化或恢复事件 | 记录，不影响 PASS。 |
+| `warn` | 可恢复异常，如 NACK 增长、pacer backpressure drop | 进入报告；如果命中 case allowlist 可 PASS。 |
+| `error` | 链路失败、SDK fatal status、UDP hard error、长时间无 RTP/AU | case FAIL。 |
+
+报告中必须区分“预期弱网现象”和“不可接受故障”。例如 `bandwidth_600k` 下 dropped frames 可以解释为
+pacer backpressure，但 `push_au_failed`、`udp_send_hard_error`、`no_au_output_5s` 不允许被吞掉。
+
+### 7.5 排障链路
+
+P2 失败时按下面顺序定位，不允许直接从现象跳到改 QoS 算法：
+
+| 失败现象 | 第一检查点 | 第二检查点 | 第三检查点 |
+|---|---|---|---|
+| join/publish/subscribe 失败 | adapter log 的 request/response | SFU log | 信令 schema / room state |
+| play 没有 RTP | `selected_consumer` 和 PlainTransport tuple | SFU consumer/transport stats | UDP bind/connect 端口 |
+| play 有 RTP 没 AU | SDK play alerts / depacketizer status | H264 PT/SSRC/TWCC ext | keyframe 请求是否发出 |
+| push 无 RTCP feedback | play `rtcpPacketsOut` | SFU RTCP 转发 | push RTCP socket 和 SDK input |
+| target 不下探 | TWCC/RR counter | loss/RTT metrics | GoogCC / pacer queue metrics |
+| target 不恢复 | netem clear 时间 | target bitrate timeline | recovery 窗口是否足够 |
+| QoE freeze | decoded frame timeline | AU output timeline | RTP/NACK/retransmission timeline |
+
+每个失败 case 的 report 必须写出 `failedChecks`，并保留对应日志字段。
 
 ## 8. P2-D：服务端 Plain 信令清理
 
@@ -835,6 +949,71 @@ P2-M4 video-only publish
 - 没有弱网 harness，后续每次改 encoder 都靠手工判断，风险高。
 - video-only 是服务端语义清理，不应该阻塞 QoS 主链路验证。
 
+### 12.3 里程碑实施卡
+
+#### P2-M1 QoS 主链路
+
+- 实施：修 ORTC header extension 透传；push/play runtime 补 RTCP 边界计数；只消费 SDK RR/TWCC public counter。
+- 验证：ORTC targeted test、native baseline smoke、`selected_consumer twccExtId=5`、play RTCP out > 0、push RTCP in > 0。
+- 观测：`selected_consumer`、`play_runtime_started transportCcExtId`、`push_metrics rtcpFeedbackPacketsIn/rttMs/loss`、SDK RR/TWCC counters。
+- 退出条件：consumer `twccExtId=0`、play `rtcpPacketsOut=0` 或 SDK TWCC counter 缺失时不得继续签收弱网 QoS。
+
+#### P2-M2 SDK runtime dist
+
+- 实施：升级 `/root/webrtc_qos_sdk/dist/linux-x86_64`，mediasoup-cpp 通过 `CMAKE_PREFIX_PATH` 消费；adapter 做字段探测和降级日志。
+- 验证：构建通过；启动日志 `sdk_runtime_files enabled=true`；push/play metrics 和 alerts 文件存在。
+- 观测：`push_metrics.*.jsonl`、`play_metrics.*.jsonl`、`push_alerts.*.jsonl`、`play_alerts.*.jsonl`。
+- 退出条件：只要 runtime 文件不能启用，P2-M2 失败；不能用 stdout 代替。
+
+#### P2-M3 弱网 harness
+
+- 实施：脚本统一启动 SFU、push、play、netem、artifact 收集和 report 生成；所有 case 统一 PASS/FAIL/SKIP。
+- 验证：`baseline,delay_100ms,loss_2pct,bandwidth_600k,drop_recover` 可单独或组合执行；无 netem 权限时弱网 case SKIP。
+- 观测：report 输出 RTT/loss/target bitrate/NACK/PLI/retransmission/droppedFrames/QoE/alerts。
+- 退出条件：case 不能复现、不能生成 report、或 SKIP 被记成 PASS 时停止。
+
+#### P2-M4 video-only publish
+
+- 实施：`plainPublish enableAudio=false`，新 push 默认 video-only；旧请求不传 `enableAudio` 时保持原行为。
+- 验证：targeted integration 验证新旧请求；smoke 验证无 audio producer、play 只收到 video consumer。
+- 观测：`plain_publish_ok audioEnabled=false`、stats report producer 列表、无 audio auto-subscribe error。
+- 退出条件：破坏旧 plain-client 兼容或仍创建 dummy audio producer 时不得合入。
+
+#### P2-M5 实时 x264 encoder
+
+- 实施：synthetic raw frame -> x264 baseline/zerolatency -> Annex-B AU；push runtime 每 tick 应用 SDK adaptation。
+- 验证：单测覆盖 encoder 输出；baseline smoke `encoderRuntime=PASS`；bandwidth case 证明 bitrate/fps/keyframe adaptation 实际落到 encoder。
+- 观测：`encoder_metrics accessUnits/keyframes/currentBitrateBps/currentFps/recreateCount/bitrateChangeCount/fpsChangeCount`。
+- 退出条件：只打印 target 而不改 encoder、PLI 后不能 force IDR、或 encoder metrics 缺失时失败。
+
+#### P2-M6 输入源扩展
+
+- 实施：保留 MP4 H264 copy path；新增 synthetic 必跑路径；后续补 MP4 decode loop 和 V4L2 source。
+- 验证：synthetic 在 CI/普通 CPU 环境必跑；MP4 decode loop 后续必跑；无 `/dev/video*` 时 V4L2 case SKIP。
+- 观测：source frame count、input fps、capture/decode errors、encoder AU/keyframe。
+- 退出条件：输入源失败不能静默降级到其他源；必须在 report 里显示实际 source。
+
+#### P2-M7 浏览器 receiver
+
+- 实施：复用现有 browser signaling，增加最小 receiver smoke，消费新 push 发布的 video。
+- 验证：browser 收到 `newConsumer`，video frames/packets 增长，必要时保存截图或 stats。
+- 观测：browser inbound-rtp stats、console error、SFU consumer stats、case artifact。
+- 退出条件：native play 通过不能替代 browser receiver；浏览器未跑时只能标记未覆盖。
+
+#### P2-M8 native decode/QoE
+
+- 实施：play AU 输出接 FFmpeg H264 decoder，再汇总 first frame、decode errors、freeze 和 output fps。
+- 验证：baseline decode error 为 0；弱网恢复后 decoded frames 继续增长；复杂 VMAF/PSNR 不进入 P2。
+- 观测：`qoe_metrics decodedFrames/decodeErrors/firstFrameDelayUs/freezeCount/maxFrameGapUs/outputFps`。
+- 退出条件：只验证 AU 不验证 decode 时，不能签收 QoE。
+
+#### P2-M9 签收回归
+
+- 实施：聚合构建、单测、静态门禁、native smoke、弱网 smoke、browser smoke 和 report。
+- 验证：一条最终命令生成 `docs/generated/webrtc-qos-plain-p2-smoke-report.{json,md}`，失败返回非 0。
+- 观测：report 包含 commit id、SDK dist 路径、case 状态、核心指标、alerts、failedChecks 和 artifact 路径。
+- 退出条件：任何非环境依赖型 case 未跑或失败时，P2 不完成。
+
 ## 13. 验收清单
 
 ### 13.0 实施 / 验证 / 观测矩阵
@@ -937,6 +1116,17 @@ webrtc-qos-plain-push-client and webrtc-qos-plain-play-client must not depend on
 | 浏览器自动化不稳定 | browser smoke 独立成可重试 case，不阻塞 native QoS harness 的基础报告。 |
 | V4L2 环境缺设备 | V4L2 case 可 SKIP；synthetic 和 MP4 decode loop 是必跑。 |
 | video-only 影响旧 plain-client | `enableAudio` 默认保持旧行为，新客户端显式传 `false`。 |
+
+### 14.1 风险里程碑
+
+| 节点 | 主要风险 | 必须观测到的证据 | 停工条件 |
+|---|---|---|---|
+| M1 前 | TWCC header extension 或 RTCP feedback 不闭环 | `twccExtId=5`、play RTCP out、push RTCP in、SDK TWCC/RR counter | 任一为 0 时先修主链路，不做 encoder/browser 扩展。 |
+| M2 前 | SDK dist 与 adapter 编译期/运行期不一致 | runtime files enabled、metrics/alerts 文件存在 | 不能启用文件观测时不跑弱网签收。 |
+| M3 前 | netem 环境不可控 | `netem.log` 记录 apply/clear，report 记录 SKIP reason | 无权限时只允许 SKIP，不允许 PASS。 |
+| M5 前 | adaptation 只停留在 target 数字 | encoder bitrate/fps/keyframe metrics 变化 | encoder 未实际变化时不签收 QoS 效果。 |
+| M7 前 | native 自闭环掩盖浏览器兼容问题 | browser stats 或截图 | browser 未跑时不得声明浏览器可播放。 |
+| M9 前 | 结果不可复现或不可排障 | generated report + artifact path + failedChecks | 只有口头结果或临时日志缺失时不完成。 |
 
 ## 15. 完成定义
 
