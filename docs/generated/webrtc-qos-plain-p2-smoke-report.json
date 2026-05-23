@@ -1,0 +1,198 @@
+{
+  "cases": [
+    {
+      "alerts": {
+        "count": 0,
+        "ignoredHarnessNoiseCount": 6,
+        "samples": []
+      },
+      "artifacts": {
+        "caseDir": "/tmp/webrtc-qos-plain-p2-smoke-final-verify/20260523T120950Z/baseline",
+        "playLog": "/tmp/webrtc-qos-plain-p2-smoke-final-verify/20260523T120950Z/baseline/play/play.log",
+        "pushLog": "/tmp/webrtc-qos-plain-p2-smoke-final-verify/20260523T120950Z/baseline/push/push.log",
+        "readyz": "/tmp/webrtc-qos-plain-p2-smoke-final-verify/20260523T120950Z/baseline/readyz.json",
+        "sfuLog": "/tmp/webrtc-qos-plain-p2-smoke-final-verify/20260523T120950Z/baseline/sfu.stdout.log"
+      },
+      "checks": [
+        {
+          "evidence": "readyz ok=true",
+          "name": "sfu-readyz-ok",
+          "status": "PASS"
+        },
+        {
+          "evidence": "audioEnabled=false",
+          "name": "push-video-only-publish",
+          "status": "PASS"
+        },
+        {
+          "evidence": "twccExtId=5",
+          "name": "publish-twcc-ext",
+          "status": "PASS"
+        },
+        {
+          "evidence": "twccExtId=5",
+          "name": "play-selected-twcc-ext",
+          "status": "PASS"
+        },
+        {
+          "evidence": "audio consumer absent",
+          "name": "no-audio-consumer",
+          "status": "PASS"
+        },
+        {
+          "evidence": "pushedAu=90",
+          "name": "push-au-output",
+          "status": "PASS"
+        },
+        {
+          "evidence": "rtpPackets=195",
+          "name": "play-rtp-input",
+          "status": "PASS"
+        },
+        {
+          "evidence": "outputAu=90",
+          "name": "play-au-output",
+          "status": "PASS"
+        },
+        {
+          "evidence": "rtcpFeedbackPacketsIn=67",
+          "name": "push-rtcp-feedback-input",
+          "status": "PASS"
+        },
+        {
+          "evidence": "rtcpFeedbackFailures=0",
+          "name": "push-rtcp-feedback-no-failures",
+          "status": "PASS"
+        },
+        {
+          "evidence": "rtcpSendFailures=0",
+          "name": "play-rtcp-send-no-failures",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ok",
+          "name": "harness-no-failure",
+          "status": "PASS"
+        }
+      ],
+      "metrics": {
+        "finalTargetBps": {
+          "avg": 1894887.5,
+          "max": 2033865.0,
+          "min": 1200000.0
+        },
+        "nack": 0,
+        "playLossQ8": {
+          "avg": 0.0,
+          "max": 0.0,
+          "min": 0.0
+        },
+        "playMetricSamples": 14,
+        "playOutputAu": 90,
+        "playRtcpBytesOut": 0,
+        "playRtcpPacketsIn": 4,
+        "playRtcpPacketsOut": 0,
+        "playRtcpSendFailures": 0,
+        "playRtpPackets": 195,
+        "pli": 0,
+        "publishTwccExtId": 5,
+        "pushMetricSamples": 12,
+        "pushRtcpFeedbackBytesIn": 1848,
+        "pushRtcpFeedbackFailures": 0,
+        "pushRtcpFeedbackPacketsIn": 67,
+        "pushedAu": 90,
+        "retransmission": 0,
+        "rttMs": {
+          "avg": 2.8333333333333335,
+          "max": 7.0,
+          "min": 0.0
+        },
+        "selectedTwccExtId": 5,
+        "senderLossFraction": {
+          "avg": 0.0,
+          "max": 0.0,
+          "min": 0.0
+        },
+        "targetBps": {
+          "avg": 1894887.5,
+          "max": 2033865.0,
+          "min": 1200000.0
+        }
+      },
+      "name": "baseline",
+      "networkCondition": "none",
+      "status": "PASS"
+    },
+    {
+      "artifacts": {
+        "caseDir": "/tmp/webrtc-qos-plain-p2-smoke-final-verify/20260523T120950Z/delay_100ms"
+      },
+      "checks": [],
+      "metrics": {},
+      "name": "delay_100ms",
+      "networkCondition": "100ms delay + 20ms jitter",
+      "skipReason": "netem disabled; pass --enable-netem to run weak-network cases",
+      "status": "SKIP"
+    }
+  ],
+  "environment": {
+    "ffmpeg": "ffmpeg version 4.2.10 Copyright (c) 2000-2024 the FFmpeg developers",
+    "kernel": "Linux iZ6we7qnlv44pdwt9mso62Z 5.10.134-18.al8.x86_64 #1 SMP Fri Dec 13 16:56:53 CST 2024 x86_64 x86_64 x86_64 GNU/Linux",
+    "platform": "Linux-5.10.134-18.al8.x86_64-x86_64-with-alinux-3-OpenAnolis_Edition",
+    "python": "3.6.8",
+    "tc": "/usr/sbin/tc"
+  },
+  "gates": {
+    "qosMainline": {
+      "evidence": {
+        "baselinePlayRtcpPacketsOut": 0,
+        "baselinePushRtcpFeedbackPacketsIn": 67,
+        "baselineSelectedTwccExtId": 5
+      },
+      "requirements": [
+        "consumer TWCC ext id > 0",
+        "push RTCP feedback input > 0",
+        "play RTCP feedback output > 0"
+      ],
+      "status": "FAIL"
+    },
+    "weakNetworkCoverage": {
+      "evidence": {
+        "attemptedWeakCases": [],
+        "skippedCases": [
+          {
+            "name": "delay_100ms",
+            "reason": "netem disabled; pass --enable-netem to run weak-network cases"
+          }
+        ]
+      },
+      "requirements": [
+        "delay/loss/bandwidth/recovery cases attempted with tc netem"
+      ],
+      "status": "SKIP"
+    }
+  },
+  "generatedAt": "2026-05-23T12:10:13Z",
+  "overallStatus": "PARTIAL",
+  "runConfig": {
+    "buildDir": "/root/mediasoup-cpp/build-webrtc-qos-plain",
+    "cases": [
+      "baseline",
+      "delay_100ms"
+    ],
+    "durationSeconds": 6,
+    "enableNetem": false,
+    "inputFile": "/tmp/webrtc-qos-plain-p2-smoke-final-verify/input.mp4",
+    "netemDev": "lo",
+    "strict": false,
+    "workerBin": "/root/mediasoup-cpp/mediasoup-worker"
+  },
+  "runDir": "/tmp/webrtc-qos-plain-p2-smoke-final-verify/20260523T120950Z",
+  "schemaVersion": 1,
+  "summary": {
+    "attemptedCases": 1,
+    "failedCases": 0,
+    "passedCases": 1,
+    "skippedCases": 1
+  }
+}

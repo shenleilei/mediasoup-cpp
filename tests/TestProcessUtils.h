@@ -3,6 +3,7 @@
 #include <arpa/inet.h>
 #include <atomic>
 #include <cerrno>
+#include <cstdlib>
 #include <fcntl.h>
 #include <fstream>
 #include <iterator>
@@ -15,6 +16,44 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <vector>
+
+inline bool isExecutableFile(const std::string& path) {
+	return !path.empty() && access(path.c_str(), X_OK) == 0;
+}
+
+inline std::string firstExecutablePath(const std::vector<std::string>& candidates, const std::string& fallback) {
+	for (const auto& candidate : candidates) {
+		if (isExecutableFile(candidate)) return candidate;
+	}
+	return fallback;
+}
+
+inline std::string testSfuBinaryPath() {
+	if (const char* env = std::getenv("MEDIASOUP_TEST_SFU_BIN")) {
+		if (*env) return env;
+	}
+	return firstExecutablePath({
+		"./build/mediasoup-sfu",
+		"./build-webrtc-qos-p2/mediasoup-sfu",
+		"./build-webrtc-qos-plain/mediasoup-sfu",
+		"./build_dbg/mediasoup-sfu",
+	}, "./build/mediasoup-sfu");
+}
+
+inline std::string testWorkerBinaryPath() {
+	if (const char* env = std::getenv("MEDIASOUP_TEST_WORKER_BIN")) {
+		if (*env) return env;
+	}
+	if (const char* env = std::getenv("QOS_CPP_CLIENT_WORKER_BIN")) {
+		if (*env) return env;
+	}
+	return firstExecutablePath({
+		"./mediasoup-worker",
+		"./build/mediasoup-worker",
+		"./build-webrtc-qos-p2/mediasoup-worker",
+		"./build-webrtc-qos-plain/mediasoup-worker",
+	}, "./mediasoup-worker");
+}
 
 inline bool isSfuProcessAlive(pid_t pid) {
 	if (pid <= 0 || kill(pid, 0) != 0) return false;
@@ -128,11 +167,11 @@ public:
 		if (!waitForTcpPortFree(port_)) return false;
 
 		std::vector<std::string> args = {
-			"./build/mediasoup-sfu",
+			testSfuBinaryPath(),
 			"--nodaemon",
 			"--port=" + std::to_string(port_),
 			"--workers=1",
-			"--workerBin=./mediasoup-worker",
+			"--workerBin=" + testWorkerBinaryPath(),
 			"--announcedIp=127.0.0.1",
 			"--listenIp=127.0.0.1",
 			"--redisHost=0.0.0.0",
@@ -165,6 +204,10 @@ public:
 			argv.push_back(nullptr);
 
 			execv(argv[0], argv.data());
+			dprintf(STDERR_FILENO, "TestSfuProcess execv failed: path=%s errno=%d (%s)\n",
+				argv[0],
+				errno,
+				strerror(errno));
 			_exit(127);
 		}
 

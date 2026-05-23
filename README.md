@@ -224,6 +224,7 @@ SignalingServer
 - 纯客户端当前状态：[docs/plain-client-qos-status.md](./docs/plain-client-qos-status.md)
 - 纯客户端对齐检查单：[docs/plain-client-qos-parity-checklist.md](./docs/plain-client-qos-parity-checklist.md)
 - 纯客户端矩阵结果：[docs/plain-client-qos-case-results.md](./docs/plain-client-qos-case-results.md)
+- WebRTC QoS Plain P2 smoke 报告：[docs/generated/webrtc-qos-plain-p2-smoke-report.md](./docs/generated/webrtc-qos-plain-p2-smoke-report.md)
 - 下行当前状态：[docs/downlink-qos-status.md](./docs/downlink-qos-status.md)
 - Linux 客户端架构：[docs/linux-client-architecture_cn.md](./docs/linux-client-architecture_cn.md)
 - 测试覆盖地图：[docs/qos-test-coverage_cn.md](./docs/qos-test-coverage_cn.md)
