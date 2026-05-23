@@ -50,11 +50,14 @@ bool PushSignalingSession::ConnectAndPublish(const PushOptions& options, Publish
 		});
 		logger_->info("join_ok roomId={} peerId={}", options.room, options.peer);
 
-		const auto response = ws_.request("plainPublish", {
+		json publishRequest = {
 			{"videoCodec", "h264"},
 			{"videoSsrc", options.videoSsrc},
-			{"audioSsrc", options.audioSsrc}
-		});
+			{"enableAudio", options.enableAudio}
+		};
+		if (options.enableAudio) publishRequest["audioSsrc"] = options.audioSsrc;
+
+		const auto response = ws_.request("plainPublish", publishRequest);
 
 		if (response.value("videoCodec", "") != "h264")
 			throw std::runtime_error("plainPublish returned non-H264 codec");
@@ -75,8 +78,10 @@ bool PushSignalingSession::ConnectAndPublish(const PushOptions& options, Publish
 			throw std::runtime_error("plainPublish returned invalid SSRC/PT/TWCC ext id");
 
 		*info = parsed;
+		const bool audioEnabled = response.value("audioEnabled", options.enableAudio);
+		const uint32_t audioSsrc = response.value("audioSsrc", options.audioSsrc);
 		logger_->info(
-			"plain_publish_ok roomId={} peerId={} transportId={} producerId={} mediaRemoteIp={} announcedIp={} port={} ssrc={} pt={} twccExtId={} audioSsrc={} audioEnabled=false",
+			"plain_publish_ok roomId={} peerId={} transportId={} producerId={} mediaRemoteIp={} announcedIp={} port={} ssrc={} pt={} twccExtId={} audioSsrc={} audioEnabled={}",
 			options.room,
 			options.peer,
 			parsed.transportId,
@@ -87,7 +92,8 @@ bool PushSignalingSession::ConnectAndPublish(const PushOptions& options, Publish
 			parsed.ssrc,
 			parsed.payloadType,
 			parsed.transportCcExtId,
-			options.audioSsrc);
+			audioSsrc,
+			audioEnabled);
 		return true;
 	} catch (const std::exception& e) {
 		logger_->error("publish_signaling_failed error={}", e.what());

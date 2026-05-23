@@ -28,7 +28,7 @@ bool ParseOptionMap(int argc, char* argv[], OptionMap* values, std::string* erro
 		if (eq != std::string::npos) {
 			const auto option = key.substr(0, eq);
 			const auto value = key.substr(eq + 1);
-			if (option == "--loop-input" || option == "--output-null") {
+			if (option == "--loop-input" || option == "--output-null" || option == "--enable-audio") {
 				(*values)[option] = value.empty() ? "1" : value;
 			} else {
 				(*values)[option] = value;
@@ -36,7 +36,7 @@ bool ParseOptionMap(int argc, char* argv[], OptionMap* values, std::string* erro
 			continue;
 		}
 
-		if (key == "--loop-input" || key == "--output-null") {
+		if (key == "--loop-input" || key == "--output-null" || key == "--enable-audio") {
 			(*values)[key] = "1";
 			continue;
 		}
@@ -128,6 +128,7 @@ bool ParsePushOptions(int argc, char* argv[], PushOptions* options, std::string*
 		options->mediaRemoteIp = GetString(values, "--media-remote-ip", options->mediaRemoteIp);
 		options->videoSsrc = ParseU32(GetString(values, "--video-ssrc", std::to_string(options->videoSsrc)), "--video-ssrc");
 		options->audioSsrc = ParseU32(GetString(values, "--audio-ssrc", std::to_string(options->audioSsrc)), "--audio-ssrc");
+		options->enableAudio = GetBoolFlag(values, "--enable-audio");
 		options->startBitrateBps = ParseU32(GetString(values, "--start-bitrate", std::to_string(options->startBitrateBps)), "--start-bitrate");
 		options->minBitrateBps = ParseU32(GetString(values, "--min-bitrate", std::to_string(options->minBitrateBps)), "--min-bitrate");
 		options->maxBitrateBps = ParseU32(GetString(values, "--max-bitrate", std::to_string(options->maxBitrateBps)), "--max-bitrate");
@@ -142,8 +143,12 @@ bool ParsePushOptions(int argc, char* argv[], PushOptions* options, std::string*
 		if (error) *error = "--input is required";
 		return false;
 	}
-	if (options->videoSsrc == 0 || options->audioSsrc == 0) {
-		if (error) *error = "--video-ssrc and --audio-ssrc must be non-zero";
+	if (options->videoSsrc == 0) {
+		if (error) *error = "--video-ssrc must be non-zero";
+		return false;
+	}
+	if (options->enableAudio && options->audioSsrc == 0) {
+		if (error) *error = "--audio-ssrc must be non-zero when --enable-audio=true";
 		return false;
 	}
 	if (!ValidateTick(options->processTickMs, error)) return false;
@@ -207,7 +212,7 @@ std::string PushUsage()
 	return
 		"webrtc-qos-plain-push-client --server-ip <ip> --server-port <port> "
 		"--room <room> --peer <peer> --input <h264.mp4> [--loop-input] "
-		"[--video-ssrc <u32>] [--audio-ssrc <u32>] [--media-remote-ip <ip>] "
+		"[--video-ssrc <u32>] [--enable-audio] [--audio-ssrc <u32>] [--media-remote-ip <ip>] "
 		"[--log-dir <dir>]";
 }
 

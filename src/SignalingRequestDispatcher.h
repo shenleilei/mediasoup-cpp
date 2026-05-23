@@ -195,12 +195,14 @@ inline RoomService::Result DispatchRoomServiceRequest(
 			data.at("consumerId").get<std::string>());
 	}
 	if (method == "plainPublish") {
+		const bool enableAudio = data.value("enableAudio", true);
 		return roomService.plainPublish(
 			roomId,
 			peerId,
 			ParseVideoSsrcs(data),
-			data.value("audioSsrc", 2222u),
-			data.value("videoCodec", std::string("h264")));
+			enableAudio ? data.value("audioSsrc", 2222u) : data.value("audioSsrc", 0u),
+			data.value("videoCodec", std::string("h264")),
+			enableAudio);
 	}
 	if (method == "plainSubscribe") {
 		return roomService.plainSubscribe(

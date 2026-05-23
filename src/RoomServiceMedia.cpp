@@ -235,17 +235,18 @@ RoomService::Result RoomService::connectPlainTransport(const std::string& roomId
 
 RoomService::Result RoomService::plainPublish(const std::string& roomId,
 	const std::string& peerId, const std::vector<uint32_t>& videoSsrcs, uint32_t audioSsrc,
-	const std::string& videoCodec)
+	const std::string& videoCodec,
+	bool enableAudio)
 {
 	auto room = roomManager_.getRoom(roomId);
 	if (!room) return {false, {}, "", "room not found"};
 	auto peer = room->getPeer(peerId);
 	if (!peer) return {false, {}, "", "peer not found"};
 	if (videoSsrcs.empty()) return {false, {}, "", "videoSsrcs cannot be empty"};
-	if (audioSsrc == 0) return {false, {}, "", "audioSsrc must be non-zero"};
+	if (enableAudio && audioSsrc == 0) return {false, {}, "", "audioSsrc must be non-zero"};
 
 	std::unordered_set<uint32_t> uniqueSsrcs;
-	uniqueSsrcs.insert(audioSsrc);
+	if (enableAudio) uniqueSsrcs.insert(audioSsrc);
 	for (auto videoSsrc : videoSsrcs) {
 		if (videoSsrc == 0) return {false, {}, "", "videoSsrcs must be non-zero"};
 		if (!uniqueSsrcs.insert(videoSsrc).second)
@@ -286,7 +287,7 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 			else if (requestedVideoCodec == "vp8" && IsPlainClientVp8Codec(c))
 				selectedVideoCodec = c;
 		}
-		if (c.mimeType == "audio/opus" && audioPt == 0) {
+		if (enableAudio && c.mimeType == "audio/opus" && audioPt == 0) {
 			audioPt = c.preferredPayloadType;
 			audioCodec = c;
 		}
@@ -296,12 +297,12 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 			return {false, {}, "", "router has no VP8 codec"};
 		return {false, {}, "", "router has no H264 Baseline codec"};
 	}
-	if (audioPt == 0) return {false, {}, "", "router has no opus codec"};
+	if (enableAudio && audioPt == 0) return {false, {}, "", "router has no opus codec"};
 
 	const uint8_t videoPt = selectedVideoCodec->preferredPayloadType;
 	json videoCodecParameters = selectedVideoCodec->parameters;
 	const uint8_t videoTransportCcExtId = FindTransportCcExtensionId(caps, "video");
-	const uint8_t audioTransportCcExtId = FindTransportCcExtensionId(caps, "audio");
+	const uint8_t audioTransportCcExtId = enableAudio ? FindTransportCcExtensionId(caps, "audio") : 0;
 
 	std::vector<std::shared_ptr<Producer>> videoProducers;
 	videoProducers.reserve(videoSsrcs.size());
@@ -337,38 +338,41 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 		videoProducers.push_back(videoProd);
 	}
 
-	json audioRtpParams = {
-		{"codecs", {{
-			{"mimeType", "audio/opus"}, {"payloadType", audioPt},
-			{"clockRate", 48000}, {"channels", 2},
-			{"parameters", {{"useinbandfec", 1}}},
-			{"rtcpFeedback", audioCodec.has_value() ? audioCodec->rtcpFeedback : std::vector<RtcpFeedback>{}}
-		}}},
-		{"encodings", {{{"ssrc", audioSsrc}}}},
-		{"rtcp", {{"cname", peerId + "-audio"}}}
-	};
-	if (audioTransportCcExtId != 0) {
-		audioRtpParams["headerExtensions"] = json::array({
-			{
-				{"uri", kTransportCcExtensionUri},
-				{"id", audioTransportCcExtId},
-				{"encrypt", false},
-				{"parameters", json::object()}
-			}
-		});
+	std::shared_ptr<Producer> audioProd;
+	if (enableAudio) {
+		json audioRtpParams = {
+			{"codecs", {{
+				{"mimeType", "audio/opus"}, {"payloadType", audioPt},
+				{"clockRate", 48000}, {"channels", 2},
+				{"parameters", {{"useinbandfec", 1}}},
+				{"rtcpFeedback", audioCodec.has_value() ? audioCodec->rtcpFeedback : std::vector<RtcpFeedback>{}}
+			}}},
+			{"encodings", {{{"ssrc", audioSsrc}}}},
+			{"rtcp", {{"cname", peerId + "-audio"}}}
+		};
+		if (audioTransportCcExtId != 0) {
+			audioRtpParams["headerExtensions"] = json::array({
+				{
+					{"uri", kTransportCcExtensionUri},
+					{"id", audioTransportCcExtId},
+					{"encrypt", false},
+					{"parameters", json::object()}
+				}
+			});
+		}
+		json audioProdOpts = {
+			{"kind", "audio"}, {"rtpParameters", audioRtpParams},
+			{"routerRtpCapabilities", caps}
+		};
+		audioProd = transport->produce(audioProdOpts);
+		room->router()->addProducer(audioProd);
+		roommedia::TrackPeerProducer(peer, audioProd);
 	}
-	json audioProdOpts = {
-		{"kind", "audio"}, {"rtpParameters", audioRtpParams},
-		{"routerRtpCapabilities", caps}
-	};
-	auto audioProd = transport->produce(audioProdOpts);
-	room->router()->addProducer(audioProd);
-	roommedia::TrackPeerProducer(peer, audioProd);
 
 	indexPeerProducers(roomId, peerId, peer->producers);
 
 	std::vector<std::shared_ptr<Producer>> allProducers = videoProducers;
-	allProducers.push_back(audioProd);
+	if (audioProd) allProducers.push_back(audioProd);
 	for (const auto& prod : allProducers) {
 		roommedia::AutoSubscribeProducerToOtherPeers(
 			roomId, peerId, room, prod, logger_, notify_, true);
@@ -385,7 +389,7 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 			{"transportCcExtId", videoTransportCcExtId}
 		});
 	}
-	return {true, {
+	json result = {
 		{"transportId", transport->id()},
 		{"ip", tuple.localAddress}, {"port", tuple.localPort},
 		{"videoPt", videoPt}, {"videoSsrc", videoSsrcs.front()},
@@ -393,10 +397,15 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 		{"videoCodec", requestedVideoCodec},
 		{"videoTracks", videoTracks},
 		{"videoTransportCcExtId", videoTransportCcExtId},
-		{"audioPt", audioPt}, {"audioSsrc", audioSsrc},
-		{"audioProdId", audioProd->id()},
-		{"audioTransportCcExtId", audioTransportCcExtId}
-	}};
+		{"audioEnabled", enableAudio}
+	};
+	if (enableAudio && audioProd) {
+		result["audioPt"] = audioPt;
+		result["audioSsrc"] = audioSsrc;
+		result["audioProdId"] = audioProd->id();
+		result["audioTransportCcExtId"] = audioTransportCcExtId;
+	}
+	return {true, result};
 }
 
 RoomService::Result RoomService::plainSubscribe(const std::string& roomId,

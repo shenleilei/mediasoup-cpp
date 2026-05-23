@@ -31,6 +31,7 @@
 - P2-M1a 已修复 ORTC consumable RTP parameters 不携带 header extension 的问题。
 - native smoke 已验证 video consumer `twccExtId=5`，不再走 `consumer_without_twcc_ext` 降级。
 - push/play adapter 已补 RTCP 边界计数日志。
+- P2-M4 已支持 `plainPublish enableAudio=false`，新 push 默认 video-only，旧请求保持 audio 默认兼容。
 - 当前 SDK play facade 只在 NACK/PLI 事件时通过 `transport_output` 发 RTCP，
   尚未生成周期性 RR/TWCC feedback；因此 P2-M1 尚不能签收为 QoS 主链路完整闭环。
 
@@ -436,11 +437,18 @@ docs/generated/webrtc-qos-plain-p2-smoke-report.md
 
 ### 8.1 Video-only publish
 
-问题：
+已修复的问题：
 
 - 当前 `plainPublish` 要求 `audioSsrc` 非 0。
 - 服务端会创建 dummy audio producer。
 - play 为避免 audio auto-subscribe error，被迫声明 Opus capability。
+
+修复：
+
+- `plainPublish` 支持 `enableAudio=false`，此时允许 `audioSsrc` 缺省或为 0。
+- response 明确返回 `audioEnabled=false`。
+- 新 `webrtc-qos-plain-push-client` 默认发送 `enableAudio=false`，不再发送 `audioSsrc`。
+- 未传 `enableAudio` 的旧请求仍默认 `true`，保持旧 plain-client 行为。
 
 目标：
 
@@ -471,6 +479,7 @@ docs/generated/webrtc-qos-plain-p2-smoke-report.md
 - 服务端 room stats 中没有 dummy audio producer。
 - play 不再收到 audio consumer。
 - SFU 日志没有 audio auto-subscribe 相关错误。
+- targeted integration 已验证旧请求仍创建 audio/video 两个 producer。
 
 ### 8.2 Plain capabilities 查询
 
@@ -743,7 +752,7 @@ P2-M4 video-only publish
 | P2-M1d SDK play RR/TWCC feedback output | 在 `webrtc_qos_sdk` public facade/dist 补 play 周期性 RR/TWCC 输出和 snapshot counter；mediasoup-cpp 只升级 dist 并验证。 | baseline smoke 必须看到 play `rtcpPacketsOut > 0`、SDK TWCC feedback counter 增长、push feedback input 增长。 | SDK metrics 输出 TWCC/RR counters；adapter 不自研解析 TWCC。 |
 | P2-M2 SDK runtime dist | 更新 SDK install/dist；mediasoup-cpp 仅更新 `CMAKE_PREFIX_PATH` 和兼容检查。 | 启动日志必须是 `sdk_runtime_files enabled=true`；metrics/alerts 文件存在。 | `push_metrics.jsonl`、`play_metrics.jsonl`、alerts jsonl 持续写入。 |
 | P2-M3 弱网 harness | 新增 `client/webrtc_qos_plain_client/harness` 或 `tests/qos_harness` 脚本，统一启动 SFU/push/play/netem。 | baseline/delay/loss/bandwidth/recovery case 输出 PASS/FAIL/SKIP。 | 生成 `docs/generated/webrtc-qos-plain-p2-smoke-report.{json,md}`。 |
-| P2-M4 video-only publish | 修改 `RoomService::plainPublish()`、signaling dispatcher、push signaling；保持旧请求兼容。 | `enableAudio=false` 时无 audio producer；旧 `audioSsrc` 请求仍通过。 | SFU stats/report 中 `audioEnabled=false`；无 dummy audio consumer 日志。 |
+| P2-M4 video-only publish | 修改 `RoomService::plainPublish()`、signaling dispatcher、push signaling；保持旧请求兼容。 | `enableAudio=false` 时无 audio producer；旧 `audioSsrc` 请求仍通过；P2-M4 targeted integration 和 smoke 通过。 | SFU stats/report 中 `audioEnabled=false`；无 dummy audio consumer 日志。 |
 | P2-M5 realtime x264 encoder | 新增 `H264EncoderAdapter` 和 `EncoderAdaptationApplier`；push runtime 接入 raw frame source。 | bandwidth drop case 中 encoder bitrate 下探；PLI 后 1 秒内输出 IDR。 | encoder metrics 输出 bitrate/fps/keyframe/frameDrop；alerts 记录 keyframe 未生成。 |
 | P2-M6 输入源扩展 | 新增 synthetic、MP4 decode loop、V4L2 source；统一 `RealtimeVideoSource` 接口。 | synthetic 和 MP4 decode loop 必跑；无 V4L2 设备时 V4L2 case SKIP。 | source metrics 输出 frame count、input fps、decode/capture errors。 |
 | P2-M7 浏览器兼容 | 新增 browser receiver smoke，复用现有 web/signaling。 | 浏览器收到 `newConsumer`、video frames 增长、截图或 stats 通过。 | browser stats 附到 report，失败带 console/error 摘要。 |

@@ -1097,6 +1097,50 @@ TEST_F(QosIntegrationTest, PlainPublishRejectsDuplicateVideoSsrcs) {
 	EXPECT_FALSE(resp.value("error", "").empty()) << resp.dump();
 }
 
+TEST_F(QosIntegrationTest, PlainPublishSupportsVideoOnlyAndKeepsLegacyAudioDefault) {
+	auto alice = joinRoom(testRoom_, "alice");
+
+	auto videoOnly = alice.ws->request("plainPublish", {
+		{"videoSsrc", 11111111u},
+		{"enableAudio", false}
+	});
+	ASSERT_TRUE(videoOnly.value("ok", false)) << videoOnly.dump();
+	ASSERT_TRUE(videoOnly["data"].contains("audioEnabled")) << videoOnly.dump();
+	EXPECT_FALSE(videoOnly["data"]["audioEnabled"].get<bool>());
+	EXPECT_FALSE(videoOnly["data"].contains("audioProdId")) << videoOnly.dump();
+	EXPECT_FALSE(videoOnly["data"].contains("audioSsrc")) << videoOnly.dump();
+	ASSERT_TRUE(videoOnly["data"].contains("videoTracks")) << videoOnly.dump();
+	ASSERT_EQ(videoOnly["data"]["videoTracks"].size(), 1u) << videoOnly.dump();
+
+	auto observer = joinRoom(testRoom_, "observer");
+	usleep(200000);
+
+	auto videoOnlyStats = observer.ws->request("getStats", {{"peerId", "alice"}});
+	ASSERT_TRUE(videoOnlyStats.value("ok", false)) << videoOnlyStats.dump();
+	ASSERT_TRUE(videoOnlyStats["data"].contains("producers")) << videoOnlyStats.dump();
+	ASSERT_EQ(videoOnlyStats["data"]["producers"].size(), 1u) << videoOnlyStats.dump();
+	for (const auto& item : videoOnlyStats["data"]["producers"].items()) {
+		EXPECT_EQ(item.value().value("kind", ""), "video") << videoOnlyStats.dump();
+	}
+
+	auto legacy = alice.ws->request("plainPublish", {
+		{"videoSsrc", 33333333u},
+		{"audioSsrc", 44444444u}
+	});
+	ASSERT_TRUE(legacy.value("ok", false)) << legacy.dump();
+	ASSERT_TRUE(legacy["data"].contains("audioEnabled")) << legacy.dump();
+	EXPECT_TRUE(legacy["data"]["audioEnabled"].get<bool>());
+	EXPECT_TRUE(legacy["data"].contains("audioProdId")) << legacy.dump();
+	EXPECT_EQ(legacy["data"]["audioSsrc"], 44444444u);
+
+	usleep(200000);
+	auto legacyStats = observer.ws->request("getStats", {{"peerId", "alice"}});
+	ASSERT_TRUE(legacyStats.value("ok", false)) << legacyStats.dump();
+	ASSERT_TRUE(legacyStats["data"].contains("producers")) << legacyStats.dump();
+	EXPECT_EQ(legacyStats["data"]["producers"].size(), 2u)
+		<< "legacy plainPublish should keep current audio/video producer behavior";
+}
+
 TEST_F(QosIntegrationTest, PlainPublishReplacesOldTransportAndUsesBaselineCodec) {
 	auto alice = joinRoom(testRoom_, "alice");
 
