@@ -13,6 +13,18 @@ include(CommonFfmpegAdapters)
 resolve_ffmpeg_include_dirs(MEDIASOUP_FFMPEG_INCLUDE_DIRS)
 message(STATUS "Using FFmpeg include dir: ${MEDIASOUP_FFMPEG_INCLUDE_DIRS}")
 
+find_package(WebRtcQosSdk CONFIG QUIET)
+
+function(select_webrtc_qos_role out_var role_name)
+    if(TARGET "WebRtcQosSdk::role_${role_name}_bundle")
+        set("${out_var}" "WebRtcQosSdk::role_${role_name}_bundle" PARENT_SCOPE)
+    elseif(TARGET "WebRtcQosSdk::role_${role_name}")
+        set("${out_var}" "WebRtcQosSdk::role_${role_name}" PARENT_SCOPE)
+    else()
+        set("${out_var}" "" PARENT_SCOPE)
+    endif()
+endfunction()
+
 set(FLATBUFFERS_INCLUDE ${CMAKE_SOURCE_DIR}/third_party/flatbuffers/include)
 set(JSON_INCLUDE ${CMAKE_SOURCE_DIR}/third_party/nlohmann_json/include)
 set(GENERATED_INCLUDE ${CMAKE_SOURCE_DIR}/generated)
@@ -149,6 +161,63 @@ mediasoup_add_configured_executable(mediasoup-sfu
         z
         hiredis
 )
+
+if(WebRtcQosSdk_FOUND)
+    select_webrtc_qos_role(WEBRTC_QOS_PUSH_TARGET push)
+    select_webrtc_qos_role(WEBRTC_QOS_PLAY_TARGET play)
+    if(WEBRTC_QOS_PUSH_TARGET AND WEBRTC_QOS_PLAY_TARGET)
+        set(WEBRTC_QOS_PLAIN_CLIENT_COMMON_SOURCES
+            client/webrtc_qos_plain_client/common/ClientArgs.cpp
+            client/webrtc_qos_plain_client/common/ClientIds.cpp
+            client/webrtc_qos_plain_client/common/PlainUdpTransport.cpp
+            client/webrtc_qos_plain_client/common/RtpRtcpClassifier.cpp
+            client/webrtc_qos_plain_client/common/RuntimeLogHelpers.cpp
+            client/WsClient.cpp
+        )
+
+        mediasoup_add_configured_executable(webrtc-qos-plain-push-client
+            SOURCES
+                client/webrtc_qos_plain_client/push/main.cpp
+                client/webrtc_qos_plain_client/push/PushSignalingSession.cpp
+                client/webrtc_qos_plain_client/push/H264AnnexBSource.cpp
+                client/webrtc_qos_plain_client/push/WebRtcQosPushRuntime.cpp
+                ${WEBRTC_QOS_PLAIN_CLIENT_COMMON_SOURCES}
+            INCLUDE_DIRS
+                ${CMAKE_SOURCE_DIR}/client
+                ${CMAKE_SOURCE_DIR}/client/webrtc_qos_plain_client
+            LINK_LIBRARIES
+                mediasoup_build_common
+                mediasoup_build_ffmpeg_core
+                mediasoup_common_ffmpeg
+                mediasoup_build_ssl_crypto
+                mediasoup_build_pthread
+                spdlog::spdlog
+                ${WEBRTC_QOS_PUSH_TARGET}
+        )
+
+        mediasoup_add_configured_executable(webrtc-qos-plain-play-client
+            SOURCES
+                client/webrtc_qos_plain_client/play/main.cpp
+                client/webrtc_qos_plain_client/play/PlaySignalingSession.cpp
+                client/webrtc_qos_plain_client/play/AnnexBSink.cpp
+                client/webrtc_qos_plain_client/play/WebRtcQosPlayRuntime.cpp
+                ${WEBRTC_QOS_PLAIN_CLIENT_COMMON_SOURCES}
+            INCLUDE_DIRS
+                ${CMAKE_SOURCE_DIR}/client
+                ${CMAKE_SOURCE_DIR}/client/webrtc_qos_plain_client
+            LINK_LIBRARIES
+                mediasoup_build_common
+                mediasoup_build_ssl_crypto
+                mediasoup_build_pthread
+                spdlog::spdlog
+                ${WEBRTC_QOS_PLAY_TARGET}
+        )
+    else()
+        message(WARNING "WebRtcQosSdk found but push/play role targets are missing; skipping webrtc-qos plain clients")
+    endif()
+else()
+    message(STATUS "WebRtcQosSdk not found; skipping webrtc-qos plain clients")
+endif()
 
 option(BUILD_TESTS "Build unit tests" ON)
 if(BUILD_TESTS)
