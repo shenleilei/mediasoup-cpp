@@ -208,9 +208,9 @@ SignalingServer
 - PlainTransport C++ 客户端矩阵：`48 / 48 PASS` (`2026-04-26`)
 - PlainTransport C++ 客户端信令测试套件：`PASS`
 - C++ 客户端 QoS 单元测试对齐 (parity)：`PASS`
-- WebRTC QoS Plain P2 synthetic+QoE：`qosMainline=PASS`，`sdkRuntimeObservability=PASS`，`encoderRuntime=PASS`，`nativeDecodeQoe=PASS`，`weakNetworkCoverage=PASS`
-- P2 已实测 `baseline`、`delay_100ms`、`loss_2pct`、`bandwidth_600k`、`drop_recover` 控制面短测：全量 `5 / 5 PASS`，100ms delay RTT avg/max 为 `109.58/242ms`，600kbps bandwidth targetBps min/max 为 `300000/1693914`，recovery targetBps min/max 为 `300000/2023706`，decode errors 均为 `0`
-- P2 恢复首帧已列为独立硬门禁：`drop_recover` 不能只看 target bitrate 回升，还必须在 netem clear 后 15 秒内看到 native QoE `decodedFrames` 增长；未 PASS 前不声明端到端画面恢复完成
+- WebRTC QoS Plain P2 synthetic+QoE：`qosMainline=PASS`，`sdkRuntimeObservability=PASS`，`encoderRuntime=PASS`，`nativeDecodeQoe=PASS`，`recoveryFirstFrame=PASS`，`weakNetworkCoverage=PASS`
+- P2 已实测 `baseline`、`delay_100ms`、`loss_2pct`、`bandwidth_600k`、`drop_recover`：全量 `5 / 5 PASS`，100ms delay RTT avg/max 为 `100.58/241ms`，600kbps bandwidth targetBps min/max 为 `300000/1863877`，recovery targetBps min/max 为 `300000/1709291`，decode errors 均为 `0`
+- P2 恢复首帧已列为独立硬门禁并通过：`drop_recover` 在 netem clear 后 `111ms` 看到 native QoE `decodedFrames` 增长，decoded delta=`10`
 - WebRTC QoS Plain P2 MP4 decode-loop baseline：`qosMainline=PASS`，`sdkRuntimeObservability=PASS`，`encoderRuntime=PASS`，`nativeDecodeQoe=PASS`；baseline `pushedAu=357`、`decodedFrames=357`、`decodeErrors=0`
 - WebRTC QoS Plain P2 browser receiver smoke：plain push 发布链路 `PASS`；当前 headless Chromium 只暴露 VP8/VP9、不暴露 H264 packetization-mode=1，浏览器收流 case 按环境能力记为 `SKIP`，overall 为 `PARTIAL`
 - WebRTC QoS Plain P2 V4L2 source：V4L2 CLI/source/smoke SKIP gate 已落地；当前机器无 `/dev/video0`，baseline 按环境能力 `SKIP`，overall 为 `PARTIAL`
@@ -219,7 +219,7 @@ SignalingServer
 
 - 上行 QoS 主链路在浏览器和 PlainTransport C++ 客户端上均已闭环
 - 下行目前覆盖接收端控制以及零需求发布端暂停/恢复协调
-- WebRTC QoS Plain P2 目前签收 native baseline/delay/loss/bandwidth/recovery synthetic+QoE 短测，并已覆盖 MP4 decode-loop baseline；browser receiver 自动化和 V4L2 输入源入口已落地，但本机浏览器缺 H264 能力、当前机器无 `/dev/video0`，对应真实画面/摄像头运行结果只能记录 `SKIP/PARTIAL`
+- WebRTC QoS Plain P2 目前签收 native baseline/delay/loss/bandwidth/recovery synthetic+QoE 短测，并已覆盖恢复首帧、MP4 decode-loop baseline；browser receiver 自动化和 V4L2 输入源入口已落地，但本机浏览器缺 H264 能力、当前机器无 `/dev/video0`，对应真实画面/摄像头运行结果只能记录 `SKIP/PARTIAL`
 - `dynacast` 和房间级全局比特率预算划分是后续工作
 
 事实来源链接 (Source-of-truth links)：
@@ -233,6 +233,7 @@ SignalingServer
 - 纯客户端矩阵结果：[docs/plain-client-qos-case-results.md](./docs/plain-client-qos-case-results.md)
 - WebRTC QoS Plain P2 smoke 报告：[docs/generated/webrtc-qos-plain-p2-smoke-report.md](./docs/generated/webrtc-qos-plain-p2-smoke-report.md)
 - WebRTC QoS Plain P2 设计和验收门禁：[docs/webrtc-qos-push-play-client-p2-design_cn.md](./docs/webrtc-qos-push-play-client-p2-design_cn.md)
+- WebRTC QoS Plain P2 恢复首帧专项报告：[docs/generated/webrtc-qos-plain-p2-recovery-first-frame-report.md](./docs/generated/webrtc-qos-plain-p2-recovery-first-frame-report.md)
 - WebRTC QoS Plain P2 MP4 decode-loop baseline 报告：[docs/generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md](./docs/generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md)
 - WebRTC QoS Plain P2 browser receiver 报告：[docs/generated/webrtc-qos-plain-p2-browser-receiver-report.md](./docs/generated/webrtc-qos-plain-p2-browser-receiver-report.md)
 - WebRTC QoS Plain P2 V4L2 source 报告：[docs/generated/webrtc-qos-plain-p2-v4l2-report.md](./docs/generated/webrtc-qos-plain-p2-v4l2-report.md)

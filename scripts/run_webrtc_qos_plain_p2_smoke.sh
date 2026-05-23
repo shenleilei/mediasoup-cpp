@@ -674,8 +674,12 @@ def parse_play_metrics(text):
         r'rtcpBytesOut=(\d+) rtcpSendFailures=(\d+) outputAu=(\d+) '
         r'nack=(\d+) pli=(\d+) retransmission=(\d+) droppedRetransmission=(\d+) '
         r'rttMs=([0-9.]+) lossQ8=(\d+)')
-    for match in pattern.finditer(text):
+    for line in text.splitlines():
+        match = pattern.search(line)
+        if not match:
+            continue
         rows.append({
+            'epochMs': parse_log_epoch_ms(line),
             'rtpPackets': int(match.group(1)),
             'rtcpPackets': int(match.group(2)),
             'rtcpPacketsOut': int(match.group(3)),
@@ -730,8 +734,12 @@ def parse_qoe_metrics(text):
         r'decodedFrames=(\d+) decodeErrors=(\d+) freezeCount=(\d+) '
         r'firstFrameDelayUs=(-?\d+) maxFrameGapUs=(\d+) outputFps=([0-9.]+) '
         r'width=(\d+) height=(\d+)')
-    for match in pattern.finditer(text):
+    for line in text.splitlines():
+        match = pattern.search(line)
+        if not match:
+            continue
         rows.append({
+            'epochMs': parse_log_epoch_ms(line),
             'enabled': match.group(1),
             'accessUnitsIn': int(match.group(2)),
             'keyframesIn': int(match.group(3)),
@@ -749,8 +757,12 @@ def parse_qoe_metrics(text):
         r'decodedFrames=(\d+) decodeErrors=(\d+) freezeCount=(\d+) '
         r'firstFrameDelayUs=(-?\d+) maxFrameGapUs=(\d+) outputFps=([0-9.]+) '
         r'width=(\d+) height=(\d+)')
-    for match in stop_pattern.finditer(text):
+    for line in text.splitlines():
+        match = stop_pattern.search(line)
+        if not match:
+            continue
         rows.append({
+            'epochMs': parse_log_epoch_ms(line),
             'enabled': match.group(1),
             'accessUnitsIn': int(match.group(2)),
             'keyframesIn': int(match.group(3)),
@@ -764,6 +776,43 @@ def parse_qoe_metrics(text):
             'height': int(match.group(11)),
         })
     return rows
+
+def recovery_qoe_metrics(qoe_metrics, clear_ms):
+    result = {
+        'enabled': bool(qoe_metrics) and isinstance(clear_ms, int),
+        'clearEpochMs': clear_ms,
+        'preClearDecodedFrames': None,
+        'postClearFirstDecodedEpochMs': None,
+        'postClearFirstDecodedDelayMs': None,
+        'postClearDecodedFramesDelta': None,
+        'postClearSamples': 0,
+    }
+    if not qoe_metrics or not isinstance(clear_ms, int):
+        return result
+    pre_clear = [
+        m for m in qoe_metrics
+        if isinstance(m.get('epochMs'), int) and m['epochMs'] < clear_ms
+    ]
+    post_clear = [
+        m for m in qoe_metrics
+        if isinstance(m.get('epochMs'), int) and m['epochMs'] >= clear_ms
+    ]
+    result['postClearSamples'] = len(post_clear)
+    baseline_decoded = (
+        pre_clear[-1].get('decodedFrames')
+        if pre_clear else
+        (qoe_metrics[0].get('decodedFrames') if qoe_metrics else None))
+    if baseline_decoded is None:
+        return result
+    result['preClearDecodedFrames'] = baseline_decoded
+    last_post_decoded = post_clear[-1].get('decodedFrames') if post_clear else baseline_decoded
+    result['postClearDecodedFramesDelta'] = max(0, last_post_decoded - baseline_decoded)
+    for row in post_clear:
+        if row.get('decodedFrames', 0) > baseline_decoded:
+            result['postClearFirstDecodedEpochMs'] = row.get('epochMs')
+            result['postClearFirstDecodedDelayMs'] = row.get('epochMs') - clear_ms
+            break
+    return result
 
 def parse_jsonl_file(path):
     rows = []
@@ -898,6 +947,7 @@ def parse_case(case_name):
     max_dropped_frames = max([m['droppedFrames'] for m in push_metrics] or [0])
     last_encoder = encoder_metrics[-1] if encoder_metrics else {}
     last_qoe = qoe_metrics[-1] if qoe_metrics else {}
+    recovery_qoe = recovery_qoe_metrics(qoe_metrics, timing.get('clearEpochMs'))
 
     warning_lines = []
     ignored_warning_lines = []
@@ -1010,6 +1060,19 @@ def parse_case(case_name):
                     post_last,
                     len(post_targets),
                     timing.get('recoverSeconds'))))
+            if decode_qoe:
+                recovery_first_frame_ok = bool(
+                    recovery_qoe.get('postClearFirstDecodedDelayMs') is not None and
+                    0 <= recovery_qoe.get('postClearFirstDecodedDelayMs') <= 15000 and
+                    recovery_qoe.get('postClearDecodedFramesDelta', 0) > 0)
+                checks.append(make_check(
+                    'qoe-recovery-first-frame-after-clear',
+                    recovery_first_frame_ok,
+                    'delayMs={} decodedDelta={} postClearSamples={} clearEpochMs={}'.format(
+                        recovery_qoe.get('postClearFirstDecodedDelayMs'),
+                        recovery_qoe.get('postClearDecodedFramesDelta'),
+                        recovery_qoe.get('postClearSamples'),
+                        recovery_qoe.get('clearEpochMs'))))
 
     metrics = {
         'publishTwccExtId': publish_twcc,
@@ -1067,6 +1130,7 @@ def parse_case(case_name):
             'outputFps': last_qoe.get('outputFps'),
             'width': last_qoe.get('width'),
             'height': last_qoe.get('height'),
+            'recovery': recovery_qoe if case_name == 'drop_recover' else None,
         },
         'sdkRuntime': {
             'push': {
@@ -1108,8 +1172,12 @@ attempted = [c for c in cases if c['status'] != 'SKIP']
 failed_cases = [c for c in attempted if c['status'] == 'FAIL']
 skipped_cases = [c for c in cases if c['status'] == 'SKIP']
 baseline = next((c for c in cases if c['name'] == 'baseline'), None)
+baseline_missing = baseline is None
 baseline_skipped = bool(baseline and baseline.get('status') == 'SKIP')
-baseline_skip_reason = baseline.get('skipReason') if baseline_skipped else None
+baseline_skip_reason = (
+    baseline.get('skipReason') if baseline_skipped else
+    ('baseline case not requested' if baseline_missing else None))
+baseline_unavailable = baseline_skipped or baseline_missing
 
 qos_gate_evidence = {
     'baselineSelectedTwccExtId': baseline and baseline.get('metrics', {}).get('selectedTwccExtId'),
@@ -1215,6 +1283,26 @@ qoe_gate_evidence = {
     'baselineHeight': baseline_qoe.get('height'),
     'baselineSkipReason': baseline_skip_reason,
 }
+drop_recover_case = next((c for c in cases if c['name'] == 'drop_recover'), None)
+drop_recover_qoe = drop_recover_case.get('metrics', {}).get('qoe', {}) if drop_recover_case else {}
+drop_recover_recovery_qoe = drop_recover_qoe.get('recovery') or {}
+recovery_first_frame_evidence = {
+    'enabled': decode_qoe,
+    'dropRecoverStatus': drop_recover_case and drop_recover_case.get('status'),
+    'clearEpochMs': drop_recover_recovery_qoe.get('clearEpochMs'),
+    'preClearDecodedFrames': drop_recover_recovery_qoe.get('preClearDecodedFrames'),
+    'postClearFirstDecodedEpochMs': drop_recover_recovery_qoe.get('postClearFirstDecodedEpochMs'),
+    'postClearFirstDecodedDelayMs': drop_recover_recovery_qoe.get('postClearFirstDecodedDelayMs'),
+    'postClearDecodedFramesDelta': drop_recover_recovery_qoe.get('postClearDecodedFramesDelta'),
+    'postClearSamples': drop_recover_recovery_qoe.get('postClearSamples'),
+}
+recovery_first_frame_pass = bool(
+    decode_qoe and
+    drop_recover_case and
+    drop_recover_case.get('status') == 'PASS' and
+    drop_recover_recovery_qoe.get('postClearFirstDecodedDelayMs') is not None and
+    0 <= drop_recover_recovery_qoe.get('postClearFirstDecodedDelayMs') <= 15000 and
+    drop_recover_recovery_qoe.get('postClearDecodedFramesDelta', 0) > 0)
 qoe_gate_pass = (
     True if not decode_qoe else bool(
         baseline and
@@ -1225,7 +1313,7 @@ qoe_gate_pass = (
 
 gates = {
     'qosMainline': {
-        'status': 'SKIP' if baseline_skipped else ('PASS' if qos_gate_pass else 'FAIL'),
+        'status': 'SKIP' if baseline_unavailable else ('PASS' if qos_gate_pass else 'FAIL'),
         'requirements': [
             'consumer TWCC ext id > 0',
             'push RTCP feedback input > 0',
@@ -1234,7 +1322,7 @@ gates = {
         'evidence': qos_gate_evidence,
     },
     'sdkRuntimeObservability': {
-        'status': 'SKIP' if baseline_skipped else ('PASS' if sdk_observability_pass else 'FAIL'),
+        'status': 'SKIP' if baseline_unavailable else ('PASS' if sdk_observability_pass else 'FAIL'),
         'requirements': [
             'SDK runtime log/metrics/alerts files enabled for push and play',
             'SDK push metrics count received TWCC and RR',
@@ -1243,7 +1331,7 @@ gates = {
         'evidence': sdk_observability_evidence,
     },
     'encoderRuntime': {
-        'status': 'SKIP' if baseline_skipped else ('PASS' if encoder_gate_pass else 'FAIL'),
+        'status': 'SKIP' if baseline_unavailable else ('PASS' if encoder_gate_pass else 'FAIL'),
         'requirements': [
             'synthetic, MP4 decode-loop, or V4L2 source uses x264 realtime encoder when requested',
             'encoder metrics expose source shape, fps, bitrate, AU count, keyframe count',
@@ -1252,12 +1340,22 @@ gates = {
         'evidence': encoder_gate_evidence,
     },
     'nativeDecodeQoe': {
-        'status': 'SKIP' if baseline_skipped else ('PASS' if qoe_gate_pass else 'FAIL'),
+        'status': 'SKIP' if baseline_unavailable else ('PASS' if qoe_gate_pass else 'FAIL'),
         'requirements': [
             'native play decode/QoE is enabled when requested',
             'FFmpeg decode produces frames and exposes first-frame/freeze/decode-error metrics',
         ],
         'evidence': qoe_gate_evidence,
+    },
+    'recoveryFirstFrame': {
+        'status': (
+            'SKIP' if not decode_qoe or not drop_recover_case or drop_recover_case.get('status') == 'SKIP'
+            else ('PASS' if recovery_first_frame_pass else 'FAIL')),
+        'requirements': [
+            'drop_recover case is attempted with QoE decode enabled',
+            'first decoded frame after netem clear is observed within 15 seconds',
+        ],
+        'evidence': recovery_first_frame_evidence,
     },
     'weakNetworkCoverage': {
         'status': 'PASS' if not skipped_cases and any(c['name'] != 'baseline' for c in attempted) else 'SKIP',
@@ -1423,6 +1521,7 @@ lines.append('- `qosMainline=PASS` means TWCC negotiation, push RTCP feedback in
 lines.append('- `sdkRuntimeObservability=PASS` means push/play SDK runtime log, metrics, alerts files exist and SDK RR/TWCC counters are non-zero.')
 lines.append('- `encoderRuntime=PASS` means requested synthetic, MP4 decode-loop, or V4L2 x264 mode produced encoded H264 access units/keyframes, and SDK keyframe requests produced an IDR within 1 second.')
 lines.append('- `nativeDecodeQoe=PASS` means requested native FFmpeg decode/QoE produced decoded frames and first-frame/decode-error metrics.')
+lines.append('- `recoveryFirstFrame=PASS` means `drop_recover` observed decoded frame growth after netem clear within 15 seconds.')
 lines.append('- `droppedFrames` is the SDK push-side pacer backpressure counter; non-zero values are acceptable in bandwidth/recovery cases when transport remains alive and QoE decode continues.')
 lines.append('- `weakNetworkCoverage=PASS` means at least one tc netem weak-network case was actually attempted and passed; the generated report records which cases were covered.')
 lines.append('- `weakNetworkCoverage=SKIP` means tc netem cases were intentionally not run; use `--enable-netem` when the host permits network emulation.')
