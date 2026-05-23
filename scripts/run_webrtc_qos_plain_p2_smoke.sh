@@ -550,7 +550,7 @@ run_case() {
 render_report() {
 	local report_json="$REPORT_DIR/$REPORT_BASENAME.json"
 	local report_md="$REPORT_DIR/$REPORT_BASENAME.md"
-	python3 - "$RUN_DIR" "$REPORT_DIR" "$report_json" "$report_md" "$CASES" "$DURATION_SECONDS" "$BUILD_DIR" "$WORKER_BIN" "$INPUT_FILE" "$ENABLE_NETEM" "$NETEM_DEV" "$STRICT" "$SOURCE_MODE" "$SYNTHETIC_WIDTH" "$SYNTHETIC_HEIGHT" "$SYNTHETIC_FPS" "$DECODE_QOE" "$V4L2_DEVICE" "$V4L2_WIDTH" "$V4L2_HEIGHT" "$V4L2_FPS" "$V4L2_INPUT_FORMAT" <<'PY'
+	python3 - "$ROOT_DIR" "$RUN_DIR" "$REPORT_DIR" "$report_json" "$report_md" "$CASES" "$DURATION_SECONDS" "$BUILD_DIR" "$WORKER_BIN" "$INPUT_FILE" "$ENABLE_NETEM" "$NETEM_DEV" "$STRICT" "$SOURCE_MODE" "$SYNTHETIC_WIDTH" "$SYNTHETIC_HEIGHT" "$SYNTHETIC_FPS" "$DECODE_QOE" "$V4L2_DEVICE" "$V4L2_WIDTH" "$V4L2_HEIGHT" "$V4L2_FPS" "$V4L2_INPUT_FORMAT" <<'PY'
 import datetime
 import glob
 import json
@@ -562,25 +562,25 @@ import subprocess
 import sys
 import time
 
-run_dir, report_dir, report_json, report_md = sys.argv[1:5]
-case_names = [c.strip() for c in sys.argv[5].split(',') if c.strip()]
-duration_seconds = int(sys.argv[6])
-build_dir = sys.argv[7]
-worker_bin = sys.argv[8]
-input_file = sys.argv[9]
-enable_netem = sys.argv[10] == '1'
-netem_dev = sys.argv[11]
-strict = sys.argv[12] == '1'
-source_mode = sys.argv[13]
-synthetic_width = int(sys.argv[14])
-synthetic_height = int(sys.argv[15])
-synthetic_fps = int(sys.argv[16])
-decode_qoe = sys.argv[17] == '1'
-v4l2_device = sys.argv[18]
-v4l2_width = int(sys.argv[19])
-v4l2_height = int(sys.argv[20])
-v4l2_fps = int(sys.argv[21])
-v4l2_input_format = sys.argv[22]
+root_dir, run_dir, report_dir, report_json, report_md = sys.argv[1:6]
+case_names = [c.strip() for c in sys.argv[6].split(',') if c.strip()]
+duration_seconds = int(sys.argv[7])
+build_dir = sys.argv[8]
+worker_bin = sys.argv[9]
+input_file = sys.argv[10]
+enable_netem = sys.argv[11] == '1'
+netem_dev = sys.argv[12]
+strict = sys.argv[13] == '1'
+source_mode = sys.argv[14]
+synthetic_width = int(sys.argv[15])
+synthetic_height = int(sys.argv[16])
+synthetic_fps = int(sys.argv[17])
+decode_qoe = sys.argv[18] == '1'
+v4l2_device = sys.argv[19]
+v4l2_width = int(sys.argv[20])
+v4l2_height = int(sys.argv[21])
+v4l2_fps = int(sys.argv[22])
+v4l2_input_format = sys.argv[23]
 
 ANSI_RE = re.compile(r'\x1b\[[0-9;]*m')
 
@@ -602,11 +602,46 @@ def read_json(path):
     except Exception:
         return {}
 
+def path_from_root(path):
+    if not path:
+        return ''
+    return path if os.path.isabs(path) else os.path.abspath(os.path.join(root_dir, path))
+
 def command_output(argv):
     try:
         return subprocess.check_output(argv, stderr=subprocess.STDOUT).decode('utf-8', 'replace').strip()
     except Exception as exc:
         return str(exc)
+
+def parse_cmake_cache(path):
+    result = {}
+    for line in read_file(path).splitlines():
+        line = line.strip()
+        if not line or line.startswith('//') or line.startswith('#') or ':' not in line or '=' not in line:
+            continue
+        key_type, value = line.split('=', 1)
+        key = key_type.split(':', 1)[0]
+        result[key] = value
+    return result
+
+def sdk_dist_from_cmake_dir(cmake_dir):
+    marker = os.path.join('lib', 'cmake', 'WebRtcQosSdk')
+    if cmake_dir and cmake_dir.endswith(marker):
+        return cmake_dir[:-len(marker)].rstrip(os.sep)
+    return ''
+
+def collect_failed_checks(cases):
+    failed = []
+    for case in cases:
+        for check in case.get('checks', []):
+            if check.get('status') != 'PASS':
+                failed.append({
+                    'case': case.get('name'),
+                    'check': check.get('name'),
+                    'status': check.get('status'),
+                    'evidence': check.get('evidence'),
+                })
+    return failed
 
 def numbers(values):
     values = [float(v) for v in values if v is not None]
@@ -1374,16 +1409,31 @@ elif all(g['status'] == 'PASS' for g in gates.values()):
 else:
     overall = 'PARTIAL'
 
+build_dir_abs = path_from_root(build_dir)
+worker_bin_abs = path_from_root(worker_bin)
+cmake_cache = parse_cmake_cache(os.path.join(build_dir_abs, 'CMakeCache.txt'))
+webrtc_qos_sdk_cmake_dir = cmake_cache.get('WebRtcQosSdk_DIR', '')
+webrtc_qos_sdk_dist = sdk_dist_from_cmake_dir(webrtc_qos_sdk_cmake_dir)
+git_commit = command_output(['git', '-C', root_dir, 'rev-parse', 'HEAD'])
+git_branch = command_output(['git', '-C', root_dir, 'branch', '--show-current'])
+failed_checks = collect_failed_checks(cases)
+
 report = {
     'schemaVersion': 1,
     'generatedAt': datetime.datetime.utcnow().replace(microsecond=0).isoformat() + 'Z',
     'overallStatus': overall,
     'runDir': run_dir,
+    'sourceRevision': {
+        'gitCommit': git_commit,
+        'gitBranch': git_branch,
+    },
     'runConfig': {
         'durationSeconds': duration_seconds,
         'cases': case_names,
         'buildDir': build_dir,
+        'buildDirAbs': build_dir_abs,
         'workerBin': worker_bin,
+        'workerBinAbs': worker_bin_abs,
         'inputFile': input_file,
         'sourceMode': source_mode,
         'synthetic': {
@@ -1409,6 +1459,9 @@ report = {
         'kernel': command_output(['uname', '-a']),
         'tc': command_output(['bash', '-lc', 'command -v tc || true']),
         'ffmpeg': command_output(['bash', '-lc', 'ffmpeg -version 2>/dev/null | head -1 || true']),
+        'cmakePrefixPath': cmake_cache.get('CMAKE_PREFIX_PATH', ''),
+        'webrtcQosSdkDir': webrtc_qos_sdk_cmake_dir,
+        'webrtcQosSdkDist': webrtc_qos_sdk_dist,
     },
     'gates': gates,
     'summary': {
@@ -1416,7 +1469,9 @@ report = {
         'passedCases': len([c for c in attempted if c['status'] == 'PASS']),
         'failedCases': len(failed_cases),
         'skippedCases': len(skipped_cases),
+        'failedChecks': len(failed_checks),
     },
+    'failedChecks': failed_checks,
     'cases': cases,
 }
 
@@ -1446,12 +1501,15 @@ lines.append('| Item | Value |')
 lines.append('|---|---|')
 lines.append('| Overall | `{}` |'.format(overall))
 lines.append('| Generated At | `{}` |'.format(report['generatedAt']))
+lines.append('| Git Commit | `{}` |'.format(git_commit))
+lines.append('| SDK Dist | `{}` |'.format(webrtc_qos_sdk_dist or '-'))
 lines.append('| Run Dir | `{}` |'.format(run_dir))
 lines.append('| Duration Seconds | `{}` |'.format(duration_seconds))
 lines.append('| Netem | `{}` on `{}` |'.format('enabled' if enable_netem else 'disabled', netem_dev))
 lines.append('| Source Mode | `{}` |'.format(source_mode))
 lines.append('| Decode QoE | `{}` |'.format('enabled' if decode_qoe else 'disabled'))
 lines.append('| Input | `{}` |'.format(input_file))
+lines.append('| Failed Checks | `{}` |'.format(len(failed_checks)))
 if source_mode == 'v4l2':
     lines.append('| V4L2 Device | `{}` |'.format(v4l2_device))
 lines.append('')
