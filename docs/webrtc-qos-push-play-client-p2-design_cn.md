@@ -21,7 +21,7 @@
 
 - mediasoup consumer 下行 `rtpParameters.headerExtensions=[]`，play 只能降级为无 TWCC 接收。
 - 本地 smoke 只验证 RTP/RTCP/AU 闭环，未完整验证下行 TWCC 主链路。
-- 当前 SDK dist 包未暴露 runtime logs/metrics/alerts 配置字段。
+- 旧 SDK dist 包未暴露 runtime logs/metrics/alerts 配置字段；当前 dist 已更新，但需要 smoke gate 固化防回归。
 - push 仍用 H264 MP4 copy path，不能根据 SDK adaptation 改 bitrate/fps，也不能响应 PLI 强制 IDR。
 - `plainPublish` 当前强制创建 dummy audio producer，服务端语义不干净。
 - 弱网 smoke、浏览器接收、native decode/QoE 尚未自动化。
@@ -32,8 +32,7 @@
 - native smoke 已验证 video consumer `twccExtId=5`，不再走 `consumer_without_twcc_ext` 降级。
 - push/play adapter 已补 RTCP 边界计数日志。
 - P2-M4 已支持 `plainPublish enableAudio=false`，新 push 默认 video-only，旧请求保持 audio 默认兼容。
-- 当前 SDK play facade 只在 NACK/PLI 事件时通过 `transport_output` 发 RTCP，
-  尚未生成周期性 RR/TWCC feedback；因此 P2-M1 尚不能签收为 QoS 主链路完整闭环。
+- 当前 SDK play facade 已生成周期性 RR/TWCC feedback；本地 baseline smoke 已验证 `qosMainline=PASS` 和 `sdkRuntimeObservability=PASS`。
 
 第二期目标是把第一期从“最小可跑”推进到“可验证、可观测、可调优、可接真实输入”的状态。
 
@@ -361,16 +360,12 @@ docs/generated/webrtc-qos-plain-p2-smoke-report.md
 
 ### 7.1 SDK dist 更新
 
-当前 dist 包问题：
+已更新的 dist 包要求：
 
-- 头文件没有暴露 `RuntimeLogConfig`。
-- 头文件没有暴露 `RuntimeMetricsConfig`。
-- 头文件没有暴露 `RuntimeAlertConfig`。
-- 客户端只能输出 `sdk_runtime_files enabled=false`，依赖 adapter spdlog。
-
-第二期必须重新发布 SDK dist：
-
-- include 中暴露 runtime config 字段。
+- include 中暴露 `RuntimeLogConfig` / `RuntimeMetricsConfig` / `RuntimeAlertConfig`。
+- play facade 输出周期性 TWCC feedback 和 RR。
+- push facade 统计收到的 TWCC feedback 和 RR。
+- `QosSnapshot` / metrics jsonl 输出 RR/TWCC counters。
 - CMake package target 不变。
 - role bundle target 不变。
 - mediasoup-cpp 仍通过 `CMAKE_PREFIX_PATH` 引入，不直接引用 SDK source。
@@ -382,6 +377,7 @@ docs/generated/webrtc-qos-plain-p2-smoke-report.md
 - `push_metrics.*.jsonl` 存在且持续写入。
 - `play_metrics.*.jsonl` 存在且持续写入。
 - alerts 文件存在；无 alert 时也写启动元信息。
+- smoke gate `sdkRuntimeObservability=PASS`。
 
 ### 7.2 Adapter 结构化日志
 
@@ -782,7 +778,7 @@ scripts/run_webrtc_qos_plain_p2_smoke.sh \
 - 默认安全模式只运行 `baseline`，弱网 case 在未传 `--enable-netem` 时写为 `SKIP`，不计 PASS。
 - 需要真实弱网验证时显式传 `--enable-netem`；脚本会预检 `tc`、root/CAP_NET_ADMIN 和目标网卡。
 - 短测报告固定写入 `docs/generated/webrtc-qos-plain-p2-smoke-report.{json,md}`。
-- 当前机器短测结果：`baseline PASS`，`delay_100ms SKIP`，`qosMainline FAIL`，原因是 SDK play 侧 `rtcpPacketsOut=0`，仍需 P2-M1d。
+- 当前机器短测结果：`baseline PASS`，`delay_100ms SKIP`，`qosMainline PASS`，`sdkRuntimeObservability PASS`；整体 `PARTIAL` 仅因为未启用 `--enable-netem`。
 
 如果脚本名后续调整，必须在本文档和 `docs/README.md` 同步更新。
 
@@ -834,8 +830,8 @@ webrtc-qos-plain-push-client and webrtc-qos-plain-play-client must not depend on
 | 风险 | 处理 |
 |---|---|
 | consumer 仍无 TWCC ext | 先定位 server consume 参数生成；保留 play 降级但 QoS 主链路验收不通过。 |
-| play `rtcpPacketsOut=0` | 不在 adapter 自研 RTCP/TWCC；在 SDK play facade 补周期性 RR/TWCC 输出和 counter 后再签收 P2-M1。 |
-| SDK dist 版本不一致 | P2-M2 明确重新发布 SDK dist，并在 smoke 中检查 `enabled=true`。 |
+| play `rtcpPacketsOut=0` | QoS 主链路 gate 直接 FAIL；不在 adapter 自研 RTCP/TWCC，必须回到 SDK play facade 修复。 |
+| SDK dist 版本不一致 | smoke 检查 `sdk_runtime_files enabled=true`、runtime 文件存在、SDK RR/TWCC counter 非 0；任一缺失即 P2-M2 FAIL。 |
 | netem 权限不足 | case 标记 SKIP 并记录原因；不算 PASS。 |
 | x264 CPU 占用高 | 基线分辨率先用 640x360/30fps，必要时降到 320x180/15fps。 |
 | PLI force IDR 不稳定 | 加 encoder 级日志和 AU keyframe 标记，验收看 1 秒内 IDR。 |

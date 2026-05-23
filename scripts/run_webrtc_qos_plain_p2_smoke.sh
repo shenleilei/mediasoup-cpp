@@ -392,6 +392,7 @@ render_report() {
 	local report_md="$REPORT_DIR/webrtc-qos-plain-p2-smoke-report.md"
 	python3 - "$RUN_DIR" "$REPORT_DIR" "$report_json" "$report_md" "$CASES" "$DURATION_SECONDS" "$BUILD_DIR" "$WORKER_BIN" "$INPUT_FILE" "$ENABLE_NETEM" "$NETEM_DEV" "$STRICT" <<'PY'
 import datetime
+import glob
 import json
 import os
 import platform
@@ -496,6 +497,49 @@ def parse_play_metrics(text):
         })
     return rows
 
+def parse_jsonl_file(path):
+    rows = []
+    for line in read_file(path).splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rows.append(json.loads(line))
+        except Exception:
+            continue
+    return rows
+
+def max_json_int(rows, key):
+    values = []
+    for row in rows:
+        value = row.get(key)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            values.append(int(value))
+    return max(values) if values else 0
+
+def parse_sdk_runtime(case_dir, role):
+    role_dir = os.path.join(case_dir, role)
+    runtime_log_files = sorted(glob.glob(os.path.join(role_dir, '{}.{}.*.log'.format(role, role))))
+    metrics_files = sorted(glob.glob(os.path.join(role_dir, '{}_metrics.{}.*.jsonl'.format(role, role))))
+    alerts_files = sorted(glob.glob(os.path.join(role_dir, '{}_alerts.{}.*.jsonl'.format(role, role))))
+    metric_rows = []
+    for path in metrics_files:
+        metric_rows.extend(parse_jsonl_file(path))
+    session_rows = [row for row in metric_rows if row.get('scope') == 'session']
+    return {
+        'runtimeLogFiles': len(runtime_log_files),
+        'metricsFiles': len(metrics_files),
+        'alertsFiles': len(alerts_files),
+        'sessionMetricSamples': len(session_rows),
+        'receiverReportCountMax': max_json_int(session_rows, 'receiver_report_count'),
+        'transportFeedbackCountMax': max_json_int(session_rows, 'transport_feedback_count'),
+        'processTickCountMax': max_json_int(session_rows, 'process_tick_count'),
+        'maxProcessTickGapUs': max_json_int(session_rows, 'max_process_tick_gap_us'),
+        'transportFailureCountMax': max_json_int(session_rows, 'transport_failure_count'),
+    }
+
 IGNORED_ALERT_PATTERNS = [
     re.compile(r'GeoRouter DB .* not found, falling back'),
     re.compile(r'worker pipe closed .* delegating to detached reaper'),
@@ -561,6 +605,10 @@ def parse_case(case_name):
 
     push_metrics = parse_push_metrics(push_text)
     play_metrics = parse_play_metrics(play_text)
+    push_sdk_runtime_enabled = re.search(r'sdk_runtime_files role=push enabled=true', push_text) is not None
+    play_sdk_runtime_enabled = re.search(r'sdk_runtime_files role=play enabled=true', play_text) is not None
+    push_sdk_runtime = parse_sdk_runtime(case_dir, 'push')
+    play_sdk_runtime = parse_sdk_runtime(case_dir, 'play')
 
     pushed_au = int(push_stop.group(1)) if push_stop else last_int(r'push_metrics pushedAu=(\d+)', push_text)
     push_rtcp_in = int(push_stop.group(2)) if push_stop else last_int(r'rtcpFeedbackPacketsIn=(\d+)', push_text)
@@ -603,6 +651,12 @@ def parse_case(case_name):
         make_check('push-rtcp-feedback-input', bool(push_rtcp_in and push_rtcp_in > 0), 'rtcpFeedbackPacketsIn={}'.format(push_rtcp_in)),
         make_check('push-rtcp-feedback-no-failures', push_rtcp_failures == 0, 'rtcpFeedbackFailures={}'.format(push_rtcp_failures)),
         make_check('play-rtcp-send-no-failures', play_rtcp_send_failures == 0, 'rtcpSendFailures={}'.format(play_rtcp_send_failures)),
+        make_check('sdk-push-runtime-enabled', push_sdk_runtime_enabled, 'enabled={}'.format(push_sdk_runtime_enabled)),
+        make_check('sdk-play-runtime-enabled', play_sdk_runtime_enabled, 'enabled={}'.format(play_sdk_runtime_enabled)),
+        make_check('sdk-push-runtime-files', push_sdk_runtime['runtimeLogFiles'] > 0 and push_sdk_runtime['metricsFiles'] > 0 and push_sdk_runtime['alertsFiles'] > 0, json.dumps(push_sdk_runtime, sort_keys=True)),
+        make_check('sdk-play-runtime-files', play_sdk_runtime['runtimeLogFiles'] > 0 and play_sdk_runtime['metricsFiles'] > 0 and play_sdk_runtime['alertsFiles'] > 0, json.dumps(play_sdk_runtime, sort_keys=True)),
+        make_check('sdk-play-rtcp-generated', play_sdk_runtime['transportFeedbackCountMax'] > 0 and play_sdk_runtime['receiverReportCountMax'] > 0, 'twcc={} rr={}'.format(play_sdk_runtime['transportFeedbackCountMax'], play_sdk_runtime['receiverReportCountMax'])),
+        make_check('sdk-push-rtcp-counted', push_sdk_runtime['transportFeedbackCountMax'] > 0 and push_sdk_runtime['receiverReportCountMax'] > 0, 'twcc={} rr={}'.format(push_sdk_runtime['transportFeedbackCountMax'], push_sdk_runtime['receiverReportCountMax'])),
         make_check('harness-no-failure', not bool(harness_failure), harness_failure or 'ok'),
     ]
 
@@ -644,6 +698,16 @@ def parse_case(case_name):
         'retransmission': max_retransmission,
         'pushMetricSamples': len(push_metrics),
         'playMetricSamples': len(play_metrics),
+        'sdkRuntime': {
+            'push': {
+                'enabled': push_sdk_runtime_enabled,
+                **push_sdk_runtime,
+            },
+            'play': {
+                'enabled': play_sdk_runtime_enabled,
+                **play_sdk_runtime,
+            },
+        },
     }
 
     status = status_from_checks(checks)
@@ -685,6 +749,38 @@ qos_gate_pass = bool(
     baseline.get('metrics', {}).get('pushRtcpFeedbackPacketsIn') and baseline.get('metrics', {}).get('pushRtcpFeedbackPacketsIn') > 0 and
     baseline.get('metrics', {}).get('playRtcpPacketsOut') and baseline.get('metrics', {}).get('playRtcpPacketsOut') > 0)
 
+baseline_sdk = baseline.get('metrics', {}).get('sdkRuntime', {}) if baseline else {}
+baseline_push_sdk = baseline_sdk.get('push', {})
+baseline_play_sdk = baseline_sdk.get('play', {})
+sdk_observability_evidence = {
+    'baselinePushRuntimeEnabled': baseline_push_sdk.get('enabled'),
+    'baselinePlayRuntimeEnabled': baseline_play_sdk.get('enabled'),
+    'baselinePushRuntimeLogFiles': baseline_push_sdk.get('runtimeLogFiles'),
+    'baselinePushMetricsFiles': baseline_push_sdk.get('metricsFiles'),
+    'baselinePushAlertsFiles': baseline_push_sdk.get('alertsFiles'),
+    'baselinePlayRuntimeLogFiles': baseline_play_sdk.get('runtimeLogFiles'),
+    'baselinePlayMetricsFiles': baseline_play_sdk.get('metricsFiles'),
+    'baselinePlayAlertsFiles': baseline_play_sdk.get('alertsFiles'),
+    'baselinePushTransportFeedbackCountMax': baseline_push_sdk.get('transportFeedbackCountMax'),
+    'baselinePushReceiverReportCountMax': baseline_push_sdk.get('receiverReportCountMax'),
+    'baselinePlayTransportFeedbackCountMax': baseline_play_sdk.get('transportFeedbackCountMax'),
+    'baselinePlayReceiverReportCountMax': baseline_play_sdk.get('receiverReportCountMax'),
+}
+sdk_observability_pass = bool(
+    baseline and
+    baseline_push_sdk.get('enabled') is True and
+    baseline_play_sdk.get('enabled') is True and
+    baseline_push_sdk.get('runtimeLogFiles', 0) > 0 and
+    baseline_push_sdk.get('metricsFiles', 0) > 0 and
+    baseline_push_sdk.get('alertsFiles', 0) > 0 and
+    baseline_play_sdk.get('runtimeLogFiles', 0) > 0 and
+    baseline_play_sdk.get('metricsFiles', 0) > 0 and
+    baseline_play_sdk.get('alertsFiles', 0) > 0 and
+    baseline_push_sdk.get('transportFeedbackCountMax', 0) > 0 and
+    baseline_push_sdk.get('receiverReportCountMax', 0) > 0 and
+    baseline_play_sdk.get('transportFeedbackCountMax', 0) > 0 and
+    baseline_play_sdk.get('receiverReportCountMax', 0) > 0)
+
 gates = {
     'qosMainline': {
         'status': 'PASS' if qos_gate_pass else 'FAIL',
@@ -694,6 +790,15 @@ gates = {
             'play RTCP feedback output > 0',
         ],
         'evidence': qos_gate_evidence,
+    },
+    'sdkRuntimeObservability': {
+        'status': 'PASS' if sdk_observability_pass else 'FAIL',
+        'requirements': [
+            'SDK runtime log/metrics/alerts files enabled for push and play',
+            'SDK push metrics count received TWCC and RR',
+            'SDK play metrics count generated TWCC and RR',
+        ],
+        'evidence': sdk_observability_evidence,
     },
     'weakNetworkCoverage': {
         'status': 'PASS' if not skipped_cases and any(c['name'] != 'baseline' for c in attempted) else 'SKIP',
@@ -826,7 +931,9 @@ lines.append('## Interpretation')
 lines.append('')
 lines.append('- `PASS` case means SFU/push/play transport smoke met its checks.')
 lines.append('- `SKIP` means the case was not verified and must not be counted as PASS.')
-lines.append('- `qosMainline=FAIL` means P2-M1d is still open: play did not output periodic RR/TWCC feedback through the SDK facade.')
+lines.append('- `qosMainline=PASS` means TWCC negotiation, push RTCP feedback input, and play RTCP feedback output are all observable.')
+lines.append('- `sdkRuntimeObservability=PASS` means push/play SDK runtime log, metrics, alerts files exist and SDK RR/TWCC counters are non-zero.')
+lines.append('- `weakNetworkCoverage=SKIP` means tc netem cases were intentionally not run; use `--enable-netem` when the host permits network emulation.')
 
 with open(report_md, 'w', encoding='utf-8') as f:
     f.write('\n'.join(lines))
