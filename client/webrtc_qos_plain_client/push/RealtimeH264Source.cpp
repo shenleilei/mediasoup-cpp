@@ -79,6 +79,7 @@ bool RealtimeH264Source::Open(std::string* error)
 
 bool RealtimeH264Source::ApplyEncoderAdaptation(
 	const webrtc_qos::EncoderAdaptation& adaptation,
+	int64_t nowUs,
 	std::string* error)
 {
 	if (!opened_) {
@@ -109,6 +110,10 @@ bool RealtimeH264Source::ApplyEncoderAdaptation(
 	if (adaptation.request_keyframe) {
 		forceKeyframe_ = true;
 		++metrics_.forcedKeyframeRequests;
+		if (!pendingForcedKeyframe_) {
+			pendingForcedKeyframe_ = true;
+			pendingForcedKeyframeRequestUs_ = nowUs;
+		}
 	}
 
 	metrics_.currentBitrateBps = config_.bitrateBps;
@@ -146,7 +151,16 @@ bool RealtimeH264Source::NextAccessUnit(int64_t nowUs, AnnexBAccessUnit* out, st
 				std::max(1, config_.fps);
 			out->keyframe = (packet->flags & AV_PKT_FLAG_KEY) != 0 || PacketHasIdr(packet.get());
 			++metrics_.accessUnits;
-			if (out->keyframe) ++metrics_.keyframes;
+			if (out->keyframe) {
+				++metrics_.keyframes;
+				if (pendingForcedKeyframe_) {
+					++metrics_.forcedKeyframes;
+					const int64_t delayUs = std::max<int64_t>(0, nowUs - pendingForcedKeyframeRequestUs_);
+					metrics_.maxForcedKeyframeDelayUs = std::max(metrics_.maxForcedKeyframeDelayUs, delayUs);
+					pendingForcedKeyframe_ = false;
+					pendingForcedKeyframeRequestUs_ = 0;
+				}
+			}
 			metrics_.lastAccessUnitKeyframe = out->keyframe;
 			msff::PacketUnref(packet.get());
 			++frameIndex_;

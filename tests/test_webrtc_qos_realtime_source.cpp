@@ -50,12 +50,13 @@ TEST(WebRtcQosRealtimeSourceTest, AppliesEncoderAdaptation)
 	adaptation.target_bitrate_bps = 180000;
 	adaptation.max_fps = 7;
 	adaptation.request_keyframe = true;
-	ASSERT_TRUE(source.ApplyEncoderAdaptation(adaptation, &error)) << error;
+	const int64_t requestUs = 1200000;
+	ASSERT_TRUE(source.ApplyEncoderAdaptation(adaptation, requestUs, &error)) << error;
 
 	webrtc_qos_plain::AnnexBAccessUnit adapted;
 	bool produced = false;
 	for (int i = 0; i < 10; ++i) {
-		if (source.NextAccessUnit(1000000 + 200000 + i * 20000, &adapted, &error)) {
+		if (source.NextAccessUnit(requestUs + i * 20000, &adapted, &error)) {
 			produced = true;
 			break;
 		}
@@ -69,5 +70,8 @@ TEST(WebRtcQosRealtimeSourceTest, AppliesEncoderAdaptation)
 	EXPECT_GE(metrics.bitrateChanges, 1u);
 	EXPECT_GE(metrics.fpsChanges, 1u);
 	EXPECT_GE(metrics.forcedKeyframeRequests, 1u);
+	EXPECT_GE(metrics.forcedKeyframes, 1u);
+	EXPECT_GE(metrics.maxForcedKeyframeDelayUs, 0);
+	EXPECT_LE(metrics.maxForcedKeyframeDelayUs, 1000000);
 	EXPECT_GE(metrics.encoderRecreates, 2u);
 }

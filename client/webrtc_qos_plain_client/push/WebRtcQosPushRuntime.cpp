@@ -142,7 +142,7 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 		const auto adaptation = push->GetEncoderAdaptation(nowUs);
 		if (realtimeSource) {
 			std::string adaptationError;
-			if (!realtimeSource->ApplyEncoderAdaptation(adaptation, &adaptationError)) {
+			if (!realtimeSource->ApplyEncoderAdaptation(adaptation, nowUs, &adaptationError)) {
 				logger_->error("encoder_adaptation_failed status={}", adaptationError);
 				push->Stop();
 				return 4;
@@ -246,7 +246,7 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 			if (realtimeSource) {
 				const auto& sourceMetrics = realtimeSource->metrics();
 				logger_->info(
-					"encoder_metrics mode=synthetic encoder={} currentBitrateBps={} currentFps={} width={} height={} framesGenerated={} framesEncoded={} accessUnits={} keyframes={} encoderRecreates={} bitrateChanges={} fpsChanges={} forcedKeyframeRequests={} lastKeyframe={}",
+					"encoder_metrics mode=synthetic encoder={} currentBitrateBps={} currentFps={} width={} height={} framesGenerated={} framesEncoded={} accessUnits={} keyframes={} encoderRecreates={} bitrateChanges={} fpsChanges={} forcedKeyframeRequests={} forcedKeyframes={} maxForcedKeyframeDelayUs={} lastKeyframe={}",
 					options_.encoder,
 					sourceMetrics.currentBitrateBps,
 					sourceMetrics.currentFps,
@@ -260,6 +260,8 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 					sourceMetrics.bitrateChanges,
 					sourceMetrics.fpsChanges,
 					sourceMetrics.forcedKeyframeRequests,
+					sourceMetrics.forcedKeyframes,
+					sourceMetrics.maxForcedKeyframeDelayUs,
 					sourceMetrics.lastAccessUnitKeyframe);
 			}
 		}

@@ -637,7 +637,9 @@ def parse_encoder_metrics(text):
         r'currentFps=(\d+) width=(\d+) height=(\d+) framesGenerated=(\d+) '
         r'framesEncoded=(\d+) accessUnits=(\d+) keyframes=(\d+) '
         r'encoderRecreates=(\d+) bitrateChanges=(\d+) fpsChanges=(\d+) '
-        r'forcedKeyframeRequests=(\d+) lastKeyframe=(\w+)')
+        r'forcedKeyframeRequests=(\d+)'
+        r'(?: forcedKeyframes=(\d+) maxForcedKeyframeDelayUs=(-?\d+))? '
+        r'lastKeyframe=(\w+)')
     for match in pattern.finditer(text):
         rows.append({
             'mode': match.group(1),
@@ -654,7 +656,9 @@ def parse_encoder_metrics(text):
             'bitrateChanges': int(match.group(12)),
             'fpsChanges': int(match.group(13)),
             'forcedKeyframeRequests': int(match.group(14)),
-            'lastKeyframe': match.group(15),
+            'forcedKeyframes': int(match.group(15) or 0),
+            'maxForcedKeyframeDelayUs': int(match.group(16) or -1),
+            'lastKeyframe': match.group(17),
         })
     return rows
 
@@ -875,6 +879,16 @@ def parse_case(case_name):
             make_check('encoder-metrics-present', bool(encoder_metrics), 'samples={}'.format(len(encoder_metrics))),
             make_check('encoder-au-output', bool(last_encoder.get('accessUnits', 0) > 0), 'accessUnits={}'.format(last_encoder.get('accessUnits'))),
             make_check('encoder-keyframe-output', bool(last_encoder.get('keyframes', 0) > 0), 'keyframes={}'.format(last_encoder.get('keyframes'))),
+            make_check(
+                'encoder-forced-keyframe-response',
+                bool(
+                    last_encoder.get('forcedKeyframeRequests', 0) > 0 and
+                    last_encoder.get('forcedKeyframes', 0) > 0 and
+                    0 <= last_encoder.get('maxForcedKeyframeDelayUs', -1) <= 1000000),
+                'forcedKeyframeRequests={} forcedKeyframes={} maxForcedKeyframeDelayUs={}'.format(
+                    last_encoder.get('forcedKeyframeRequests'),
+                    last_encoder.get('forcedKeyframes'),
+                    last_encoder.get('maxForcedKeyframeDelayUs'))),
             make_check('encoder-source-shape', last_encoder.get('width') == synthetic_width and last_encoder.get('height') == synthetic_height and last_encoder.get('currentFps', 0) > 0 and last_encoder.get('currentBitrateBps', 0) > 0, json.dumps(last_encoder, sort_keys=True)),
         ])
     if decode_qoe:
@@ -962,6 +976,8 @@ def parse_case(case_name):
             'bitrateChanges': last_encoder.get('bitrateChanges'),
             'fpsChanges': last_encoder.get('fpsChanges'),
             'forcedKeyframeRequests': last_encoder.get('forcedKeyframeRequests'),
+            'forcedKeyframes': last_encoder.get('forcedKeyframes'),
+            'maxForcedKeyframeDelayUs': last_encoder.get('maxForcedKeyframeDelayUs'),
         },
         'qoe': {
             'enabled': decode_qoe,
@@ -1069,6 +1085,9 @@ encoder_gate_evidence = {
     'baselineEncoderSamples': baseline_encoder.get('samples'),
     'baselineAccessUnits': baseline_encoder.get('accessUnits'),
     'baselineKeyframes': baseline_encoder.get('keyframes'),
+    'baselineForcedKeyframeRequests': baseline_encoder.get('forcedKeyframeRequests'),
+    'baselineForcedKeyframes': baseline_encoder.get('forcedKeyframes'),
+    'baselineMaxForcedKeyframeDelayUs': baseline_encoder.get('maxForcedKeyframeDelayUs'),
     'baselineCurrentBitrateBps': baseline_encoder.get('currentBitrateBps'),
     'baselineCurrentFps': baseline_encoder.get('currentFps'),
     'baselineWidth': baseline_encoder.get('width'),
@@ -1082,6 +1101,9 @@ encoder_gate_pass = (
         baseline_encoder.get('samples', 0) > 0 and
         baseline_encoder.get('accessUnits', 0) > 0 and
         baseline_encoder.get('keyframes', 0) > 0 and
+        baseline_encoder.get('forcedKeyframeRequests', 0) > 0 and
+        baseline_encoder.get('forcedKeyframes', 0) > 0 and
+        0 <= baseline_encoder.get('maxForcedKeyframeDelayUs', -1) <= 1000000 and
         baseline_encoder.get('width') == synthetic_width and
         baseline_encoder.get('height') == synthetic_height and
         baseline_encoder.get('currentFps', 0) > 0 and
@@ -1131,6 +1153,7 @@ gates = {
         'requirements': [
             'synthetic source uses x264 realtime encoder when requested',
             'encoder metrics expose source shape, fps, bitrate, AU count, keyframe count',
+            'SDK keyframe requests produce a forced IDR within 1 second',
         ],
         'evidence': encoder_gate_evidence,
     },
@@ -1295,7 +1318,7 @@ lines.append('- `PASS` case means SFU/push/play transport smoke met its checks.'
 lines.append('- `SKIP` means the case was not verified and must not be counted as PASS.')
 lines.append('- `qosMainline=PASS` means TWCC negotiation, push RTCP feedback input, and play RTCP feedback output are all observable.')
 lines.append('- `sdkRuntimeObservability=PASS` means push/play SDK runtime log, metrics, alerts files exist and SDK RR/TWCC counters are non-zero.')
-lines.append('- `encoderRuntime=PASS` means requested synthetic x264 mode produced encoded H264 access units and keyframes with observable encoder metrics.')
+lines.append('- `encoderRuntime=PASS` means requested synthetic x264 mode produced encoded H264 access units/keyframes, and SDK keyframe requests produced an IDR within 1 second.')
 lines.append('- `nativeDecodeQoe=PASS` means requested native FFmpeg decode/QoE produced decoded frames and first-frame/decode-error metrics.')
 lines.append('- `droppedFrames` is the SDK push-side pacer backpressure counter; non-zero values are acceptable in bandwidth/recovery cases when transport remains alive and QoE decode continues.')
 lines.append('- `weakNetworkCoverage=PASS` means at least one tc netem weak-network case was actually attempted and passed; the generated report records which cases were covered.')
