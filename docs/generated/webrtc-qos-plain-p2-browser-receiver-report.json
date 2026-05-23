@@ -1,0 +1,194 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-05-23T15:21:14Z",
+  "overallStatus": "PARTIAL",
+  "runDir": "/tmp/webrtc-qos-plain-p2-browser-receiver/20260523T152110Z",
+  "runConfig": {
+    "sourceMode": "synthetic",
+    "durationSeconds": 10,
+    "buildDir": "/root/mediasoup-cpp/build-webrtc-qos-plain",
+    "workerBin": "/root/mediasoup-cpp/mediasoup-worker",
+    "chromiumPath": "/usr/lib64/chromium-browser/headless_shell",
+    "roomId": "p2-browser-20260523T152110Z",
+    "pushPeer": "p2-plain-push",
+    "browserPeer": "p2-browser-recv",
+    "sfuPort": 35131,
+    "inputFile": null
+  },
+  "case": {
+    "name": "browser_receiver",
+    "status": "PARTIAL",
+    "checks": [
+      {
+        "name": "plain-push-alive",
+        "status": "PASS",
+        "evidence": "pid=1038224"
+      },
+      {
+        "name": "plain-publish-ok",
+        "status": "PASS",
+        "evidence": "{\"logPath\":\"/tmp/webrtc-qos-plain-p2-browser-receiver/20260523T152110Z/browser_receiver/push/push.log\",\"producerId\":\"826e3db0-f31a-4554-befb-662fb90a1f14\",\"ssrc\":22334455,\"payloadType\":127,\"twccExtId\":5,\"pushedAu\":91,\"metricSamples\":4}"
+      },
+      {
+        "name": "browser-h264-capability",
+        "status": "SKIP",
+        "evidence": "Error: browser does not expose H264 packetization-mode=1 receive capability\n    at Object.init (http://127.0.0.1:43659/:184:21)\n    at async http://127.0.0.1:43659/:348:18"
+      },
+      {
+        "name": "browser-harness-ok",
+        "status": "PASS",
+        "evidence": "skipped after codec diagnostics"
+      },
+      {
+        "name": "browser-consumer-created",
+        "status": "SKIP",
+        "evidence": "consumerCount=0"
+      },
+      {
+        "name": "browser-keyframe-requested",
+        "status": "SKIP",
+        "evidence": "keyframeRequests=0"
+      },
+      {
+        "name": "browser-receiver-media-flow",
+        "status": "SKIP",
+        "evidence": "{}"
+      },
+      {
+        "name": "browser-track-live",
+        "status": "SKIP",
+        "evidence": "[]"
+      }
+    ],
+    "metrics": {
+      "push": {
+        "logPath": "/tmp/webrtc-qos-plain-p2-browser-receiver/20260523T152110Z/browser_receiver/push/push.log",
+        "producerId": "826e3db0-f31a-4554-befb-662fb90a1f14",
+        "ssrc": 22334455,
+        "payloadType": 127,
+        "twccExtId": 5,
+        "pushedAu": 91,
+        "metricSamples": 4
+      },
+      "browser": {
+        "consumerCount": 0,
+        "delta": {},
+        "last": {
+          "videos": []
+        },
+        "keyframeRequests": 0,
+        "diagnostics": {
+          "join": {
+            "existingProducers": [
+              {
+                "kind": "video",
+                "producerId": "826e3db0-f31a-4554-befb-662fb90a1f14",
+                "producerPeerId": "p2-plain-push"
+              }
+            ],
+            "routerVideoCodecs": [
+              {
+                "mimeType": "video/H264",
+                "payloadType": 107,
+                "parameters": {
+                  "level-asymmetry-allowed": 1,
+                  "packetization-mode": 1,
+                  "profile-level-id": "4d0032"
+                }
+              },
+              {
+                "mimeType": "video/rtx",
+                "payloadType": 102,
+                "parameters": {
+                  "apt": 107
+                }
+              },
+              {
+                "mimeType": "video/H264",
+                "payloadType": 127,
+                "parameters": {
+                  "level-asymmetry-allowed": 1,
+                  "packetization-mode": 1,
+                  "profile-level-id": "42e01f"
+                }
+              },
+              {
+                "mimeType": "video/rtx",
+                "payloadType": 103,
+                "parameters": {
+                  "apt": 127
+                }
+              },
+              {
+                "mimeType": "video/VP8",
+                "payloadType": 104,
+                "parameters": {}
+              },
+              {
+                "mimeType": "video/rtx",
+                "payloadType": 105,
+                "parameters": {
+                  "apt": 104
+                }
+              },
+              {
+                "mimeType": "video/VP9",
+                "payloadType": 106,
+                "parameters": {
+                  "profile-id": 0
+                }
+              },
+              {
+                "mimeType": "video/rtx",
+                "payloadType": 108,
+                "parameters": {
+                  "apt": 106
+                }
+              }
+            ]
+          },
+          "device": {
+            "handlerName": "Chrome111",
+            "videoCodecs": [
+              {
+                "mimeType": "video/VP8",
+                "payloadType": 104,
+                "parameters": {}
+              },
+              {
+                "mimeType": "video/rtx",
+                "payloadType": 105,
+                "parameters": {
+                  "apt": 104
+                }
+              },
+              {
+                "mimeType": "video/VP9",
+                "payloadType": 106,
+                "parameters": {
+                  "profile-id": 0
+                }
+              },
+              {
+                "mimeType": "video/rtx",
+                "payloadType": 108,
+                "parameters": {
+                  "apt": 106
+                }
+              }
+            ],
+            "supportsH264Packetization1": false
+          }
+        }
+      }
+    },
+    "browserError": "Error: browser does not expose H264 packetization-mode=1 receive capability\n    at Object.init (http://127.0.0.1:43659/:184:21)\n    at async http://127.0.0.1:43659/:348:18",
+    "browserErrorCode": "BROWSER_H264_UNSUPPORTED",
+    "artifacts": {
+      "caseDir": "/tmp/webrtc-qos-plain-p2-browser-receiver/20260523T152110Z/browser_receiver",
+      "pushLog": "/tmp/webrtc-qos-plain-p2-browser-receiver/20260523T152110Z/browser_receiver/push/push.log",
+      "sfuStdout": "/tmp/webrtc-qos-plain-p2-browser-receiver/20260523T152110Z/browser_receiver/sfu.stdout.log",
+      "chromiumStderr": "/tmp/webrtc-qos-plain-p2-browser-receiver/20260523T152110Z/browser_receiver/chromium.stderr.log"
+    }
+  }
+}
