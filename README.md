@@ -138,6 +138,7 @@ RTCP 侧边路径
 
 - [docs/dependencies_cn.md](./docs/dependencies_cn.md)
 - [docs/webrtc-qos-push-play-client-design_cn.md](./docs/webrtc-qos-push-play-client-design_cn.md)
+- [docs/webrtc-qos-push-play-client-p2-design_cn.md](./docs/webrtc-qos-push-play-client-p2-design_cn.md)
 - [docs/webrtc-qos-push-play-client-implementation-checklist_cn.md](./docs/webrtc-qos-push-play-client-implementation-checklist_cn.md)
 - [docs/linux-client-architecture_cn.md](./docs/linux-client-architecture_cn.md)
 - [docs/linux-client-multi-source-thread-model_cn.md](./docs/linux-client-multi-source-thread-model_cn.md)

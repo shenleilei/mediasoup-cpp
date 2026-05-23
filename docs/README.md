@@ -37,7 +37,7 @@
 | 配 nightly 全量回归邮件 | [nightly-full-regression.md](./nightly-full-regression.md) → [run_all_tests.sh](../scripts/run_all_tests.sh) → [full-regression-test-results.md](./full-regression-test-results.md) |
 | 做线上排障 | [troubleshooting_cn.md](./troubleshooting_cn.md) → [architecture_cn.md](./architecture_cn.md) → [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) |
 | 做 QoS 改动 | [qos-status.md](./qos-status.md) → [uplink-qos-design_cn.md](./uplink-qos-design_cn.md) → [downlink-qos-design_cn.md](./downlink-qos-design_cn.md) → [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md) → [downlink-qos-v3-design_cn.md](./downlink-qos-v3-design_cn.md) → [downlink-qos-v3-implementation-plan_cn.md](./downlink-qos-v3-implementation-plan_cn.md) → [run_qos_tests.sh](../scripts/run_qos_tests.sh) |
-| 做 Linux client / PlainTransport C++ client | [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md) → [plain-client-qos-status.md](./plain-client-qos-status.md) → [linux-client-architecture_cn.md](./linux-client-architecture_cn.md) → [plain-client-qos-parity-checklist.md](./plain-client-qos-parity-checklist.md) |
+| 做 Linux client / PlainTransport C++ client | [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md) → [webrtc-qos-push-play-client-p2-design_cn.md](./webrtc-qos-push-play-client-p2-design_cn.md) → [plain-client-qos-status.md](./plain-client-qos-status.md) → [linux-client-architecture_cn.md](./linux-client-architecture_cn.md) → [plain-client-qos-parity-checklist.md](./plain-client-qos-parity-checklist.md) |
 | 查 worker 架构 | [mediasoup-worker-architecture-analysis_cn.md](./mediasoup-worker-architecture-analysis_cn.md) |
 | 查 QoS 详细 case 结果 | [uplink-qos-case-analysis.md](./uplink-qos-case-analysis.md) |
 | 查 QoS 测试覆盖地图 | [qos-test-coverage_cn.md](./qos-test-coverage_cn.md) |
@@ -54,6 +54,7 @@
 | [dependencies_cn.md](./dependencies_cn.md) | 构建 / 运行 / 测试依赖总览，统一说明系统包、vendored 依赖、Node harness 依赖和 `setup.sh` / CMake 解析规则。 |
 | [linux-client-architecture_cn.md](./linux-client-architecture_cn.md) | Linux `PlainTransport C++ client` 架构说明，覆盖 FFmpeg、RTP/RTCP、QoS 控制器、多 track 和服务端交互。 |
 | [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md) | 新 `webrtc_qos_sdk` Plain 推拉流客户端设计方案，定义同一目录下的 push/play、信令复用、媒体面接 SDK、验收门禁和阶段计划。 |
+| [webrtc-qos-push-play-client-p2-design_cn.md](./webrtc-qos-push-play-client-p2-design_cn.md) | Plain 推拉流客户端“大第二期”设计方案，合并 QoS 闭环、弱网自动化、观测日志、video-only、实时编码器、输入源和 QoE 验证。 |
 | [webrtc-qos-push-play-client-implementation-checklist_cn.md](./webrtc-qos-push-play-client-implementation-checklist_cn.md) | 新 Plain 推拉流客户端实现对照清单，记录已实现项、验证命令、版本差异和动态验收缺口。 |
 | [qos-status.md](./qos-status.md) | QoS 总状态摘要，统一给出 browser uplink / plain-client / downlink 的当前口径与结果入口。 |
 | [full-regression-test-results.md](./full-regression-test-results.md) | 最新一次 `scripts/run_all_tests.sh` 生成的仓库全量回归结果页，按选择分组记录逐任务 PASS/FAIL 和耗时。 |
