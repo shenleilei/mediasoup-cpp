@@ -136,22 +136,32 @@ bool ParsePushOptions(int argc, char* argv[], PushOptions* options, std::string*
 		options->loopInput = GetBoolFlag(values, "--loop-input");
 		options->inputSynthetic = GetBoolFlag(values, "--input-synthetic");
 		options->inputDecodeLoop = GetBoolFlag(values, "--input-decode-loop");
+		options->inputV4L2 = GetString(values, "--input-v4l2", options->inputV4L2);
 		options->encoder = GetString(values, "--encoder", options->encoder);
 		options->syntheticWidth = ParseInt(GetString(values, "--synthetic-width", std::to_string(options->syntheticWidth)), "--synthetic-width");
 		options->syntheticHeight = ParseInt(GetString(values, "--synthetic-height", std::to_string(options->syntheticHeight)), "--synthetic-height");
 		options->syntheticFps = ParseInt(GetString(values, "--synthetic-fps", std::to_string(options->syntheticFps)), "--synthetic-fps");
 		options->syntheticPattern = GetString(values, "--synthetic-pattern", options->syntheticPattern);
+		options->v4l2Width = ParseInt(GetString(values, "--v4l2-width", std::to_string(options->v4l2Width)), "--v4l2-width");
+		options->v4l2Height = ParseInt(GetString(values, "--v4l2-height", std::to_string(options->v4l2Height)), "--v4l2-height");
+		options->v4l2Fps = ParseInt(GetString(values, "--v4l2-fps", std::to_string(options->v4l2Fps)), "--v4l2-fps");
+		options->v4l2InputFormat = GetString(values, "--v4l2-input-format", options->v4l2InputFormat);
 	} catch (const std::exception& e) {
 		if (error) *error = e.what();
 		return false;
 	}
 
-	if (!options->inputSynthetic && options->input.empty()) {
+	const bool inputV4L2 = !options->inputV4L2.empty();
+	if (!options->inputSynthetic && !inputV4L2 && options->input.empty()) {
 		if (error) *error = "--input is required";
 		return false;
 	}
-	if (options->inputSynthetic && options->inputDecodeLoop) {
-		if (error) *error = "--input-synthetic and --input-decode-loop are mutually exclusive";
+	const int selectedInputs =
+		(options->inputSynthetic ? 1 : 0) +
+		(options->inputDecodeLoop ? 1 : 0) +
+		(inputV4L2 ? 1 : 0);
+	if (selectedInputs > 1) {
+		if (error) *error = "--input-synthetic, --input-decode-loop, and --input-v4l2 are mutually exclusive";
 		return false;
 	}
 	if (options->inputSynthetic && options->encoder != "x264") {
@@ -162,8 +172,12 @@ bool ParsePushOptions(int argc, char* argv[], PushOptions* options, std::string*
 		if (error) *error = "--input-decode-loop requires --encoder x264";
 		return false;
 	}
-	if (!options->inputSynthetic && !options->inputDecodeLoop && options->encoder != "copy") {
-		if (error) *error = "--encoder x264 currently requires --input-synthetic or --input-decode-loop";
+	if (inputV4L2 && options->encoder != "x264") {
+		if (error) *error = "--input-v4l2 requires --encoder x264";
+		return false;
+	}
+	if (!options->inputSynthetic && !options->inputDecodeLoop && !inputV4L2 && options->encoder != "copy") {
+		if (error) *error = "--encoder x264 currently requires --input-synthetic, --input-decode-loop, or --input-v4l2";
 		return false;
 	}
 	if (options->syntheticWidth < 16 || options->syntheticHeight < 16 ||
@@ -173,6 +187,15 @@ bool ParsePushOptions(int argc, char* argv[], PushOptions* options, std::string*
 	}
 	if (options->syntheticFps < 1 || options->syntheticFps > 60) {
 		if (error) *error = "--synthetic-fps must be in [1,60]";
+		return false;
+	}
+	if (options->v4l2Width < 16 || options->v4l2Height < 16 ||
+		options->v4l2Width > 1920 || options->v4l2Height > 1080) {
+		if (error) *error = "--v4l2-width/height must be in [16,1920]x[16,1080]";
+		return false;
+	}
+	if (options->v4l2Fps < 1 || options->v4l2Fps > 60) {
+		if (error) *error = "--v4l2-fps must be in [1,60]";
 		return false;
 	}
 	if (options->videoSsrc == 0) {
@@ -244,9 +267,10 @@ std::string PushUsage()
 {
 	return
 		"webrtc-qos-plain-push-client --server-ip <ip> --server-port <port> "
-		"--room <room> --peer <peer> (--input <h264.mp4>|--input <mp4> --input-decode-loop --encoder x264|--input-synthetic --encoder x264) [--loop-input] "
+		"--room <room> --peer <peer> (--input <h264.mp4>|--input <mp4> --input-decode-loop --encoder x264|--input-synthetic --encoder x264|--input-v4l2 </dev/videoN> --encoder x264) [--loop-input] "
 		"[--video-ssrc <u32>] [--enable-audio] [--audio-ssrc <u32>] [--media-remote-ip <ip>] "
-		"[--synthetic-width <px>] [--synthetic-height <px>] [--synthetic-fps <n>] [--log-dir <dir>]";
+		"[--synthetic-width <px>] [--synthetic-height <px>] [--synthetic-fps <n>] "
+		"[--v4l2-width <px>] [--v4l2-height <px>] [--v4l2-fps <n>] [--v4l2-input-format <fmt>] [--log-dir <dir>]";
 }
 
 std::string PlayUsage()

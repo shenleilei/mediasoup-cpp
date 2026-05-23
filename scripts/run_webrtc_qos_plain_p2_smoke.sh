@@ -13,6 +13,11 @@ SOURCE_MODE="copy"
 SYNTHETIC_WIDTH=320
 SYNTHETIC_HEIGHT=180
 SYNTHETIC_FPS=15
+V4L2_DEVICE="/dev/video0"
+V4L2_WIDTH=640
+V4L2_HEIGHT=360
+V4L2_FPS=30
+V4L2_INPUT_FORMAT=""
 DECODE_QOE=0
 CASES="baseline,delay_100ms,loss_2pct,loss_5pct,bandwidth_600k,drop_recover"
 DURATION_SECONDS=10
@@ -39,11 +44,16 @@ Options:
   --report-name <name>       Report basename without extension. Default: webrtc-qos-plain-p2-smoke-report.
   --artifact-root <path>     Runtime logs/artifacts root. Default: /tmp/webrtc-qos-plain-p2-smoke.
   --input <path>             H264 MP4 input. If omitted, a short synthetic input is generated.
-  --source <copy|synthetic|mp4-decode-loop>
+  --source <copy|synthetic|mp4-decode-loop|v4l2>
                              Push source mode. copy uses Annex-B remux; synthetic and mp4-decode-loop use x264 realtime encoder.
   --synthetic-width <px>      Synthetic source width. Default: 320.
   --synthetic-height <px>     Synthetic source height. Default: 180.
   --synthetic-fps <n>         Synthetic source fps. Default: 15.
+  --input-v4l2 <path>          V4L2 device for --source v4l2. Default: /dev/video0.
+  --v4l2-width <px>            V4L2 capture/encoder width. Default: 640.
+  --v4l2-height <px>           V4L2 capture/encoder height. Default: 360.
+  --v4l2-fps <n>               V4L2 capture/encoder fps. Default: 30.
+  --v4l2-input-format <fmt>    Optional V4L2 input_format, for example mjpeg.
   --decode-qoe                Enable native FFmpeg decode/QoE sink in play client.
   --base-port <port>         First SFU signaling port. Default: 33131.
   --play-base-port <port>    First play UDP listen port. Default: 43131.
@@ -94,6 +104,16 @@ while [[ $# -gt 0 ]]; do
 		--synthetic-height=*) SYNTHETIC_HEIGHT="${1#*=}"; shift ;;
 		--synthetic-fps) require_arg "$1" "${2:-}"; SYNTHETIC_FPS="$2"; shift 2 ;;
 		--synthetic-fps=*) SYNTHETIC_FPS="${1#*=}"; shift ;;
+		--input-v4l2) require_arg "$1" "${2:-}"; V4L2_DEVICE="$2"; shift 2 ;;
+		--input-v4l2=*) V4L2_DEVICE="${1#*=}"; shift ;;
+		--v4l2-width) require_arg "$1" "${2:-}"; V4L2_WIDTH="$2"; shift 2 ;;
+		--v4l2-width=*) V4L2_WIDTH="${1#*=}"; shift ;;
+		--v4l2-height) require_arg "$1" "${2:-}"; V4L2_HEIGHT="$2"; shift 2 ;;
+		--v4l2-height=*) V4L2_HEIGHT="${1#*=}"; shift ;;
+		--v4l2-fps) require_arg "$1" "${2:-}"; V4L2_FPS="$2"; shift 2 ;;
+		--v4l2-fps=*) V4L2_FPS="${1#*=}"; shift ;;
+		--v4l2-input-format) require_arg "$1" "${2:-}"; V4L2_INPUT_FORMAT="$2"; shift 2 ;;
+		--v4l2-input-format=*) V4L2_INPUT_FORMAT="${1#*=}"; shift ;;
 		--decode-qoe) DECODE_QOE=1; shift ;;
 		--base-port) require_arg "$1" "${2:-}"; BASE_PORT="$2"; shift 2 ;;
 		--base-port=*) BASE_PORT="${1#*=}"; shift ;;
@@ -140,12 +160,12 @@ RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 RUN_DIR="$ARTIFACT_ROOT/$RUN_ID"
 mkdir -p "$RUN_DIR"
 
-if [[ "$SOURCE_MODE" != "copy" && "$SOURCE_MODE" != "synthetic" && "$SOURCE_MODE" != "mp4-decode-loop" ]]; then
-	echo "--source must be copy, synthetic, or mp4-decode-loop" >&2
+if [[ "$SOURCE_MODE" != "copy" && "$SOURCE_MODE" != "synthetic" && "$SOURCE_MODE" != "mp4-decode-loop" && "$SOURCE_MODE" != "v4l2" ]]; then
+	echo "--source must be copy, synthetic, mp4-decode-loop, or v4l2" >&2
 	exit 2
 fi
 
-if [[ "$SOURCE_MODE" != "synthetic" && -z "$INPUT_FILE" ]]; then
+if [[ "$SOURCE_MODE" != "synthetic" && "$SOURCE_MODE" != "v4l2" && -z "$INPUT_FILE" ]]; then
 	INPUT_FILE="$ARTIFACT_ROOT/input.mp4"
 fi
 
@@ -318,6 +338,14 @@ write_skip() {
 	printf '%s\n' "$(network_condition "$case_name")" >"$case_dir/NETWORK_CONDITION"
 }
 
+source_skip_reason() {
+	if [[ "$SOURCE_MODE" == "v4l2" && ! -e "$V4L2_DEVICE" ]]; then
+		printf 'v4l2 device not found: %s' "$V4L2_DEVICE"
+		return 0
+	fi
+	return 1
+}
+
 apply_netem() {
 	local case_name="$1"
 	local case_dir="$2"
@@ -361,6 +389,11 @@ run_case() {
 	mkdir -p "$case_dir/push" "$case_dir/play"
 	printf '%s\n' "$(network_condition "$case_name")" >"$case_dir/NETWORK_CONDITION"
 
+	local source_skip=""
+	if source_skip="$(source_skip_reason)"; then
+		write_skip "$case_dir" "$case_name" "$source_skip"
+		return
+	fi
 	if case_requires_netem "$case_name" && [[ -n "$NETEM_SKIP_REASON" ]]; then
 		write_skip "$case_dir" "$case_name" "$NETEM_SKIP_REASON"
 		return
@@ -433,6 +466,17 @@ run_case() {
 			--loop-input=true
 			--encoder=x264
 		)
+	elif [[ "$SOURCE_MODE" == "v4l2" ]]; then
+		push_args+=(
+			--input-v4l2="$V4L2_DEVICE"
+			--encoder=x264
+			--v4l2-width="$V4L2_WIDTH"
+			--v4l2-height="$V4L2_HEIGHT"
+			--v4l2-fps="$V4L2_FPS"
+		)
+		if [[ -n "$V4L2_INPUT_FORMAT" ]]; then
+			push_args+=(--v4l2-input-format="$V4L2_INPUT_FORMAT")
+		fi
 	else
 		push_args+=(--input="$INPUT_FILE" --loop-input=true)
 	fi
@@ -506,7 +550,7 @@ run_case() {
 render_report() {
 	local report_json="$REPORT_DIR/$REPORT_BASENAME.json"
 	local report_md="$REPORT_DIR/$REPORT_BASENAME.md"
-	python3 - "$RUN_DIR" "$REPORT_DIR" "$report_json" "$report_md" "$CASES" "$DURATION_SECONDS" "$BUILD_DIR" "$WORKER_BIN" "$INPUT_FILE" "$ENABLE_NETEM" "$NETEM_DEV" "$STRICT" "$SOURCE_MODE" "$SYNTHETIC_WIDTH" "$SYNTHETIC_HEIGHT" "$SYNTHETIC_FPS" "$DECODE_QOE" <<'PY'
+	python3 - "$RUN_DIR" "$REPORT_DIR" "$report_json" "$report_md" "$CASES" "$DURATION_SECONDS" "$BUILD_DIR" "$WORKER_BIN" "$INPUT_FILE" "$ENABLE_NETEM" "$NETEM_DEV" "$STRICT" "$SOURCE_MODE" "$SYNTHETIC_WIDTH" "$SYNTHETIC_HEIGHT" "$SYNTHETIC_FPS" "$DECODE_QOE" "$V4L2_DEVICE" "$V4L2_WIDTH" "$V4L2_HEIGHT" "$V4L2_FPS" "$V4L2_INPUT_FORMAT" <<'PY'
 import datetime
 import glob
 import json
@@ -532,6 +576,11 @@ synthetic_width = int(sys.argv[14])
 synthetic_height = int(sys.argv[15])
 synthetic_fps = int(sys.argv[16])
 decode_qoe = sys.argv[17] == '1'
+v4l2_device = sys.argv[18]
+v4l2_width = int(sys.argv[19])
+v4l2_height = int(sys.argv[20])
+v4l2_fps = int(sys.argv[21])
+v4l2_input_format = sys.argv[22]
 
 ANSI_RE = re.compile(r'\x1b\[[0-9;]*m')
 
@@ -886,12 +935,16 @@ def parse_case(case_name):
         make_check('runtime-no-unexpected-alerts', not bool(warning_lines), 'alerts={}'.format(len(warning_lines)) if warning_lines else 'ok'),
     ]
 
-    if source_mode in ('synthetic', 'mp4-decode-loop'):
+    if source_mode in ('synthetic', 'mp4-decode-loop', 'v4l2'):
         expected_encoder_mode = source_mode.replace('-', '_')
         if source_mode == 'synthetic':
             source_shape_ok = (
                 last_encoder.get('width') == synthetic_width and
                 last_encoder.get('height') == synthetic_height)
+        elif source_mode == 'v4l2':
+            source_shape_ok = (
+                last_encoder.get('width') == v4l2_width and
+                last_encoder.get('height') == v4l2_height)
         else:
             source_shape_ok = (
                 last_encoder.get('width', 0) > 0 and
@@ -1055,11 +1108,14 @@ attempted = [c for c in cases if c['status'] != 'SKIP']
 failed_cases = [c for c in attempted if c['status'] == 'FAIL']
 skipped_cases = [c for c in cases if c['status'] == 'SKIP']
 baseline = next((c for c in cases if c['name'] == 'baseline'), None)
+baseline_skipped = bool(baseline and baseline.get('status') == 'SKIP')
+baseline_skip_reason = baseline.get('skipReason') if baseline_skipped else None
 
 qos_gate_evidence = {
     'baselineSelectedTwccExtId': baseline and baseline.get('metrics', {}).get('selectedTwccExtId'),
     'baselinePushRtcpFeedbackPacketsIn': baseline and baseline.get('metrics', {}).get('pushRtcpFeedbackPacketsIn'),
     'baselinePlayRtcpPacketsOut': baseline and baseline.get('metrics', {}).get('playRtcpPacketsOut'),
+    'baselineSkipReason': baseline_skip_reason,
 }
 qos_gate_pass = bool(
     baseline and
@@ -1083,6 +1139,7 @@ sdk_observability_evidence = {
     'baselinePushReceiverReportCountMax': baseline_push_sdk.get('receiverReportCountMax'),
     'baselinePlayTransportFeedbackCountMax': baseline_play_sdk.get('transportFeedbackCountMax'),
     'baselinePlayReceiverReportCountMax': baseline_play_sdk.get('receiverReportCountMax'),
+    'baselineSkipReason': baseline_skip_reason,
 }
 sdk_observability_pass = bool(
     baseline and
@@ -1100,12 +1157,16 @@ sdk_observability_pass = bool(
     baseline_play_sdk.get('receiverReportCountMax', 0) > 0)
 
 baseline_encoder = baseline.get('metrics', {}).get('encoder', {}) if baseline else {}
-encoder_source_modes = ('synthetic', 'mp4-decode-loop')
+encoder_source_modes = ('synthetic', 'mp4-decode-loop', 'v4l2')
 expected_encoder_mode = source_mode.replace('-', '_')
 if source_mode == 'synthetic':
     baseline_encoder_shape_ok = (
         baseline_encoder.get('width') == synthetic_width and
         baseline_encoder.get('height') == synthetic_height)
+elif source_mode == 'v4l2':
+    baseline_encoder_shape_ok = (
+        baseline_encoder.get('width') == v4l2_width and
+        baseline_encoder.get('height') == v4l2_height)
 else:
     baseline_encoder_shape_ok = (
         baseline_encoder.get('width', 0) > 0 and
@@ -1124,6 +1185,7 @@ encoder_gate_evidence = {
     'baselineCurrentFps': baseline_encoder.get('currentFps'),
     'baselineWidth': baseline_encoder.get('width'),
     'baselineHeight': baseline_encoder.get('height'),
+    'baselineSkipReason': baseline_skip_reason,
 }
 encoder_gate_pass = (
     True if source_mode not in encoder_source_modes else bool(
@@ -1151,6 +1213,7 @@ qoe_gate_evidence = {
     'baselineOutputFps': baseline_qoe.get('outputFps'),
     'baselineWidth': baseline_qoe.get('width'),
     'baselineHeight': baseline_qoe.get('height'),
+    'baselineSkipReason': baseline_skip_reason,
 }
 qoe_gate_pass = (
     True if not decode_qoe else bool(
@@ -1162,7 +1225,7 @@ qoe_gate_pass = (
 
 gates = {
     'qosMainline': {
-        'status': 'PASS' if qos_gate_pass else 'FAIL',
+        'status': 'SKIP' if baseline_skipped else ('PASS' if qos_gate_pass else 'FAIL'),
         'requirements': [
             'consumer TWCC ext id > 0',
             'push RTCP feedback input > 0',
@@ -1171,7 +1234,7 @@ gates = {
         'evidence': qos_gate_evidence,
     },
     'sdkRuntimeObservability': {
-        'status': 'PASS' if sdk_observability_pass else 'FAIL',
+        'status': 'SKIP' if baseline_skipped else ('PASS' if sdk_observability_pass else 'FAIL'),
         'requirements': [
             'SDK runtime log/metrics/alerts files enabled for push and play',
             'SDK push metrics count received TWCC and RR',
@@ -1180,16 +1243,16 @@ gates = {
         'evidence': sdk_observability_evidence,
     },
     'encoderRuntime': {
-        'status': 'PASS' if encoder_gate_pass else 'FAIL',
+        'status': 'SKIP' if baseline_skipped else ('PASS' if encoder_gate_pass else 'FAIL'),
         'requirements': [
-            'synthetic or MP4 decode-loop source uses x264 realtime encoder when requested',
+            'synthetic, MP4 decode-loop, or V4L2 source uses x264 realtime encoder when requested',
             'encoder metrics expose source shape, fps, bitrate, AU count, keyframe count',
             'SDK keyframe requests produce a forced IDR within 1 second',
         ],
         'evidence': encoder_gate_evidence,
     },
     'nativeDecodeQoe': {
-        'status': 'PASS' if qoe_gate_pass else 'FAIL',
+        'status': 'SKIP' if baseline_skipped else ('PASS' if qoe_gate_pass else 'FAIL'),
         'requirements': [
             'native play decode/QoE is enabled when requested',
             'FFmpeg decode produces frames and exposes first-frame/freeze/decode-error metrics',
@@ -1229,6 +1292,13 @@ report = {
             'width': synthetic_width,
             'height': synthetic_height,
             'fps': synthetic_fps,
+        },
+        'v4l2': {
+            'device': v4l2_device,
+            'width': v4l2_width,
+            'height': v4l2_height,
+            'fps': v4l2_fps,
+            'inputFormat': v4l2_input_format or None,
         },
         'decodeQoe': decode_qoe,
         'enableNetem': enable_netem,
@@ -1284,6 +1354,8 @@ lines.append('| Netem | `{}` on `{}` |'.format('enabled' if enable_netem else 'd
 lines.append('| Source Mode | `{}` |'.format(source_mode))
 lines.append('| Decode QoE | `{}` |'.format('enabled' if decode_qoe else 'disabled'))
 lines.append('| Input | `{}` |'.format(input_file))
+if source_mode == 'v4l2':
+    lines.append('| V4L2 Device | `{}` |'.format(v4l2_device))
 lines.append('')
 lines.append('## Gates')
 lines.append('')
@@ -1349,7 +1421,7 @@ lines.append('- `PASS` case means SFU/push/play transport smoke met its checks.'
 lines.append('- `SKIP` means the case was not verified and must not be counted as PASS.')
 lines.append('- `qosMainline=PASS` means TWCC negotiation, push RTCP feedback input, and play RTCP feedback output are all observable.')
 lines.append('- `sdkRuntimeObservability=PASS` means push/play SDK runtime log, metrics, alerts files exist and SDK RR/TWCC counters are non-zero.')
-lines.append('- `encoderRuntime=PASS` means requested synthetic or MP4 decode-loop x264 mode produced encoded H264 access units/keyframes, and SDK keyframe requests produced an IDR within 1 second.')
+lines.append('- `encoderRuntime=PASS` means requested synthetic, MP4 decode-loop, or V4L2 x264 mode produced encoded H264 access units/keyframes, and SDK keyframe requests produced an IDR within 1 second.')
 lines.append('- `nativeDecodeQoe=PASS` means requested native FFmpeg decode/QoE produced decoded frames and first-frame/decode-error metrics.')
 lines.append('- `droppedFrames` is the SDK push-side pacer backpressure counter; non-zero values are acceptable in bandwidth/recovery cases when transport remains alive and QoE decode continues.')
 lines.append('- `weakNetworkCoverage=PASS` means at least one tc netem weak-network case was actually attempted and passed; the generated report records which cases were covered.')
@@ -1368,7 +1440,7 @@ if strict and overall != 'PASS':
 PY
 }
 
-if [[ "$SOURCE_MODE" != "synthetic" ]]; then
+if [[ "$SOURCE_MODE" != "synthetic" && "$SOURCE_MODE" != "v4l2" ]]; then
 	generate_input_if_needed
 fi
 

@@ -23,11 +23,16 @@ struct PushOptions {
 	bool loopInput = false;
 	bool inputSynthetic = false;
 	bool inputDecodeLoop = false;
+	std::string inputV4L2;
 	std::string encoder = "copy";
 	int syntheticWidth = 320;
 	int syntheticHeight = 180;
 	int syntheticFps = 15;
 	std::string syntheticPattern = "testsrc";
+	int v4l2Width = 640;
+	int v4l2Height = 360;
+	int v4l2Fps = 30;
+	std::string v4l2InputFormat;
 };
 
 struct PlayOptions {

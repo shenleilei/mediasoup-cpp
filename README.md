@@ -212,12 +212,13 @@ SignalingServer
 - P2 已实测 `baseline`、`delay_100ms`、`loss_2pct`、`bandwidth_600k`、`drop_recover`：全量 `5 / 5 PASS`，100ms delay RTT avg/max 为 `109.58/242ms`，600kbps bandwidth targetBps min/max 为 `300000/1693914`，recovery targetBps min/max 为 `300000/2023706`，decode errors 均为 `0`
 - WebRTC QoS Plain P2 MP4 decode-loop baseline：`qosMainline=PASS`，`sdkRuntimeObservability=PASS`，`encoderRuntime=PASS`，`nativeDecodeQoe=PASS`；baseline `pushedAu=357`、`decodedFrames=357`、`decodeErrors=0`
 - WebRTC QoS Plain P2 browser receiver smoke：plain push 发布链路 `PASS`；当前 headless Chromium 只暴露 VP8/VP9、不暴露 H264 packetization-mode=1，浏览器收流 case 按环境能力记为 `SKIP`，overall 为 `PARTIAL`
+- WebRTC QoS Plain P2 V4L2 source：V4L2 CLI/source/smoke SKIP gate 已落地；当前机器无 `/dev/video0`，baseline 按环境能力 `SKIP`，overall 为 `PARTIAL`
 
 当前范围提示：
 
 - 上行 QoS 主链路在浏览器和 PlainTransport C++ 客户端上均已闭环
 - 下行目前覆盖接收端控制以及零需求发布端暂停/恢复协调
-- WebRTC QoS Plain P2 目前签收 native baseline/delay/loss/bandwidth/recovery synthetic+QoE 短测，并已覆盖 MP4 decode-loop baseline；browser receiver 自动化已落地但本机浏览器缺 H264 能力，只能记录 SKIP，恢复首帧专项和 V4L2 仍是后续覆盖项
+- WebRTC QoS Plain P2 目前签收 native baseline/delay/loss/bandwidth/recovery synthetic+QoE 短测，并已覆盖 MP4 decode-loop baseline；browser receiver 自动化和 V4L2 输入源入口已落地，但本机浏览器缺 H264 能力、当前机器无 `/dev/video0`，对应真实画面/摄像头运行结果只能记录 `SKIP/PARTIAL`
 - `dynacast` 和房间级全局比特率预算划分是后续工作
 
 事实来源链接 (Source-of-truth links)：
@@ -232,6 +233,7 @@ SignalingServer
 - WebRTC QoS Plain P2 smoke 报告：[docs/generated/webrtc-qos-plain-p2-smoke-report.md](./docs/generated/webrtc-qos-plain-p2-smoke-report.md)
 - WebRTC QoS Plain P2 MP4 decode-loop baseline 报告：[docs/generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md](./docs/generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md)
 - WebRTC QoS Plain P2 browser receiver 报告：[docs/generated/webrtc-qos-plain-p2-browser-receiver-report.md](./docs/generated/webrtc-qos-plain-p2-browser-receiver-report.md)
+- WebRTC QoS Plain P2 V4L2 source 报告：[docs/generated/webrtc-qos-plain-p2-v4l2-report.md](./docs/generated/webrtc-qos-plain-p2-v4l2-report.md)
 - 下行当前状态：[docs/downlink-qos-status.md](./docs/downlink-qos-status.md)
 - Linux 客户端架构：[docs/linux-client-architecture_cn.md](./docs/linux-client-architecture_cn.md)
 - 测试覆盖地图：[docs/qos-test-coverage_cn.md](./docs/qos-test-coverage_cn.md)
