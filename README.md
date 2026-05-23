@@ -238,7 +238,7 @@ SignalingServer
 - WebRTC QoS Plain P2 MP4 decode-loop baseline 报告：[docs/generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md](./docs/generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md)
 - WebRTC QoS Plain P2 browser receiver 报告：[docs/generated/webrtc-qos-plain-p2-browser-receiver-report.md](./docs/generated/webrtc-qos-plain-p2-browser-receiver-report.md)
 - WebRTC QoS Plain P2 V4L2 source 报告：[docs/generated/webrtc-qos-plain-p2-v4l2-report.md](./docs/generated/webrtc-qos-plain-p2-v4l2-report.md)
-- 旧 plain-client 下线与删除方案：[docs/plain-client-legacy-removal-plan_cn.md](./docs/plain-client-legacy-removal-plan_cn.md)
+- 旧 plain-client 直接删除方案：[docs/plain-client-legacy-removal-plan_cn.md](./docs/plain-client-legacy-removal-plan_cn.md)
 - 下行当前状态：[docs/downlink-qos-status.md](./docs/downlink-qos-status.md)
 - Linux 客户端架构：[docs/linux-client-architecture_cn.md](./docs/linux-client-architecture_cn.md)
 - 测试覆盖地图：[docs/qos-test-coverage_cn.md](./docs/qos-test-coverage_cn.md)
