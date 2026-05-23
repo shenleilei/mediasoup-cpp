@@ -36,9 +36,9 @@
 - P2-M5/M6 已落地最小 synthetic+x264 路径：`RealtimeH264Source` 生成 raw frame，libx264 输出 Annex-B AU，push runtime 应用 SDK encoder adaptation；本地 synthetic baseline smoke 已验证 `encoderRuntime=PASS`，SDK keyframe request 到 IDR 输出最大延迟 `0us`。
 - P2-M6 已补充 MP4 decode-loop baseline：`Mp4DecodeH264Source` 解码 MP4 video frame 后重新 x264 编码，报告 `encoderRuntime=PASS`、`nativeDecodeQoe=PASS`，baseline `pushedAu=357`、`decodedFrames=357`、`decodeErrors=0`。
 - P2-M6 已补充 V4L2 source 入口：`V4L2H264Source` 通过 FFmpeg v4l2 capture 解码 raw frame 后 x264 编码，push runtime 应用同一套 SDK bitrate/fps/keyframe adaptation；当前机器无 `/dev/video0`，报告以 `v4l2 device not found` 记为环境 `SKIP/PARTIAL`。
-- P2-M3/P2-M8 已完成真实 netem 控制面短测：`baseline`、`delay_100ms`、`loss_2pct`、`bandwidth_600k`、`drop_recover` 全部 PASS；100ms delay RTT avg/max `109.58/242ms`，bandwidth targetBps min/max `300000/1693914`，recovery targetBps min/max `300000/2023706`，所有 case decodeErrors=0，报告 `weakNetworkCoverage=PASS`。
+- P2-M3/P2-M8 已完成真实 netem 短测：`baseline`、`delay_100ms`、`loss_2pct`、`bandwidth_600k`、`drop_recover` 全部 PASS；100ms delay RTT avg/max `100.58/241ms`，bandwidth targetBps min/max `300000/1863877`，recovery targetBps min/max `300000/1709291`，所有 case decodeErrors=0，报告 `weakNetworkCoverage=PASS`。
 - P2-M7 已新增 browser receiver smoke：`tests/qos_harness/browser_plain_receiver.mjs` 启动 SFU + plain push + headless Chromium，并输出 `docs/generated/webrtc-qos-plain-p2-browser-receiver-report.{json,md}`；当前报告 plain push 链路 `PASS`，browser H264 capability `SKIP`，overall `PARTIAL`。
-- P2-M8b 新增恢复首帧专项验收口径：`drop_recover` 不能只看 target bitrate 回升，还必须在 netem clear 后 15 秒内看到 native QoE `decodedFrames` 增长；该门禁未 PASS 前，恢复场景只能算 QoS 控制面可恢复，不能算端到端画面恢复完成。
+- P2-M8b 已新增并通过恢复首帧门禁：`drop_recover` 不只看 target bitrate 回升，还要求 netem clear 后 15 秒内看到 native QoE `decodedFrames` 增长；当前主报告 `recoveryFirstFrame=PASS`，清网后 `111ms` decoded frames 增长，delta=`10`。
 
 第二期目标是把第一期从“最小可跑”推进到“可验证、可观测、可调优、可接真实输入”的状态。
 
@@ -332,7 +332,7 @@ PlainTransport 本身：
 - play 日志出现 `selected_consumer ... twccExtId=<non-zero>`。
 - 不再出现 `consumer_without_twcc_ext`。
 - push metrics 中 RTCP feedback 输入计数增长。
-- play 侧周期性 RR/TWCC feedback 仍需要 SDK play facade 补能力后验收。
+- play 侧周期性 RR/TWCC feedback 已由 SDK play facade 输出，并由 smoke 的 SDK RR/TWCC counter gate 验收。
 
 ### 5.2 RTCP feedback 闭环
 
@@ -895,7 +895,7 @@ node tests/qos_harness/browser_plain_receiver.mjs \
 - 无设备时 baseline case 必须 `SKIP`，`skipReason` 写明缺失设备，所有依赖 baseline 的 gate 写为 `SKIP`，overall 为 `PARTIAL`。
 - report 必须写入 `runConfig.v4l2.device/width/height/fps/inputFormat`，方便复现同一摄像头参数。
 
-当前已在 delay/loss/bandwidth/recovery 真实 netem 下验证反馈闭环、target bitrate 下探、恢复开始回升、PLI/SDK keyframe request 后 1 秒内 IDR，以及 native decode 稳定性。P2-M8b 会把“清网后首帧”提升为独立门禁，避免只看到控制面恢复但用户画面未恢复。
+当前已在 delay/loss/bandwidth/recovery 真实 netem 下验证反馈闭环、target bitrate 下探、恢复开始回升、PLI/SDK keyframe request 后 1 秒内 IDR，以及 native decode 稳定性。P2-M8b 已把“清网后首帧”提升为独立门禁并跑到 PASS，避免只看到控制面恢复但用户画面未恢复。
 
 ## 10. P2-F：浏览器和 native QoE 验证
 
@@ -1148,6 +1148,7 @@ P2-M4 video-only publish
 - 实施：smoke report 解析 `case_timing.clearEpochMs` 和 `qoe_metrics epochMs/decodedFrames`，新增 `recoveryFirstFrame` gate；必要时 play adapter 基于 QoE freeze 请求关键帧，但不得自研 jitter/NACK/TWCC。
 - 验证：`drop_recover` 启用 `--decode-qoe` 和 `--enable-netem`；清网后 15 秒内 `decodedFrames` 必须大于清网前最后一次采样值。
 - 观测：report 记录 `clearEpochMs`、`preClearDecodedFrames`、`postClearFirstDecodedEpochMs`、`postClearFirstDecodedDelayMs`、`postClearDecodedFramesDelta`、`postClearSamples`。
+- 当前证据：主报告 `recoveryFirstFrame=PASS`，`postClearFirstDecodedDelayMs=111`，`postClearDecodedFramesDelta=10`；专项报告同一 gate `PASS`，用于快速回归恢复首帧。
 - 退出条件：target bitrate 已回升但 `decodedFramesDelta=0` 时，P2-M8b 失败；该问题必须定位到 SDK play recovery、关键帧请求链路、RTP depacketizer/jitter buffer 或 SFU RTCP 转发中的具体一段。
 
 #### P2-M9 签收回归
@@ -1229,8 +1230,8 @@ scripts/run_webrtc_qos_plain_p2_smoke.sh \
 - 默认安全模式只运行 `baseline`，弱网 case 在未传 `--enable-netem` 时写为 `SKIP`，不计 PASS。
 - 需要真实弱网验证时显式传 `--enable-netem`；脚本会预检 `tc`、root/CAP_NET_ADMIN 和目标网卡。
 - 默认短测报告写入 `docs/generated/webrtc-qos-plain-p2-smoke-report.{json,md}`；专项报告可用 `--report-name` 指定 basename，例如 MP4 decode-loop baseline 写入 `docs/generated/webrtc-qos-plain-p2-mp4-decode-loop-report.{json,md}`。
-- 当前机器 synthetic+QoE+netem 短测结果：`baseline PASS`、`delay_100ms PASS`、`loss_2pct PASS`、`bandwidth_600k PASS`、`drop_recover PASS`，`qosMainline PASS`，`sdkRuntimeObservability PASS`，`encoderRuntime PASS`，`nativeDecodeQoe PASS`，`weakNetworkCoverage PASS`。
-- 当前 `drop_recover PASS` 的含义是控制面和基础 QoE 短测通过：target bitrate 下探/回升、RTCP/TWCC 反馈、IDR 响应和 decodeErrors=0 均可观测；P2-M8b 还要求清网后 15 秒内 decoded frames 增长，未通过前不能把恢复场景声明为端到端画面恢复完成。
+- 当前机器 synthetic+QoE+netem 短测结果：`baseline PASS`、`delay_100ms PASS`、`loss_2pct PASS`、`bandwidth_600k PASS`、`drop_recover PASS`，`qosMainline PASS`，`sdkRuntimeObservability PASS`，`encoderRuntime PASS`，`nativeDecodeQoe PASS`，`recoveryFirstFrame PASS`，`weakNetworkCoverage PASS`。
+- 当前 `drop_recover PASS` 同时覆盖控制面和画面恢复：target bitrate 下探/回升、RTCP/TWCC 反馈、IDR 响应、decodeErrors=0，以及清网后 15 秒内 decoded frames 增长均可观测。
 - 当前机器 MP4 decode-loop baseline 短测结果：`baseline PASS`，`qosMainline PASS`，`sdkRuntimeObservability PASS`，`encoderRuntime PASS`，`nativeDecodeQoe PASS`；弱网 coverage 未跑，overall 为 `PARTIAL`。
 - 当前机器 V4L2 source 短测结果：`/dev/video0` 不存在，baseline 按环境能力 `SKIP`，所有 baseline 依赖 gate 为 `SKIP`，overall 为 `PARTIAL`；有设备机器必须用同一命令升级为 runtime PASS。
 - 当前机器 browser receiver 短测结果：plain push 发布 `PASS`；headless Chromium `handlerName=Chrome111`，只暴露 VP8/VP9，不暴露 H264 packetization-mode=1，browser consumer/media-flow/track-live 记录为环境 `SKIP`，overall 为 `PARTIAL`。
