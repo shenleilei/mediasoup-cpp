@@ -134,13 +134,36 @@ bool ParsePushOptions(int argc, char* argv[], PushOptions* options, std::string*
 		options->maxBitrateBps = ParseU32(GetString(values, "--max-bitrate", std::to_string(options->maxBitrateBps)), "--max-bitrate");
 		options->processTickMs = ParseInt(GetString(values, "--process-tick-ms", std::to_string(options->processTickMs)), "--process-tick-ms");
 		options->loopInput = GetBoolFlag(values, "--loop-input");
+		options->inputSynthetic = GetBoolFlag(values, "--input-synthetic");
+		options->encoder = GetString(values, "--encoder", options->encoder);
+		options->syntheticWidth = ParseInt(GetString(values, "--synthetic-width", std::to_string(options->syntheticWidth)), "--synthetic-width");
+		options->syntheticHeight = ParseInt(GetString(values, "--synthetic-height", std::to_string(options->syntheticHeight)), "--synthetic-height");
+		options->syntheticFps = ParseInt(GetString(values, "--synthetic-fps", std::to_string(options->syntheticFps)), "--synthetic-fps");
+		options->syntheticPattern = GetString(values, "--synthetic-pattern", options->syntheticPattern);
 	} catch (const std::exception& e) {
 		if (error) *error = e.what();
 		return false;
 	}
 
-	if (options->input.empty()) {
+	if (!options->inputSynthetic && options->input.empty()) {
 		if (error) *error = "--input is required";
+		return false;
+	}
+	if (options->inputSynthetic && options->encoder != "x264") {
+		if (error) *error = "--input-synthetic requires --encoder x264";
+		return false;
+	}
+	if (!options->inputSynthetic && options->encoder != "copy") {
+		if (error) *error = "--encoder x264 currently requires --input-synthetic";
+		return false;
+	}
+	if (options->syntheticWidth < 16 || options->syntheticHeight < 16 ||
+		options->syntheticWidth > 1920 || options->syntheticHeight > 1080) {
+		if (error) *error = "--synthetic-width/height must be in [16,1920]x[16,1080]";
+		return false;
+	}
+	if (options->syntheticFps < 1 || options->syntheticFps > 60) {
+		if (error) *error = "--synthetic-fps must be in [1,60]";
 		return false;
 	}
 	if (options->videoSsrc == 0) {
@@ -211,9 +234,9 @@ std::string PushUsage()
 {
 	return
 		"webrtc-qos-plain-push-client --server-ip <ip> --server-port <port> "
-		"--room <room> --peer <peer> --input <h264.mp4> [--loop-input] "
+		"--room <room> --peer <peer> (--input <h264.mp4>|--input-synthetic --encoder x264) [--loop-input] "
 		"[--video-ssrc <u32>] [--enable-audio] [--audio-ssrc <u32>] [--media-remote-ip <ip>] "
-		"[--log-dir <dir>]";
+		"[--synthetic-width <px>] [--synthetic-height <px>] [--synthetic-fps <n>] [--log-dir <dir>]";
 }
 
 std::string PlayUsage()

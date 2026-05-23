@@ -1,6 +1,7 @@
 #include "push/WebRtcQosPushRuntime.h"
 
 #include <chrono>
+#include <optional>
 #include <thread>
 
 #include "common/ClientIds.h"
@@ -30,10 +31,30 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 		return 2;
 	}
 
-	H264AnnexBSource source(options_.input, options_.loopInput);
-	if (!source.Open(&error)) {
-		logger_->error("h264_source_open_failed input={} error={}", options_.input, error);
-		return 2;
+	std::optional<H264AnnexBSource> copySource;
+	std::optional<RealtimeH264Source> realtimeSource;
+	const bool realtimeMode = options_.inputSynthetic && options_.encoder == "x264";
+	if (realtimeMode) {
+		RealtimeH264SourceConfig sourceConfig;
+		sourceConfig.width = options_.syntheticWidth;
+		sourceConfig.height = options_.syntheticHeight;
+		sourceConfig.fps = options_.syntheticFps;
+		sourceConfig.bitrateBps = options_.startBitrateBps;
+		sourceConfig.minBitrateBps = options_.minBitrateBps;
+		sourceConfig.maxBitrateBps = options_.maxBitrateBps;
+		sourceConfig.pattern = options_.syntheticPattern;
+		realtimeSource.emplace(sourceConfig);
+		if (!realtimeSource->Open(&error)) {
+			logger_->error("realtime_source_open_failed encoder={} pattern={} error={}",
+				options_.encoder, options_.syntheticPattern, error);
+			return 2;
+		}
+	} else {
+		copySource.emplace(options_.input, options_.loopInput);
+		if (!copySource->Open(&error)) {
+			logger_->error("h264_source_open_failed input={} error={}", options_.input, error);
+			return 2;
+		}
 	}
 
 	SingleVideoSessionParams sessionParams;
@@ -81,7 +102,7 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 	}
 
 	logger_->info(
-		"push_runtime_started roomId={} peerId={} producerId={} transportId={} videoSsrc={} videoPt={} transportCcExtId={} udpLocalIp={} udpLocalPort={} udpRemoteIp={} udpRemotePort={}",
+		"push_runtime_started roomId={} peerId={} producerId={} transportId={} videoSsrc={} videoPt={} transportCcExtId={} sourceMode={} encoder={} udpLocalIp={} udpLocalPort={} udpRemoteIp={} udpRemotePort={}",
 		options_.room,
 		options_.peer,
 		publishInfo_.producerId,
@@ -89,14 +110,19 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 		publishInfo_.ssrc,
 		publishInfo_.payloadType,
 		publishInfo_.transportCcExtId,
+		realtimeMode ? "synthetic" : "copy",
+		options_.encoder,
 		udp.localEndpoint().ip,
 		udp.localEndpoint().port,
 		udp.remoteEndpoint().ip,
 		udp.remoteEndpoint().port);
 
 	AnnexBAccessUnit nextAu;
-	bool haveAu = source.NextAccessUnit(&nextAu, &error);
-	if (!haveAu && !error.empty()) {
+	bool haveAu = false;
+	if (!realtimeMode) {
+		haveAu = copySource->NextAccessUnit(&nextAu, &error);
+	}
+	if (!realtimeMode && !haveAu && !error.empty()) {
 		logger_->error("h264_source_read_failed error={}", error);
 		push->Stop();
 		return 4;
@@ -113,8 +139,41 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 		const int64_t nowUs = MonotonicNowUs();
 		if (signaling) signaling->DispatchNotifications();
 		DrainUdpFeedback(udp, *push, nowUs, feedbackCounters);
+		const auto adaptation = push->GetEncoderAdaptation(nowUs);
+		if (realtimeSource) {
+			std::string adaptationError;
+			if (!realtimeSource->ApplyEncoderAdaptation(adaptation, &adaptationError)) {
+				logger_->error("encoder_adaptation_failed status={}", adaptationError);
+				push->Stop();
+				return 4;
+			}
+		}
 
-		if (haveAu) {
+		if (realtimeSource) {
+			bool produced = false;
+			while (realtimeSource->NextAccessUnit(nowUs, &nextAu, &error)) {
+				produced = true;
+				webrtc_qos::AnnexBAccessUnitView view;
+				view.bytes = nextAu.bytes.data();
+				view.size = nextAu.bytes.size();
+				view.capture_time_us = startWallUs == 0 ? nowUs : startWallUs + nextAu.mediaTimeUs;
+				view.keyframe = nextAu.keyframe;
+				view.ids = session.video_tracks.front().ids;
+				status = push->PushAnnexBAccessUnit(view);
+				if (!status) {
+					logger_->error("push_au_failed status={}", StatusToString(status));
+					push->Stop();
+					return 4;
+				}
+				++pushedAu;
+			}
+			if (!error.empty()) {
+				logger_->error("realtime_source_read_failed error={}", error);
+				push->Stop();
+				return 4;
+			}
+			if (produced && startWallUs == 0) startWallUs = nowUs;
+		} else if (haveAu) {
 			if (firstAu) {
 				firstAu = false;
 				startWallUs = nowUs;
@@ -135,7 +194,7 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 					return 4;
 				}
 				++pushedAu;
-				haveAu = source.NextAccessUnit(&nextAu, &error);
+				haveAu = copySource->NextAccessUnit(&nextAu, &error);
 				if (!haveAu && !error.empty()) {
 					logger_->error("h264_source_read_failed error={}", error);
 					push->Stop();
@@ -170,7 +229,6 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 		if (nowUs - lastSnapshotUs >= 1000000) {
 			lastSnapshotUs = nowUs;
 			auto snapshot = push->GetQosSnapshot(nowUs);
-			auto adaptation = push->GetEncoderAdaptation(nowUs);
 			logger_->info(
 				"push_metrics pushedAu={} targetBps={} pacingBps={} finalTargetBps={} rttMs={} loss={} rtcpFeedbackPacketsIn={} rtcpFeedbackBytesIn={} rtcpFeedbackFailures={} maxFps={} requestKeyframe={}",
 				pushedAu,
@@ -184,6 +242,25 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 				feedbackCounters.rtcpFailures,
 				adaptation.max_fps,
 				adaptation.request_keyframe);
+			if (realtimeSource) {
+				const auto& sourceMetrics = realtimeSource->metrics();
+				logger_->info(
+					"encoder_metrics mode=synthetic encoder={} currentBitrateBps={} currentFps={} width={} height={} framesGenerated={} framesEncoded={} accessUnits={} keyframes={} encoderRecreates={} bitrateChanges={} fpsChanges={} forcedKeyframeRequests={} lastKeyframe={}",
+					options_.encoder,
+					sourceMetrics.currentBitrateBps,
+					sourceMetrics.currentFps,
+					sourceMetrics.width,
+					sourceMetrics.height,
+					sourceMetrics.framesGenerated,
+					sourceMetrics.framesEncoded,
+					sourceMetrics.accessUnits,
+					sourceMetrics.keyframes,
+					sourceMetrics.encoderRecreates,
+					sourceMetrics.bitrateChanges,
+					sourceMetrics.fpsChanges,
+					sourceMetrics.forcedKeyframeRequests,
+					sourceMetrics.lastAccessUnitKeyframe);
+			}
 		}
 
 		std::this_thread::sleep_for(std::chrono::milliseconds(options_.processTickMs));

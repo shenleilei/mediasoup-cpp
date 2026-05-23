@@ -180,6 +180,7 @@ if(WebRtcQosSdk_FOUND)
                 client/webrtc_qos_plain_client/push/main.cpp
                 client/webrtc_qos_plain_client/push/PushSignalingSession.cpp
                 client/webrtc_qos_plain_client/push/H264AnnexBSource.cpp
+                client/webrtc_qos_plain_client/push/RealtimeH264Source.cpp
                 client/webrtc_qos_plain_client/push/WebRtcQosPushRuntime.cpp
                 ${WEBRTC_QOS_PLAIN_CLIENT_COMMON_SOURCES}
             INCLUDE_DIRS
@@ -270,6 +271,20 @@ if(BUILD_TESTS)
             mediasoup_lib
             ip2region
     )
+
+    if(WEBRTC_QOS_PUSH_TARGET)
+        mediasoup_add_gtest_target(mediasoup_webrtc_qos_plain_unit_tests
+            SOURCES
+                client/webrtc_qos_plain_client/push/RealtimeH264Source.cpp
+                tests/test_webrtc_qos_realtime_source.cpp
+            INCLUDE_DIRS
+                ${CMAKE_SOURCE_DIR}/client/webrtc_qos_plain_client
+            LINK_LIBRARIES
+                mediasoup_build_test_support
+                mediasoup_common_ffmpeg
+                ${WEBRTC_QOS_PUSH_TARGET}
+        )
+    endif()
 
     mediasoup_add_gtest_target(mediasoup_qos_unit_tests
         SOURCES ${MEDIASOUP_QOS_UNIT_TEST_SOURCES}

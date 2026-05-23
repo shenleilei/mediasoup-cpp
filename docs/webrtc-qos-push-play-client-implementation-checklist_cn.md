@@ -1,6 +1,6 @@
 # WebRTC QoS SDK Plain 推拉流客户端实现验收清单
 
-> 状态：P1 已完成本地短链路验收；P2 已完成 consumer TWCC ext 修复、adapter RTCP 边界计数、SDK play RR/TWCC 输出、SDK runtime 文件观测、video-only publish 和 P2 smoke 报告脚本。浏览器画面、真实弱网 smoke、实时编码器和 native QoE 仍需后续验证。
+> 状态：P1 已完成本地短链路验收；P2 已完成 consumer TWCC ext 修复、adapter RTCP 边界计数、SDK play RR/TWCC 输出、SDK runtime 文件观测、video-only publish、P2 smoke 报告脚本，以及 synthetic+x264 最小实时编码路径。浏览器画面、真实弱网 smoke、MP4 decode loop、V4L2 和 native QoE 仍需后续验证。
 
 ## 1. 已实现项
 
@@ -33,17 +33,23 @@
 | SDK runtime 文件观测 | dist 暴露 `logging/metrics/alerts`，adapter 自动启用 SDK runtime 文件 | P2 smoke：push/play 均 `sdk_runtime_files enabled=true`，各生成 log/metrics/alerts 文件 |
 | video-only plain publish | 服务端支持 `enableAudio=false`；新 push 默认不发 `audioSsrc`；旧请求默认仍启用 audio | P2-M4 smoke：`audioEnabled=false` 且 play 只收到 video consumer |
 | P2 smoke 报告脚本 | `scripts/run_webrtc_qos_plain_p2_smoke.sh` 统一启动 SFU/push/play/netem 并生成报告 | `docs/generated/webrtc-qos-plain-p2-smoke-report.{json,md}` |
+| synthetic x264 实时编码 | `RealtimeH264Source` 生成 synthetic YUV420 frame，经 libx264 baseline/zerolatency 编码成 Annex-B AU | `WebRtcQosRealtimeSourceTest.*` 通过 |
+| encoder adaptation 接入 | push runtime 每 tick 调 `GetEncoderAdaptation()` 并应用到 x264 bitrate/fps/keyframe | synthetic smoke：`encoderRuntime=PASS`，encoder `accessUnits=151`、`keyframes=6`、`currentFps=30` |
+| encoder runtime 观测 | push log 输出 `encoder_metrics`，报告解析 encoder AU/keyframe/fps/bitrate/recreate/change counters | `docs/generated/webrtc-qos-plain-p2-smoke-report.md` 的 `encoderRuntime=PASS` |
 
 ## 2. 当前验证命令
 
 ```bash
 cmake -S . -B build-webrtc-qos-plain \
   -DCMAKE_PREFIX_PATH=/root/webrtc_qos_sdk/dist/linux-x86_64 \
-  -DBUILD_TESTS=OFF
+  -DBUILD_TESTS=ON
 
 cmake --build build-webrtc-qos-plain \
-  --target webrtc-qos-plain-push-client webrtc-qos-plain-play-client \
-  -j"$(nproc)"
+  --target webrtc-qos-plain-push-client webrtc-qos-plain-play-client mediasoup_webrtc_qos_plain_unit_tests \
+  -j1
+
+./build-webrtc-qos-plain/mediasoup_webrtc_qos_plain_unit_tests \
+  --gtest_filter='WebRtcQosRealtimeSourceTest.*'
 
 g++ -std=c++17 -Isrc -I. -Ithird_party/nlohmann_json/include \
   -isystem third_party/googletest/googletest/include \
@@ -64,9 +70,12 @@ MEDIASOUP_TEST_WORKER_BIN=./mediasoup-worker \
   --gtest_filter='QosIntegrationTest.PlainPublishSupportsVideoOnlyAndKeepsLegacyAudioDefault:QosIntegrationTest.PlainPublishReplacesOldTransportAndUsesBaselineCodec:QosIntegrationTest.PlainPublishRejectsDuplicateVideoSsrcs'
 
 scripts/run_webrtc_qos_plain_p2_smoke.sh \
-  --cases baseline,delay_100ms \
+  --build-dir build-webrtc-qos-plain \
+  --worker-bin ./mediasoup-worker \
+  --source synthetic \
+  --cases baseline \
   --duration-seconds 6 \
-  --artifact-root /tmp/webrtc-qos-plain-p2-sdk-smoke-v2 \
+  --artifact-root /tmp/webrtc-qos-plain-p2-synthetic-smoke-v2 \
   --report-dir docs/generated
 ```
 
@@ -74,9 +83,10 @@ scripts/run_webrtc_qos_plain_p2_smoke.sh \
 
 - CMake configure 通过。
 - push/play 两个 target 编译通过。
+- `mediasoup_webrtc_qos_plain_unit_tests --gtest_filter='WebRtcQosRealtimeSourceTest.*'` 通过。
 - ORTC standalone targeted test 通过。
 - P2-M4 targeted integration test 通过；非默认 build 目录下通过 `MEDIASOUP_TEST_SFU_BIN` / `MEDIASOUP_TEST_WORKER_BIN` 指定测试 SFU 和 worker。
-- P2 smoke 脚本短测通过：baseline 传输链路 PASS，`qosMainline=PASS`，`sdkRuntimeObservability=PASS`；未启用 netem 的 weak case 正确标记 SKIP。
+- P2 synthetic smoke 脚本短测通过：baseline 传输链路 PASS，`qosMainline=PASS`，`sdkRuntimeObservability=PASS`，`encoderRuntime=PASS`；未启用 netem，weak coverage 正确标记 SKIP。
 - 旧实现依赖门禁没有命中代码；只命中 `client/webrtc_qos_plain_client/README.md` 的说明文本。
 
 ## 3. P1 动态 smoke 结果（历史）
@@ -218,9 +228,12 @@ push/play：
 
 ```bash
 scripts/run_webrtc_qos_plain_p2_smoke.sh \
-  --cases baseline,delay_100ms \
+  --build-dir build-webrtc-qos-plain \
+  --worker-bin ./mediasoup-worker \
+  --source synthetic \
+  --cases baseline \
   --duration-seconds 6 \
-  --artifact-root /tmp/webrtc-qos-plain-p2-sdk-smoke-v2 \
+  --artifact-root /tmp/webrtc-qos-plain-p2-synthetic-smoke-v2 \
   --report-dir docs/generated
 ```
 
@@ -228,18 +241,20 @@ scripts/run_webrtc_qos_plain_p2_smoke.sh \
 
 | 验收点 | 结果 | 证据 |
 |---|---:|---|
-| baseline 传输链路 | PASS | `pushedAu=90`、`outputAu=90`、`selectedTwccExtId=5` |
+| baseline 传输链路 | PASS | `pushedAu=178`、`outputAu=178`、`selectedTwccExtId=5` |
 | video-only | PASS | 报告中无 audio consumer，push `audioEnabled=false` |
-| push RTCP feedback 输入 | PASS | `pushRtcpFeedbackPacketsIn=66` |
-| play RTCP 输出 | PASS | `playRtcpPacketsOut=98`、`playRtcpSendFailures=0` |
+| push RTCP feedback 输入 | PASS | `pushRtcpFeedbackPacketsIn=65` |
+| play RTCP 输出 | PASS | `playRtcpPacketsOut=121`、`playRtcpSendFailures=0` |
 | SDK runtime 文件 | PASS | push/play 均 `sdk_runtime_files enabled=true`，各有 log/metrics/alerts 文件 |
-| SDK RR/TWCC counter | PASS | play `transportFeedbackCountMax=92`、`receiverReportCountMax=6`；push `transportFeedbackCountMax=50`、`receiverReportCountMax=4` |
-| 弱网 coverage | SKIP | 未传 `--enable-netem`，`delay_100ms` 不计 PASS |
+| SDK RR/TWCC counter | PASS | play `transportFeedbackCountMax=116`、`receiverReportCountMax=5`；push `transportFeedbackCountMax=50`、`receiverReportCountMax=4` |
+| synthetic x264 runtime | PASS | `encoderRuntime=PASS`，encoder `accessUnits=151`、`keyframes=6`、`currentBitrateBps=1959838`、`currentFps=30` |
+| 弱网 coverage | SKIP | 未传 `--enable-netem`，弱网 case 不计 PASS |
 
 结论：
 
 - P2-M1d、P2-M2、P2-M3 的本地 baseline 主链路已闭环：TWCC 协商、play 反馈输出、push 反馈输入、SDK runtime 文件和 SDK counter 都可观测。
-- 当前结果仍不能签收完整 P2：真实弱网 case 需要带 `--enable-netem` 在可控环境运行，浏览器、实时编码器和 native QoE 仍未覆盖。
+- P2-M5/P2-M6 的 synthetic+x264 最小切片已闭环：encoder AU、keyframe、bitrate/fps runtime metrics 和 smoke gate 都可观测。
+- 当前结果仍不能签收完整 P2：真实弱网 case 需要带 `--enable-netem` 在可控环境运行，浏览器、MP4 decode loop、V4L2 和 native QoE 仍未覆盖。
 
 ## 4. 版本差异
 
@@ -260,5 +275,6 @@ scripts/run_webrtc_qos_plain_p2_smoke.sh \
 
 - browser receiver 可看到 push 画面。
 - netem 弱网 smoke：脚本已支持；当前机器未启用 `--enable-netem`，延迟、丢包、恢复 case 仍未实际签收。
-- realtime x264 encoder adaptation。
+- realtime x264 在真实弱网下的 bitrate 下探、PLI force IDR 和恢复时首帧时间。
+- MP4 decode loop 和 V4L2 输入源。
 - native decode/QoE 指标。

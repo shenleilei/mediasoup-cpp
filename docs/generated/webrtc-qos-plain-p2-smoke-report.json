@@ -7,11 +7,11 @@
         "samples": []
       },
       "artifacts": {
-        "caseDir": "/tmp/webrtc-qos-plain-p2-sdk-smoke-v2/20260523T122810Z/baseline",
-        "playLog": "/tmp/webrtc-qos-plain-p2-sdk-smoke-v2/20260523T122810Z/baseline/play/play.log",
-        "pushLog": "/tmp/webrtc-qos-plain-p2-sdk-smoke-v2/20260523T122810Z/baseline/push/push.log",
-        "readyz": "/tmp/webrtc-qos-plain-p2-sdk-smoke-v2/20260523T122810Z/baseline/readyz.json",
-        "sfuLog": "/tmp/webrtc-qos-plain-p2-sdk-smoke-v2/20260523T122810Z/baseline/sfu.stdout.log"
+        "caseDir": "/tmp/webrtc-qos-plain-p2-synthetic-smoke-v2/20260523T125915Z/baseline",
+        "playLog": "/tmp/webrtc-qos-plain-p2-synthetic-smoke-v2/20260523T125915Z/baseline/play/play.log",
+        "pushLog": "/tmp/webrtc-qos-plain-p2-synthetic-smoke-v2/20260523T125915Z/baseline/push/push.log",
+        "readyz": "/tmp/webrtc-qos-plain-p2-synthetic-smoke-v2/20260523T125915Z/baseline/readyz.json",
+        "sfuLog": "/tmp/webrtc-qos-plain-p2-synthetic-smoke-v2/20260523T125915Z/baseline/sfu.stdout.log"
       },
       "checks": [
         {
@@ -40,22 +40,22 @@
           "status": "PASS"
         },
         {
-          "evidence": "pushedAu=90",
+          "evidence": "pushedAu=178",
           "name": "push-au-output",
           "status": "PASS"
         },
         {
-          "evidence": "rtpPackets=196",
+          "evidence": "rtpPackets=1261",
           "name": "play-rtp-input",
           "status": "PASS"
         },
         {
-          "evidence": "outputAu=90",
+          "evidence": "outputAu=178",
           "name": "play-au-output",
           "status": "PASS"
         },
         {
-          "evidence": "rtcpFeedbackPacketsIn=66",
+          "evidence": "rtcpFeedbackPacketsIn=65",
           "name": "push-rtcp-feedback-input",
           "status": "PASS"
         },
@@ -80,17 +80,17 @@
           "status": "PASS"
         },
         {
-          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 14736, \"metricsFiles\": 1, \"processTickCountMax\": 496, \"receiverReportCountMax\": 4, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 6, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 50}",
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 25176, \"metricsFiles\": 1, \"processTickCountMax\": 468, \"receiverReportCountMax\": 4, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 6, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 50}",
           "name": "sdk-push-runtime-files",
           "status": "PASS"
         },
         {
-          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 15026, \"metricsFiles\": 1, \"processTickCountMax\": 593, \"receiverReportCountMax\": 6, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 7, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 92}",
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 31178, \"metricsFiles\": 1, \"processTickCountMax\": 587, \"receiverReportCountMax\": 5, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 7, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 116}",
           "name": "sdk-play-runtime-files",
           "status": "PASS"
         },
         {
-          "evidence": "twcc=92 rr=6",
+          "evidence": "twcc=116 rr=5",
           "name": "sdk-play-rtcp-generated",
           "status": "PASS"
         },
@@ -103,12 +103,49 @@
           "evidence": "ok",
           "name": "harness-no-failure",
           "status": "PASS"
+        },
+        {
+          "evidence": "samples=12",
+          "name": "encoder-metrics-present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "accessUnits=151",
+          "name": "encoder-au-output",
+          "status": "PASS"
+        },
+        {
+          "evidence": "keyframes=6",
+          "name": "encoder-keyframe-output",
+          "status": "PASS"
+        },
+        {
+          "evidence": "{\"accessUnits\": 151, \"bitrateChanges\": 30, \"currentBitrateBps\": 1959838, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 2, \"forcedKeyframeRequests\": 3, \"fpsChanges\": 1, \"framesEncoded\": 151, \"framesGenerated\": 151, \"height\": 180, \"keyframes\": 6, \"lastKeyframe\": \"false\", \"mode\": \"synthetic\", \"width\": 320}",
+          "name": "encoder-source-shape",
+          "status": "PASS"
         }
       ],
       "metrics": {
+        "encoder": {
+          "accessUnits": 151,
+          "bitrateChanges": 30,
+          "currentBitrateBps": 1959838,
+          "currentFps": 30,
+          "encoderRecreates": 2,
+          "forcedKeyframeRequests": 3,
+          "fpsChanges": 1,
+          "framesEncoded": 151,
+          "framesGenerated": 151,
+          "height": 180,
+          "keyframes": 6,
+          "mode": "synthetic",
+          "name": "x264",
+          "samples": 12,
+          "width": 320
+        },
         "finalTargetBps": {
-          "avg": 1897205.8333333333,
-          "max": 2036647.0,
+          "avg": 1616812.0,
+          "max": 1959838.0,
           "min": 1200000.0
         },
         "nack": 0,
@@ -118,44 +155,44 @@
           "min": 0.0
         },
         "playMetricSamples": 14,
-        "playOutputAu": 90,
-        "playRtcpBytesOut": 2500,
-        "playRtcpPacketsIn": 5,
-        "playRtcpPacketsOut": 98,
+        "playOutputAu": 178,
+        "playRtcpBytesOut": 4140,
+        "playRtcpPacketsIn": 4,
+        "playRtcpPacketsOut": 121,
         "playRtcpSendFailures": 0,
-        "playRtpPackets": 196,
+        "playRtpPackets": 1261,
         "pli": 0,
         "publishTwccExtId": 5,
         "pushMetricSamples": 12,
-        "pushRtcpFeedbackBytesIn": 1832,
+        "pushRtcpFeedbackBytesIn": 2840,
         "pushRtcpFeedbackFailures": 0,
-        "pushRtcpFeedbackPacketsIn": 66,
-        "pushedAu": 90,
+        "pushRtcpFeedbackPacketsIn": 65,
+        "pushedAu": 178,
         "retransmission": 0,
         "rttMs": {
-          "avg": 6.0,
-          "max": 9.0,
+          "avg": 8.0,
+          "max": 14.0,
           "min": 0.0
         },
         "sdkRuntime": {
           "play": {
             "alertsFiles": 1,
             "enabled": true,
-            "maxProcessTickGapUs": 15026,
+            "maxProcessTickGapUs": 31178,
             "metricsFiles": 1,
-            "processTickCountMax": 593,
-            "receiverReportCountMax": 6,
+            "processTickCountMax": 587,
+            "receiverReportCountMax": 5,
             "runtimeLogFiles": 1,
             "sessionMetricSamples": 7,
             "transportFailureCountMax": 0,
-            "transportFeedbackCountMax": 92
+            "transportFeedbackCountMax": 116
           },
           "push": {
             "alertsFiles": 1,
             "enabled": true,
-            "maxProcessTickGapUs": 14736,
+            "maxProcessTickGapUs": 25176,
             "metricsFiles": 1,
-            "processTickCountMax": 496,
+            "processTickCountMax": 468,
             "receiverReportCountMax": 4,
             "runtimeLogFiles": 1,
             "sessionMetricSamples": 6,
@@ -170,25 +207,14 @@
           "min": 0.0
         },
         "targetBps": {
-          "avg": 1897205.8333333333,
-          "max": 2036647.0,
+          "avg": 1616812.0,
+          "max": 1959838.0,
           "min": 1200000.0
         }
       },
       "name": "baseline",
       "networkCondition": "none",
       "status": "PASS"
-    },
-    {
-      "artifacts": {
-        "caseDir": "/tmp/webrtc-qos-plain-p2-sdk-smoke-v2/20260523T122810Z/delay_100ms"
-      },
-      "checks": [],
-      "metrics": {},
-      "name": "delay_100ms",
-      "networkCondition": "100ms delay + 20ms jitter",
-      "skipReason": "netem disabled; pass --enable-netem to run weak-network cases",
-      "status": "SKIP"
     }
   ],
   "environment": {
@@ -199,10 +225,29 @@
     "tc": "/usr/sbin/tc"
   },
   "gates": {
+    "encoderRuntime": {
+      "evidence": {
+        "baselineAccessUnits": 151,
+        "baselineCurrentBitrateBps": 1959838,
+        "baselineCurrentFps": 30,
+        "baselineEncoderMode": "synthetic",
+        "baselineEncoderName": "x264",
+        "baselineEncoderSamples": 12,
+        "baselineHeight": 180,
+        "baselineKeyframes": 6,
+        "baselineWidth": 320,
+        "sourceMode": "synthetic"
+      },
+      "requirements": [
+        "synthetic source uses x264 realtime encoder when requested",
+        "encoder metrics expose source shape, fps, bitrate, AU count, keyframe count"
+      ],
+      "status": "PASS"
+    },
     "qosMainline": {
       "evidence": {
-        "baselinePlayRtcpPacketsOut": 98,
-        "baselinePushRtcpFeedbackPacketsIn": 66,
+        "baselinePlayRtcpPacketsOut": 121,
+        "baselinePushRtcpFeedbackPacketsIn": 65,
         "baselineSelectedTwccExtId": 5
       },
       "requirements": [
@@ -216,10 +261,10 @@
       "evidence": {
         "baselinePlayAlertsFiles": 1,
         "baselinePlayMetricsFiles": 1,
-        "baselinePlayReceiverReportCountMax": 6,
+        "baselinePlayReceiverReportCountMax": 5,
         "baselinePlayRuntimeEnabled": true,
         "baselinePlayRuntimeLogFiles": 1,
-        "baselinePlayTransportFeedbackCountMax": 92,
+        "baselinePlayTransportFeedbackCountMax": 116,
         "baselinePushAlertsFiles": 1,
         "baselinePushMetricsFiles": 1,
         "baselinePushReceiverReportCountMax": 4,
@@ -237,12 +282,7 @@
     "weakNetworkCoverage": {
       "evidence": {
         "attemptedWeakCases": [],
-        "skippedCases": [
-          {
-            "name": "delay_100ms",
-            "reason": "netem disabled; pass --enable-netem to run weak-network cases"
-          }
-        ]
+        "skippedCases": []
       },
       "requirements": [
         "delay/loss/bandwidth/recovery cases attempted with tc netem"
@@ -250,27 +290,32 @@
       "status": "SKIP"
     }
   },
-  "generatedAt": "2026-05-23T12:28:33Z",
+  "generatedAt": "2026-05-23T12:59:38Z",
   "overallStatus": "PARTIAL",
   "runConfig": {
     "buildDir": "build-webrtc-qos-plain",
     "cases": [
-      "baseline",
-      "delay_100ms"
+      "baseline"
     ],
     "durationSeconds": 6,
     "enableNetem": false,
-    "inputFile": "/tmp/webrtc-qos-plain-p2-sdk-smoke-v2/input.mp4",
+    "inputFile": "",
     "netemDev": "lo",
+    "sourceMode": "synthetic",
     "strict": false,
+    "synthetic": {
+      "fps": 15,
+      "height": 180,
+      "width": 320
+    },
     "workerBin": "./mediasoup-worker"
   },
-  "runDir": "/tmp/webrtc-qos-plain-p2-sdk-smoke-v2/20260523T122810Z",
+  "runDir": "/tmp/webrtc-qos-plain-p2-synthetic-smoke-v2/20260523T125915Z",
   "schemaVersion": 1,
   "summary": {
     "attemptedCases": 1,
     "failedCases": 0,
     "passedCases": 1,
-    "skippedCases": 1
+    "skippedCases": 0
   }
 }
