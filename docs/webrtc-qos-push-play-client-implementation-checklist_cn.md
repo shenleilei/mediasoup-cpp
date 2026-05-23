@@ -34,8 +34,8 @@
 | video-only plain publish | 服务端支持 `enableAudio=false`；新 push 默认不发 `audioSsrc`；旧请求默认仍启用 audio | P2-M4 smoke：`audioEnabled=false` 且 play 只收到 video consumer |
 | P2 smoke 报告脚本 | `scripts/run_webrtc_qos_plain_p2_smoke.sh` 统一启动 SFU/push/play/netem 并生成报告 | `docs/generated/webrtc-qos-plain-p2-smoke-report.{json,md}` |
 | synthetic x264 实时编码 | `RealtimeH264Source` 生成 synthetic YUV420 frame，经 libx264 baseline/zerolatency 编码成 Annex-B AU | `WebRtcQosRealtimeSourceTest.*` 通过 |
-| encoder adaptation 接入 | push runtime 每 tick 调 `GetEncoderAdaptation()` 并应用到 x264 bitrate/fps/keyframe | synthetic smoke：`encoderRuntime=PASS`，encoder `accessUnits=151`、`keyframes=6`、`currentFps=30` |
-| encoder runtime 观测 | push log 输出 `encoder_metrics`，报告解析 encoder AU/keyframe/fps/bitrate/recreate/change counters | `docs/generated/webrtc-qos-plain-p2-smoke-report.md` 的 `encoderRuntime=PASS` |
+| encoder adaptation 接入 | push runtime 每 tick 调 `GetEncoderAdaptation()` 并应用到 x264 bitrate/fps/keyframe | synthetic smoke：`encoderRuntime=PASS`，encoder `accessUnits=332`、`keyframes=12`、`currentFps=30` |
+| encoder runtime 观测 | push log 输出 `encoder_metrics`，报告解析 encoder AU/keyframe/fps/bitrate/recreate/change/forced-IDR counters | `docs/generated/webrtc-qos-plain-p2-smoke-report.md` 的 `encoderRuntime=PASS`，`forcedKeyframeRequests=1`、`forcedKeyframes=1`、`maxForcedKeyframeDelayUs=0` |
 | native decode/QoE baseline | play 端 `--decode-qoe` 启用 `FfmpegDecodeSink`，对 SDK 输出的 Annex-B AU 做 H264 解码 | `WebRtcQosDecodeSinkTest.*` 通过；smoke `nativeDecodeQoe=PASS` |
 | QoE runtime 观测 | play log 输出 `qoe_metrics` / `qoe_runtime_stopped`，报告解析 decoded frames、decode errors、first frame、freeze、output fps | 当前报告：baseline decodedFrames=358、decodeErrors=0、freezeCount=0、outputFps=30.08；所有已跑 case decodeErrors=0 |
 | delay/loss/bandwidth/recovery netem 弱网短测 | `scripts/run_webrtc_qos_plain_p2_smoke.sh --enable-netem --cases baseline,delay_100ms,loss_2pct,bandwidth_600k,drop_recover` | 当前报告：`5 / 5 PASS`，`weakNetworkCoverage=PASS`，delay RTT avg/max `109.58/242ms`，bandwidth targetBps min/max `300000/1693914`，recovery targetBps min/max `300000/2023706`，decodeErrors=0 |
@@ -255,6 +255,7 @@ scripts/run_webrtc_qos_plain_p2_smoke.sh \
 | SDK runtime 文件 | PASS | push/play 均 `sdk_runtime_files enabled=true`，各有 log/metrics/alerts 文件 |
 | SDK RR/TWCC counter | PASS | play `transportFeedbackCountMax=232`、`receiverReportCountMax=12`；push `transportFeedbackCountMax=110`、`receiverReportCountMax=9` |
 | synthetic x264 runtime | PASS | `encoderRuntime=PASS`，baseline encoder `accessUnits=332`、`keyframes=12`、`currentBitrateBps=2500000`、`currentFps=30` |
+| PLI/SDK keyframe request 响应 IDR | PASS | baseline `forcedKeyframeRequests=1`、`forcedKeyframes=1`、`maxForcedKeyframeDelayUs=0`；bandwidth case `maxForcedKeyframeDelayUs=190401us`，均小于 1s |
 | native decode/QoE | PASS | `nativeDecodeQoe=PASS`，baseline `decodedFrames=358`、`decodeErrors=0`、`freezeCount=0`、`outputFps=30.08` |
 | 弱网 coverage | PASS | `delay_100ms`、`loss_2pct`、`bandwidth_600k`、`drop_recover` 实际启用 netem，全部 PASS |
 | delay netem | PASS | RTT avg/max `109.58/242ms`，`decodedFrames=333`、`decodeErrors=0`、`NACK=249` |
@@ -265,7 +266,7 @@ scripts/run_webrtc_qos_plain_p2_smoke.sh \
 结论：
 
 - P2-M1d、P2-M2、P2-M3 的本地 baseline 主链路已闭环：TWCC 协商、play 反馈输出、push 反馈输入、SDK runtime 文件和 SDK counter 都可观测。
-- P2-M5/P2-M6 的 synthetic+x264 最小切片已闭环：encoder AU、keyframe、bitrate/fps runtime metrics 和 smoke gate 都可观测。
+- P2-M5/P2-M6 的 synthetic+x264 最小切片已闭环：encoder AU、keyframe、bitrate/fps、forced-IDR runtime metrics 和 smoke gate 都可观测。
 - P2-M8 的 native decode/QoE baseline 最小切片已闭环：decoded frames、decode errors、first frame、freeze、output fps 都写入日志和报告。
 - P2-M3 已覆盖 baseline、delay、loss、bandwidth、recovery 真实 netem 短测；浏览器、MP4 decode loop 和 V4L2 仍未覆盖。
 
@@ -287,5 +288,5 @@ scripts/run_webrtc_qos_plain_p2_smoke.sh \
 以下未在本地短 smoke 中覆盖或未通过：
 
 - browser receiver 可看到 push 画面。
-- PLI force IDR 和恢复时首帧时间的专项 browser/输入源验证。
+- 恢复时首帧时间的专项 browser/输入源验证。
 - MP4 decode loop 和 V4L2 输入源。

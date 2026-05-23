@@ -30,6 +30,8 @@ struct RealtimeH264SourceMetrics {
 	uint64_t bitrateChanges{0};
 	uint64_t fpsChanges{0};
 	uint64_t forcedKeyframeRequests{0};
+	uint64_t forcedKeyframes{0};
+	int64_t maxForcedKeyframeDelayUs{-1};
 	uint32_t currentBitrateBps{0};
 	uint32_t currentFps{0};
 	int width{0};
@@ -42,7 +44,10 @@ public:
 	explicit RealtimeH264Source(RealtimeH264SourceConfig config);
 
 	bool Open(std::string* error);
-	bool ApplyEncoderAdaptation(const webrtc_qos::EncoderAdaptation& adaptation, std::string* error);
+	bool ApplyEncoderAdaptation(
+		const webrtc_qos::EncoderAdaptation& adaptation,
+		int64_t nowUs,
+		std::string* error);
 	bool NextAccessUnit(int64_t nowUs, AnnexBAccessUnit* out, std::string* error);
 
 	const RealtimeH264SourceMetrics& metrics() const { return metrics_; }
@@ -58,6 +63,8 @@ private:
 	mediasoup::ffmpeg::FramePtr frame_;
 	bool opened_{false};
 	bool forceKeyframe_{true};
+	bool pendingForcedKeyframe_{false};
+	int64_t pendingForcedKeyframeRequestUs_{0};
 	int64_t startWallUs_{0};
 	int64_t nextFrameTimeUs_{0};
 	uint64_t frameIndex_{0};
