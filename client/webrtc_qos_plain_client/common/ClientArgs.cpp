@@ -28,7 +28,7 @@ bool ParseOptionMap(int argc, char* argv[], OptionMap* values, std::string* erro
 		if (eq != std::string::npos) {
 			const auto option = key.substr(0, eq);
 			const auto value = key.substr(eq + 1);
-			if (option == "--loop-input" || option == "--output-null" || option == "--enable-audio") {
+			if (option == "--loop-input" || option == "--output-null" || option == "--enable-audio" || option == "--decode-qoe") {
 				(*values)[option] = value.empty() ? "1" : value;
 			} else {
 				(*values)[option] = value;
@@ -36,7 +36,7 @@ bool ParseOptionMap(int argc, char* argv[], OptionMap* values, std::string* erro
 			continue;
 		}
 
-		if (key == "--loop-input" || key == "--output-null" || key == "--enable-audio") {
+		if (key == "--loop-input" || key == "--output-null" || key == "--enable-audio" || key == "--decode-qoe") {
 			(*values)[key] = "1";
 			continue;
 		}
@@ -209,6 +209,7 @@ bool ParsePlayOptions(int argc, char* argv[], PlayOptions* options, std::string*
 		options->processTickMs = ParseInt(GetString(values, "--process-tick-ms", std::to_string(options->processTickMs)), "--process-tick-ms");
 		options->mediaRemoteIp = GetString(values, "--media-remote-ip", options->mediaRemoteIp);
 		options->waitConsumerTimeoutMs = ParseInt(GetString(values, "--wait-consumer-timeout-ms", std::to_string(options->waitConsumerTimeoutMs)), "--wait-consumer-timeout-ms");
+		options->decodeQoe = GetBoolFlag(values, "--decode-qoe");
 	} catch (const std::exception& e) {
 		if (error) *error = e.what();
 		return false;
@@ -246,7 +247,7 @@ std::string PlayUsage()
 		"--room <room> --peer <peer> --listen-ip <ip> --advertise-ip <ip> "
 		"--listen-port <port> (--output-au <file>|--output-null) "
 		"[--producer-id <id>] [--producer-peer-id <peer>] [--media-remote-ip <ip>] "
-		"[--wait-consumer-timeout-ms <ms>] [--log-dir <dir>]";
+		"[--wait-consumer-timeout-ms <ms>] [--decode-qoe] [--log-dir <dir>]";
 }
 
 } // namespace webrtc_qos_plain

@@ -208,7 +208,7 @@ SignalingServer
 - PlainTransport C++ 客户端矩阵：`48 / 48 PASS` (`2026-04-26`)
 - PlainTransport C++ 客户端信令测试套件：`PASS`
 - C++ 客户端 QoS 单元测试对齐 (parity)：`PASS`
-- WebRTC QoS Plain P2 synthetic baseline：`qosMainline=PASS`，`sdkRuntimeObservability=PASS`，`encoderRuntime=PASS`；未启用 `--enable-netem` 的弱网 coverage 记为 `SKIP`
+- WebRTC QoS Plain P2 synthetic+QoE baseline：`qosMainline=PASS`，`sdkRuntimeObservability=PASS`，`encoderRuntime=PASS`，`nativeDecodeQoe=PASS`；未启用 `--enable-netem` 的弱网 coverage 记为 `SKIP`
 
 当前范围提示：
 

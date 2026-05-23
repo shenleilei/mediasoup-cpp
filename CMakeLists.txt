@@ -201,6 +201,7 @@ if(WebRtcQosSdk_FOUND)
                 client/webrtc_qos_plain_client/play/main.cpp
                 client/webrtc_qos_plain_client/play/PlaySignalingSession.cpp
                 client/webrtc_qos_plain_client/play/AnnexBSink.cpp
+                client/webrtc_qos_plain_client/play/FfmpegDecodeSink.cpp
                 client/webrtc_qos_plain_client/play/WebRtcQosPlayRuntime.cpp
                 ${WEBRTC_QOS_PLAIN_CLIENT_COMMON_SOURCES}
             INCLUDE_DIRS
@@ -208,6 +209,8 @@ if(WebRtcQosSdk_FOUND)
                 ${CMAKE_SOURCE_DIR}/client/webrtc_qos_plain_client
             LINK_LIBRARIES
                 mediasoup_build_common
+                mediasoup_build_ffmpeg_core
+                mediasoup_common_ffmpeg
                 mediasoup_build_ssl_crypto
                 mediasoup_build_pthread
                 spdlog::spdlog
@@ -276,6 +279,8 @@ if(BUILD_TESTS)
         mediasoup_add_gtest_target(mediasoup_webrtc_qos_plain_unit_tests
             SOURCES
                 client/webrtc_qos_plain_client/push/RealtimeH264Source.cpp
+                client/webrtc_qos_plain_client/play/FfmpegDecodeSink.cpp
+                tests/test_webrtc_qos_decode_sink.cpp
                 tests/test_webrtc_qos_realtime_source.cpp
             INCLUDE_DIRS
                 ${CMAKE_SOURCE_DIR}/client/webrtc_qos_plain_client

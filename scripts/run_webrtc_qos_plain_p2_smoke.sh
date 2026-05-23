@@ -12,6 +12,7 @@ SOURCE_MODE="copy"
 SYNTHETIC_WIDTH=320
 SYNTHETIC_HEIGHT=180
 SYNTHETIC_FPS=15
+DECODE_QOE=0
 CASES="baseline,delay_100ms,loss_2pct,loss_5pct,bandwidth_600k,drop_recover"
 DURATION_SECONDS=10
 BASE_PORT=33131
@@ -39,6 +40,7 @@ Options:
   --synthetic-width <px>      Synthetic source width. Default: 320.
   --synthetic-height <px>     Synthetic source height. Default: 180.
   --synthetic-fps <n>         Synthetic source fps. Default: 15.
+  --decode-qoe                Enable native FFmpeg decode/QoE sink in play client.
   --base-port <port>         First SFU signaling port. Default: 33131.
   --play-base-port <port>    First play UDP listen port. Default: 43131.
   --server-ip <ip>           SFU signaling IP. Default: 127.0.0.1.
@@ -86,6 +88,7 @@ while [[ $# -gt 0 ]]; do
 		--synthetic-height=*) SYNTHETIC_HEIGHT="${1#*=}"; shift ;;
 		--synthetic-fps) require_arg "$1" "${2:-}"; SYNTHETIC_FPS="$2"; shift 2 ;;
 		--synthetic-fps=*) SYNTHETIC_FPS="${1#*=}"; shift ;;
+		--decode-qoe) DECODE_QOE=1; shift ;;
 		--base-port) require_arg "$1" "${2:-}"; BASE_PORT="$2"; shift 2 ;;
 		--base-port=*) BASE_PORT="${1#*=}"; shift ;;
 		--play-base-port) require_arg "$1" "${2:-}"; PLAY_BASE_PORT="$2"; shift 2 ;;
@@ -353,19 +356,24 @@ run_case() {
 		return
 	fi
 
-	setsid "$PLAY_BIN" \
-		--server-ip="$SERVER_IP" \
-		--server-port="$port" \
-		--room="$room" \
-		--peer="$play_peer" \
-		--listen-ip="$SERVER_IP" \
-		--advertise-ip="$SERVER_IP" \
-		--listen-port="$play_port" \
-		--output-null=true \
-		--wait-consumer-timeout-ms=15000 \
-		--media-remote-ip="$MEDIA_IP" \
-		--log-dir="$case_dir/play" \
-		>"$case_dir/play.stdout.log" 2>&1 &
+	local play_args=(
+		"$PLAY_BIN"
+		--server-ip="$SERVER_IP"
+		--server-port="$port"
+		--room="$room"
+		--peer="$play_peer"
+		--listen-ip="$SERVER_IP"
+		--advertise-ip="$SERVER_IP"
+		--listen-port="$play_port"
+		--output-null=true
+		--wait-consumer-timeout-ms=15000
+		--media-remote-ip="$MEDIA_IP"
+		--log-dir="$case_dir/play"
+	)
+	if [[ "$DECODE_QOE" == "1" ]]; then
+		play_args+=(--decode-qoe=true)
+	fi
+	setsid "${play_args[@]}" >"$case_dir/play.stdout.log" 2>&1 &
 	play_pid=$!
 
 	sleep 0.7
@@ -422,7 +430,7 @@ run_case() {
 render_report() {
 	local report_json="$REPORT_DIR/webrtc-qos-plain-p2-smoke-report.json"
 	local report_md="$REPORT_DIR/webrtc-qos-plain-p2-smoke-report.md"
-	python3 - "$RUN_DIR" "$REPORT_DIR" "$report_json" "$report_md" "$CASES" "$DURATION_SECONDS" "$BUILD_DIR" "$WORKER_BIN" "$INPUT_FILE" "$ENABLE_NETEM" "$NETEM_DEV" "$STRICT" "$SOURCE_MODE" "$SYNTHETIC_WIDTH" "$SYNTHETIC_HEIGHT" "$SYNTHETIC_FPS" <<'PY'
+	python3 - "$RUN_DIR" "$REPORT_DIR" "$report_json" "$report_md" "$CASES" "$DURATION_SECONDS" "$BUILD_DIR" "$WORKER_BIN" "$INPUT_FILE" "$ENABLE_NETEM" "$NETEM_DEV" "$STRICT" "$SOURCE_MODE" "$SYNTHETIC_WIDTH" "$SYNTHETIC_HEIGHT" "$SYNTHETIC_FPS" "$DECODE_QOE" <<'PY'
 import datetime
 import glob
 import json
@@ -446,6 +454,7 @@ source_mode = sys.argv[13]
 synthetic_width = int(sys.argv[14])
 synthetic_height = int(sys.argv[15])
 synthetic_fps = int(sys.argv[16])
+decode_qoe = sys.argv[17] == '1'
 
 ANSI_RE = re.compile(r'\x1b\[[0-9;]*m')
 
@@ -561,6 +570,48 @@ def parse_encoder_metrics(text):
         })
     return rows
 
+def parse_qoe_metrics(text):
+    rows = []
+    pattern = re.compile(
+        r'qoe_metrics enabled=(\w+) accessUnitsIn=(\d+) keyframesIn=(\d+) '
+        r'decodedFrames=(\d+) decodeErrors=(\d+) freezeCount=(\d+) '
+        r'firstFrameDelayUs=(-?\d+) maxFrameGapUs=(\d+) outputFps=([0-9.]+) '
+        r'width=(\d+) height=(\d+)')
+    for match in pattern.finditer(text):
+        rows.append({
+            'enabled': match.group(1),
+            'accessUnitsIn': int(match.group(2)),
+            'keyframesIn': int(match.group(3)),
+            'decodedFrames': int(match.group(4)),
+            'decodeErrors': int(match.group(5)),
+            'freezeCount': int(match.group(6)),
+            'firstFrameDelayUs': int(match.group(7)),
+            'maxFrameGapUs': int(match.group(8)),
+            'outputFps': float(match.group(9)),
+            'width': int(match.group(10)),
+            'height': int(match.group(11)),
+        })
+    stop_pattern = re.compile(
+        r'qoe_runtime_stopped enabled=(\w+) accessUnitsIn=(\d+) keyframesIn=(\d+) '
+        r'decodedFrames=(\d+) decodeErrors=(\d+) freezeCount=(\d+) '
+        r'firstFrameDelayUs=(-?\d+) maxFrameGapUs=(\d+) outputFps=([0-9.]+) '
+        r'width=(\d+) height=(\d+)')
+    for match in stop_pattern.finditer(text):
+        rows.append({
+            'enabled': match.group(1),
+            'accessUnitsIn': int(match.group(2)),
+            'keyframesIn': int(match.group(3)),
+            'decodedFrames': int(match.group(4)),
+            'decodeErrors': int(match.group(5)),
+            'freezeCount': int(match.group(6)),
+            'firstFrameDelayUs': int(match.group(7)),
+            'maxFrameGapUs': int(match.group(8)),
+            'outputFps': float(match.group(9)),
+            'width': int(match.group(10)),
+            'height': int(match.group(11)),
+        })
+    return rows
+
 def parse_jsonl_file(path):
     rows = []
     for line in read_file(path).splitlines():
@@ -670,6 +721,7 @@ def parse_case(case_name):
     push_metrics = parse_push_metrics(push_text)
     play_metrics = parse_play_metrics(play_text)
     encoder_metrics = parse_encoder_metrics(push_text)
+    qoe_metrics = parse_qoe_metrics(play_text)
     push_sdk_runtime_enabled = re.search(r'sdk_runtime_files role=push enabled=true', push_text) is not None
     play_sdk_runtime_enabled = re.search(r'sdk_runtime_files role=play enabled=true', play_text) is not None
     push_sdk_runtime = parse_sdk_runtime(case_dir, 'push')
@@ -690,6 +742,7 @@ def parse_case(case_name):
     max_pli = max([m['pli'] for m in play_metrics] or [0])
     max_retransmission = max([m['retransmission'] for m in play_metrics] or [0])
     last_encoder = encoder_metrics[-1] if encoder_metrics else {}
+    last_qoe = qoe_metrics[-1] if qoe_metrics else {}
 
     warning_lines = []
     ignored_warning_lines = []
@@ -732,6 +785,13 @@ def parse_case(case_name):
             make_check('encoder-au-output', bool(last_encoder.get('accessUnits', 0) > 0), 'accessUnits={}'.format(last_encoder.get('accessUnits'))),
             make_check('encoder-keyframe-output', bool(last_encoder.get('keyframes', 0) > 0), 'keyframes={}'.format(last_encoder.get('keyframes'))),
             make_check('encoder-source-shape', last_encoder.get('width') == synthetic_width and last_encoder.get('height') == synthetic_height and last_encoder.get('currentFps', 0) > 0 and last_encoder.get('currentBitrateBps', 0) > 0, json.dumps(last_encoder, sort_keys=True)),
+        ])
+    if decode_qoe:
+        checks.extend([
+            make_check('qoe-metrics-present', bool(qoe_metrics), 'samples={}'.format(len(qoe_metrics))),
+            make_check('qoe-decodes-frames', bool(last_qoe.get('decodedFrames', 0) > 0), 'decodedFrames={}'.format(last_qoe.get('decodedFrames'))),
+            make_check('qoe-decode-errors-zero', last_qoe.get('decodeErrors', 0) == 0, 'decodeErrors={}'.format(last_qoe.get('decodeErrors'))),
+            make_check('qoe-first-frame-observable', last_qoe.get('firstFrameDelayUs', -1) >= 0, 'firstFrameDelayUs={}'.format(last_qoe.get('firstFrameDelayUs'))),
         ])
 
     if case_name != 'baseline':
@@ -788,6 +848,20 @@ def parse_case(case_name):
             'bitrateChanges': last_encoder.get('bitrateChanges'),
             'fpsChanges': last_encoder.get('fpsChanges'),
             'forcedKeyframeRequests': last_encoder.get('forcedKeyframeRequests'),
+        },
+        'qoe': {
+            'enabled': decode_qoe,
+            'samples': len(qoe_metrics),
+            'accessUnitsIn': last_qoe.get('accessUnitsIn'),
+            'keyframesIn': last_qoe.get('keyframesIn'),
+            'decodedFrames': last_qoe.get('decodedFrames'),
+            'decodeErrors': last_qoe.get('decodeErrors'),
+            'freezeCount': last_qoe.get('freezeCount'),
+            'firstFrameDelayUs': last_qoe.get('firstFrameDelayUs'),
+            'maxFrameGapUs': last_qoe.get('maxFrameGapUs'),
+            'outputFps': last_qoe.get('outputFps'),
+            'width': last_qoe.get('width'),
+            'height': last_qoe.get('height'),
         },
         'sdkRuntime': {
             'push': {
@@ -898,6 +972,26 @@ encoder_gate_pass = (
         baseline_encoder.get('currentFps', 0) > 0 and
         baseline_encoder.get('currentBitrateBps', 0) > 0))
 
+baseline_qoe = baseline.get('metrics', {}).get('qoe', {}) if baseline else {}
+qoe_gate_evidence = {
+    'enabled': decode_qoe,
+    'baselineSamples': baseline_qoe.get('samples'),
+    'baselineDecodedFrames': baseline_qoe.get('decodedFrames'),
+    'baselineDecodeErrors': baseline_qoe.get('decodeErrors'),
+    'baselineFirstFrameDelayUs': baseline_qoe.get('firstFrameDelayUs'),
+    'baselineFreezeCount': baseline_qoe.get('freezeCount'),
+    'baselineOutputFps': baseline_qoe.get('outputFps'),
+    'baselineWidth': baseline_qoe.get('width'),
+    'baselineHeight': baseline_qoe.get('height'),
+}
+qoe_gate_pass = (
+    True if not decode_qoe else bool(
+        baseline and
+        baseline_qoe.get('samples', 0) > 0 and
+        baseline_qoe.get('decodedFrames', 0) > 0 and
+        baseline_qoe.get('decodeErrors', 0) == 0 and
+        baseline_qoe.get('firstFrameDelayUs', -1) >= 0))
+
 gates = {
     'qosMainline': {
         'status': 'PASS' if qos_gate_pass else 'FAIL',
@@ -924,6 +1018,14 @@ gates = {
             'encoder metrics expose source shape, fps, bitrate, AU count, keyframe count',
         ],
         'evidence': encoder_gate_evidence,
+    },
+    'nativeDecodeQoe': {
+        'status': 'PASS' if qoe_gate_pass else 'FAIL',
+        'requirements': [
+            'native play decode/QoE is enabled when requested',
+            'FFmpeg decode produces frames and exposes first-frame/freeze/decode-error metrics',
+        ],
+        'evidence': qoe_gate_evidence,
     },
     'weakNetworkCoverage': {
         'status': 'PASS' if not skipped_cases and any(c['name'] != 'baseline' for c in attempted) else 'SKIP',
@@ -959,6 +1061,7 @@ report = {
             'height': synthetic_height,
             'fps': synthetic_fps,
         },
+        'decodeQoe': decode_qoe,
         'enableNetem': enable_netem,
         'netemDev': netem_dev,
         'strict': strict,
@@ -1010,6 +1113,7 @@ lines.append('| Run Dir | `{}` |'.format(run_dir))
 lines.append('| Duration Seconds | `{}` |'.format(duration_seconds))
 lines.append('| Netem | `{}` on `{}` |'.format('enabled' if enable_netem else 'disabled', netem_dev))
 lines.append('| Source Mode | `{}` |'.format(source_mode))
+lines.append('| Decode QoE | `{}` |'.format('enabled' if decode_qoe else 'disabled'))
 lines.append('| Input | `{}` |'.format(input_file))
 lines.append('')
 lines.append('## Gates')
@@ -1021,12 +1125,12 @@ for name, gate in gates.items():
 lines.append('')
 lines.append('## Cases')
 lines.append('')
-lines.append('| Case | Status | Network | pushedAu | outputAu | RTP in | push RTCP in | play RTCP out | TWCC ext | Encoder AU/keyframes | RTT min/avg/max | Loss min/avg/max | targetBps min/avg/max | NACK/PLI/RTX | Notes |')
-lines.append('|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|')
+lines.append('| Case | Status | Network | pushedAu | outputAu | decodedFrames/errors | RTP in | push RTCP in | play RTCP out | TWCC ext | Encoder AU/keyframes | RTT min/avg/max | Loss min/avg/max | targetBps min/avg/max | NACK/PLI/RTX | Notes |')
+lines.append('|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|')
 for case in cases:
     metrics = case.get('metrics', {})
     if case['status'] == 'SKIP':
-        lines.append('| `{}` | `{}` | {} | - | - | - | - | - | - | - | - | - | - | - | {} |'.format(
+        lines.append('| `{}` | `{}` | {} | - | - | - | - | - | - | - | - | - | - | - | - | {} |'.format(
             case['name'], case['status'], case.get('networkCondition', '-'), case.get('skipReason', '-')))
         continue
     twcc = metrics.get('selectedTwccExtId') or metrics.get('publishTwccExtId')
@@ -1040,12 +1144,17 @@ for case in cases:
     encoder_summary = '-'
     if encoder.get('accessUnits') is not None:
         encoder_summary = '{}/{}'.format(fmt(encoder.get('accessUnits')), fmt(encoder.get('keyframes')))
-    lines.append('| `{}` | `{}` | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {}/{}/{} | {} |'.format(
+    qoe = metrics.get('qoe') or {}
+    qoe_summary = '-'
+    if qoe.get('decodedFrames') is not None:
+        qoe_summary = '{}/{}'.format(fmt(qoe.get('decodedFrames')), fmt(qoe.get('decodeErrors')))
+    lines.append('| `{}` | `{}` | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {}/{}/{} | {} |'.format(
         case['name'],
         case['status'],
         case.get('networkCondition', '-'),
         fmt(metrics.get('pushedAu')),
         fmt(metrics.get('playOutputAu')),
+        qoe_summary,
         fmt(metrics.get('playRtpPackets')),
         fmt(metrics.get('pushRtcpFeedbackPacketsIn')),
         fmt(metrics.get('playRtcpPacketsOut')),
@@ -1071,6 +1180,7 @@ lines.append('- `SKIP` means the case was not verified and must not be counted a
 lines.append('- `qosMainline=PASS` means TWCC negotiation, push RTCP feedback input, and play RTCP feedback output are all observable.')
 lines.append('- `sdkRuntimeObservability=PASS` means push/play SDK runtime log, metrics, alerts files exist and SDK RR/TWCC counters are non-zero.')
 lines.append('- `encoderRuntime=PASS` means requested synthetic x264 mode produced encoded H264 access units and keyframes with observable encoder metrics.')
+lines.append('- `nativeDecodeQoe=PASS` means requested native FFmpeg decode/QoE produced decoded frames and first-frame/decode-error metrics.')
 lines.append('- `weakNetworkCoverage=SKIP` means tc netem cases were intentionally not run; use `--enable-netem` when the host permits network emulation.')
 
 with open(report_md, 'w', encoding='utf-8') as f:

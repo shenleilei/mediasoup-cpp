@@ -8,6 +8,7 @@
 #include "common/ClientArgs.h"
 #include "common/PlainUdpTransport.h"
 #include "play/AnnexBSink.h"
+#include "play/FfmpegDecodeSink.h"
 #include "play/PlaySignalingSession.h"
 
 namespace webrtc_qos_plain {
