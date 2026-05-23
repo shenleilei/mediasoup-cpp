@@ -22,6 +22,7 @@ struct PushOptions {
 	int processTickMs = 10;
 	bool loopInput = false;
 	bool inputSynthetic = false;
+	bool inputDecodeLoop = false;
 	std::string encoder = "copy";
 	int syntheticWidth = 320;
 	int syntheticHeight = 180;

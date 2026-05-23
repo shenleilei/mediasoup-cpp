@@ -28,7 +28,7 @@ bool ParseOptionMap(int argc, char* argv[], OptionMap* values, std::string* erro
 		if (eq != std::string::npos) {
 			const auto option = key.substr(0, eq);
 			const auto value = key.substr(eq + 1);
-			if (option == "--loop-input" || option == "--output-null" || option == "--enable-audio" || option == "--decode-qoe") {
+			if (option == "--loop-input" || option == "--input-decode-loop" || option == "--output-null" || option == "--enable-audio" || option == "--decode-qoe") {
 				(*values)[option] = value.empty() ? "1" : value;
 			} else {
 				(*values)[option] = value;
@@ -36,7 +36,7 @@ bool ParseOptionMap(int argc, char* argv[], OptionMap* values, std::string* erro
 			continue;
 		}
 
-		if (key == "--loop-input" || key == "--output-null" || key == "--enable-audio" || key == "--decode-qoe") {
+		if (key == "--loop-input" || key == "--input-decode-loop" || key == "--output-null" || key == "--enable-audio" || key == "--decode-qoe") {
 			(*values)[key] = "1";
 			continue;
 		}
@@ -135,6 +135,7 @@ bool ParsePushOptions(int argc, char* argv[], PushOptions* options, std::string*
 		options->processTickMs = ParseInt(GetString(values, "--process-tick-ms", std::to_string(options->processTickMs)), "--process-tick-ms");
 		options->loopInput = GetBoolFlag(values, "--loop-input");
 		options->inputSynthetic = GetBoolFlag(values, "--input-synthetic");
+		options->inputDecodeLoop = GetBoolFlag(values, "--input-decode-loop");
 		options->encoder = GetString(values, "--encoder", options->encoder);
 		options->syntheticWidth = ParseInt(GetString(values, "--synthetic-width", std::to_string(options->syntheticWidth)), "--synthetic-width");
 		options->syntheticHeight = ParseInt(GetString(values, "--synthetic-height", std::to_string(options->syntheticHeight)), "--synthetic-height");
@@ -149,12 +150,20 @@ bool ParsePushOptions(int argc, char* argv[], PushOptions* options, std::string*
 		if (error) *error = "--input is required";
 		return false;
 	}
+	if (options->inputSynthetic && options->inputDecodeLoop) {
+		if (error) *error = "--input-synthetic and --input-decode-loop are mutually exclusive";
+		return false;
+	}
 	if (options->inputSynthetic && options->encoder != "x264") {
 		if (error) *error = "--input-synthetic requires --encoder x264";
 		return false;
 	}
-	if (!options->inputSynthetic && options->encoder != "copy") {
-		if (error) *error = "--encoder x264 currently requires --input-synthetic";
+	if (options->inputDecodeLoop && options->encoder != "x264") {
+		if (error) *error = "--input-decode-loop requires --encoder x264";
+		return false;
+	}
+	if (!options->inputSynthetic && !options->inputDecodeLoop && options->encoder != "copy") {
+		if (error) *error = "--encoder x264 currently requires --input-synthetic or --input-decode-loop";
 		return false;
 	}
 	if (options->syntheticWidth < 16 || options->syntheticHeight < 16 ||
@@ -235,7 +244,7 @@ std::string PushUsage()
 {
 	return
 		"webrtc-qos-plain-push-client --server-ip <ip> --server-port <port> "
-		"--room <room> --peer <peer> (--input <h264.mp4>|--input-synthetic --encoder x264) [--loop-input] "
+		"--room <room> --peer <peer> (--input <h264.mp4>|--input <mp4> --input-decode-loop --encoder x264|--input-synthetic --encoder x264) [--loop-input] "
 		"[--video-ssrc <u32>] [--enable-audio] [--audio-ssrc <u32>] [--media-remote-ip <ip>] "
 		"[--synthetic-width <px>] [--synthetic-height <px>] [--synthetic-fps <n>] [--log-dir <dir>]";
 }
