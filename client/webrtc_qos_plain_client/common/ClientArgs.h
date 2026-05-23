@@ -14,7 +14,8 @@ struct PushOptions {
 	std::string logDir = "logs/webrtc_qos_plain_client/push";
 	std::string mediaRemoteIp;
 	uint32_t videoSsrc = 11111111u;
-	uint32_t audioSsrc = 22222222u;
+	uint32_t audioSsrc = 0;
+	bool enableAudio = false;
 	uint32_t startBitrateBps = 1200000u;
 	uint32_t minBitrateBps = 300000u;
 	uint32_t maxBitrateBps = 2500000u;

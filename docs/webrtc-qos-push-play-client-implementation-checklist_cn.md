@@ -1,6 +1,6 @@
 # WebRTC QoS SDK Plain 推拉流客户端实现验收清单
 
-> 状态：P1 已完成本地短链路验收；P2 已完成 consumer TWCC ext 修复和 adapter RTCP 边界计数。浏览器画面、弱网 smoke、SDK play 周期性 RR/TWCC 输出仍需后续验证。
+> 状态：P1 已完成本地短链路验收；P2 已完成 consumer TWCC ext 修复、adapter RTCP 边界计数和 video-only publish。浏览器画面、弱网 smoke、SDK play 周期性 RR/TWCC 输出仍需后续验证。
 
 ## 1. 已实现项
 
@@ -9,7 +9,7 @@
 | 新建同一目录下的 push/play 客户端 | `client/webrtc_qos_plain_client/{common,push,play}` | `find client/webrtc_qos_plain_client -type f` |
 | 两个可执行 target | `webrtc-qos-plain-push-client`、`webrtc-qos-plain-play-client` | `cmake --build build-webrtc-qos-plain --target ...` 通过 |
 | 复用现有 WebSocket 信令 | 复用 `client/WsClient.cpp` | CMake target source 包含 `client/WsClient.cpp` |
-| push 复用 `join` + `plainPublish` | `PushSignalingSession` | `plainPublish` 请求含 `videoCodec=h264`、`videoSsrc`、`audioSsrc` |
+| push 复用 `join` + `plainPublish` | `PushSignalingSession` | 新客户端请求含 `videoCodec=h264`、`videoSsrc`、`enableAudio=false` |
 | play 复用 `join` + `plainSubscribe` | `PlaySignalingSession` | `join` 带最小 Plain receive capabilities，`plainSubscribe(recvIp, recvPort)` |
 | play 借鉴原 Play 的 `newConsumer` | `PlaySignalingSession` 缓存 `newConsumer` 并单路选择 | `pendingConsumers_` + `TakeSelectedConsumer()` |
 | play 借鉴 `requestConsumerKeyFrame` | 选中 consumer 后立即请求，1s 后再请求一次 | `play/main.cpp` |
@@ -24,11 +24,12 @@
 | runtime loop 持续处理 WS notification | push/play loop 调 `DispatchNotifications()` | 支持 `qosPolicy`/`newConsumer` 等通知观测 |
 | 不复用旧自研 QoS/RTCP/packetizer | 源码和 target 不引用旧模块 | `rg` 门禁仅命中 README 的说明文本 |
 | CLI 兼容 `--key value` 和 `--key=value` | `ClientArgs` | smoke 使用 `--server-ip=127.0.0.1` 等参数通过 |
-| play 兼容 dummy audio producer | receive capabilities 声明 Opus，但 runtime 只选择 video | SFU smoke 不再出现 audio auto-subscribe error |
+| play 兼容历史 dummy audio producer | receive capabilities 暂保留 Opus，runtime 只选择 video | P1 历史 smoke 不再出现 audio auto-subscribe error |
 | consumer TWCC ext 透传 | `ortc::getConsumableRtpParameters()` 保留 producer/router 均支持的 header extension | P2 smoke：`selected_consumer ... twccExtId=5` |
 | consumer 无 TWCC ext 降级 | 保留 `consumer_without_twcc_ext` 日志，兼容异常环境继续启动 `VideoPlayClient` | 降级可播放，但不允许作为 QoS 主链路 PASS |
 | push RTCP feedback 输入计数 | `WebRtcQosPushRuntime` 记录 `rtcpFeedbackPacketsIn/BytesIn/Failures` | P2 smoke：`rtcpFeedbackPacketsIn=86 ... Failures=0` |
 | play RTCP 输出计数 | `WebRtcQosPlayRuntime` 记录 `rtcpPacketsOut/BytesOut/SendFailures` | P2 smoke 字段存在；当前 SDK baseline 输出为 0，列为 P2 后续项 |
+| video-only plain publish | 服务端支持 `enableAudio=false`；新 push 默认不发 `audioSsrc`；旧请求默认仍启用 audio | P2-M4 smoke：`audioEnabled=false` 且 play 只收到 video consumer |
 
 ## 2. 当前验证命令
 
@@ -53,6 +54,9 @@ g++ -std=c++17 -Isrc -I. -Ithird_party/nlohmann_json/include \
 
 rg -n "client/qos|sendsidebwe|ccutils|RtcpHandler|NetworkThread|SenderTransportController|H264Packetizer|Vp8Packetizer|PublisherQosController|PacketizeAnnexB" \
   client/webrtc_qos_plain_client CMakeLists.txt
+
+./build-webrtc-qos-p2/mediasoup_qos_integration_tests \
+  --gtest_filter='QosIntegrationTest.PlainPublishSupportsVideoOnlyAndKeepsLegacyAudioDefault:QosIntegrationTest.PlainPublishReplacesOldTransportAndUsesBaselineCodec:QosIntegrationTest.PlainPublishRejectsDuplicateVideoSsrcs'
 ```
 
 当前结果：
@@ -60,6 +64,7 @@ rg -n "client/qos|sendsidebwe|ccutils|RtcpHandler|NetworkThread|SenderTransportC
 - CMake configure 通过。
 - push/play 两个 target 编译通过。
 - ORTC standalone targeted test 通过。
+- P2-M4 targeted integration test 通过。
 - 旧实现依赖门禁没有命中代码；只命中 `client/webrtc_qos_plain_client/README.md` 的说明文本。
 
 ## 3. P1 动态 smoke 结果（历史）
@@ -159,6 +164,36 @@ push/play：
 - P2-M1a 已完成：consumer 不再丢 TWCC header extension。
 - P2-M1c adapter 边界计数已完成：push/play 日志包含 RTCP I/O counters。
 - P2-M1d 未完成：需要 `webrtc_qos_sdk` play facade 补周期性 RR/TWCC 输出和 SDK counter 后，再在 mediasoup-cpp 集成验证。
+
+## 3.2 P2-M4 video-only 动态 smoke 结果
+
+运行目录：
+
+```text
+/tmp/webrtc-qos-plain-p2-m4
+```
+
+本地结果：
+
+| 验收点 | 结果 | 证据 |
+|---|---:|---|
+| push video-only publish | PASS | `plain_publish_ok ... audioSsrc=0 audioEnabled=false` |
+| play 只收到 video consumer | PASS | 只有 `new_consumer_notification ... "kind":"video"`，没有 audio consumer |
+| video consumer TWCC ext | PASS | `selected_consumer ... twccExtId=5` |
+| statsReport 无 dummy audio producer | PASS | statsReport 中 `p2-push.producers` 只有 video producer |
+| RTP/AU 输出 | PASS | `play_runtime_stopped rtpPackets=233 rtcpPackets=7 ... outputAu=118` |
+| push RTCP feedback 输入 | PASS | `push_runtime_stopped pushedAu=118 rtcpFeedbackPacketsIn=87 ... Failures=0` |
+
+配套 targeted integration：
+
+- `QosIntegrationTest.PlainPublishSupportsVideoOnlyAndKeepsLegacyAudioDefault`
+- `QosIntegrationTest.PlainPublishReplacesOldTransportAndUsesBaselineCodec`
+- `QosIntegrationTest.PlainPublishRejectsDuplicateVideoSsrcs`
+
+结论：
+
+- P2-M4 已完成：新 push 默认 `enableAudio=false`，服务端不再创建 dummy audio producer。
+- 旧请求不传 `enableAudio` 时仍默认启用 audio，保持旧 plain-client 兼容。
 
 ## 4. 版本差异
 
