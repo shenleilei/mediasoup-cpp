@@ -241,6 +241,19 @@ inline RtpParameters getConsumableRtpParameters(
 		consumable.codecs.push_back(codec);
 	}
 
+	// Preserve negotiated RTP header extensions that the producer announced and
+	// the router supports for this media kind. The consumer side later intersects
+	// these with remote capabilities.
+	for (const auto& extension : params.headerExtensions) {
+		auto it = std::find_if(caps.headerExtensions.begin(), caps.headerExtensions.end(),
+			[&](const RtpHeaderExtension& capExtension) {
+				return capExtension.kind == kind &&
+					capExtension.uri == extension.uri;
+			});
+		if (it == caps.headerExtensions.end()) continue;
+		consumable.headerExtensions.push_back(extension);
+	}
+
 	// Map encodings
 	for (size_t i = 0; i < params.encodings.size(); i++) {
 		auto& encoding = params.encodings[i];

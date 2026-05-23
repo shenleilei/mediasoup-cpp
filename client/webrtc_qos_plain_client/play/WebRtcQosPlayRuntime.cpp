@@ -54,8 +54,16 @@ int WebRtcQosPlayRuntime::Run(std::atomic<bool>& running, PlaySignalingSession* 
 	config.session = session;
 	const bool sdkRuntimeFilesEnabled = ConfigureSdkRuntimeFiles(config, "play", options_.logDir);
 	logger_->info("sdk_runtime_files role=play enabled={}", sdkRuntimeFilesEnabled);
+	uint64_t rtcpPacketsOut = 0;
+	uint64_t rtcpBytesOut = 0;
+	uint64_t rtcpSendFailures = 0;
 	config.transport_output = [&](const webrtc_qos::TransportPacketView& packet) {
 		std::string sendError;
+		const bool isRtcp = packet.metadata.kind == webrtc_qos::TransportPacketKind::kRtcp;
+		if (isRtcp) {
+			++rtcpPacketsOut;
+			rtcpBytesOut += static_cast<uint64_t>(packet.size);
+		}
 		const bool ok = udp_.SendTo(
 			options_.mediaRemoteIp,
 			consumerInfo_.plainTransportPort,
@@ -63,7 +71,9 @@ int WebRtcQosPlayRuntime::Run(std::atomic<bool>& running, PlaySignalingSession* 
 			packet.size,
 			&sendError);
 		if (!ok) {
-			logger_->error("sdk_transport_output_failed kind=rtcp bytes={} remoteIp={} remotePort={} error={}",
+			if (isRtcp) ++rtcpSendFailures;
+			logger_->error("sdk_transport_output_failed kind={} bytes={} remoteIp={} remotePort={} error={}",
+				isRtcp ? "rtcp" : "rtp",
 				packet.size,
 				options_.mediaRemoteIp,
 				consumerInfo_.plainTransportPort,
@@ -154,9 +164,12 @@ int WebRtcQosPlayRuntime::Run(std::atomic<bool>& running, PlaySignalingSession* 
 			lastSnapshotUs = nowUs;
 			auto snapshot = play->GetQosSnapshot(nowUs);
 			logger_->info(
-				"play_metrics rtpPackets={} rtcpPackets={} outputAu={} nack={} pli={} retransmission={} droppedRetransmission={} rttMs={} lossQ8={}",
+				"play_metrics rtpPackets={} rtcpPackets={} rtcpPacketsOut={} rtcpBytesOut={} rtcpSendFailures={} outputAu={} nack={} pli={} retransmission={} droppedRetransmission={} rttMs={} lossQ8={}",
 				rtpPackets,
 				rtcpPackets,
+				rtcpPacketsOut,
+				rtcpBytesOut,
+				rtcpSendFailures,
 				sink.writtenAccessUnits(),
 				snapshot.nack_count,
 				snapshot.pli_count,
@@ -170,9 +183,13 @@ int WebRtcQosPlayRuntime::Run(std::atomic<bool>& running, PlaySignalingSession* 
 	}
 
 	play->Stop();
-	logger_->info("play_runtime_stopped rtpPackets={} rtcpPackets={} outputAu={}",
+	logger_->info(
+		"play_runtime_stopped rtpPackets={} rtcpPackets={} rtcpPacketsOut={} rtcpBytesOut={} rtcpSendFailures={} outputAu={}",
 		rtpPackets,
 		rtcpPackets,
+		rtcpPacketsOut,
+		rtcpBytesOut,
+		rtcpSendFailures,
 		sink.writtenAccessUnits());
 	return 0;
 }
