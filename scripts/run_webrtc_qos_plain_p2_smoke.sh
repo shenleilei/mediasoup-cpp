@@ -777,6 +777,7 @@ def parse_case(case_name):
         make_check('sdk-play-rtcp-generated', play_sdk_runtime['transportFeedbackCountMax'] > 0 and play_sdk_runtime['receiverReportCountMax'] > 0, 'twcc={} rr={}'.format(play_sdk_runtime['transportFeedbackCountMax'], play_sdk_runtime['receiverReportCountMax'])),
         make_check('sdk-push-rtcp-counted', push_sdk_runtime['transportFeedbackCountMax'] > 0 and push_sdk_runtime['receiverReportCountMax'] > 0, 'twcc={} rr={}'.format(push_sdk_runtime['transportFeedbackCountMax'], push_sdk_runtime['receiverReportCountMax'])),
         make_check('harness-no-failure', not bool(harness_failure), harness_failure or 'ok'),
+        make_check('runtime-no-unexpected-alerts', not bool(warning_lines), 'alerts={}'.format(len(warning_lines)) if warning_lines else 'ok'),
     ]
 
     if source_mode == 'synthetic':
@@ -1181,6 +1182,7 @@ lines.append('- `qosMainline=PASS` means TWCC negotiation, push RTCP feedback in
 lines.append('- `sdkRuntimeObservability=PASS` means push/play SDK runtime log, metrics, alerts files exist and SDK RR/TWCC counters are non-zero.')
 lines.append('- `encoderRuntime=PASS` means requested synthetic x264 mode produced encoded H264 access units and keyframes with observable encoder metrics.')
 lines.append('- `nativeDecodeQoe=PASS` means requested native FFmpeg decode/QoE produced decoded frames and first-frame/decode-error metrics.')
+lines.append('- `weakNetworkCoverage=PASS` means at least one tc netem weak-network case was actually attempted and passed; the generated report records which cases were covered.')
 lines.append('- `weakNetworkCoverage=SKIP` means tc netem cases were intentionally not run; use `--enable-netem` when the host permits network emulation.')
 
 with open(report_md, 'w', encoding='utf-8') as f:
