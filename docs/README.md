@@ -38,6 +38,7 @@
 | 做线上排障 | [troubleshooting_cn.md](./troubleshooting_cn.md) → [architecture_cn.md](./architecture_cn.md) → [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) |
 | 做 QoS 改动 | [qos-status.md](./qos-status.md) → [uplink-qos-design_cn.md](./uplink-qos-design_cn.md) → [downlink-qos-design_cn.md](./downlink-qos-design_cn.md) → [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md) → [downlink-qos-v3-design_cn.md](./downlink-qos-v3-design_cn.md) → [downlink-qos-v3-implementation-plan_cn.md](./downlink-qos-v3-implementation-plan_cn.md) → [run_qos_tests.sh](../scripts/run_qos_tests.sh) |
 | 做 Linux client / PlainTransport C++ client | [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md) → [webrtc-qos-push-play-client-p2-design_cn.md](./webrtc-qos-push-play-client-p2-design_cn.md) → [plain-client-qos-status.md](./plain-client-qos-status.md) → [linux-client-architecture_cn.md](./linux-client-architecture_cn.md) → [plain-client-qos-parity-checklist.md](./plain-client-qos-parity-checklist.md) |
+| 下线旧 plain-client | [plain-client-legacy-removal-plan_cn.md](./plain-client-legacy-removal-plan_cn.md) |
 | 查 worker 架构 | [mediasoup-worker-architecture-analysis_cn.md](./mediasoup-worker-architecture-analysis_cn.md) |
 | 查 QoS 详细 case 结果 | [uplink-qos-case-analysis.md](./uplink-qos-case-analysis.md) |
 | 查 QoS 测试覆盖地图 | [qos-test-coverage_cn.md](./qos-test-coverage_cn.md) |
@@ -56,6 +57,7 @@
 | [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md) | 新 `webrtc_qos_sdk` Plain 推拉流客户端设计方案，定义同一目录下的 push/play、信令复用、媒体面接 SDK、验收门禁和阶段计划。 |
 | [webrtc-qos-push-play-client-p2-design_cn.md](./webrtc-qos-push-play-client-p2-design_cn.md) | Plain 推拉流客户端“大第二期”设计方案，按可实施性、可验证性、可观测性三类门禁组织 QoS 闭环、弱网自动化、观测日志、video-only、实时编码器、输入源和 QoE 验证。 |
 | [webrtc-qos-push-play-client-implementation-checklist_cn.md](./webrtc-qos-push-play-client-implementation-checklist_cn.md) | 新 Plain 推拉流客户端实现对照清单，记录已实现项、验证命令、版本差异和动态验收缺口。 |
+| [plain-client-legacy-removal-plan_cn.md](./plain-client-legacy-removal-plan_cn.md) | 旧 `plain-client` 的引用审计、保留边界、两阶段下线/删除方案和验收门禁。 |
 | [qos-status.md](./qos-status.md) | QoS 总状态摘要，统一给出 browser uplink / plain-client / downlink 的当前口径与结果入口。 |
 | [full-regression-test-results.md](./full-regression-test-results.md) | 最新一次 `scripts/run_all_tests.sh` 生成的仓库全量回归结果页，按选择分组记录逐任务 PASS/FAIL 和耗时。 |
 | [nightly-full-regression.md](./nightly-full-regression.md) | nightly 全量回归自动化说明，包含 03:00 cron 安装、日志目录、邮件摘要和 Markdown 附件约定。 |
@@ -114,6 +116,7 @@
 - [plain-client-qos-parity-checklist.md](./plain-client-qos-parity-checklist.md) 用中文列出 JS uplink QoS 测试资产与 C++ client 对位覆盖的当前状态。
 - [linux-client-architecture_cn.md](./linux-client-architecture_cn.md) 是当前 Linux client 架构主入口。
 - [plain-client-qos-status.md](./plain-client-qos-status.md) 是当前 plain-client QoS 结果与签收范围的稳定摘要入口。
+- [plain-client-legacy-removal-plan_cn.md](./plain-client-legacy-removal-plan_cn.md) 是旧 `plain-client` 下线与删除方案入口。
 - [downlink-qos-status.md](./downlink-qos-status.md) 是当前 downlink 范围和结果入口摘要。
 - 当前签收口径，以 [qos-status.md](./qos-status.md) 为总入口，并按各分支状态页下钻。
 - [uplink-qos-boundaries.md](./uplink-qos-boundaries.md) 用来说明“底层 WebRTC 自动能力”和“本仓库 uplink QoS 策略能力”的职责边界。
