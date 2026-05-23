@@ -22,9 +22,9 @@
 - mediasoup consumer 下行 `rtpParameters.headerExtensions=[]`，play 只能降级为无 TWCC 接收。
 - 本地 smoke 只验证 RTP/RTCP/AU 闭环，未完整验证下行 TWCC 主链路。
 - 旧 SDK dist 包未暴露 runtime logs/metrics/alerts 配置字段；当前 dist 已更新，但需要 smoke gate 固化防回归。
-- MP4 copy path 不能根据 SDK adaptation 改 bitrate/fps，也不能响应 PLI 强制 IDR；当前已补 synthetic+x264 最小实时编码路径，但 MP4 decode loop、V4L2 和真实弱网 adaptation 仍需继续验收。
+- MP4 copy path 不能根据 SDK adaptation 改 bitrate/fps，也不能响应 PLI 强制 IDR；当前已补 synthetic+x264 最小实时编码路径，并已在 `delay_100ms` netem 下验证 QoS/RTCP/QoE 不崩溃；MP4 decode loop、V4L2 和 bandwidth/recovery adaptation 仍需继续验收。
 - `plainPublish` 当前强制创建 dummy audio producer，服务端语义不干净。
-- 弱网 smoke、浏览器接收尚未自动化；native decode/QoE 已有 baseline 最小切片，但弱网恢复 QoE 仍需继续验收。
+- 弱网 smoke harness 已支持 `--enable-netem` 并完成 baseline + `delay_100ms` 短测；浏览器接收尚未自动化，loss/bandwidth/recovery 和弱网恢复 QoE 仍需继续验收。
 
 当前实施进展：
 
@@ -34,6 +34,7 @@
 - P2-M4 已支持 `plainPublish enableAudio=false`，新 push 默认 video-only，旧请求保持 audio 默认兼容。
 - 当前 SDK play facade 已生成周期性 RR/TWCC feedback；本地 baseline smoke 已验证 `qosMainline=PASS` 和 `sdkRuntimeObservability=PASS`。
 - P2-M5/M6 已落地最小 synthetic+x264 路径：`RealtimeH264Source` 生成 raw frame，libx264 输出 Annex-B AU，push runtime 应用 SDK encoder adaptation；本地 synthetic baseline smoke 已验证 `encoderRuntime=PASS`。
+- P2-M3/P2-M8 已完成真实 `delay_100ms` netem 短测：RTT avg/max `82.83/209ms`，decodeErrors=0，play RTCP out=283，push RTCP in=146，报告 `weakNetworkCoverage=PASS`。
 
 第二期目标是把第一期从“最小可跑”推进到“可验证、可观测、可调优、可接真实输入”的状态。
 
@@ -659,7 +660,7 @@ scripts/run_webrtc_qos_plain_p2_smoke.sh \
 - `currentFps > 0`
 - `currentBitrateBps > 0`
 
-真实弱网下的 bitrate 下探、PLI 触发 IDR 和恢复时首帧时间，仍必须在启用 `--enable-netem` 后验收。
+当前已在 `delay_100ms` 下验证真实 netem 的反馈闭环和 native decode 稳定性；bitrate 下探、PLI 触发 IDR 和恢复时首帧时间，仍必须在 bandwidth/recovery case 中继续验收。
 
 ## 10. P2-F：浏览器和 native QoE 验证
 
@@ -876,7 +877,7 @@ scripts/run_webrtc_qos_plain_p2_smoke.sh \
 - 默认安全模式只运行 `baseline`，弱网 case 在未传 `--enable-netem` 时写为 `SKIP`，不计 PASS。
 - 需要真实弱网验证时显式传 `--enable-netem`；脚本会预检 `tc`、root/CAP_NET_ADMIN 和目标网卡。
 - 短测报告固定写入 `docs/generated/webrtc-qos-plain-p2-smoke-report.{json,md}`。
-- 当前机器 synthetic+QoE 短测结果：`baseline PASS`，`qosMainline PASS`，`sdkRuntimeObservability PASS`，`encoderRuntime PASS`，`nativeDecodeQoe PASS`；整体 `PARTIAL` 仅因为未启用 `--enable-netem`，弱网 coverage 为 `SKIP`。
+- 当前机器 synthetic+QoE+netem 短测结果：`baseline PASS`、`delay_100ms PASS`，`qosMainline PASS`，`sdkRuntimeObservability PASS`，`encoderRuntime PASS`，`nativeDecodeQoe PASS`，`weakNetworkCoverage PASS`。
 
 如果脚本名后续调整，必须在本文档和 `docs/README.md` 同步更新。
 

@@ -208,12 +208,14 @@ SignalingServer
 - PlainTransport C++ 客户端矩阵：`48 / 48 PASS` (`2026-04-26`)
 - PlainTransport C++ 客户端信令测试套件：`PASS`
 - C++ 客户端 QoS 单元测试对齐 (parity)：`PASS`
-- WebRTC QoS Plain P2 synthetic+QoE baseline：`qosMainline=PASS`，`sdkRuntimeObservability=PASS`，`encoderRuntime=PASS`，`nativeDecodeQoe=PASS`；未启用 `--enable-netem` 的弱网 coverage 记为 `SKIP`
+- WebRTC QoS Plain P2 synthetic+QoE：`qosMainline=PASS`，`sdkRuntimeObservability=PASS`，`encoderRuntime=PASS`，`nativeDecodeQoe=PASS`，`weakNetworkCoverage=PASS`
+- P2 已实测 `baseline` 和 `delay_100ms`：100ms delay + 20ms jitter 下 RTT avg/max 为 `82.83/209ms`，decode errors 为 `0`，play RTCP out 为 `283`，push RTCP in 为 `146`
 
 当前范围提示：
 
 - 上行 QoS 主链路在浏览器和 PlainTransport C++ 客户端上均已闭环
 - 下行目前覆盖接收端控制以及零需求发布端暂停/恢复协调
+- WebRTC QoS Plain P2 目前签收 baseline 和 100ms delay 短测；loss/bandwidth/recovery、浏览器画面、MP4 decode loop、V4L2 仍是后续覆盖项
 - `dynacast` 和房间级全局比特率预算划分是后续工作
 
 事实来源链接 (Source-of-truth links)：

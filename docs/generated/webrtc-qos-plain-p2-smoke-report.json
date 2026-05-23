@@ -7,11 +7,11 @@
         "samples": []
       },
       "artifacts": {
-        "caseDir": "/tmp/webrtc-qos-plain-p2-qoe-smoke/20260523T131456Z/baseline",
-        "playLog": "/tmp/webrtc-qos-plain-p2-qoe-smoke/20260523T131456Z/baseline/play/play.log",
-        "pushLog": "/tmp/webrtc-qos-plain-p2-qoe-smoke/20260523T131456Z/baseline/push/push.log",
-        "readyz": "/tmp/webrtc-qos-plain-p2-qoe-smoke/20260523T131456Z/baseline/readyz.json",
-        "sfuLog": "/tmp/webrtc-qos-plain-p2-qoe-smoke/20260523T131456Z/baseline/sfu.stdout.log"
+        "caseDir": "/tmp/webrtc-qos-plain-p2-netem-smoke-gated/20260523T133901Z/baseline",
+        "playLog": "/tmp/webrtc-qos-plain-p2-netem-smoke-gated/20260523T133901Z/baseline/play/play.log",
+        "pushLog": "/tmp/webrtc-qos-plain-p2-netem-smoke-gated/20260523T133901Z/baseline/push/push.log",
+        "readyz": "/tmp/webrtc-qos-plain-p2-netem-smoke-gated/20260523T133901Z/baseline/readyz.json",
+        "sfuLog": "/tmp/webrtc-qos-plain-p2-netem-smoke-gated/20260523T133901Z/baseline/sfu.stdout.log"
       },
       "checks": [
         {
@@ -45,7 +45,7 @@
           "status": "PASS"
         },
         {
-          "evidence": "rtpPackets=1277",
+          "evidence": "rtpPackets=1342",
           "name": "play-rtp-input",
           "status": "PASS"
         },
@@ -80,12 +80,12 @@
           "status": "PASS"
         },
         {
-          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 19406, \"metricsFiles\": 1, \"processTickCountMax\": 471, \"receiverReportCountMax\": 4, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 6, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 50}",
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 21423, \"metricsFiles\": 1, \"processTickCountMax\": 471, \"receiverReportCountMax\": 4, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 6, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 50}",
           "name": "sdk-push-runtime-files",
           "status": "PASS"
         },
         {
-          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 15586, \"metricsFiles\": 1, \"processTickCountMax\": 583, \"receiverReportCountMax\": 5, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 7, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 116}",
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 21635, \"metricsFiles\": 1, \"processTickCountMax\": 584, \"receiverReportCountMax\": 5, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 7, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 116}",
           "name": "sdk-play-runtime-files",
           "status": "PASS"
         },
@@ -105,6 +105,11 @@
           "status": "PASS"
         },
         {
+          "evidence": "ok",
+          "name": "runtime-no-unexpected-alerts",
+          "status": "PASS"
+        },
+        {
           "evidence": "samples=12",
           "name": "encoder-metrics-present",
           "status": "PASS"
@@ -120,7 +125,7 @@
           "status": "PASS"
         },
         {
-          "evidence": "{\"accessUnits\": 151, \"bitrateChanges\": 28, \"currentBitrateBps\": 2156096, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 2, \"forcedKeyframeRequests\": 1, \"fpsChanges\": 1, \"framesEncoded\": 151, \"framesGenerated\": 151, \"height\": 180, \"keyframes\": 6, \"lastKeyframe\": \"true\", \"mode\": \"synthetic\", \"width\": 320}",
+          "evidence": "{\"accessUnits\": 151, \"bitrateChanges\": 28, \"currentBitrateBps\": 2326605, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 2, \"forcedKeyframeRequests\": 4, \"fpsChanges\": 1, \"framesEncoded\": 151, \"framesGenerated\": 151, \"height\": 180, \"keyframes\": 6, \"lastKeyframe\": \"false\", \"mode\": \"synthetic\", \"width\": 320}",
           "name": "encoder-source-shape",
           "status": "PASS"
         },
@@ -149,10 +154,10 @@
         "encoder": {
           "accessUnits": 151,
           "bitrateChanges": 28,
-          "currentBitrateBps": 2156096,
+          "currentBitrateBps": 2326605,
           "currentFps": 30,
           "encoderRecreates": 2,
-          "forcedKeyframeRequests": 1,
+          "forcedKeyframeRequests": 4,
           "fpsChanges": 1,
           "framesEncoded": 151,
           "framesGenerated": 151,
@@ -164,8 +169,8 @@
           "width": 320
         },
         "finalTargetBps": {
-          "avg": 1758929.5,
-          "max": 2156096.0,
+          "avg": 1894794.5,
+          "max": 2326605.0,
           "min": 1200000.0
         },
         "nack": 0,
@@ -176,15 +181,15 @@
         },
         "playMetricSamples": 14,
         "playOutputAu": 178,
-        "playRtcpBytesOut": 4156,
+        "playRtcpBytesOut": 4208,
         "playRtcpPacketsIn": 5,
         "playRtcpPacketsOut": 121,
         "playRtcpSendFailures": 0,
-        "playRtpPackets": 1277,
+        "playRtpPackets": 1342,
         "pli": 0,
         "publishTwccExtId": 5,
         "pushMetricSamples": 12,
-        "pushRtcpFeedbackBytesIn": 2848,
+        "pushRtcpFeedbackBytesIn": 2928,
         "pushRtcpFeedbackFailures": 0,
         "pushRtcpFeedbackPacketsIn": 65,
         "pushedAu": 178,
@@ -196,25 +201,25 @@
           "firstFrameDelayUs": 0,
           "freezeCount": 0,
           "height": 180,
-          "keyframesIn": 6,
-          "maxFrameGapUs": 92339,
+          "keyframesIn": 7,
+          "maxFrameGapUs": 66157,
           "outputFps": 30.12,
           "samples": 16,
           "width": 320
         },
         "retransmission": 0,
         "rttMs": {
-          "avg": 8.166666666666666,
-          "max": 19.0,
+          "avg": 7.833333333333333,
+          "max": 14.0,
           "min": 0.0
         },
         "sdkRuntime": {
           "play": {
             "alertsFiles": 1,
             "enabled": true,
-            "maxProcessTickGapUs": 15586,
+            "maxProcessTickGapUs": 21635,
             "metricsFiles": 1,
-            "processTickCountMax": 583,
+            "processTickCountMax": 584,
             "receiverReportCountMax": 5,
             "runtimeLogFiles": 1,
             "sessionMetricSamples": 7,
@@ -224,7 +229,7 @@
           "push": {
             "alertsFiles": 1,
             "enabled": true,
-            "maxProcessTickGapUs": 19406,
+            "maxProcessTickGapUs": 21423,
             "metricsFiles": 1,
             "processTickCountMax": 471,
             "receiverReportCountMax": 4,
@@ -241,13 +246,273 @@
           "min": 0.0
         },
         "targetBps": {
-          "avg": 1758929.5,
-          "max": 2156096.0,
+          "avg": 1894794.5,
+          "max": 2326605.0,
           "min": 1200000.0
         }
       },
       "name": "baseline",
       "networkCondition": "none",
+      "status": "PASS"
+    },
+    {
+      "alerts": {
+        "count": 0,
+        "ignoredHarnessNoiseCount": 6,
+        "samples": []
+      },
+      "artifacts": {
+        "caseDir": "/tmp/webrtc-qos-plain-p2-netem-smoke-gated/20260523T133901Z/delay_100ms",
+        "playLog": "/tmp/webrtc-qos-plain-p2-netem-smoke-gated/20260523T133901Z/delay_100ms/play/play.log",
+        "pushLog": "/tmp/webrtc-qos-plain-p2-netem-smoke-gated/20260523T133901Z/delay_100ms/push/push.log",
+        "readyz": "/tmp/webrtc-qos-plain-p2-netem-smoke-gated/20260523T133901Z/delay_100ms/readyz.json",
+        "sfuLog": "/tmp/webrtc-qos-plain-p2-netem-smoke-gated/20260523T133901Z/delay_100ms/sfu.stdout.log"
+      },
+      "checks": [
+        {
+          "evidence": "readyz ok=true",
+          "name": "sfu-readyz-ok",
+          "status": "PASS"
+        },
+        {
+          "evidence": "audioEnabled=false",
+          "name": "push-video-only-publish",
+          "status": "PASS"
+        },
+        {
+          "evidence": "twccExtId=5",
+          "name": "publish-twcc-ext",
+          "status": "PASS"
+        },
+        {
+          "evidence": "twccExtId=5",
+          "name": "play-selected-twcc-ext",
+          "status": "PASS"
+        },
+        {
+          "evidence": "audio consumer absent",
+          "name": "no-audio-consumer",
+          "status": "PASS"
+        },
+        {
+          "evidence": "pushedAu=179",
+          "name": "push-au-output",
+          "status": "PASS"
+        },
+        {
+          "evidence": "rtpPackets=1663",
+          "name": "play-rtp-input",
+          "status": "PASS"
+        },
+        {
+          "evidence": "outputAu=190",
+          "name": "play-au-output",
+          "status": "PASS"
+        },
+        {
+          "evidence": "rtcpFeedbackPacketsIn=146",
+          "name": "push-rtcp-feedback-input",
+          "status": "PASS"
+        },
+        {
+          "evidence": "rtcpFeedbackFailures=0",
+          "name": "push-rtcp-feedback-no-failures",
+          "status": "PASS"
+        },
+        {
+          "evidence": "rtcpSendFailures=0",
+          "name": "play-rtcp-send-no-failures",
+          "status": "PASS"
+        },
+        {
+          "evidence": "enabled=True",
+          "name": "sdk-push-runtime-enabled",
+          "status": "PASS"
+        },
+        {
+          "evidence": "enabled=True",
+          "name": "sdk-play-runtime-enabled",
+          "status": "PASS"
+        },
+        {
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 17713, \"metricsFiles\": 1, \"processTickCountMax\": 469, \"receiverReportCountMax\": 4, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 6, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 49}",
+          "name": "sdk-push-runtime-files",
+          "status": "PASS"
+        },
+        {
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 27026, \"metricsFiles\": 1, \"processTickCountMax\": 578, \"receiverReportCountMax\": 5, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 7, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 114}",
+          "name": "sdk-play-runtime-files",
+          "status": "PASS"
+        },
+        {
+          "evidence": "twcc=114 rr=5",
+          "name": "sdk-play-rtcp-generated",
+          "status": "PASS"
+        },
+        {
+          "evidence": "twcc=49 rr=4",
+          "name": "sdk-push-rtcp-counted",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ok",
+          "name": "harness-no-failure",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ok",
+          "name": "runtime-no-unexpected-alerts",
+          "status": "PASS"
+        },
+        {
+          "evidence": "samples=12",
+          "name": "encoder-metrics-present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "accessUnits=151",
+          "name": "encoder-au-output",
+          "status": "PASS"
+        },
+        {
+          "evidence": "keyframes=6",
+          "name": "encoder-keyframe-output",
+          "status": "PASS"
+        },
+        {
+          "evidence": "{\"accessUnits\": 151, \"bitrateChanges\": 31, \"currentBitrateBps\": 1245004, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 2, \"forcedKeyframeRequests\": 2, \"fpsChanges\": 1, \"framesEncoded\": 151, \"framesGenerated\": 151, \"height\": 180, \"keyframes\": 6, \"lastKeyframe\": \"false\", \"mode\": \"synthetic\", \"width\": 320}",
+          "name": "encoder-source-shape",
+          "status": "PASS"
+        },
+        {
+          "evidence": "samples=16",
+          "name": "qoe-metrics-present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "decodedFrames=167",
+          "name": "qoe-decodes-frames",
+          "status": "PASS"
+        },
+        {
+          "evidence": "decodeErrors=0",
+          "name": "qoe-decode-errors-zero",
+          "status": "PASS"
+        },
+        {
+          "evidence": "firstFrameDelayUs=0",
+          "name": "qoe-first-frame-observable",
+          "status": "PASS"
+        },
+        {
+          "evidence": "rttMax=209.0",
+          "name": "weak-delay-rtt-observable",
+          "status": "PASS"
+        }
+      ],
+      "metrics": {
+        "encoder": {
+          "accessUnits": 151,
+          "bitrateChanges": 31,
+          "currentBitrateBps": 1245004,
+          "currentFps": 30,
+          "encoderRecreates": 2,
+          "forcedKeyframeRequests": 2,
+          "fpsChanges": 1,
+          "framesEncoded": 151,
+          "framesGenerated": 151,
+          "height": 180,
+          "keyframes": 6,
+          "mode": "synthetic",
+          "name": "x264",
+          "samples": 12,
+          "width": 320
+        },
+        "finalTargetBps": {
+          "avg": 1285647.3333333333,
+          "max": 1674497.0,
+          "min": 1128876.0
+        },
+        "nack": 161,
+        "playLossQ8": {
+          "avg": 0.0,
+          "max": 0.0,
+          "min": 0.0
+        },
+        "playMetricSamples": 14,
+        "playOutputAu": 190,
+        "playRtcpBytesOut": 7956,
+        "playRtcpPacketsIn": 4,
+        "playRtcpPacketsOut": 283,
+        "playRtcpSendFailures": 0,
+        "playRtpPackets": 1663,
+        "pli": 0,
+        "publishTwccExtId": 5,
+        "pushMetricSamples": 12,
+        "pushRtcpFeedbackBytesIn": 4924,
+        "pushRtcpFeedbackFailures": 0,
+        "pushRtcpFeedbackPacketsIn": 146,
+        "pushedAu": 179,
+        "qoe": {
+          "accessUnitsIn": 190,
+          "decodeErrors": 0,
+          "decodedFrames": 167,
+          "enabled": true,
+          "firstFrameDelayUs": 0,
+          "freezeCount": 0,
+          "height": 180,
+          "keyframesIn": 7,
+          "maxFrameGapUs": 426385,
+          "outputFps": 28.14,
+          "samples": 16,
+          "width": 320
+        },
+        "retransmission": 0,
+        "rttMs": {
+          "avg": 82.83333333333333,
+          "max": 209.0,
+          "min": 0.0
+        },
+        "sdkRuntime": {
+          "play": {
+            "alertsFiles": 1,
+            "enabled": true,
+            "maxProcessTickGapUs": 27026,
+            "metricsFiles": 1,
+            "processTickCountMax": 578,
+            "receiverReportCountMax": 5,
+            "runtimeLogFiles": 1,
+            "sessionMetricSamples": 7,
+            "transportFailureCountMax": 0,
+            "transportFeedbackCountMax": 114
+          },
+          "push": {
+            "alertsFiles": 1,
+            "enabled": true,
+            "maxProcessTickGapUs": 17713,
+            "metricsFiles": 1,
+            "processTickCountMax": 469,
+            "receiverReportCountMax": 4,
+            "runtimeLogFiles": 1,
+            "sessionMetricSamples": 6,
+            "transportFailureCountMax": 0,
+            "transportFeedbackCountMax": 49
+          }
+        },
+        "selectedTwccExtId": 5,
+        "senderLossFraction": {
+          "avg": 0.0,
+          "max": 0.0,
+          "min": 0.0
+        },
+        "targetBps": {
+          "avg": 1285647.3333333333,
+          "max": 1674497.0,
+          "min": 1128876.0
+        }
+      },
+      "name": "delay_100ms",
+      "networkCondition": "100ms delay + 20ms jitter",
       "status": "PASS"
     }
   ],
@@ -262,7 +527,7 @@
     "encoderRuntime": {
       "evidence": {
         "baselineAccessUnits": 151,
-        "baselineCurrentBitrateBps": 2156096,
+        "baselineCurrentBitrateBps": 2326605,
         "baselineCurrentFps": 30,
         "baselineEncoderMode": "synthetic",
         "baselineEncoderName": "x264",
@@ -333,25 +598,28 @@
     },
     "weakNetworkCoverage": {
       "evidence": {
-        "attemptedWeakCases": [],
+        "attemptedWeakCases": [
+          "delay_100ms"
+        ],
         "skippedCases": []
       },
       "requirements": [
         "delay/loss/bandwidth/recovery cases attempted with tc netem"
       ],
-      "status": "SKIP"
+      "status": "PASS"
     }
   },
-  "generatedAt": "2026-05-23T13:15:18Z",
-  "overallStatus": "PARTIAL",
+  "generatedAt": "2026-05-23T13:39:46Z",
+  "overallStatus": "PASS",
   "runConfig": {
     "buildDir": "build-webrtc-qos-plain",
     "cases": [
-      "baseline"
+      "baseline",
+      "delay_100ms"
     ],
     "decodeQoe": true,
     "durationSeconds": 6,
-    "enableNetem": false,
+    "enableNetem": true,
     "inputFile": "",
     "netemDev": "lo",
     "sourceMode": "synthetic",
@@ -363,12 +631,12 @@
     },
     "workerBin": "./mediasoup-worker"
   },
-  "runDir": "/tmp/webrtc-qos-plain-p2-qoe-smoke/20260523T131456Z",
+  "runDir": "/tmp/webrtc-qos-plain-p2-netem-smoke-gated/20260523T133901Z",
   "schemaVersion": 1,
   "summary": {
-    "attemptedCases": 1,
+    "attemptedCases": 2,
     "failedCases": 0,
-    "passedCases": 1,
+    "passedCases": 2,
     "skippedCases": 0
   }
 }
