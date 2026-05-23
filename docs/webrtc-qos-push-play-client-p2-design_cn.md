@@ -24,7 +24,7 @@
 - 旧 SDK dist 包未暴露 runtime logs/metrics/alerts 配置字段；当前 dist 已更新，但需要 smoke gate 固化防回归。
 - MP4 copy path 不能根据 SDK adaptation 改 bitrate/fps，也不能响应 PLI 强制 IDR；当前已补 synthetic+x264 最小实时编码路径，但 MP4 decode loop、V4L2 和真实弱网 adaptation 仍需继续验收。
 - `plainPublish` 当前强制创建 dummy audio producer，服务端语义不干净。
-- 弱网 smoke、浏览器接收、native decode/QoE 尚未自动化。
+- 弱网 smoke、浏览器接收尚未自动化；native decode/QoE 已有 baseline 最小切片，但弱网恢复 QoE 仍需继续验收。
 
 当前实施进展：
 
@@ -707,6 +707,30 @@ QoE 指标：
 
 第二期不做复杂 VMAF/PSNR。
 
+当前最小实现已经落在：
+
+- `client/webrtc_qos_plain_client/play/FfmpegDecodeSink.{h,cpp}`
+- `client/webrtc_qos_plain_client/play/WebRtcQosPlayRuntime.cpp`
+- `client/webrtc_qos_plain_client/common/ClientArgs.{h,cpp}`
+- `tests/test_webrtc_qos_decode_sink.cpp`
+- `scripts/run_webrtc_qos_plain_p2_smoke.sh`
+
+当前已经可用的 CLI：
+
+```bash
+webrtc-qos-plain-play-client \
+  --output-null=true \
+  --decode-qoe=true
+```
+
+当前 smoke 报告新增 gate：
+
+- `nativeDecodeQoe=PASS`
+- `decodedFrames > 0`
+- `decodeErrors == 0`
+- `firstFrameDelayUs >= 0`
+- `freezeCount`、`maxFrameGapUs`、`outputFps` 可观测。
+
 验收：
 
 - baseline 下 decode error 为 0。
@@ -826,7 +850,7 @@ P2-M4 video-only publish
 | P2-M5 realtime x264 encoder | 已新增 `RealtimeH264Source` 最小 x264 encoder，并在 push runtime 调 `ApplyEncoderAdaptation()`；后续再拆 `H264EncoderAdapter` 时保持同一外部行为。 | 当前 synthetic baseline 和单测已验证 encoder AU/keyframe/adaptation；最终仍需 bandwidth drop 下 encoder bitrate 下探、PLI 后 1 秒内 IDR。 | 当前输出 `encoder_metrics` 的 bitrate/fps/AU/keyframe/recreate/change counters；后续补 frameDrop 和 keyframe alert。 |
 | P2-M6 输入源扩展 | 已新增 synthetic raw frame source；MP4 decode loop、V4L2 source 待实现。 | 当前 synthetic 必跑；MP4 decode loop 后续必跑；无 V4L2 设备时 V4L2 case SKIP。 | 当前 encoder/source metrics 输出 frame count、input fps、AU/keyframe；后续补 decode/capture errors。 |
 | P2-M7 浏览器兼容 | 新增 browser receiver smoke，复用现有 web/signaling。 | 浏览器收到 `newConsumer`、video frames 增长、截图或 stats 通过。 | browser stats 附到 report，失败带 console/error 摘要。 |
-| P2-M8 native decode/QoE | 新增 `FfmpegDecodeSink` 和 `QoeProbe`。 | baseline decode error 为 0；弱网恢复后 decoded frames 继续增长。 | report 输出 first-frame、freeze、decode errors、output fps。 |
+| P2-M8 native decode/QoE | 已新增 `FfmpegDecodeSink` baseline 解码和 QoE 指标；复杂 `QoeProbe` 可后续独立扩展。 | 当前 baseline 已验证 decode error 为 0、decoded frames 增长；弱网恢复后 decoded frames 继续增长仍待 `--enable-netem` 验收。 | 当前 report 输出 first-frame、freeze、decode errors、output fps。 |
 | P2-M9 签收回归 | 聚合所有 case 和门禁。 | 一条命令生成最终报告；失败非零退出。 | report 可直接定位失败发生在 signaling/UDP/RTP/RTCP/SDK/encoder/sink。 |
 
 ### 13.0.1 建议验收命令
@@ -852,7 +876,7 @@ scripts/run_webrtc_qos_plain_p2_smoke.sh \
 - 默认安全模式只运行 `baseline`，弱网 case 在未传 `--enable-netem` 时写为 `SKIP`，不计 PASS。
 - 需要真实弱网验证时显式传 `--enable-netem`；脚本会预检 `tc`、root/CAP_NET_ADMIN 和目标网卡。
 - 短测报告固定写入 `docs/generated/webrtc-qos-plain-p2-smoke-report.{json,md}`。
-- 当前机器 synthetic 短测结果：`baseline PASS`，`qosMainline PASS`，`sdkRuntimeObservability PASS`，`encoderRuntime PASS`；整体 `PARTIAL` 仅因为未启用 `--enable-netem`，弱网 coverage 为 `SKIP`。
+- 当前机器 synthetic+QoE 短测结果：`baseline PASS`，`qosMainline PASS`，`sdkRuntimeObservability PASS`，`encoderRuntime PASS`，`nativeDecodeQoe PASS`；整体 `PARTIAL` 仅因为未启用 `--enable-netem`，弱网 coverage 为 `SKIP`。
 
 如果脚本名后续调整，必须在本文档和 `docs/README.md` 同步更新。
 

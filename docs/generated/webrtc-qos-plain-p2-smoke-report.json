@@ -7,11 +7,11 @@
         "samples": []
       },
       "artifacts": {
-        "caseDir": "/tmp/webrtc-qos-plain-p2-synthetic-smoke-v2/20260523T125915Z/baseline",
-        "playLog": "/tmp/webrtc-qos-plain-p2-synthetic-smoke-v2/20260523T125915Z/baseline/play/play.log",
-        "pushLog": "/tmp/webrtc-qos-plain-p2-synthetic-smoke-v2/20260523T125915Z/baseline/push/push.log",
-        "readyz": "/tmp/webrtc-qos-plain-p2-synthetic-smoke-v2/20260523T125915Z/baseline/readyz.json",
-        "sfuLog": "/tmp/webrtc-qos-plain-p2-synthetic-smoke-v2/20260523T125915Z/baseline/sfu.stdout.log"
+        "caseDir": "/tmp/webrtc-qos-plain-p2-qoe-smoke/20260523T131456Z/baseline",
+        "playLog": "/tmp/webrtc-qos-plain-p2-qoe-smoke/20260523T131456Z/baseline/play/play.log",
+        "pushLog": "/tmp/webrtc-qos-plain-p2-qoe-smoke/20260523T131456Z/baseline/push/push.log",
+        "readyz": "/tmp/webrtc-qos-plain-p2-qoe-smoke/20260523T131456Z/baseline/readyz.json",
+        "sfuLog": "/tmp/webrtc-qos-plain-p2-qoe-smoke/20260523T131456Z/baseline/sfu.stdout.log"
       },
       "checks": [
         {
@@ -45,7 +45,7 @@
           "status": "PASS"
         },
         {
-          "evidence": "rtpPackets=1261",
+          "evidence": "rtpPackets=1277",
           "name": "play-rtp-input",
           "status": "PASS"
         },
@@ -80,12 +80,12 @@
           "status": "PASS"
         },
         {
-          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 25176, \"metricsFiles\": 1, \"processTickCountMax\": 468, \"receiverReportCountMax\": 4, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 6, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 50}",
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 19406, \"metricsFiles\": 1, \"processTickCountMax\": 471, \"receiverReportCountMax\": 4, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 6, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 50}",
           "name": "sdk-push-runtime-files",
           "status": "PASS"
         },
         {
-          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 31178, \"metricsFiles\": 1, \"processTickCountMax\": 587, \"receiverReportCountMax\": 5, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 7, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 116}",
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 15586, \"metricsFiles\": 1, \"processTickCountMax\": 583, \"receiverReportCountMax\": 5, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 7, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 116}",
           "name": "sdk-play-runtime-files",
           "status": "PASS"
         },
@@ -120,19 +120,39 @@
           "status": "PASS"
         },
         {
-          "evidence": "{\"accessUnits\": 151, \"bitrateChanges\": 30, \"currentBitrateBps\": 1959838, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 2, \"forcedKeyframeRequests\": 3, \"fpsChanges\": 1, \"framesEncoded\": 151, \"framesGenerated\": 151, \"height\": 180, \"keyframes\": 6, \"lastKeyframe\": \"false\", \"mode\": \"synthetic\", \"width\": 320}",
+          "evidence": "{\"accessUnits\": 151, \"bitrateChanges\": 28, \"currentBitrateBps\": 2156096, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 2, \"forcedKeyframeRequests\": 1, \"fpsChanges\": 1, \"framesEncoded\": 151, \"framesGenerated\": 151, \"height\": 180, \"keyframes\": 6, \"lastKeyframe\": \"true\", \"mode\": \"synthetic\", \"width\": 320}",
           "name": "encoder-source-shape",
+          "status": "PASS"
+        },
+        {
+          "evidence": "samples=16",
+          "name": "qoe-metrics-present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "decodedFrames=178",
+          "name": "qoe-decodes-frames",
+          "status": "PASS"
+        },
+        {
+          "evidence": "decodeErrors=0",
+          "name": "qoe-decode-errors-zero",
+          "status": "PASS"
+        },
+        {
+          "evidence": "firstFrameDelayUs=0",
+          "name": "qoe-first-frame-observable",
           "status": "PASS"
         }
       ],
       "metrics": {
         "encoder": {
           "accessUnits": 151,
-          "bitrateChanges": 30,
-          "currentBitrateBps": 1959838,
+          "bitrateChanges": 28,
+          "currentBitrateBps": 2156096,
           "currentFps": 30,
           "encoderRecreates": 2,
-          "forcedKeyframeRequests": 3,
+          "forcedKeyframeRequests": 1,
           "fpsChanges": 1,
           "framesEncoded": 151,
           "framesGenerated": 151,
@@ -144,8 +164,8 @@
           "width": 320
         },
         "finalTargetBps": {
-          "avg": 1616812.0,
-          "max": 1959838.0,
+          "avg": 1758929.5,
+          "max": 2156096.0,
           "min": 1200000.0
         },
         "nack": 0,
@@ -156,31 +176,45 @@
         },
         "playMetricSamples": 14,
         "playOutputAu": 178,
-        "playRtcpBytesOut": 4140,
-        "playRtcpPacketsIn": 4,
+        "playRtcpBytesOut": 4156,
+        "playRtcpPacketsIn": 5,
         "playRtcpPacketsOut": 121,
         "playRtcpSendFailures": 0,
-        "playRtpPackets": 1261,
+        "playRtpPackets": 1277,
         "pli": 0,
         "publishTwccExtId": 5,
         "pushMetricSamples": 12,
-        "pushRtcpFeedbackBytesIn": 2840,
+        "pushRtcpFeedbackBytesIn": 2848,
         "pushRtcpFeedbackFailures": 0,
         "pushRtcpFeedbackPacketsIn": 65,
         "pushedAu": 178,
+        "qoe": {
+          "accessUnitsIn": 178,
+          "decodeErrors": 0,
+          "decodedFrames": 178,
+          "enabled": true,
+          "firstFrameDelayUs": 0,
+          "freezeCount": 0,
+          "height": 180,
+          "keyframesIn": 6,
+          "maxFrameGapUs": 92339,
+          "outputFps": 30.12,
+          "samples": 16,
+          "width": 320
+        },
         "retransmission": 0,
         "rttMs": {
-          "avg": 8.0,
-          "max": 14.0,
+          "avg": 8.166666666666666,
+          "max": 19.0,
           "min": 0.0
         },
         "sdkRuntime": {
           "play": {
             "alertsFiles": 1,
             "enabled": true,
-            "maxProcessTickGapUs": 31178,
+            "maxProcessTickGapUs": 15586,
             "metricsFiles": 1,
-            "processTickCountMax": 587,
+            "processTickCountMax": 583,
             "receiverReportCountMax": 5,
             "runtimeLogFiles": 1,
             "sessionMetricSamples": 7,
@@ -190,9 +224,9 @@
           "push": {
             "alertsFiles": 1,
             "enabled": true,
-            "maxProcessTickGapUs": 25176,
+            "maxProcessTickGapUs": 19406,
             "metricsFiles": 1,
-            "processTickCountMax": 468,
+            "processTickCountMax": 471,
             "receiverReportCountMax": 4,
             "runtimeLogFiles": 1,
             "sessionMetricSamples": 6,
@@ -207,8 +241,8 @@
           "min": 0.0
         },
         "targetBps": {
-          "avg": 1616812.0,
-          "max": 1959838.0,
+          "avg": 1758929.5,
+          "max": 2156096.0,
           "min": 1200000.0
         }
       },
@@ -228,7 +262,7 @@
     "encoderRuntime": {
       "evidence": {
         "baselineAccessUnits": 151,
-        "baselineCurrentBitrateBps": 1959838,
+        "baselineCurrentBitrateBps": 2156096,
         "baselineCurrentFps": 30,
         "baselineEncoderMode": "synthetic",
         "baselineEncoderName": "x264",
@@ -241,6 +275,24 @@
       "requirements": [
         "synthetic source uses x264 realtime encoder when requested",
         "encoder metrics expose source shape, fps, bitrate, AU count, keyframe count"
+      ],
+      "status": "PASS"
+    },
+    "nativeDecodeQoe": {
+      "evidence": {
+        "baselineDecodeErrors": 0,
+        "baselineDecodedFrames": 178,
+        "baselineFirstFrameDelayUs": 0,
+        "baselineFreezeCount": 0,
+        "baselineHeight": 180,
+        "baselineOutputFps": 30.12,
+        "baselineSamples": 16,
+        "baselineWidth": 320,
+        "enabled": true
+      },
+      "requirements": [
+        "native play decode/QoE is enabled when requested",
+        "FFmpeg decode produces frames and exposes first-frame/freeze/decode-error metrics"
       ],
       "status": "PASS"
     },
@@ -290,13 +342,14 @@
       "status": "SKIP"
     }
   },
-  "generatedAt": "2026-05-23T12:59:38Z",
+  "generatedAt": "2026-05-23T13:15:18Z",
   "overallStatus": "PARTIAL",
   "runConfig": {
     "buildDir": "build-webrtc-qos-plain",
     "cases": [
       "baseline"
     ],
+    "decodeQoe": true,
     "durationSeconds": 6,
     "enableNetem": false,
     "inputFile": "",
@@ -310,7 +363,7 @@
     },
     "workerBin": "./mediasoup-worker"
   },
-  "runDir": "/tmp/webrtc-qos-plain-p2-synthetic-smoke-v2/20260523T125915Z",
+  "runDir": "/tmp/webrtc-qos-plain-p2-qoe-smoke/20260523T131456Z",
   "schemaVersion": 1,
   "summary": {
     "attemptedCases": 1,

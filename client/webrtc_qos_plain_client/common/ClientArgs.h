@@ -49,6 +49,7 @@ struct PlayOptions {
 	int processTickMs = 10;
 	std::string mediaRemoteIp;
 	int waitConsumerTimeoutMs = 30000;
+	bool decodeQoe = false;
 };
 
 bool ParsePushOptions(int argc, char* argv[], PushOptions* options, std::string* error);

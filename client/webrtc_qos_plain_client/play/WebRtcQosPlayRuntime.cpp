@@ -34,6 +34,11 @@ int WebRtcQosPlayRuntime::Run(std::atomic<bool>& running, PlaySignalingSession* 
 		logger_->error("annexb_sink_open_failed output={} error={}", options_.outputAu, error);
 		return 2;
 	}
+	FfmpegDecodeSink decodeSink;
+	if (options_.decodeQoe && !decodeSink.Open(&error)) {
+		logger_->error("decode_qoe_open_failed error={}", error);
+		return 2;
+	}
 
 	SingleVideoSessionParams sessionParams;
 	sessionParams.roomId = options_.room;
@@ -87,6 +92,12 @@ int WebRtcQosPlayRuntime::Run(std::atomic<bool>& running, PlaySignalingSession* 
 	config.decoded_access_unit_output = [&](const webrtc_qos::AnnexBAccessUnitView& accessUnit) {
 		auto status = sink.Write(accessUnit);
 		if (!status) logger_->warn("annexb_sink_write_failed status={}", StatusToString(status));
+		if (options_.decodeQoe) {
+			std::string decodeError;
+			if (!decodeSink.Decode(accessUnit, MonotonicNowUs(), &decodeError)) {
+				logger_->warn("decode_qoe_failed error={}", decodeError);
+			}
+		}
 		return status;
 	};
 
@@ -177,6 +188,22 @@ int WebRtcQosPlayRuntime::Run(std::atomic<bool>& running, PlaySignalingSession* 
 				snapshot.dropped_retransmission_packets,
 				snapshot.downlink_quality.rtt_ms,
 				snapshot.downlink_quality.fraction_lost_q8);
+			if (options_.decodeQoe) {
+				const auto& qoe = decodeSink.metrics();
+				logger_->info(
+					"qoe_metrics enabled={} accessUnitsIn={} keyframesIn={} decodedFrames={} decodeErrors={} freezeCount={} firstFrameDelayUs={} maxFrameGapUs={} outputFps={:.2f} width={} height={}",
+					qoe.enabled,
+					qoe.accessUnitsIn,
+					qoe.keyframesIn,
+					qoe.decodedFrames,
+					qoe.decodeErrors,
+					qoe.freezeCount,
+					qoe.firstFrameDelayUs,
+					qoe.maxFrameGapUs,
+					qoe.outputFps,
+					qoe.width,
+					qoe.height);
+			}
 		}
 
 		std::this_thread::sleep_for(std::chrono::milliseconds(options_.processTickMs));
@@ -191,6 +218,22 @@ int WebRtcQosPlayRuntime::Run(std::atomic<bool>& running, PlaySignalingSession* 
 		rtcpBytesOut,
 		rtcpSendFailures,
 		sink.writtenAccessUnits());
+	if (options_.decodeQoe) {
+		const auto& qoe = decodeSink.metrics();
+		logger_->info(
+			"qoe_runtime_stopped enabled={} accessUnitsIn={} keyframesIn={} decodedFrames={} decodeErrors={} freezeCount={} firstFrameDelayUs={} maxFrameGapUs={} outputFps={:.2f} width={} height={}",
+			qoe.enabled,
+			qoe.accessUnitsIn,
+			qoe.keyframesIn,
+			qoe.decodedFrames,
+			qoe.decodeErrors,
+			qoe.freezeCount,
+			qoe.firstFrameDelayUs,
+			qoe.maxFrameGapUs,
+			qoe.outputFps,
+			qoe.width,
+			qoe.height);
+	}
 	return 0;
 }
 
