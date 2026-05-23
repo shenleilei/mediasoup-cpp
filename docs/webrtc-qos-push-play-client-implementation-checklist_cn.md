@@ -1,6 +1,6 @@
 # WebRTC QoS SDK Plain 推拉流客户端实现验收清单
 
-> 状态：已完成本地短链路验收；浏览器画面和弱网 smoke 仍需单独环境验证。
+> 状态：P1 已完成本地短链路验收；P2 已完成 consumer TWCC ext 修复和 adapter RTCP 边界计数。浏览器画面、弱网 smoke、SDK play 周期性 RR/TWCC 输出仍需后续验证。
 
 ## 1. 已实现项
 
@@ -25,7 +25,10 @@
 | 不复用旧自研 QoS/RTCP/packetizer | 源码和 target 不引用旧模块 | `rg` 门禁仅命中 README 的说明文本 |
 | CLI 兼容 `--key value` 和 `--key=value` | `ClientArgs` | smoke 使用 `--server-ip=127.0.0.1` 等参数通过 |
 | play 兼容 dummy audio producer | receive capabilities 声明 Opus，但 runtime 只选择 video | SFU smoke 不再出现 audio auto-subscribe error |
-| consumer 无 TWCC ext 降级 | `consumer_without_twcc_ext` 日志，`twccExtId=0` 仍启动 `VideoPlayClient` | 本地 smoke 输出 120/150 AU |
+| consumer TWCC ext 透传 | `ortc::getConsumableRtpParameters()` 保留 producer/router 均支持的 header extension | P2 smoke：`selected_consumer ... twccExtId=5` |
+| consumer 无 TWCC ext 降级 | 保留 `consumer_without_twcc_ext` 日志，兼容异常环境继续启动 `VideoPlayClient` | 降级可播放，但不允许作为 QoS 主链路 PASS |
+| push RTCP feedback 输入计数 | `WebRtcQosPushRuntime` 记录 `rtcpFeedbackPacketsIn/BytesIn/Failures` | P2 smoke：`rtcpFeedbackPacketsIn=86 ... Failures=0` |
+| play RTCP 输出计数 | `WebRtcQosPlayRuntime` 记录 `rtcpPacketsOut/BytesOut/SendFailures` | P2 smoke 字段存在；当前 SDK baseline 输出为 0，列为 P2 后续项 |
 
 ## 2. 当前验证命令
 
@@ -38,6 +41,16 @@ cmake --build build-webrtc-qos-plain \
   --target webrtc-qos-plain-push-client webrtc-qos-plain-play-client \
   -j"$(nproc)"
 
+g++ -std=c++17 -Isrc -I. -Ithird_party/nlohmann_json/include \
+  -isystem third_party/googletest/googletest/include \
+  tests/test_ortc.cpp \
+  third_party/googletest/googletest/src/gtest-all.cc \
+  third_party/googletest/googletest/src/gtest_main.cc \
+  -Ithird_party/googletest/googletest \
+  -pthread -o /tmp/test_ortc_p2
+
+/tmp/test_ortc_p2 --gtest_filter='*TransportCc*:*Consumable*'
+
 rg -n "client/qos|sendsidebwe|ccutils|RtcpHandler|NetworkThread|SenderTransportController|H264Packetizer|Vp8Packetizer|PublisherQosController|PacketizeAnnexB" \
   client/webrtc_qos_plain_client CMakeLists.txt
 ```
@@ -46,9 +59,13 @@ rg -n "client/qos|sendsidebwe|ccutils|RtcpHandler|NetworkThread|SenderTransportC
 
 - CMake configure 通过。
 - push/play 两个 target 编译通过。
+- ORTC standalone targeted test 通过。
 - 旧实现依赖门禁没有命中代码；只命中 `client/webrtc_qos_plain_client/README.md` 的说明文本。
 
-## 3. 动态 smoke 结果
+## 3. P1 动态 smoke 结果（历史）
+
+本节记录第一期最小链路 smoke 的历史结果，用来说明当时已经跑通 RTP/RTCP/AU，
+但还没有完成 consumer TWCC header extension 透传。当前 P2 结果以 `3.1` 为准。
 
 前置：
 
@@ -103,8 +120,8 @@ push/play：
 | push SDK runtime | PASS | `push_runtime_started ... udpRemotePort=51003` |
 | play `join/plainSubscribe` | PASS | `join_ok ... h264-baseline+opus-compat`，`plain_subscribe_ok` |
 | `newConsumer` | PASS | 收到 video consumer；也收到 dummy audio consumer 但未选择 |
-| play 选择 video consumer | PASS | `selected_consumer ... pt=127 twccExtId=0` |
-| consumer 无 TWCC ext 降级 | PASS | `consumer_without_twcc_ext ... headerExtensions=[]` |
+| play 选择 video consumer | HISTORICAL PASS | `selected_consumer ... pt=127 twccExtId=0` |
+| consumer 无 TWCC ext 降级 | HISTORICAL PASS | `consumer_without_twcc_ext ... headerExtensions=[]` |
 | keyframe 请求 | PASS | `request_consumer_keyframe_ok` |
 | play RTP/RTCP/AU | PASS | 8 秒 smoke：`rtpPackets=212 rtcpPackets=6 outputAu=120` |
 | push 停止统计 | PASS | 8 秒 smoke：`push_runtime_stopped pushedAu=120` |
@@ -115,6 +132,33 @@ push/play：
 - push：`push_runtime_stopped pushedAu=150`
 - play：`play_runtime_stopped rtpPackets=252 rtcpPackets=9 outputAu=150`
 - play 每秒 metrics 持续输出，未出现 `play_packet_input_failed`。
+
+## 3.1 P2-M1a/M1c 动态 smoke 结果
+
+运行目录：
+
+```text
+/tmp/webrtc-qos-plain-p2-m1c
+```
+
+本地结果：
+
+| 验收点 | 结果 | 证据 |
+|---|---:|---|
+| SFU ready | PASS | `/readyz` 返回 `ok=true` |
+| consumer TWCC ext | PASS | `new_consumer_notification ... "headerExtensions":[{"id":5,...transport-wide-cc...}]` |
+| play 选择 video consumer | PASS | `selected_consumer ... pt=127 twccExtId=5` |
+| play runtime TWCC ext | PASS | `play_runtime_started ... transportCcExtId=5` |
+| push RTCP feedback 输入 | PASS | `push_runtime_stopped pushedAu=120 rtcpFeedbackPacketsIn=86 rtcpFeedbackBytesIn=2376 rtcpFeedbackFailures=0` |
+| push RTT/loss snapshot | PASS | `push_metrics ... rttMs=8 loss=0 rtcpFeedbackPacketsIn=77 ...` |
+| play RTP/AU | PASS | `play_runtime_stopped rtpPackets=236 rtcpPackets=7 ... outputAu=120` |
+| play RTCP 输出 | FAIL | `rtcpPacketsOut=0`；SDK play facade 当前只在 NACK/PLI 事件时输出 RTCP，没有周期性 RR/TWCC |
+
+结论：
+
+- P2-M1a 已完成：consumer 不再丢 TWCC header extension。
+- P2-M1c adapter 边界计数已完成：push/play 日志包含 RTCP I/O counters。
+- P2-M1d 未完成：需要 `webrtc_qos_sdk` play facade 补周期性 RR/TWCC 输出和 SDK counter 后，再在 mediasoup-cpp 集成验证。
 
 ## 4. 版本差异
 
@@ -132,9 +176,9 @@ push/play：
 
 ## 5. 未覆盖项
 
-以下未在本地短 smoke 中覆盖：
+以下未在本地短 smoke 中覆盖或未通过：
 
 - browser receiver 可看到 push 画面。
 - netem 弱网 smoke：延迟、丢包、恢复。
-- 当前 mediasoup consumer 未返回 TWCC header extension，因此本地 smoke 只验证 RTP/RTCP/AU 闭环；下行 TWCC 主链路需要服务端 consumer 携带 TWCC ext 后再验。
+- SDK play 周期性 RR/TWCC 输出：当前 P2 smoke 中 `rtcpPacketsOut=0`，QoS 主链路不能签收。
 - 当前 SDK dist 包未暴露 runtime 文件配置字段，因此 SDK 内部 metrics/alerts 文件输出未覆盖；adapter spdlog 文件已覆盖。

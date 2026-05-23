@@ -17,7 +17,7 @@
 
 第一期 smoke 结果证明“链路能跑通”，但还不能证明“QoS 主链路完整、弱网有效、现场可排障”。
 
-当前缺口：
+第一期后发现的缺口：
 
 - mediasoup consumer 下行 `rtpParameters.headerExtensions=[]`，play 只能降级为无 TWCC 接收。
 - 本地 smoke 只验证 RTP/RTCP/AU 闭环，未完整验证下行 TWCC 主链路。
@@ -25,6 +25,14 @@
 - push 仍用 H264 MP4 copy path，不能根据 SDK adaptation 改 bitrate/fps，也不能响应 PLI 强制 IDR。
 - `plainPublish` 当前强制创建 dummy audio producer，服务端语义不干净。
 - 弱网 smoke、浏览器接收、native decode/QoE 尚未自动化。
+
+当前实施进展：
+
+- P2-M1a 已修复 ORTC consumable RTP parameters 不携带 header extension 的问题。
+- native smoke 已验证 video consumer `twccExtId=5`，不再走 `consumer_without_twcc_ext` 降级。
+- push/play adapter 已补 RTCP 边界计数日志。
+- 当前 SDK play facade 只在 NACK/PLI 事件时通过 `transport_output` 发 RTCP，
+  尚未生成周期性 RR/TWCC feedback；因此 P2-M1 尚不能签收为 QoS 主链路完整闭环。
 
 第二期目标是把第一期从“最小可跑”推进到“可验证、可观测、可调优、可接真实输入”的状态。
 
@@ -45,6 +53,14 @@
 
 - 不是只要求 play 有 AU 输出。
 - 必须证明 QoS 控制信号在弱网下生效，并且日志能解释发生了什么。
+
+第二期每个任务都必须同时满足三类门禁：
+
+- 可实施性：明确要改哪些文件、引入哪些模块、依赖哪些前置条件。
+- 可验证性：明确用什么命令或自动化 case 验收，PASS/FAIL/SKIP 口径固定。
+- 可观测性：明确日志、metrics、alerts 和报告字段，失败时能定位到具体链路段。
+
+不满足这三类门禁的功能不进入第二期 scope。
 
 ## 3. 非目标
 
@@ -167,13 +183,46 @@ client/webrtc_qos_plain_client/
 
 ## 5. P2-A：QoS 主链路补齐
 
+### 5.0 关键技术判断
+
+重新审查现有服务端代码后，TWCC 缺失的优先排查点是 ORTC 参数生成，不是
+PlainTransport 本身：
+
+- `RoomService::plainPublish()` 给 producer RTP 参数写入了
+  `transport-wide-cc` header extension。
+- `Transport::produce()` 会调用 `ortc::getConsumableRtpParameters()` 生成
+  producer 的 consumable RTP 参数。
+- 当前 `ortc::getConsumableRtpParameters()` 只映射 codecs / encodings / rtcp，
+  没有把 producer RTP 参数中的 `headerExtensions` 映射到 consumable 参数。
+- 后续 `ortc::getConsumerRtpParameters()` 是从 consumable 参数和 remote
+  capabilities 求交集；如果 consumable 里本来就没有 header extension，
+  consumer 下行自然得到 `headerExtensions=[]`。
+
+因此 P2-M1 的第一步是：
+
+1. 给 `ortc::getConsumableRtpParameters()` 增加 header extension 映射。
+2. 增加 unit test：producer 带 TWCC ext，consumer remote capabilities 也带 TWCC，
+   最终 consumer RTP parameters 必须包含 TWCC ext。
+3. 再跑 native push/play smoke，确认 `selected_consumer ... twccExtId=5`。
+
+这一步已经完成；后续 P2-M1 的阻塞点转移到 play 侧 RTCP/TWCC feedback 生成与观测。
+这一步完成之前不应该先做实时编码器；现在虽然 consumer TWCC 已恢复，但如果 play
+侧 feedback 未闭环，encoder adaptation 仍无法证明是由真实下行反馈驱动。
+
 ### 5.1 Consumer TWCC header extension
 
-问题：
+已修复的问题：
 
 - 第一期 smoke 中 video consumer 的 `rtpParameters.headerExtensions=[]`。
 - play 端因此记录 `consumer_without_twcc_ext`，并以 `twccExtId=0` 降级运行。
 - 该场景可以验证 RTP/RTCP/AU，但不能验证下行 TWCC 主链路。
+
+修复：
+
+- 在 `ortc::getConsumableRtpParameters()` 中保留 producer RTP 参数里、且 router
+  capabilities 支持的 header extension。
+- 增加 ORTC 单元测试，覆盖 producer TWCC ext 到 consumer RTP parameters 的透传。
+- native smoke 已验证 `selected_consumer ... twccExtId=5`。
 
 目标：
 
@@ -181,19 +230,20 @@ client/webrtc_qos_plain_client/
 - play 端解析到非 0 `transportCcExtId`。
 - SDK play 能按该 extension id 解析 RTP transport sequence number。
 
-实施方向：
+后续注意：
 
-1. 检查 `Router::consume()` / consumer rtpParameters 生成逻辑。
-2. 确认 `rtpCapabilities.headerExtensions` 和 producer consumable params 的交集规则。
-3. 如果 PlainTransport consumer 默认剥离 header extension，需要在服务端修正。
-4. 保持客户端降级逻辑：如果某些环境仍无 TWCC，继续可播放但验收不通过 QoS 主链路。
+1. 当前修复按 `kind + uri` 判断 router 是否支持该 extension，并保留 producer ext id；
+   consumer 侧仍会和 remote capabilities 再做最终交集。
+2. 如果未来要支持 producer ext id、router preferred id、consumer preferred id 三者完全不同，
+   需要补完整 header extension id mapping。
+3. 保持客户端降级逻辑：如果某些环境仍无 TWCC，继续可播放但验收不通过 QoS 主链路。
 
 验收：
 
 - play 日志出现 `selected_consumer ... twccExtId=<non-zero>`。
 - 不再出现 `consumer_without_twcc_ext`。
-- play metrics 中 TWCC feedback count 持续增长。
-- push metrics 中 RTT/loss/target bitrate 来自真实 feedback。
+- push metrics 中 RTCP feedback 输入计数增长。
+- play 侧周期性 RR/TWCC feedback 仍需要 SDK play facade 补能力后验收。
 
 ### 5.2 RTCP feedback 闭环
 
@@ -206,18 +256,30 @@ client/webrtc_qos_plain_client/
 
 Adapter 日志必须记录：
 
-- play `rtcpPacketsOut`。
-- push `rtcpPacketsIn`。
-- TWCC feedback count。
+- play `rtcpPacketsOut` / `rtcpBytesOut` / `rtcpSendFailures`。
+- push `rtcpFeedbackPacketsIn` / `rtcpFeedbackBytesIn` / `rtcpFeedbackFailures`。
+- SDK 侧 TWCC feedback count；当前 dist snapshot 未暴露该字段，不能由 adapter 自行解析代替。
 - RR count。
 - PLI count。
 - NACK count。
 - RTT。
 - fraction lost。
 
+当前验证结果：
+
+- push 已可观测到 mediasoup 侧返回的 RTCP feedback：
+  `rtcpFeedbackPacketsIn=86 rtcpFeedbackBytesIn=2376 rtcpFeedbackFailures=0`。
+- SDK push snapshot 已输出 `rttMs`、`loss`、`targetBps`、`pacingBps`、`finalTargetBps`。
+- play adapter 已记录 `rtcpPacketsOut`，但 baseline smoke 中仍为 `0`。
+- 审查 SDK 源码确认当前 `VideoPlayClient` 只在 NACK/PLI 事件时输出 RTCP，
+  没有周期性 RR/TWCC 生成路径；这必须在 SDK public API/dist 层补齐，mediasoup-cpp
+  不应自研 TWCC/RR 生成。
+
 验收：
 
 - baseline 下 RTT 非异常值。
+- baseline 下 play `rtcpPacketsOut > 0`，push `rtcpFeedbackPacketsIn > 0`。
+- baseline 下 SDK 暴露的 TWCC feedback counter 增长。
 - 触发丢包时 NACK 增长。
 - 请求关键帧时 PLI 增长。
 - bandwidth drop 时 target bitrate 下探。
@@ -613,10 +675,40 @@ defaults < config file < CLI flags
 
 ## 12. 实施里程碑
 
+### 12.1 前置依赖 DAG
+
+```text
+P2-M1a ORTC consumable header extension
+  -> P2-M1b native TWCC consumer smoke
+  -> P2-M1c adapter RTCP boundary counters
+  -> P2-M1d SDK play RR/TWCC feedback output
+  -> P2-M3 weak-network harness
+  -> P2-M5 realtime encoder adaptation
+  -> P2-M7 browser weak-network smoke
+  -> P2-M8 native decode/QoE
+
+P2-M2 SDK runtime dist
+  -> P2-M3 weak-network harness
+  -> P2-M9 final report
+
+P2-M4 video-only publish
+  -> P2-M7 browser compatibility cleanup
+```
+
+关键顺序：
+
+- P2-M1a/P2-M1b 是硬前置；不先修 consumer TWCC，就无法签收 QoS 主链路。
+- P2-M1d 是 QoS 闭环硬前置；play 侧不输出 RR/TWCC 时，弱网 case 不能证明下行反馈有效。
+- P2-M2 是弱网自动化的观测前置；没有 metrics/alerts 文件，弱网 case 只能靠日志猜。
+- P2-M5 实时编码器依赖 P2-M1 和 P2-M3；否则 bitrate/fps/keyframe adaptation 没有可信验收。
+- P2-M4 可以并行，但不应阻塞 P2-M1；它是语义清理，不是 QoS 主链路前置。
+
+### 12.2 里程碑列表
+
 | 里程碑 | 内容 | 输出 |
 |---|---|---|
 | P2-M0 | 文档 review | 本文档确认。 |
-| P2-M1 | 服务端 QoS 主链路 | consumer TWCC ext 非 0，RTCP feedback 闭环可观测。 |
+| P2-M1 | QoS 主链路 | consumer TWCC ext 非 0，play RR/TWCC 输出、push feedback 输入和 SDK counter 闭环可观测。 |
 | P2-M2 | SDK runtime dist | logs/metrics/alerts 文件输出启用。 |
 | P2-M3 | 弱网 harness | baseline/delay/loss/bandwidth/recovery 自动报告。 |
 | P2-M4 | video-only publish | `enableAudio=false`，去掉 dummy audio。 |
@@ -640,6 +732,43 @@ defaults < config file < CLI flags
 - video-only 是服务端语义清理，不应该阻塞 QoS 主链路验证。
 
 ## 13. 验收清单
+
+### 13.0 实施 / 验证 / 观测矩阵
+
+| 里程碑 | 可实施性 | 可验证性 | 可观测性 |
+|---|---|---|---|
+| P2-M1a ORTC header extension | 修改 `src/ortc.h`，补 `getConsumableRtpParameters()` header extension 映射；补 `tests/test_ortc.cpp`。 | standalone ORTC test 通过；native smoke 中 `selected_consumer twccExtId=5`。 | play 日志不再出现 `consumer_without_twcc_ext`。 |
+| P2-M1b native TWCC consumer smoke | 复用当前 push/play 和 SFU smoke。 | baseline smoke 验证 video `newConsumer.headerExtensions` 包含 TWCC id 5，play `transportCcExtId=5`。 | `play_runtime_started ... transportCcExtId=5`。 |
+| P2-M1c adapter RTCP boundary counters | 修改 push/play runtime counters。 | baseline smoke 验证 push `rtcpFeedbackPacketsIn > 0`，play 记录 `rtcpPacketsOut` 字段。 | push/play metrics 输出 `rtcpFeedbackPacketsIn`、`rtcpFeedbackBytesIn`、`rtcpFeedbackFailures`、`rtcpPacketsOut`、`rtcpBytesOut`、`rtcpSendFailures`、`rttMs`、`loss`。 |
+| P2-M1d SDK play RR/TWCC feedback output | 在 `webrtc_qos_sdk` public facade/dist 补 play 周期性 RR/TWCC 输出和 snapshot counter；mediasoup-cpp 只升级 dist 并验证。 | baseline smoke 必须看到 play `rtcpPacketsOut > 0`、SDK TWCC feedback counter 增长、push feedback input 增长。 | SDK metrics 输出 TWCC/RR counters；adapter 不自研解析 TWCC。 |
+| P2-M2 SDK runtime dist | 更新 SDK install/dist；mediasoup-cpp 仅更新 `CMAKE_PREFIX_PATH` 和兼容检查。 | 启动日志必须是 `sdk_runtime_files enabled=true`；metrics/alerts 文件存在。 | `push_metrics.jsonl`、`play_metrics.jsonl`、alerts jsonl 持续写入。 |
+| P2-M3 弱网 harness | 新增 `client/webrtc_qos_plain_client/harness` 或 `tests/qos_harness` 脚本，统一启动 SFU/push/play/netem。 | baseline/delay/loss/bandwidth/recovery case 输出 PASS/FAIL/SKIP。 | 生成 `docs/generated/webrtc-qos-plain-p2-smoke-report.{json,md}`。 |
+| P2-M4 video-only publish | 修改 `RoomService::plainPublish()`、signaling dispatcher、push signaling；保持旧请求兼容。 | `enableAudio=false` 时无 audio producer；旧 `audioSsrc` 请求仍通过。 | SFU stats/report 中 `audioEnabled=false`；无 dummy audio consumer 日志。 |
+| P2-M5 realtime x264 encoder | 新增 `H264EncoderAdapter` 和 `EncoderAdaptationApplier`；push runtime 接入 raw frame source。 | bandwidth drop case 中 encoder bitrate 下探；PLI 后 1 秒内输出 IDR。 | encoder metrics 输出 bitrate/fps/keyframe/frameDrop；alerts 记录 keyframe 未生成。 |
+| P2-M6 输入源扩展 | 新增 synthetic、MP4 decode loop、V4L2 source；统一 `RealtimeVideoSource` 接口。 | synthetic 和 MP4 decode loop 必跑；无 V4L2 设备时 V4L2 case SKIP。 | source metrics 输出 frame count、input fps、decode/capture errors。 |
+| P2-M7 浏览器兼容 | 新增 browser receiver smoke，复用现有 web/signaling。 | 浏览器收到 `newConsumer`、video frames 增长、截图或 stats 通过。 | browser stats 附到 report，失败带 console/error 摘要。 |
+| P2-M8 native decode/QoE | 新增 `FfmpegDecodeSink` 和 `QoeProbe`。 | baseline decode error 为 0；弱网恢复后 decoded frames 继续增长。 | report 输出 first-frame、freeze、decode errors、output fps。 |
+| P2-M9 签收回归 | 聚合所有 case 和门禁。 | 一条命令生成最终报告；失败非零退出。 | report 可直接定位失败发生在 signaling/UDP/RTP/RTCP/SDK/encoder/sink。 |
+
+### 13.0.1 建议验收命令
+
+```bash
+cmake -S . -B build-webrtc-qos-plain \
+  -DCMAKE_PREFIX_PATH=/path/to/webrtc_qos_sdk/dist \
+  -DBUILD_TESTS=ON
+
+cmake --build build-webrtc-qos-plain \
+  --target mediasoup-sfu webrtc-qos-plain-push-client webrtc-qos-plain-play-client mediasoup_tests \
+  -j"$(nproc)"
+
+./build-webrtc-qos-plain/mediasoup_tests --gtest_filter='*Ortc*:*Plain*'
+
+scripts/run_webrtc_qos_plain_p2_smoke.sh \
+  --cases baseline,delay_100ms,loss_2pct,bandwidth_600k,drop_recover \
+  --report-dir docs/generated
+```
+
+如果脚本名后续调整，必须在本文档和 `docs/README.md` 同步更新。
 
 ### 13.1 功能验收
 
@@ -689,6 +818,7 @@ webrtc-qos-plain-push-client and webrtc-qos-plain-play-client must not depend on
 | 风险 | 处理 |
 |---|---|
 | consumer 仍无 TWCC ext | 先定位 server consume 参数生成；保留 play 降级但 QoS 主链路验收不通过。 |
+| play `rtcpPacketsOut=0` | 不在 adapter 自研 RTCP/TWCC；在 SDK play facade 补周期性 RR/TWCC 输出和 counter 后再签收 P2-M1。 |
 | SDK dist 版本不一致 | P2-M2 明确重新发布 SDK dist，并在 smoke 中检查 `enabled=true`。 |
 | netem 权限不足 | case 标记 SKIP 并记录原因；不算 PASS。 |
 | x264 CPU 占用高 | 基线分辨率先用 640x360/30fps，必要时降到 320x180/15fps。 |
@@ -701,7 +831,7 @@ webrtc-qos-plain-push-client and webrtc-qos-plain-play-client must not depend on
 
 第二期完成必须同时满足：
 
-- 文档中的 P2-M1 到 P2-M9 全部完成，或明确标记为非阻塞 SKIP。
+- 文档中的 P2-M1 到 P2-M9 全部完成；只有环境依赖型 case 允许 SKIP。
 - 本地 native smoke PASS。
 - 弱网 smoke 关键 case PASS。
 - 浏览器 receiver smoke PASS。
@@ -709,3 +839,22 @@ webrtc-qos-plain-push-client and webrtc-qos-plain-play-client must not depend on
 - 实时 x264 encoder 能被 SDK adaptation 控制。
 - 所有结果写入报告。
 - 新客户端仍不链接旧自研 QoS。
+
+不允许的完成方式：
+
+- 只说“手动看起来正常”，没有自动化命令或报告。
+- 弱网 case 因权限失败但记为 PASS。
+- metrics/alerts 文件没落盘，只靠控制台日志。
+- consumer `twccExtId=0` 仍签收 QoS 主链路。
+- play `rtcpPacketsOut=0` 或 SDK TWCC counter 缺失时签收 QoS 主链路。
+- encoder adaptation 只打印 target，不实际改 encoder bitrate/fps/keyframe。
+- 浏览器 smoke 没跑，却把 native play 闭环当作浏览器兼容性。
+
+最终签收报告必须包含：
+
+- commit id。
+- 构建命令和 SDK dist 路径。
+- 每个 case 的 PASS/FAIL/SKIP。
+- 核心指标表。
+- alerts 汇总。
+- 失败链路定位。

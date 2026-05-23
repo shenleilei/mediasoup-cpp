@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <cstdint>
 #include <memory>
 
 #include <spdlog/logger.h>
@@ -23,7 +24,17 @@ public:
 	int Run(std::atomic<bool>& running, PushSignalingSession* signaling);
 
 private:
-	bool DrainUdpFeedback(PlainUdpTransport& udp, webrtc_qos::VideoPushClient& push, int64_t nowUs);
+	struct FeedbackCounters {
+		uint64_t rtcpPacketsIn{ 0 };
+		uint64_t rtcpBytesIn{ 0 };
+		uint64_t rtcpFailures{ 0 };
+	};
+
+	bool DrainUdpFeedback(
+		PlainUdpTransport& udp,
+		webrtc_qos::VideoPushClient& push,
+		int64_t nowUs,
+		FeedbackCounters& counters);
 
 	PushOptions options_;
 	PublishInfo publishInfo_;

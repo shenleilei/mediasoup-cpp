@@ -238,6 +238,43 @@ TEST(OrtcTest, ConsumableRtpParametersMapsCodecsAndDefaultsScalability) {
 	EXPECT_TRUE(consumable.rtcp.reducedSize);
 }
 
+TEST(OrtcTest, ConsumableAndConsumerRtpParametersPreserveTransportCcExtension) {
+	constexpr const char* kTransportCcUri =
+		"http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01";
+
+	std::vector<RtpCodecCapability> mediaCodecs = {
+		{"video", "video/H264", 0, 90000, 0,
+			{{"packetization-mode", 1}, {"profile-level-id", "42e01f"}}, {}}
+	};
+	auto caps = ortc::generateRouterRtpCapabilities(mediaCodecs);
+
+	RtpParameters params;
+	params.codecs.push_back({"video/H264", 127, 90000, 0,
+		{{"packetization-mode", 1}, {"profile-level-id", "42e01f"}}, {}});
+	params.headerExtensions.push_back({kTransportCcUri, 5, false, {}});
+	params.encodings.push_back(RtpEncodingParameters{11111111u, "", std::nullopt, std::nullopt, false, "S1T1", std::nullopt});
+	params.rtcp.cname = "plain-video";
+
+	auto mapping = ortc::getProducerRtpParametersMapping(params, caps);
+	auto consumable = ortc::getConsumableRtpParameters("video", params, caps, mapping);
+
+	ASSERT_EQ(consumable.headerExtensions.size(), 1u);
+	EXPECT_EQ(consumable.headerExtensions[0].uri, kTransportCcUri);
+	EXPECT_EQ(consumable.headerExtensions[0].id, 5);
+
+	RtpCapabilities remote;
+	remote.codecs.push_back({"video", "video/H264", 127, 90000, 0,
+		{{"packetization-mode", 1}, {"profile-level-id", "42e01f"}},
+		{{"nack", ""}, {"nack", "pli"}, {"transport-cc", ""}}});
+	remote.headerExtensions.push_back({"video", kTransportCcUri, 5, false, "recvonly"});
+
+	auto consumer = ortc::getConsumerRtpParameters(consumable, remote, false);
+
+	ASSERT_EQ(consumer.headerExtensions.size(), 1u);
+	EXPECT_EQ(consumer.headerExtensions[0].uri, kTransportCcUri);
+	EXPECT_EQ(consumer.headerExtensions[0].id, 5);
+}
+
 TEST(OrtcTest, ConsumerRtpParametersMatchesRemoteCodecWithoutUnnegotiatedRtx) {
 	RtpParameters consumable;
 	consumable.codecs.push_back({"video/VP8", 120, 90000, 0, {}, {}});

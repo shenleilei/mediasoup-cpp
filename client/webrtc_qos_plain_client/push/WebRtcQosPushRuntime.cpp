@@ -107,11 +107,12 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 	int64_t firstMediaUs = 0;
 	uint64_t pushedAu = 0;
 	int64_t lastSnapshotUs = 0;
+	FeedbackCounters feedbackCounters;
 
 	while (running.load()) {
 		const int64_t nowUs = MonotonicNowUs();
 		if (signaling) signaling->DispatchNotifications();
-		DrainUdpFeedback(udp, *push, nowUs);
+		DrainUdpFeedback(udp, *push, nowUs, feedbackCounters);
 
 		if (haveAu) {
 			if (firstAu) {
@@ -147,7 +148,7 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 			while (running.load() && MonotonicNowUs() < drainUntilUs) {
 				const int64_t drainNowUs = MonotonicNowUs();
 				if (signaling) signaling->DispatchNotifications();
-				DrainUdpFeedback(udp, *push, drainNowUs);
+				DrainUdpFeedback(udp, *push, drainNowUs, feedbackCounters);
 				status = push->Process(drainNowUs);
 				if (!status) {
 					logger_->error("push_process_failed status={}", StatusToString(status));
@@ -171,13 +172,16 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 			auto snapshot = push->GetQosSnapshot(nowUs);
 			auto adaptation = push->GetEncoderAdaptation(nowUs);
 			logger_->info(
-				"push_metrics pushedAu={} targetBps={} pacingBps={} finalTargetBps={} rttMs={} loss={} maxFps={} requestKeyframe={}",
+				"push_metrics pushedAu={} targetBps={} pacingBps={} finalTargetBps={} rttMs={} loss={} rtcpFeedbackPacketsIn={} rtcpFeedbackBytesIn={} rtcpFeedbackFailures={} maxFps={} requestKeyframe={}",
 				pushedAu,
 				snapshot.sender_rates.googcc_target_bps,
 				snapshot.sender_rates.pacing_bps,
 				snapshot.sender_rates.final_target_bps,
 				snapshot.sender_rates.rtt_ms,
 				snapshot.sender_rates.loss_fraction,
+				feedbackCounters.rtcpPacketsIn,
+				feedbackCounters.rtcpBytesIn,
+				feedbackCounters.rtcpFailures,
 				adaptation.max_fps,
 				adaptation.request_keyframe);
 		}
@@ -186,14 +190,20 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 	}
 
 	push->Stop();
-	logger_->info("push_runtime_stopped pushedAu={}", pushedAu);
+	logger_->info(
+		"push_runtime_stopped pushedAu={} rtcpFeedbackPacketsIn={} rtcpFeedbackBytesIn={} rtcpFeedbackFailures={}",
+		pushedAu,
+		feedbackCounters.rtcpPacketsIn,
+		feedbackCounters.rtcpBytesIn,
+		feedbackCounters.rtcpFailures);
 	return 0;
 }
 
 bool WebRtcQosPushRuntime::DrainUdpFeedback(
 	PlainUdpTransport& udp,
 	webrtc_qos::VideoPushClient& push,
-	int64_t nowUs)
+	int64_t nowUs,
+	FeedbackCounters& counters)
 {
 	bool progressed = false;
 	uint8_t buffer[2048];
@@ -208,8 +218,11 @@ bool WebRtcQosPushRuntime::DrainUdpFeedback(
 		}
 		const auto kind = ClassifyRtpOrRtcp(buffer, static_cast<size_t>(received));
 		if (kind == PacketKind::Rtcp) {
+			++counters.rtcpPacketsIn;
+			counters.rtcpBytesIn += static_cast<uint64_t>(received);
 			auto status = push.OnTransportFeedback(buffer, static_cast<size_t>(received), nowUs);
 			if (!status) {
+				++counters.rtcpFailures;
 				logger_->warn("push_feedback_failed bytes={} from={}:{} status={}",
 					received,
 					from.ip,
