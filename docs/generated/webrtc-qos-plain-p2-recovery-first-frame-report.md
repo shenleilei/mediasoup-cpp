@@ -2,17 +2,17 @@
 
 | Item | Value |
 |---|---|
-| Overall | `FAIL` |
-| Generated At | `2026-05-23T17:17:17Z` |
-| Git Commit | `8279e23d70f63d2dd0f29eef8d850ca5a0d9d2fb` |
+| Overall | `PARTIAL` |
+| Generated At | `2026-05-23T17:44:17Z` |
+| Git Commit | `588c79bde1185f8022533b29383319f5056158ee` |
 | SDK Dist | `/root/webrtc_qos_sdk/dist/linux-x86_64` |
-| Run Dir | `/tmp/webrtc-qos-plain-p2-recovery-first-frame-p2m9-final/20260523T171630Z` |
+| Run Dir | `/tmp/webrtc-qos-plain-p2-recovery-final-cleantrace/20260523T174330Z` |
 | Duration Seconds | `30` |
 | Netem | `enabled` on `lo` |
 | Source Mode | `synthetic` |
 | Decode QoE | `enabled` |
 | Input | `` |
-| Failed Checks | `3` |
+| Failed Checks | `0` |
 
 ## Gates
 
@@ -22,19 +22,19 @@
 | `sdkRuntimeObservability` | `SKIP` | `{"baselinePlayAlertsFiles": null, "baselinePlayMetricsFiles": null, "baselinePlayReceiverReportCountMax": null, "baselinePlayRuntimeEnabled": null, "baselinePlayRuntimeLogFiles": null, "baselinePlayTransportFeedbackCountMax": null, "baselinePushAlertsFiles": null, "baselinePushMetricsFiles": null, "baselinePushReceiverReportCountMax": null, "baselinePushRuntimeEnabled": null, "baselinePushRuntimeLogFiles": null, "baselinePushTransportFeedbackCountMax": null, "baselineSkipReason": "baseline case not requested"}` |
 | `encoderRuntime` | `SKIP` | `{"baselineAccessUnits": null, "baselineCurrentBitrateBps": null, "baselineCurrentFps": null, "baselineEncoderMode": null, "baselineEncoderName": null, "baselineEncoderSamples": null, "baselineForcedKeyframeRequests": null, "baselineForcedKeyframes": null, "baselineHeight": null, "baselineKeyframes": null, "baselineMaxForcedKeyframeDelayUs": null, "baselineSkipReason": "baseline case not requested", "baselineWidth": null, "sourceMode": "synthetic"}` |
 | `nativeDecodeQoe` | `SKIP` | `{"baselineDecodeErrors": null, "baselineDecodedFrames": null, "baselineFirstFrameDelayUs": null, "baselineFreezeCount": null, "baselineHeight": null, "baselineOutputFps": null, "baselineSamples": null, "baselineSkipReason": "baseline case not requested", "baselineWidth": null, "enabled": true}` |
-| `recoveryFirstFrame` | `FAIL` | `{"clearEpochMs": 1779556606722, "dropRecoverStatus": "FAIL", "enabled": true, "postClearDecodedFramesDelta": 0, "postClearFirstDecodedDelayMs": null, "postClearFirstDecodedEpochMs": null, "postClearSamples": 32, "preClearDecodedFrames": 92}` |
+| `recoveryFirstFrame` | `PASS` | `{"clearEpochMs": 1779558226742, "dropRecoverStatus": "PASS", "enabled": true, "postClearDecodedFramesDelta": 416, "postClearFirstDecodedDelayMs": 2122, "postClearFirstDecodedEpochMs": 1779558228864, "postClearSamples": 32, "preClearDecodedFrames": 90}` |
 | `weakNetworkCoverage` | `PASS` | `{"attemptedWeakCases": ["drop_recover"], "skippedCases": []}` |
 
 ## Cases
 
 | Case | Status | Network | pushedAu | outputAu | decodedFrames/errors | RTP in | push RTCP in | play RTCP out | TWCC ext | Encoder AU/keyframes | RTT min/avg/max | Loss min/avg/max | targetBps min/avg/max | droppedFrames | NACK/PLI/RTX | Notes |
 |---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| `drop_recover` | `FAIL` | 5% loss + 600kbps, then recovery | 302 | 92 | 92/0 | 958 | 207 | 1555 | 5 | 297/37 | 0/1160.80/7672 | 0/0/0 | 300000/564628.47/2012838 | 8 | 1326/0/0 | runtime-no-unexpected-alerts: alerts=20<br>weak-recovery-target-up: targetMin=300000 postClearMax=300000 postClearLast=300000 postClearSamples=30 recoverSeconds=15<br>qoe-recovery-first-frame-after-clear: delayMs=None decodedDelta=0 postClearSamples=32 clearEpochMs=1779556606722<br>alerts=20 |
+| `drop_recover` | `PASS` | 5% loss + 600kbps, then recovery | 650 | 506 | 506/0 | 4159 | 322 | 1866 | 5 | 625/38 | 0/1577.80/7240 | 0/0/0 | 300000/1470280.70/2500000 | 5 | 1335/0/0 | - |
 
 ## Artifacts
 
 - JSON report: `docs/generated/webrtc-qos-plain-p2-recovery-first-frame-report.json`
-- Runtime logs: `/tmp/webrtc-qos-plain-p2-recovery-first-frame-p2m9-final/20260523T171630Z`
+- Runtime logs: `/tmp/webrtc-qos-plain-p2-recovery-final-cleantrace/20260523T174330Z`
 
 ## Interpretation
 

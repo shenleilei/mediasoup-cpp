@@ -208,9 +208,9 @@ SignalingServer
 - PlainTransport C++ 客户端矩阵：`48 / 48 PASS` (`2026-04-26`)
 - PlainTransport C++ 客户端信令测试套件：`PASS`
 - C++ 客户端 QoS 单元测试对齐 (parity)：`PASS`
-- WebRTC QoS Plain P2 synthetic+QoE 当前主报告：`qosMainline=PASS`，`sdkRuntimeObservability=PASS`，`encoderRuntime=PASS`，`nativeDecodeQoe=PASS`，`weakNetworkCoverage=PASS`；`drop_recover` 控制面恢复未达标，overall 为 `FAIL`，`failedChecks=1`
-- P2 已实测 `baseline`、`delay_100ms`、`loss_2pct`、`bandwidth_600k`、`drop_recover`：当前主报告 `4 / 5 PASS`；100ms delay RTT avg/max 为 `104.42/222ms`，600kbps bandwidth targetBps min/max 为 `300000/1986686`，`drop_recover` 失败证据为 `targetMin=300000 postClearMax=300000 postClearLast=300000 postClearSamples=30 recoverSeconds=15`
-- P2 恢复首帧已列为独立硬门禁：主报告中 `drop_recover` 清网后 `130ms` 看到 native QoE `decodedFrames` 增长，decoded delta=`3`，但因同 case 的 target bitrate 恢复失败，主报告 `recoveryFirstFrame=FAIL`；专项恢复报告当前也为 `FAIL`，用于快速复现和定位该阻塞
+- WebRTC QoS Plain P2 synthetic+QoE 当前主报告：`qosMainline=PASS`，`sdkRuntimeObservability=PASS`，`encoderRuntime=PASS`，`nativeDecodeQoe=PASS`，`weakNetworkCoverage=PASS`，`recoveryFirstFrame=PASS`；overall 为 `PASS`，`failedChecks=0`
+- P2 已实测 `baseline`、`delay_100ms`、`loss_2pct`、`bandwidth_600k`、`drop_recover`：当前主报告 `5 / 5 PASS`；100ms delay RTT avg/max 为 `78.25/220ms`，600kbps bandwidth targetBps min/max 为 `300000/2500000`，`drop_recover` targetBps min/avg/max 为 `300000/1398037.20/2500000`
+- P2 恢复首帧已列为独立硬门禁：主报告中 `drop_recover` 清网后 `144ms` 看到 native QoE `decodedFrames` 增长，decoded delta=`376`；专项恢复报告 `drop_recover=PASS`、`failedChecks=0`，清网后 `2122ms` 看到首帧，decoded delta=`416`
 - WebRTC QoS Plain P2 MP4 decode-loop baseline：`qosMainline=PASS`，`sdkRuntimeObservability=PASS`，`encoderRuntime=PASS`，`nativeDecodeQoe=PASS`；baseline `pushedAu=359`、`decodedFrames=359`、`decodeErrors=0`
 - WebRTC QoS Plain P2 browser receiver smoke：plain push 发布链路 `PASS`；当前 headless Chromium 只暴露 VP8/VP9、不暴露 H264 packetization-mode=1，浏览器收流 case 按环境能力记为 `SKIP`，overall 为 `PARTIAL`
 - WebRTC QoS Plain P2 V4L2 source：V4L2 CLI/source/smoke SKIP gate 已落地；当前机器无 `/dev/video0`，baseline 按环境能力 `SKIP`，overall 为 `PARTIAL`
@@ -219,7 +219,7 @@ SignalingServer
 
 - 上行 QoS 主链路在浏览器和 PlainTransport C++ 客户端上均已闭环
 - 下行目前覆盖接收端控制以及零需求发布端暂停/恢复协调
-- WebRTC QoS Plain P2 目前已签收 native baseline/delay/loss/bandwidth synthetic+QoE 短测、MP4 decode-loop baseline、browser receiver 自动化入口和 V4L2 输入源入口；`drop_recover` 恢复稳定性仍是 P2-M9 阻塞项，本机浏览器缺 H264 能力、当前机器无 `/dev/video0`，对应真实画面/摄像头运行结果只能记录 `SKIP/PARTIAL`
+- WebRTC QoS Plain P2 目前已签收 native baseline/delay/loss/bandwidth/recovery synthetic+QoE 短测、MP4 decode-loop baseline、browser receiver 自动化入口和 V4L2 输入源入口；本机浏览器缺 H264 能力、当前机器无 `/dev/video0`，对应真实画面/摄像头运行结果仍只能记录 `SKIP/PARTIAL`
 - `dynacast` 和房间级全局比特率预算划分是后续工作
 
 事实来源链接 (Source-of-truth links)：

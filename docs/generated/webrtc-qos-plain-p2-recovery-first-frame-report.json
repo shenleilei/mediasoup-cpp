@@ -2,37 +2,16 @@
   "cases": [
     {
       "alerts": {
-        "count": 20,
+        "count": 0,
         "ignoredHarnessNoiseCount": 6,
-        "samples": [
-          "2026-05-24 01:16:44.809 [warning] [play] request_consumer_keyframe_failed consumerId=3c68268c-f41b-41dc-b6bc-c130a907ccea error=timeout: requestConsumerKeyFrame",
-          "2026-05-24 01:16:44.809 [warning] [play] qoe_recovery_keyframe_request consumerId=3c68268c-f41b-41dc-b6bc-c130a907ccea sent=false decodedFrames=90 accessUnitsIn=90 freezeCount=1 stallMs=2017",
-          "2026-05-24 01:16:46.838 [warning] [play] qoe_recovery_keyframe_request consumerId=3c68268c-f41b-41dc-b6bc-c130a907ccea sent=true decodedFrames=92 accessUnitsIn=92 freezeCount=2 stallMs=2015",
-          "2026-05-24 01:16:48.849 [warning] [play] qoe_recovery_keyframe_request consumerId=3c68268c-f41b-41dc-b6bc-c130a907ccea sent=true decodedFrames=92 accessUnitsIn=92 freezeCount=2 stallMs=4027",
-          "2026-05-24 01:16:50.859 [warning] [play] qoe_recovery_keyframe_request consumerId=3c68268c-f41b-41dc-b6bc-c130a907ccea sent=true decodedFrames=92 accessUnitsIn=92 freezeCount=2 stallMs=6037",
-          "2026-05-24 01:16:52.874 [warning] [play] qoe_recovery_keyframe_request consumerId=3c68268c-f41b-41dc-b6bc-c130a907ccea sent=true decodedFrames=92 accessUnitsIn=92 freezeCount=2 stallMs=8052",
-          "2026-05-24 01:16:54.885 [warning] [play] qoe_recovery_keyframe_request consumerId=3c68268c-f41b-41dc-b6bc-c130a907ccea sent=true decodedFrames=92 accessUnitsIn=92 freezeCount=2 stallMs=10062",
-          "2026-05-24 01:16:56.889 [warning] [play] qoe_recovery_keyframe_request consumerId=3c68268c-f41b-41dc-b6bc-c130a907ccea sent=true decodedFrames=92 accessUnitsIn=92 freezeCount=2 stallMs=12066",
-          "2026-05-24 01:16:58.901 [warning] [play] qoe_recovery_keyframe_request consumerId=3c68268c-f41b-41dc-b6bc-c130a907ccea sent=true decodedFrames=92 accessUnitsIn=92 freezeCount=2 stallMs=14079",
-          "2026-05-24 01:17:00.904 [warning] [play] qoe_recovery_keyframe_request consumerId=3c68268c-f41b-41dc-b6bc-c130a907ccea sent=true decodedFrames=92 accessUnitsIn=92 freezeCount=2 stallMs=16082",
-          "2026-05-24 01:16:44.809 [warning] [play] request_consumer_keyframe_failed consumerId=3c68268c-f41b-41dc-b6bc-c130a907ccea error=timeout: requestConsumerKeyFrame",
-          "2026-05-24 01:16:44.809 [warning] [play] qoe_recovery_keyframe_request consumerId=3c68268c-f41b-41dc-b6bc-c130a907ccea sent=false decodedFrames=90 accessUnitsIn=90 freezeCount=1 stallMs=2017",
-          "2026-05-24 01:16:46.838 [warning] [play] qoe_recovery_keyframe_request consumerId=3c68268c-f41b-41dc-b6bc-c130a907ccea sent=true decodedFrames=92 accessUnitsIn=92 freezeCount=2 stallMs=2015",
-          "2026-05-24 01:16:48.849 [warning] [play] qoe_recovery_keyframe_request consumerId=3c68268c-f41b-41dc-b6bc-c130a907ccea sent=true decodedFrames=92 accessUnitsIn=92 freezeCount=2 stallMs=4027",
-          "2026-05-24 01:16:50.859 [warning] [play] qoe_recovery_keyframe_request consumerId=3c68268c-f41b-41dc-b6bc-c130a907ccea sent=true decodedFrames=92 accessUnitsIn=92 freezeCount=2 stallMs=6037",
-          "2026-05-24 01:16:52.874 [warning] [play] qoe_recovery_keyframe_request consumerId=3c68268c-f41b-41dc-b6bc-c130a907ccea sent=true decodedFrames=92 accessUnitsIn=92 freezeCount=2 stallMs=8052",
-          "2026-05-24 01:16:54.885 [warning] [play] qoe_recovery_keyframe_request consumerId=3c68268c-f41b-41dc-b6bc-c130a907ccea sent=true decodedFrames=92 accessUnitsIn=92 freezeCount=2 stallMs=10062",
-          "2026-05-24 01:16:56.889 [warning] [play] qoe_recovery_keyframe_request consumerId=3c68268c-f41b-41dc-b6bc-c130a907ccea sent=true decodedFrames=92 accessUnitsIn=92 freezeCount=2 stallMs=12066",
-          "2026-05-24 01:16:58.901 [warning] [play] qoe_recovery_keyframe_request consumerId=3c68268c-f41b-41dc-b6bc-c130a907ccea sent=true decodedFrames=92 accessUnitsIn=92 freezeCount=2 stallMs=14079",
-          "2026-05-24 01:17:00.904 [warning] [play] qoe_recovery_keyframe_request consumerId=3c68268c-f41b-41dc-b6bc-c130a907ccea sent=true decodedFrames=92 accessUnitsIn=92 freezeCount=2 stallMs=16082"
-        ]
+        "samples": []
       },
       "artifacts": {
-        "caseDir": "/tmp/webrtc-qos-plain-p2-recovery-first-frame-p2m9-final/20260523T171630Z/drop_recover",
-        "playLog": "/tmp/webrtc-qos-plain-p2-recovery-first-frame-p2m9-final/20260523T171630Z/drop_recover/play/play.log",
-        "pushLog": "/tmp/webrtc-qos-plain-p2-recovery-first-frame-p2m9-final/20260523T171630Z/drop_recover/push/push.log",
-        "readyz": "/tmp/webrtc-qos-plain-p2-recovery-first-frame-p2m9-final/20260523T171630Z/drop_recover/readyz.json",
-        "sfuLog": "/tmp/webrtc-qos-plain-p2-recovery-first-frame-p2m9-final/20260523T171630Z/drop_recover/sfu.stdout.log"
+        "caseDir": "/tmp/webrtc-qos-plain-p2-recovery-final-cleantrace/20260523T174330Z/drop_recover",
+        "playLog": "/tmp/webrtc-qos-plain-p2-recovery-final-cleantrace/20260523T174330Z/drop_recover/play/play.log",
+        "pushLog": "/tmp/webrtc-qos-plain-p2-recovery-final-cleantrace/20260523T174330Z/drop_recover/push/push.log",
+        "readyz": "/tmp/webrtc-qos-plain-p2-recovery-final-cleantrace/20260523T174330Z/drop_recover/readyz.json",
+        "sfuLog": "/tmp/webrtc-qos-plain-p2-recovery-final-cleantrace/20260523T174330Z/drop_recover/sfu.stdout.log"
       },
       "checks": [
         {
@@ -61,22 +40,22 @@
           "status": "PASS"
         },
         {
-          "evidence": "pushedAu=302",
+          "evidence": "pushedAu=650",
           "name": "push-au-output",
           "status": "PASS"
         },
         {
-          "evidence": "rtpPackets=958",
+          "evidence": "rtpPackets=4159",
           "name": "play-rtp-input",
           "status": "PASS"
         },
         {
-          "evidence": "outputAu=92",
+          "evidence": "outputAu=506",
           "name": "play-au-output",
           "status": "PASS"
         },
         {
-          "evidence": "rtcpFeedbackPacketsIn=207",
+          "evidence": "rtcpFeedbackPacketsIn=322",
           "name": "push-rtcp-feedback-input",
           "status": "PASS"
         },
@@ -101,22 +80,22 @@
           "status": "PASS"
         },
         {
-          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 36689, \"metricsFiles\": 1, \"processTickCountMax\": 2785, \"receiverReportCountMax\": 16, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 30, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 74}",
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 43184, \"metricsFiles\": 1, \"processTickCountMax\": 2729, \"receiverReportCountMax\": 16, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 30, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 202}",
           "name": "sdk-push-runtime-files",
           "status": "PASS"
         },
         {
-          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 5011735, \"metricsFiles\": 1, \"processTickCountMax\": 2337, \"receiverReportCountMax\": 24, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 26, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 185}",
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 22847, \"metricsFiles\": 1, \"processTickCountMax\": 2798, \"receiverReportCountMax\": 28, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 30, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 484}",
           "name": "sdk-play-runtime-files",
           "status": "PASS"
         },
         {
-          "evidence": "twcc=185 rr=24",
+          "evidence": "twcc=484 rr=28",
           "name": "sdk-play-rtcp-generated",
           "status": "PASS"
         },
         {
-          "evidence": "twcc=74 rr=16",
+          "evidence": "twcc=202 rr=16",
           "name": "sdk-push-rtcp-counted",
           "status": "PASS"
         },
@@ -126,9 +105,9 @@
           "status": "PASS"
         },
         {
-          "evidence": "alerts=20",
+          "evidence": "ok",
           "name": "runtime-no-unexpected-alerts",
-          "status": "FAIL"
+          "status": "PASS"
         },
         {
           "evidence": "samples=60",
@@ -136,37 +115,37 @@
           "status": "PASS"
         },
         {
-          "evidence": "{\"accessUnits\": 297, \"bitrateChanges\": 29, \"currentBitrateBps\": 300000, \"currentFps\": 5, \"encoder\": \"x264\", \"encoderRecreates\": 5, \"forcedKeyframeRequests\": 210, \"forcedKeyframes\": 19, \"fpsChanges\": 4, \"framesEncoded\": 297, \"framesGenerated\": 297, \"height\": 180, \"keyframes\": 37, \"lastKeyframe\": \"false\", \"maxForcedKeyframeDelayUs\": 196269, \"mode\": \"synthetic\", \"width\": 320}",
+          "evidence": "{\"accessUnits\": 625, \"bitrateChanges\": 58, \"currentBitrateBps\": 2433953, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 8, \"forcedKeyframeRequests\": 88, \"forcedKeyframes\": 6, \"fpsChanges\": 7, \"framesEncoded\": 625, \"framesGenerated\": 625, \"height\": 180, \"keyframes\": 38, \"lastKeyframe\": \"true\", \"maxForcedKeyframeDelayUs\": 198551, \"mode\": \"synthetic\", \"width\": 320}",
           "name": "encoder-mode-selected",
           "status": "PASS"
         },
         {
-          "evidence": "accessUnits=297",
+          "evidence": "accessUnits=625",
           "name": "encoder-au-output",
           "status": "PASS"
         },
         {
-          "evidence": "keyframes=37",
+          "evidence": "keyframes=38",
           "name": "encoder-keyframe-output",
           "status": "PASS"
         },
         {
-          "evidence": "forcedKeyframeRequests=210 forcedKeyframes=19 maxForcedKeyframeDelayUs=196269",
+          "evidence": "forcedKeyframeRequests=88 forcedKeyframes=6 maxForcedKeyframeDelayUs=198551",
           "name": "encoder-forced-keyframe-response",
           "status": "PASS"
         },
         {
-          "evidence": "{\"accessUnits\": 297, \"bitrateChanges\": 29, \"currentBitrateBps\": 300000, \"currentFps\": 5, \"encoder\": \"x264\", \"encoderRecreates\": 5, \"forcedKeyframeRequests\": 210, \"forcedKeyframes\": 19, \"fpsChanges\": 4, \"framesEncoded\": 297, \"framesGenerated\": 297, \"height\": 180, \"keyframes\": 37, \"lastKeyframe\": \"false\", \"maxForcedKeyframeDelayUs\": 196269, \"mode\": \"synthetic\", \"width\": 320}",
+          "evidence": "{\"accessUnits\": 625, \"bitrateChanges\": 58, \"currentBitrateBps\": 2433953, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 8, \"forcedKeyframeRequests\": 88, \"forcedKeyframes\": 6, \"fpsChanges\": 7, \"framesEncoded\": 625, \"framesGenerated\": 625, \"height\": 180, \"keyframes\": 38, \"lastKeyframe\": \"true\", \"maxForcedKeyframeDelayUs\": 198551, \"mode\": \"synthetic\", \"width\": 320}",
           "name": "encoder-source-shape",
           "status": "PASS"
         },
         {
-          "evidence": "samples=54",
+          "evidence": "samples=62",
           "name": "qoe-metrics-present",
           "status": "PASS"
         },
         {
-          "evidence": "decodedFrames=92",
+          "evidence": "decodedFrames=506",
           "name": "qoe-decodes-frames",
           "status": "PASS"
         },
@@ -181,115 +160,115 @@
           "status": "PASS"
         },
         {
-          "evidence": "targetMin=300000 postClearMax=300000 postClearLast=300000 postClearSamples=30 recoverSeconds=15",
+          "evidence": "targetMin=300000 postClearMax=2500000 postClearLast=2433953 postClearSamples=30 recoverSeconds=15",
           "name": "weak-recovery-target-up",
-          "status": "FAIL"
+          "status": "PASS"
         },
         {
-          "evidence": "delayMs=None decodedDelta=0 postClearSamples=32 clearEpochMs=1779556606722",
+          "evidence": "delayMs=2122 decodedDelta=416 postClearSamples=32 clearEpochMs=1779558226742",
           "name": "qoe-recovery-first-frame-after-clear",
-          "status": "FAIL"
+          "status": "PASS"
         }
       ],
       "metrics": {
-        "droppedFrames": 8,
+        "droppedFrames": 5,
         "encoder": {
-          "accessUnits": 297,
-          "bitrateChanges": 29,
-          "currentBitrateBps": 300000,
-          "currentFps": 5,
-          "encoderRecreates": 5,
-          "forcedKeyframeRequests": 210,
-          "forcedKeyframes": 19,
-          "fpsChanges": 4,
-          "framesEncoded": 297,
-          "framesGenerated": 297,
+          "accessUnits": 625,
+          "bitrateChanges": 58,
+          "currentBitrateBps": 2433953,
+          "currentFps": 30,
+          "encoderRecreates": 8,
+          "forcedKeyframeRequests": 88,
+          "forcedKeyframes": 6,
+          "fpsChanges": 7,
+          "framesEncoded": 625,
+          "framesGenerated": 625,
           "height": 180,
-          "keyframes": 37,
-          "maxForcedKeyframeDelayUs": 196269,
+          "keyframes": 38,
+          "maxForcedKeyframeDelayUs": 198551,
           "mode": "synthetic",
           "name": "x264",
           "samples": 60,
           "width": 320
         },
         "finalTargetBps": {
-          "avg": 564628.4666666667,
-          "max": 2012838.0,
+          "avg": 1470280.7,
+          "max": 2500000.0,
           "min": 300000.0
         },
-        "nack": 1326,
+        "nack": 1335,
         "playLossQ8": {
           "avg": 0.0,
           "max": 0.0,
           "min": 0.0
         },
-        "playMetricSamples": 52,
-        "playOutputAu": 92,
-        "playRtcpBytesOut": 54132,
-        "playRtcpPacketsIn": 16,
-        "playRtcpPacketsOut": 1555,
+        "playMetricSamples": 60,
+        "playOutputAu": 506,
+        "playRtcpBytesOut": 58852,
+        "playRtcpPacketsIn": 18,
+        "playRtcpPacketsOut": 1866,
         "playRtcpSendFailures": 0,
-        "playRtpPackets": 958,
+        "playRtpPackets": 4159,
         "pli": 0,
         "publishTwccExtId": 5,
         "pushMetricSamples": 60,
-        "pushRtcpFeedbackBytesIn": 6784,
+        "pushRtcpFeedbackBytesIn": 11960,
         "pushRtcpFeedbackFailures": 0,
-        "pushRtcpFeedbackPacketsIn": 207,
-        "pushedAu": 302,
+        "pushRtcpFeedbackPacketsIn": 322,
+        "pushedAu": 650,
         "qoe": {
-          "accessUnitsIn": 92,
+          "accessUnitsIn": 506,
           "decodeErrors": 0,
-          "decodedFrames": 92,
+          "decodedFrames": 506,
           "enabled": true,
           "firstFrameDelayUs": 0,
           "freezeCount": 2,
           "height": 180,
-          "keyframesIn": 5,
-          "maxFrameGapUs": 7883619,
-          "outputFps": 6.98,
+          "keyframesIn": 18,
+          "maxFrameGapUs": 12189991,
+          "outputFps": 16.87,
           "recovery": {
-            "clearEpochMs": 1779556606722,
+            "clearEpochMs": 1779558226742,
             "enabled": true,
-            "postClearDecodedFramesDelta": 0,
-            "postClearFirstDecodedDelayMs": null,
-            "postClearFirstDecodedEpochMs": null,
+            "postClearDecodedFramesDelta": 416,
+            "postClearFirstDecodedDelayMs": 2122,
+            "postClearFirstDecodedEpochMs": 1779558228864,
             "postClearSamples": 32,
-            "preClearDecodedFrames": 92
+            "preClearDecodedFrames": 90
           },
-          "samples": 54,
+          "samples": 62,
           "width": 320
         },
         "retransmission": 0,
         "rttMs": {
-          "avg": 1160.8,
-          "max": 7672.0,
+          "avg": 1577.8,
+          "max": 7240.0,
           "min": 0.0
         },
         "sdkRuntime": {
           "play": {
             "alertsFiles": 1,
             "enabled": true,
-            "maxProcessTickGapUs": 5011735,
+            "maxProcessTickGapUs": 22847,
             "metricsFiles": 1,
-            "processTickCountMax": 2337,
-            "receiverReportCountMax": 24,
+            "processTickCountMax": 2798,
+            "receiverReportCountMax": 28,
             "runtimeLogFiles": 1,
-            "sessionMetricSamples": 26,
+            "sessionMetricSamples": 30,
             "transportFailureCountMax": 0,
-            "transportFeedbackCountMax": 185
+            "transportFeedbackCountMax": 484
           },
           "push": {
             "alertsFiles": 1,
             "enabled": true,
-            "maxProcessTickGapUs": 36689,
+            "maxProcessTickGapUs": 43184,
             "metricsFiles": 1,
-            "processTickCountMax": 2785,
+            "processTickCountMax": 2729,
             "receiverReportCountMax": 16,
             "runtimeLogFiles": 1,
             "sessionMetricSamples": 30,
             "transportFailureCountMax": 0,
-            "transportFeedbackCountMax": 74
+            "transportFeedbackCountMax": 202
           }
         },
         "selectedTwccExtId": 5,
@@ -299,27 +278,27 @@
           "min": 0.0
         },
         "targetBps": {
-          "avg": 564628.4666666667,
-          "max": 2012838.0,
+          "avg": 1470280.7,
+          "max": 2500000.0,
           "min": 300000.0
         },
         "timing": {
-          "applyEpochMs": 1779556594687,
+          "applyEpochMs": 1779558214697,
           "case": "drop_recover",
-          "clearEpochMs": 1779556606722,
+          "clearEpochMs": 1779558226742,
           "durationSeconds": 30,
           "effectiveDurationSeconds": 30,
-          "endEpochMs": 1779556621756,
+          "endEpochMs": 1779558241757,
           "netemApplied": 1,
           "preSeconds": 3,
           "recoverSeconds": 15,
-          "startEpochMs": 1779556590572,
+          "startEpochMs": 1779558210640,
           "weakSeconds": 12
         }
       },
       "name": "drop_recover",
       "networkCondition": "5% loss + 600kbps, then recovery",
-      "status": "FAIL"
+      "status": "PASS"
     }
   ],
   "environment": {
@@ -330,28 +309,13 @@
     "python": "3.6.8",
     "tc": "/usr/sbin/tc",
     "webrtcQosSdkDir": "/root/webrtc_qos_sdk/dist/linux-x86_64/lib/cmake/WebRtcQosSdk",
-    "webrtcQosSdkDist": "/root/webrtc_qos_sdk/dist/linux-x86_64"
+    "webrtcQosSdkDist": "/root/webrtc_qos_sdk/dist/linux-x86_64",
+    "webrtcQosSdkGitBranch": "master",
+    "webrtcQosSdkGitCommit": "79e3acdf75968d823596769c381eb3449778694e",
+    "webrtcQosSdkGitStatus": "",
+    "webrtcQosSdkRepo": "/root/webrtc_qos_sdk"
   },
-  "failedChecks": [
-    {
-      "case": "drop_recover",
-      "check": "runtime-no-unexpected-alerts",
-      "evidence": "alerts=20",
-      "status": "FAIL"
-    },
-    {
-      "case": "drop_recover",
-      "check": "weak-recovery-target-up",
-      "evidence": "targetMin=300000 postClearMax=300000 postClearLast=300000 postClearSamples=30 recoverSeconds=15",
-      "status": "FAIL"
-    },
-    {
-      "case": "drop_recover",
-      "check": "qoe-recovery-first-frame-after-clear",
-      "evidence": "delayMs=None decodedDelta=0 postClearSamples=32 clearEpochMs=1779556606722",
-      "status": "FAIL"
-    }
-  ],
+  "failedChecks": [],
   "gates": {
     "encoderRuntime": {
       "evidence": {
@@ -412,20 +376,20 @@
     },
     "recoveryFirstFrame": {
       "evidence": {
-        "clearEpochMs": 1779556606722,
-        "dropRecoverStatus": "FAIL",
+        "clearEpochMs": 1779558226742,
+        "dropRecoverStatus": "PASS",
         "enabled": true,
-        "postClearDecodedFramesDelta": 0,
-        "postClearFirstDecodedDelayMs": null,
-        "postClearFirstDecodedEpochMs": null,
+        "postClearDecodedFramesDelta": 416,
+        "postClearFirstDecodedDelayMs": 2122,
+        "postClearFirstDecodedEpochMs": 1779558228864,
         "postClearSamples": 32,
-        "preClearDecodedFrames": 92
+        "preClearDecodedFrames": 90
       },
       "requirements": [
         "drop_recover case is attempted with QoE decode enabled",
         "first decoded frame after netem clear is observed within 15 seconds"
       ],
-      "status": "FAIL"
+      "status": "PASS"
     },
     "sdkRuntimeObservability": {
       "evidence": {
@@ -463,8 +427,8 @@
       "status": "PASS"
     }
   },
-  "generatedAt": "2026-05-23T17:17:17Z",
-  "overallStatus": "FAIL",
+  "generatedAt": "2026-05-23T17:44:17Z",
+  "overallStatus": "PARTIAL",
   "runConfig": {
     "buildDir": "build-webrtc-qos-plain",
     "buildDirAbs": "/root/mediasoup-cpp/build-webrtc-qos-plain",
@@ -493,17 +457,17 @@
     "workerBin": "./mediasoup-worker",
     "workerBinAbs": "/root/mediasoup-cpp/mediasoup-worker"
   },
-  "runDir": "/tmp/webrtc-qos-plain-p2-recovery-first-frame-p2m9-final/20260523T171630Z",
+  "runDir": "/tmp/webrtc-qos-plain-p2-recovery-final-cleantrace/20260523T174330Z",
   "schemaVersion": 1,
   "sourceRevision": {
     "gitBranch": "main",
-    "gitCommit": "8279e23d70f63d2dd0f29eef8d850ca5a0d9d2fb"
+    "gitCommit": "588c79bde1185f8022533b29383319f5056158ee"
   },
   "summary": {
     "attemptedCases": 1,
-    "failedCases": 1,
-    "failedChecks": 3,
-    "passedCases": 0,
+    "failedCases": 0,
+    "failedChecks": 0,
+    "passedCases": 1,
     "skippedCases": 0
   }
 }

@@ -1414,6 +1414,14 @@ worker_bin_abs = path_from_root(worker_bin)
 cmake_cache = parse_cmake_cache(os.path.join(build_dir_abs, 'CMakeCache.txt'))
 webrtc_qos_sdk_cmake_dir = cmake_cache.get('WebRtcQosSdk_DIR', '')
 webrtc_qos_sdk_dist = sdk_dist_from_cmake_dir(webrtc_qos_sdk_cmake_dir)
+webrtc_qos_sdk_repo = os.path.abspath(os.path.join(webrtc_qos_sdk_dist, '..', '..')) if webrtc_qos_sdk_dist else ''
+webrtc_qos_sdk_git_commit = ''
+webrtc_qos_sdk_git_branch = ''
+webrtc_qos_sdk_git_status = ''
+if webrtc_qos_sdk_repo and os.path.isdir(os.path.join(webrtc_qos_sdk_repo, '.git')):
+    webrtc_qos_sdk_git_commit = command_output(['git', '-C', webrtc_qos_sdk_repo, 'rev-parse', 'HEAD'])
+    webrtc_qos_sdk_git_branch = command_output(['git', '-C', webrtc_qos_sdk_repo, 'branch', '--show-current'])
+    webrtc_qos_sdk_git_status = command_output(['git', '-C', webrtc_qos_sdk_repo, 'status', '--short', '--untracked-files=no'])
 git_commit = command_output(['git', '-C', root_dir, 'rev-parse', 'HEAD'])
 git_branch = command_output(['git', '-C', root_dir, 'branch', '--show-current'])
 failed_checks = collect_failed_checks(cases)
@@ -1462,6 +1470,10 @@ report = {
         'cmakePrefixPath': cmake_cache.get('CMAKE_PREFIX_PATH', ''),
         'webrtcQosSdkDir': webrtc_qos_sdk_cmake_dir,
         'webrtcQosSdkDist': webrtc_qos_sdk_dist,
+        'webrtcQosSdkRepo': webrtc_qos_sdk_repo,
+        'webrtcQosSdkGitCommit': webrtc_qos_sdk_git_commit,
+        'webrtcQosSdkGitBranch': webrtc_qos_sdk_git_branch,
+        'webrtcQosSdkGitStatus': webrtc_qos_sdk_git_status,
     },
     'gates': gates,
     'summary': {
