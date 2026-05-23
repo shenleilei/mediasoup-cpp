@@ -11,6 +11,7 @@
 #include "ffmpeg/OutputFormat.h"
 #include "push/Mp4DecodeH264Source.h"
 #include "push/RealtimeH264Source.h"
+#include "push/V4L2H264Source.h"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -155,6 +156,23 @@ TEST(WebRtcQosRealtimeSourceTest, Mp4DecodeLoopProducesAdaptedAnnexBAccessUnits)
 	EXPECT_GE(metrics.maxForcedKeyframeDelayUs, 0);
 	EXPECT_LE(metrics.maxForcedKeyframeDelayUs, 1000000);
 	std::filesystem::remove(input);
+}
+
+TEST(WebRtcQosRealtimeSourceTest, V4L2MissingDeviceReportsOpenFailure)
+{
+	std::string error;
+	webrtc_qos_plain::V4L2H264SourceConfig config;
+	config.device = "/dev/mediasoup-cpp-missing-video-device";
+	config.width = 64;
+	config.height = 48;
+	config.fps = 15;
+	config.bitrateBps = 500000;
+	config.minBitrateBps = 120000;
+	config.maxBitrateBps = 800000;
+	webrtc_qos_plain::V4L2H264Source source(config);
+	EXPECT_FALSE(source.Open(&error));
+	EXPECT_FALSE(error.empty());
+	EXPECT_EQ(source.metrics().accessUnits, 0u);
 }
 
 TEST(WebRtcQosRealtimeSourceTest, AppliesEncoderAdaptation)
