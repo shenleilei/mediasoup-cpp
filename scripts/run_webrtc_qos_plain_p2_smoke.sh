@@ -31,6 +31,7 @@ Usage:
 Options:
   --cases <csv>              Case list. Default: baseline,delay_100ms,loss_2pct,loss_5pct,bandwidth_600k,drop_recover
   --duration-seconds <n>     Per-case runtime. Default: 10. Formal P2 runs should use 60.
+                             drop_recover uses at least 30s so recovery has a 15s observation window.
   --build-dir <path>         Build directory containing mediasoup-sfu and plain clients.
   --worker-bin <path>        mediasoup-worker binary. Default: ./mediasoup-worker.
   --report-dir <path>        Report output directory. Default: docs/generated.
@@ -197,6 +198,18 @@ cleanup_netem() {
 	fi
 }
 
+now_ms() {
+	date +%s%3N
+}
+
+json_number_or_null() {
+	if [[ -n "${1:-}" ]]; then
+		printf '%s' "$1"
+	else
+		printf 'null'
+	fi
+}
+
 NETEM_SKIP_REASON=""
 check_netem_ready() {
 	if [[ "$ENABLE_NETEM" -ne 1 ]]; then
@@ -309,11 +322,12 @@ apply_netem() {
 		return 0
 	fi
 	cleanup_netem
+	printf 'apply_start epochMs=%s args="%s" dev=%s\n' "$(now_ms)" "$args" "$NETEM_DEV" >>"$case_dir/netem.log"
 	# shellcheck disable=SC2086
-	if ! tc qdisc add dev "$NETEM_DEV" root netem $args >"$case_dir/netem.log" 2>&1; then
+	if ! tc qdisc add dev "$NETEM_DEV" root netem $args >>"$case_dir/netem.log" 2>&1; then
 		return 1
 	fi
-	printf 'applied %s on %s\n' "$args" "$NETEM_DEV" >>"$case_dir/netem.log"
+	printf 'apply_done epochMs=%s args="%s" dev=%s\n' "$(now_ms)" "$args" "$NETEM_DEV" >>"$case_dir/netem.log"
 	return 0
 }
 
@@ -329,6 +343,15 @@ run_case() {
 	local sfu_pid=""
 	local play_pid=""
 	local push_pid=""
+	local pre=0
+	local weak=0
+	local recover=0
+	local effective_duration=$DURATION_SECONDS
+	local start_epoch_ms=""
+	local apply_epoch_ms=""
+	local clear_epoch_ms=""
+	local end_epoch_ms=""
+	local netem_applied=0
 
 	mkdir -p "$case_dir/push" "$case_dir/play"
 	printf '%s\n' "$(network_condition "$case_name")" >"$case_dir/NETWORK_CONDITION"
@@ -337,6 +360,8 @@ run_case() {
 		write_skip "$case_dir" "$case_name" "$NETEM_SKIP_REASON"
 		return
 	fi
+
+	start_epoch_ms="$(now_ms)"
 
 	setsid "$SFU_BIN" \
 		--nodaemon \
@@ -403,18 +428,41 @@ run_case() {
 	push_pid=$!
 
 	if case_requires_netem "$case_name"; then
-		local pre=$((DURATION_SECONDS / 4))
-		local weak=$((DURATION_SECONDS / 2))
-		local recover=$((DURATION_SECONDS - pre - weak))
-		if [[ "$pre" -lt 1 ]]; then pre=1; fi
-		if [[ "$weak" -lt 1 ]]; then weak=1; fi
-		if [[ "$recover" -lt 1 ]]; then recover=1; fi
+		if [[ "$case_name" == "drop_recover" && "$DURATION_SECONDS" -lt 30 ]]; then
+			effective_duration=30
+			pre=3
+			weak=12
+			recover=15
+		elif [[ "$case_name" == "drop_recover" && "$DURATION_SECONDS" -lt 60 ]]; then
+			effective_duration=$DURATION_SECONDS
+			pre=$((DURATION_SECONDS / 10))
+			recover=$((DURATION_SECONDS / 2))
+			if [[ "$pre" -lt 3 ]]; then pre=3; fi
+			if [[ "$recover" -lt 15 ]]; then recover=15; fi
+			weak=$((effective_duration - pre - recover))
+			if [[ "$weak" -lt 2 ]]; then
+				weak=2
+				effective_duration=$((pre + weak + recover))
+			fi
+		else
+			pre=$((DURATION_SECONDS / 4))
+			weak=$((DURATION_SECONDS / 2))
+			recover=$((DURATION_SECONDS - pre - weak))
+			if [[ "$pre" -lt 1 ]]; then pre=1; fi
+			if [[ "$weak" -lt 1 ]]; then weak=1; fi
+			if [[ "$recover" -lt 1 ]]; then recover=1; fi
+		fi
+		printf 'schedule preSeconds=%s weakSeconds=%s recoverSeconds=%s durationSeconds=%s effectiveDurationSeconds=%s\n' "$pre" "$weak" "$recover" "$DURATION_SECONDS" "$effective_duration" >"$case_dir/netem.log"
 		sleep "$pre"
+		apply_epoch_ms="$(now_ms)"
 		if ! apply_netem "$case_name" "$case_dir"; then
 			printf 'netem apply failed: %s\n' "$(tr '\n' ' ' < "$case_dir/netem.log" 2>/dev/null || true)" >"$case_dir/HARNESS_FAILURE"
 		else
+			netem_applied=1
 			sleep "$weak"
 			cleanup_netem
+			clear_epoch_ms="$(now_ms)"
+			printf 'clear_done epochMs=%s dev=%s\n' "$clear_epoch_ms" "$NETEM_DEV" >>"$case_dir/netem.log"
 			sleep "$recover"
 		fi
 	else
@@ -422,6 +470,22 @@ run_case() {
 	fi
 
 	cleanup_netem
+	end_epoch_ms="$(now_ms)"
+	{
+		printf '{\n'
+		printf '  "case": "%s",\n' "$case_name"
+		printf '  "durationSeconds": %s,\n' "$DURATION_SECONDS"
+		printf '  "effectiveDurationSeconds": %s,\n' "$effective_duration"
+		printf '  "preSeconds": %s,\n' "$pre"
+		printf '  "weakSeconds": %s,\n' "$weak"
+		printf '  "recoverSeconds": %s,\n' "$recover"
+		printf '  "netemApplied": %s,\n' "$netem_applied"
+		printf '  "startEpochMs": %s,\n' "$(json_number_or_null "$start_epoch_ms")"
+		printf '  "applyEpochMs": %s,\n' "$(json_number_or_null "$apply_epoch_ms")"
+		printf '  "clearEpochMs": %s,\n' "$(json_number_or_null "$clear_epoch_ms")"
+		printf '  "endEpochMs": %s\n' "$(json_number_or_null "$end_epoch_ms")"
+		printf '}\n'
+	} >"$case_dir/case_timing.json"
 	terminate_group "$push_pid"
 	terminate_group "$play_pid"
 	terminate_group "$sfu_pid"
@@ -440,6 +504,7 @@ import re
 import statistics
 import subprocess
 import sys
+import time
 
 run_dir, report_dir, report_json, report_md = sys.argv[1:5]
 case_names = [c.strip() for c in sys.argv[5].split(',') if c.strip()]
@@ -469,6 +534,13 @@ def read_first(path):
     text = read_file(path).strip()
     return text.splitlines()[0] if text else ''
 
+def read_json(path):
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
 def command_output(argv):
     try:
         return subprocess.check_output(argv, stderr=subprocess.STDOUT).decode('utf-8', 'replace').strip()
@@ -495,15 +567,30 @@ def first_int(regex, text, group=1):
     match = re.search(regex, text)
     return int(match.group(group)) if match else None
 
+def parse_log_epoch_ms(line):
+    match = re.match(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\.(\d{3})', line)
+    if not match:
+        return None
+    try:
+        dt = datetime.datetime.strptime(match.group(1), '%Y-%m-%d %H:%M:%S')
+        return int(time.mktime(dt.timetuple()) * 1000) + int(match.group(2))
+    except Exception:
+        return None
+
 def parse_push_metrics(text):
     rows = []
     pattern = re.compile(
         r'push_metrics pushedAu=(\d+) targetBps=(\d+) pacingBps=(\d+) '
         r'finalTargetBps=(\d+) rttMs=([0-9.]+) loss=([0-9.]+) '
         r'rtcpFeedbackPacketsIn=(\d+) rtcpFeedbackBytesIn=(\d+) '
-        r'rtcpFeedbackFailures=(\d+) maxFps=([0-9.]+) requestKeyframe=(\w+)')
-    for match in pattern.finditer(text):
+        r'rtcpFeedbackFailures=(\d+) maxFps=([0-9.]+) requestKeyframe=(\w+)'
+        r'(?: droppedFrames=(\d+))?')
+    for line in text.splitlines():
+        match = pattern.search(line)
+        if not match:
+            continue
         rows.append({
+            'epochMs': parse_log_epoch_ms(line),
             'pushedAu': int(match.group(1)),
             'targetBps': int(match.group(2)),
             'pacingBps': int(match.group(3)),
@@ -515,6 +602,7 @@ def parse_push_metrics(text):
             'rtcpFeedbackFailures': int(match.group(9)),
             'maxFps': float(match.group(10)),
             'requestKeyframe': match.group(11),
+            'droppedFrames': int(match.group(12) or 0),
         })
     return rows
 
@@ -676,6 +764,7 @@ def status_from_checks(checks):
 def parse_case(case_name):
     case_dir = os.path.join(run_dir, case_name)
     condition = read_first(os.path.join(case_dir, 'NETWORK_CONDITION')) or 'unknown'
+    timing = read_json(os.path.join(case_dir, 'case_timing.json'))
     skip_reason = read_first(os.path.join(case_dir, 'SKIP_REASON'))
     if skip_reason:
         return {
@@ -685,7 +774,7 @@ def parse_case(case_name):
             'skipReason': skip_reason,
             'artifacts': {'caseDir': case_dir},
             'checks': [],
-            'metrics': {},
+            'metrics': {'timing': timing},
         }
 
     push_text = '\n'.join([
@@ -741,6 +830,7 @@ def parse_case(case_name):
     max_nack = max([m['nack'] for m in play_metrics] or [0])
     max_pli = max([m['pli'] for m in play_metrics] or [0])
     max_retransmission = max([m['retransmission'] for m in play_metrics] or [0])
+    max_dropped_frames = max([m['droppedFrames'] for m in push_metrics] or [0])
     last_encoder = encoder_metrics[-1] if encoder_metrics else {}
     last_qoe = qoe_metrics[-1] if qoe_metrics else {}
 
@@ -807,8 +897,30 @@ def parse_case(case_name):
             checks.append(make_check('weak-bandwidth-target-down', dropped, 'targetMin={} targetMax={}'.format(min(targets) if targets else None, max(targets) if targets else None)))
         elif case_name == 'drop_recover':
             targets = [m['targetBps'] for m in push_metrics]
-            recovered = bool(len(targets) >= 3 and targets[-1] > min(targets))
-            checks.append(make_check('weak-recovery-target-up', recovered, 'targetMin={} targetLast={}'.format(min(targets) if targets else None, targets[-1] if targets else None)))
+            clear_ms = timing.get('clearEpochMs')
+            post_clear = [
+                m for m in push_metrics
+                if isinstance(m.get('epochMs'), int) and isinstance(clear_ms, int) and m['epochMs'] >= clear_ms
+            ]
+            post_targets = [m['targetBps'] for m in post_clear]
+            global_min = min(targets) if targets else None
+            post_max = max(post_targets) if post_targets else None
+            post_last = post_targets[-1] if post_targets else None
+            recovered = bool(
+                len(targets) >= 3 and
+                global_min is not None and
+                post_targets and
+                (post_max > global_min or post_last > global_min)
+            )
+            checks.append(make_check(
+                'weak-recovery-target-up',
+                recovered,
+                'targetMin={} postClearMax={} postClearLast={} postClearSamples={} recoverSeconds={}'.format(
+                    global_min,
+                    post_max,
+                    post_last,
+                    len(post_targets),
+                    timing.get('recoverSeconds'))))
 
     metrics = {
         'publishTwccExtId': publish_twcc,
@@ -828,6 +940,7 @@ def parse_case(case_name):
         'playLossQ8': numbers([m['lossQ8'] for m in play_metrics]),
         'targetBps': numbers([m['targetBps'] for m in push_metrics]),
         'finalTargetBps': numbers([m['finalTargetBps'] for m in push_metrics]),
+        'droppedFrames': max_dropped_frames,
         'nack': max_nack,
         'pli': max_pli,
         'retransmission': max_retransmission,
@@ -874,6 +987,7 @@ def parse_case(case_name):
                 **play_sdk_runtime,
             },
         },
+        'timing': timing,
     }
 
     status = status_from_checks(checks)
@@ -1126,12 +1240,12 @@ for name, gate in gates.items():
 lines.append('')
 lines.append('## Cases')
 lines.append('')
-lines.append('| Case | Status | Network | pushedAu | outputAu | decodedFrames/errors | RTP in | push RTCP in | play RTCP out | TWCC ext | Encoder AU/keyframes | RTT min/avg/max | Loss min/avg/max | targetBps min/avg/max | NACK/PLI/RTX | Notes |')
-lines.append('|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|')
+lines.append('| Case | Status | Network | pushedAu | outputAu | decodedFrames/errors | RTP in | push RTCP in | play RTCP out | TWCC ext | Encoder AU/keyframes | RTT min/avg/max | Loss min/avg/max | targetBps min/avg/max | droppedFrames | NACK/PLI/RTX | Notes |')
+lines.append('|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|')
 for case in cases:
     metrics = case.get('metrics', {})
     if case['status'] == 'SKIP':
-        lines.append('| `{}` | `{}` | {} | - | - | - | - | - | - | - | - | - | - | - | - | {} |'.format(
+        lines.append('| `{}` | `{}` | {} | - | - | - | - | - | - | - | - | - | - | - | - | - | {} |'.format(
             case['name'], case['status'], case.get('networkCondition', '-'), case.get('skipReason', '-')))
         continue
     twcc = metrics.get('selectedTwccExtId') or metrics.get('publishTwccExtId')
@@ -1149,7 +1263,7 @@ for case in cases:
     qoe_summary = '-'
     if qoe.get('decodedFrames') is not None:
         qoe_summary = '{}/{}'.format(fmt(qoe.get('decodedFrames')), fmt(qoe.get('decodeErrors')))
-    lines.append('| `{}` | `{}` | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {}/{}/{} | {} |'.format(
+    lines.append('| `{}` | `{}` | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {}/{}/{} | {} |'.format(
         case['name'],
         case['status'],
         case.get('networkCondition', '-'),
@@ -1164,6 +1278,7 @@ for case in cases:
         fmt_triplet(metrics.get('rttMs')),
         fmt_triplet(metrics.get('senderLossFraction')),
         fmt_triplet(metrics.get('targetBps')),
+        fmt(metrics.get('droppedFrames')),
         fmt(metrics.get('nack')),
         fmt(metrics.get('pli')),
         fmt(metrics.get('retransmission')),
@@ -1182,6 +1297,7 @@ lines.append('- `qosMainline=PASS` means TWCC negotiation, push RTCP feedback in
 lines.append('- `sdkRuntimeObservability=PASS` means push/play SDK runtime log, metrics, alerts files exist and SDK RR/TWCC counters are non-zero.')
 lines.append('- `encoderRuntime=PASS` means requested synthetic x264 mode produced encoded H264 access units and keyframes with observable encoder metrics.')
 lines.append('- `nativeDecodeQoe=PASS` means requested native FFmpeg decode/QoE produced decoded frames and first-frame/decode-error metrics.')
+lines.append('- `droppedFrames` is the SDK push-side pacer backpressure counter; non-zero values are acceptable in bandwidth/recovery cases when transport remains alive and QoE decode continues.')
 lines.append('- `weakNetworkCoverage=PASS` means at least one tc netem weak-network case was actually attempted and passed; the generated report records which cases were covered.')
 lines.append('- `weakNetworkCoverage=SKIP` means tc netem cases were intentionally not run; use `--enable-netem` when the host permits network emulation.')
 

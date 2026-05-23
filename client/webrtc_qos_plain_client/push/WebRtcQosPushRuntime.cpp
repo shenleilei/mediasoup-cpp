@@ -230,7 +230,7 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 			lastSnapshotUs = nowUs;
 			auto snapshot = push->GetQosSnapshot(nowUs);
 			logger_->info(
-				"push_metrics pushedAu={} targetBps={} pacingBps={} finalTargetBps={} rttMs={} loss={} rtcpFeedbackPacketsIn={} rtcpFeedbackBytesIn={} rtcpFeedbackFailures={} maxFps={} requestKeyframe={}",
+				"push_metrics pushedAu={} targetBps={} pacingBps={} finalTargetBps={} rttMs={} loss={} rtcpFeedbackPacketsIn={} rtcpFeedbackBytesIn={} rtcpFeedbackFailures={} maxFps={} requestKeyframe={} droppedFrames={}",
 				pushedAu,
 				snapshot.sender_rates.googcc_target_bps,
 				snapshot.sender_rates.pacing_bps,
@@ -241,7 +241,8 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 				feedbackCounters.rtcpBytesIn,
 				feedbackCounters.rtcpFailures,
 				adaptation.max_fps,
-				adaptation.request_keyframe);
+				adaptation.request_keyframe,
+				snapshot.dropped_frames);
 			if (realtimeSource) {
 				const auto& sourceMetrics = realtimeSource->metrics();
 				logger_->info(
