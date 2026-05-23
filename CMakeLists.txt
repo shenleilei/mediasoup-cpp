@@ -180,6 +180,7 @@ if(WebRtcQosSdk_FOUND)
                 client/webrtc_qos_plain_client/push/main.cpp
                 client/webrtc_qos_plain_client/push/PushSignalingSession.cpp
                 client/webrtc_qos_plain_client/push/H264AnnexBSource.cpp
+                client/webrtc_qos_plain_client/push/Mp4DecodeH264Source.cpp
                 client/webrtc_qos_plain_client/push/RealtimeH264Source.cpp
                 client/webrtc_qos_plain_client/push/WebRtcQosPushRuntime.cpp
                 ${WEBRTC_QOS_PLAIN_CLIENT_COMMON_SOURCES}
@@ -279,6 +280,7 @@ if(BUILD_TESTS)
         mediasoup_add_gtest_target(mediasoup_webrtc_qos_plain_unit_tests
             SOURCES
                 client/webrtc_qos_plain_client/push/RealtimeH264Source.cpp
+                client/webrtc_qos_plain_client/push/Mp4DecodeH264Source.cpp
                 client/webrtc_qos_plain_client/play/FfmpegDecodeSink.cpp
                 tests/test_webrtc_qos_decode_sink.cpp
                 tests/test_webrtc_qos_realtime_source.cpp

@@ -210,12 +210,13 @@ SignalingServer
 - C++ 客户端 QoS 单元测试对齐 (parity)：`PASS`
 - WebRTC QoS Plain P2 synthetic+QoE：`qosMainline=PASS`，`sdkRuntimeObservability=PASS`，`encoderRuntime=PASS`，`nativeDecodeQoe=PASS`，`weakNetworkCoverage=PASS`
 - P2 已实测 `baseline`、`delay_100ms`、`loss_2pct`、`bandwidth_600k`、`drop_recover`：全量 `5 / 5 PASS`，100ms delay RTT avg/max 为 `109.58/242ms`，600kbps bandwidth targetBps min/max 为 `300000/1693914`，recovery targetBps min/max 为 `300000/2023706`，decode errors 均为 `0`
+- WebRTC QoS Plain P2 MP4 decode-loop baseline：`qosMainline=PASS`，`sdkRuntimeObservability=PASS`，`encoderRuntime=PASS`，`nativeDecodeQoe=PASS`；baseline `pushedAu=357`、`decodedFrames=357`、`decodeErrors=0`
 
 当前范围提示：
 
 - 上行 QoS 主链路在浏览器和 PlainTransport C++ 客户端上均已闭环
 - 下行目前覆盖接收端控制以及零需求发布端暂停/恢复协调
-- WebRTC QoS Plain P2 目前签收 native baseline/delay/loss/bandwidth/recovery synthetic+QoE 短测；浏览器画面、MP4 decode loop、V4L2 仍是后续覆盖项
+- WebRTC QoS Plain P2 目前签收 native baseline/delay/loss/bandwidth/recovery synthetic+QoE 短测，并已覆盖 MP4 decode-loop baseline；浏览器画面、恢复首帧专项和 V4L2 仍是后续覆盖项
 - `dynacast` 和房间级全局比特率预算划分是后续工作
 
 事实来源链接 (Source-of-truth links)：
@@ -228,6 +229,7 @@ SignalingServer
 - 纯客户端对齐检查单：[docs/plain-client-qos-parity-checklist.md](./docs/plain-client-qos-parity-checklist.md)
 - 纯客户端矩阵结果：[docs/plain-client-qos-case-results.md](./docs/plain-client-qos-case-results.md)
 - WebRTC QoS Plain P2 smoke 报告：[docs/generated/webrtc-qos-plain-p2-smoke-report.md](./docs/generated/webrtc-qos-plain-p2-smoke-report.md)
+- WebRTC QoS Plain P2 MP4 decode-loop baseline 报告：[docs/generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md](./docs/generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md)
 - 下行当前状态：[docs/downlink-qos-status.md](./docs/downlink-qos-status.md)
 - Linux 客户端架构：[docs/linux-client-architecture_cn.md](./docs/linux-client-architecture_cn.md)
 - 测试覆盖地图：[docs/qos-test-coverage_cn.md](./docs/qos-test-coverage_cn.md)

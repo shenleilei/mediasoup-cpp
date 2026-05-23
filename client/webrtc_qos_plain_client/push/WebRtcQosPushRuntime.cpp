@@ -8,6 +8,7 @@
 #include "common/RtpRtcpClassifier.h"
 #include "common/RuntimeLogHelpers.h"
 #include "common/SdkRuntimeConfig.h"
+#include "push/Mp4DecodeH264Source.h"
 
 namespace webrtc_qos_plain {
 
@@ -33,7 +34,9 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 
 	std::optional<H264AnnexBSource> copySource;
 	std::optional<RealtimeH264Source> realtimeSource;
+	std::optional<Mp4DecodeH264Source> mp4DecodeSource;
 	const bool realtimeMode = options_.inputSynthetic && options_.encoder == "x264";
+	const bool mp4DecodeMode = options_.inputDecodeLoop && options_.encoder == "x264";
 	if (realtimeMode) {
 		RealtimeH264SourceConfig sourceConfig;
 		sourceConfig.width = options_.syntheticWidth;
@@ -47,6 +50,19 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 		if (!realtimeSource->Open(&error)) {
 			logger_->error("realtime_source_open_failed encoder={} pattern={} error={}",
 				options_.encoder, options_.syntheticPattern, error);
+			return 2;
+		}
+	} else if (mp4DecodeMode) {
+		Mp4DecodeH264SourceConfig sourceConfig;
+		sourceConfig.path = options_.input;
+		sourceConfig.loopInput = options_.loopInput;
+		sourceConfig.bitrateBps = options_.startBitrateBps;
+		sourceConfig.minBitrateBps = options_.minBitrateBps;
+		sourceConfig.maxBitrateBps = options_.maxBitrateBps;
+		mp4DecodeSource.emplace(sourceConfig);
+		if (!mp4DecodeSource->Open(&error)) {
+			logger_->error("mp4_decode_source_open_failed input={} encoder={} error={}",
+				options_.input, options_.encoder, error);
 			return 2;
 		}
 	} else {
@@ -110,7 +126,7 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 		publishInfo_.ssrc,
 		publishInfo_.payloadType,
 		publishInfo_.transportCcExtId,
-		realtimeMode ? "synthetic" : "copy",
+		realtimeMode ? "synthetic" : (mp4DecodeMode ? "mp4_decode_loop" : "copy"),
 		options_.encoder,
 		udp.localEndpoint().ip,
 		udp.localEndpoint().port,
@@ -119,10 +135,10 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 
 	AnnexBAccessUnit nextAu;
 	bool haveAu = false;
-	if (!realtimeMode) {
+	if (copySource) {
 		haveAu = copySource->NextAccessUnit(&nextAu, &error);
 	}
-	if (!realtimeMode && !haveAu && !error.empty()) {
+	if (copySource && !haveAu && !error.empty()) {
 		logger_->error("h264_source_read_failed error={}", error);
 		push->Stop();
 		return 4;
@@ -147,11 +163,23 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 				push->Stop();
 				return 4;
 			}
+		} else if (mp4DecodeSource) {
+			std::string adaptationError;
+			if (!mp4DecodeSource->ApplyEncoderAdaptation(adaptation, nowUs, &adaptationError)) {
+				logger_->error("encoder_adaptation_failed status={}", adaptationError);
+				push->Stop();
+				return 4;
+			}
 		}
 
-		if (realtimeSource) {
+		if (realtimeSource || mp4DecodeSource) {
 			bool produced = false;
-			while (realtimeSource->NextAccessUnit(nowUs, &nextAu, &error)) {
+			auto nextAccessUnit = [&]() {
+				return realtimeSource
+					? realtimeSource->NextAccessUnit(nowUs, &nextAu, &error)
+					: mp4DecodeSource->NextAccessUnit(nowUs, &nextAu, &error);
+			};
+			while (nextAccessUnit()) {
 				produced = true;
 				webrtc_qos::AnnexBAccessUnitView view;
 				view.bytes = nextAu.bytes.data();
@@ -168,7 +196,7 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 				++pushedAu;
 			}
 			if (!error.empty()) {
-				logger_->error("realtime_source_read_failed error={}", error);
+				logger_->error("{}_source_read_failed error={}", realtimeSource ? "realtime" : "mp4_decode", error);
 				push->Stop();
 				return 4;
 			}
@@ -243,10 +271,11 @@ int WebRtcQosPushRuntime::Run(std::atomic<bool>& running, PushSignalingSession* 
 				adaptation.max_fps,
 				adaptation.request_keyframe,
 				snapshot.dropped_frames);
-			if (realtimeSource) {
-				const auto& sourceMetrics = realtimeSource->metrics();
+			if (realtimeSource || mp4DecodeSource) {
+				const auto& sourceMetrics = realtimeSource ? realtimeSource->metrics() : mp4DecodeSource->metrics();
 				logger_->info(
-					"encoder_metrics mode=synthetic encoder={} currentBitrateBps={} currentFps={} width={} height={} framesGenerated={} framesEncoded={} accessUnits={} keyframes={} encoderRecreates={} bitrateChanges={} fpsChanges={} forcedKeyframeRequests={} forcedKeyframes={} maxForcedKeyframeDelayUs={} lastKeyframe={}",
+					"encoder_metrics mode={} encoder={} currentBitrateBps={} currentFps={} width={} height={} framesGenerated={} framesEncoded={} accessUnits={} keyframes={} encoderRecreates={} bitrateChanges={} fpsChanges={} forcedKeyframeRequests={} forcedKeyframes={} maxForcedKeyframeDelayUs={} lastKeyframe={}",
+					realtimeSource ? "synthetic" : "mp4_decode_loop",
 					options_.encoder,
 					sourceMetrics.currentBitrateBps,
 					sourceMetrics.currentFps,

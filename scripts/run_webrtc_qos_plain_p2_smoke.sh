@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build-webrtc-qos-plain"
 WORKER_BIN="$ROOT_DIR/mediasoup-worker"
 REPORT_DIR="$ROOT_DIR/docs/generated"
+REPORT_BASENAME="webrtc-qos-plain-p2-smoke-report"
 ARTIFACT_ROOT="${TMPDIR:-/tmp}/webrtc-qos-plain-p2-smoke"
 INPUT_FILE=""
 SOURCE_MODE="copy"
@@ -35,9 +36,11 @@ Options:
   --build-dir <path>         Build directory containing mediasoup-sfu and plain clients.
   --worker-bin <path>        mediasoup-worker binary. Default: ./mediasoup-worker.
   --report-dir <path>        Report output directory. Default: docs/generated.
+  --report-name <name>       Report basename without extension. Default: webrtc-qos-plain-p2-smoke-report.
   --artifact-root <path>     Runtime logs/artifacts root. Default: /tmp/webrtc-qos-plain-p2-smoke.
   --input <path>             H264 MP4 input. If omitted, a short synthetic input is generated.
-  --source <copy|synthetic>   Push source mode. copy uses --input; synthetic uses x264 realtime source.
+  --source <copy|synthetic|mp4-decode-loop>
+                             Push source mode. copy uses Annex-B remux; synthetic and mp4-decode-loop use x264 realtime encoder.
   --synthetic-width <px>      Synthetic source width. Default: 320.
   --synthetic-height <px>     Synthetic source height. Default: 180.
   --synthetic-fps <n>         Synthetic source fps. Default: 15.
@@ -77,6 +80,8 @@ while [[ $# -gt 0 ]]; do
 		--worker-bin=*) WORKER_BIN="${1#*=}"; shift ;;
 		--report-dir) require_arg "$1" "${2:-}"; REPORT_DIR="$2"; shift 2 ;;
 		--report-dir=*) REPORT_DIR="${1#*=}"; shift ;;
+		--report-name) require_arg "$1" "${2:-}"; REPORT_BASENAME="$2"; shift 2 ;;
+		--report-name=*) REPORT_BASENAME="${1#*=}"; shift ;;
 		--artifact-root) require_arg "$1" "${2:-}"; ARTIFACT_ROOT="$2"; shift 2 ;;
 		--artifact-root=*) ARTIFACT_ROOT="${1#*=}"; shift ;;
 		--input) require_arg "$1" "${2:-}"; INPUT_FILE="$2"; shift 2 ;;
@@ -135,12 +140,12 @@ RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 RUN_DIR="$ARTIFACT_ROOT/$RUN_ID"
 mkdir -p "$RUN_DIR"
 
-if [[ "$SOURCE_MODE" != "copy" && "$SOURCE_MODE" != "synthetic" ]]; then
-	echo "--source must be copy or synthetic" >&2
+if [[ "$SOURCE_MODE" != "copy" && "$SOURCE_MODE" != "synthetic" && "$SOURCE_MODE" != "mp4-decode-loop" ]]; then
+	echo "--source must be copy, synthetic, or mp4-decode-loop" >&2
 	exit 2
 fi
 
-if [[ "$SOURCE_MODE" == "copy" && -z "$INPUT_FILE" ]]; then
+if [[ "$SOURCE_MODE" != "synthetic" && -z "$INPUT_FILE" ]]; then
 	INPUT_FILE="$ARTIFACT_ROOT/input.mp4"
 fi
 
@@ -421,6 +426,13 @@ run_case() {
 			--synthetic-height="$SYNTHETIC_HEIGHT"
 			--synthetic-fps="$SYNTHETIC_FPS"
 		)
+	elif [[ "$SOURCE_MODE" == "mp4-decode-loop" ]]; then
+		push_args+=(
+			--input="$INPUT_FILE"
+			--input-decode-loop=true
+			--loop-input=true
+			--encoder=x264
+		)
 	else
 		push_args+=(--input="$INPUT_FILE" --loop-input=true)
 	fi
@@ -492,8 +504,8 @@ run_case() {
 }
 
 render_report() {
-	local report_json="$REPORT_DIR/webrtc-qos-plain-p2-smoke-report.json"
-	local report_md="$REPORT_DIR/webrtc-qos-plain-p2-smoke-report.md"
+	local report_json="$REPORT_DIR/$REPORT_BASENAME.json"
+	local report_md="$REPORT_DIR/$REPORT_BASENAME.md"
 	python3 - "$RUN_DIR" "$REPORT_DIR" "$report_json" "$report_md" "$CASES" "$DURATION_SECONDS" "$BUILD_DIR" "$WORKER_BIN" "$INPUT_FILE" "$ENABLE_NETEM" "$NETEM_DEV" "$STRICT" "$SOURCE_MODE" "$SYNTHETIC_WIDTH" "$SYNTHETIC_HEIGHT" "$SYNTHETIC_FPS" "$DECODE_QOE" <<'PY'
 import datetime
 import glob
@@ -874,9 +886,19 @@ def parse_case(case_name):
         make_check('runtime-no-unexpected-alerts', not bool(warning_lines), 'alerts={}'.format(len(warning_lines)) if warning_lines else 'ok'),
     ]
 
-    if source_mode == 'synthetic':
+    if source_mode in ('synthetic', 'mp4-decode-loop'):
+        expected_encoder_mode = source_mode.replace('-', '_')
+        if source_mode == 'synthetic':
+            source_shape_ok = (
+                last_encoder.get('width') == synthetic_width and
+                last_encoder.get('height') == synthetic_height)
+        else:
+            source_shape_ok = (
+                last_encoder.get('width', 0) > 0 and
+                last_encoder.get('height', 0) > 0)
         checks.extend([
             make_check('encoder-metrics-present', bool(encoder_metrics), 'samples={}'.format(len(encoder_metrics))),
+            make_check('encoder-mode-selected', last_encoder.get('mode') == expected_encoder_mode and last_encoder.get('encoder') == 'x264', json.dumps(last_encoder, sort_keys=True)),
             make_check('encoder-au-output', bool(last_encoder.get('accessUnits', 0) > 0), 'accessUnits={}'.format(last_encoder.get('accessUnits'))),
             make_check('encoder-keyframe-output', bool(last_encoder.get('keyframes', 0) > 0), 'keyframes={}'.format(last_encoder.get('keyframes'))),
             make_check(
@@ -889,7 +911,7 @@ def parse_case(case_name):
                     last_encoder.get('forcedKeyframeRequests'),
                     last_encoder.get('forcedKeyframes'),
                     last_encoder.get('maxForcedKeyframeDelayUs'))),
-            make_check('encoder-source-shape', last_encoder.get('width') == synthetic_width and last_encoder.get('height') == synthetic_height and last_encoder.get('currentFps', 0) > 0 and last_encoder.get('currentBitrateBps', 0) > 0, json.dumps(last_encoder, sort_keys=True)),
+            make_check('encoder-source-shape', source_shape_ok and last_encoder.get('currentFps', 0) > 0 and last_encoder.get('currentBitrateBps', 0) > 0, json.dumps(last_encoder, sort_keys=True)),
         ])
     if decode_qoe:
         checks.extend([
@@ -1078,6 +1100,16 @@ sdk_observability_pass = bool(
     baseline_play_sdk.get('receiverReportCountMax', 0) > 0)
 
 baseline_encoder = baseline.get('metrics', {}).get('encoder', {}) if baseline else {}
+encoder_source_modes = ('synthetic', 'mp4-decode-loop')
+expected_encoder_mode = source_mode.replace('-', '_')
+if source_mode == 'synthetic':
+    baseline_encoder_shape_ok = (
+        baseline_encoder.get('width') == synthetic_width and
+        baseline_encoder.get('height') == synthetic_height)
+else:
+    baseline_encoder_shape_ok = (
+        baseline_encoder.get('width', 0) > 0 and
+        baseline_encoder.get('height', 0) > 0)
 encoder_gate_evidence = {
     'sourceMode': source_mode,
     'baselineEncoderMode': baseline_encoder.get('mode'),
@@ -1094,9 +1126,9 @@ encoder_gate_evidence = {
     'baselineHeight': baseline_encoder.get('height'),
 }
 encoder_gate_pass = (
-    True if source_mode != 'synthetic' else bool(
+    True if source_mode not in encoder_source_modes else bool(
         baseline and
-        baseline_encoder.get('mode') == 'synthetic' and
+        baseline_encoder.get('mode') == expected_encoder_mode and
         baseline_encoder.get('name') == 'x264' and
         baseline_encoder.get('samples', 0) > 0 and
         baseline_encoder.get('accessUnits', 0) > 0 and
@@ -1104,8 +1136,7 @@ encoder_gate_pass = (
         baseline_encoder.get('forcedKeyframeRequests', 0) > 0 and
         baseline_encoder.get('forcedKeyframes', 0) > 0 and
         0 <= baseline_encoder.get('maxForcedKeyframeDelayUs', -1) <= 1000000 and
-        baseline_encoder.get('width') == synthetic_width and
-        baseline_encoder.get('height') == synthetic_height and
+        baseline_encoder_shape_ok and
         baseline_encoder.get('currentFps', 0) > 0 and
         baseline_encoder.get('currentBitrateBps', 0) > 0))
 
@@ -1151,7 +1182,7 @@ gates = {
     'encoderRuntime': {
         'status': 'PASS' if encoder_gate_pass else 'FAIL',
         'requirements': [
-            'synthetic source uses x264 realtime encoder when requested',
+            'synthetic or MP4 decode-loop source uses x264 realtime encoder when requested',
             'encoder metrics expose source shape, fps, bitrate, AU count, keyframe count',
             'SDK keyframe requests produce a forced IDR within 1 second',
         ],
@@ -1318,7 +1349,7 @@ lines.append('- `PASS` case means SFU/push/play transport smoke met its checks.'
 lines.append('- `SKIP` means the case was not verified and must not be counted as PASS.')
 lines.append('- `qosMainline=PASS` means TWCC negotiation, push RTCP feedback input, and play RTCP feedback output are all observable.')
 lines.append('- `sdkRuntimeObservability=PASS` means push/play SDK runtime log, metrics, alerts files exist and SDK RR/TWCC counters are non-zero.')
-lines.append('- `encoderRuntime=PASS` means requested synthetic x264 mode produced encoded H264 access units/keyframes, and SDK keyframe requests produced an IDR within 1 second.')
+lines.append('- `encoderRuntime=PASS` means requested synthetic or MP4 decode-loop x264 mode produced encoded H264 access units/keyframes, and SDK keyframe requests produced an IDR within 1 second.')
 lines.append('- `nativeDecodeQoe=PASS` means requested native FFmpeg decode/QoE produced decoded frames and first-frame/decode-error metrics.')
 lines.append('- `droppedFrames` is the SDK push-side pacer backpressure counter; non-zero values are acceptable in bandwidth/recovery cases when transport remains alive and QoE decode continues.')
 lines.append('- `weakNetworkCoverage=PASS` means at least one tc netem weak-network case was actually attempted and passed; the generated report records which cases were covered.')
@@ -1337,7 +1368,7 @@ if strict and overall != 'PASS':
 PY
 }
 
-if [[ "$SOURCE_MODE" == "copy" ]]; then
+if [[ "$SOURCE_MODE" != "synthetic" ]]; then
 	generate_input_if_needed
 fi
 

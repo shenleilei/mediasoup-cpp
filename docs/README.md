@@ -124,6 +124,7 @@
 - targeted rerun 当前机器结果在 [generated/uplink-qos-case-results.targeted.md](./generated/uplink-qos-case-results.targeted.md) 和 [generated/uplink-qos-matrix-report.targeted.json](./generated/uplink-qos-matrix-report.targeted.json)。
 - Linux plain-client QoS 当前状态摘要在 [plain-client-qos-status.md](./plain-client-qos-status.md)。
 - WebRTC QoS Plain P2 smoke 当前机器报告在 [generated/webrtc-qos-plain-p2-smoke-report.md](./generated/webrtc-qos-plain-p2-smoke-report.md)，原始 JSON 在 [generated/webrtc-qos-plain-p2-smoke-report.json](./generated/webrtc-qos-plain-p2-smoke-report.json)。
+- WebRTC QoS Plain P2 MP4 decode-loop baseline 报告在 [generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md](./generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md)，原始 JSON 在 [generated/webrtc-qos-plain-p2-mp4-decode-loop-report.json](./generated/webrtc-qos-plain-p2-mp4-decode-loop-report.json)。
 - PlainTransport C++ client full matrix 当前机器结果在 [plain-client-qos-case-results.md](./plain-client-qos-case-results.md) 和 [generated/uplink-qos-cpp-client-matrix-report.json](./generated/uplink-qos-cpp-client-matrix-report.json)。
 - PlainTransport C++ client targeted rerun 当前机器结果在 [generated/plain-client-qos-case-results.targeted.md](./generated/plain-client-qos-case-results.targeted.md) 和 [generated/uplink-qos-cpp-client-matrix-report.targeted.json](./generated/uplink-qos-cpp-client-matrix-report.targeted.json)。
 - downlink 当前状态摘要在 [downlink-qos-status.md](./downlink-qos-status.md)。
