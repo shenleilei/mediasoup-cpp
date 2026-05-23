@@ -2,7 +2,7 @@
   "cases": [
     {
       "artifacts": {
-        "caseDir": "/tmp/webrtc-qos-plain-p2-v4l2/20260523T154633Z/baseline"
+        "caseDir": "/tmp/webrtc-qos-plain-p2-v4l2-p2m9-final/20260523T171630Z/baseline"
       },
       "checks": [],
       "metrics": {
@@ -15,12 +15,16 @@
     }
   ],
   "environment": {
+    "cmakePrefixPath": "/root/webrtc_qos_sdk/dist/linux-x86_64",
     "ffmpeg": "ffmpeg version 4.2.10 Copyright (c) 2000-2024 the FFmpeg developers",
     "kernel": "Linux iZ6we7qnlv44pdwt9mso62Z 5.10.134-18.al8.x86_64 #1 SMP Fri Dec 13 16:56:53 CST 2024 x86_64 x86_64 x86_64 GNU/Linux",
     "platform": "Linux-5.10.134-18.al8.x86_64-x86_64-with-alinux-3-OpenAnolis_Edition",
     "python": "3.6.8",
-    "tc": "/usr/sbin/tc"
+    "tc": "/usr/sbin/tc",
+    "webrtcQosSdkDir": "/root/webrtc_qos_sdk/dist/linux-x86_64/lib/cmake/WebRtcQosSdk",
+    "webrtcQosSdkDist": "/root/webrtc_qos_sdk/dist/linux-x86_64"
   },
+  "failedChecks": [],
   "gates": {
     "encoderRuntime": {
       "evidence": {
@@ -79,6 +83,23 @@
       ],
       "status": "SKIP"
     },
+    "recoveryFirstFrame": {
+      "evidence": {
+        "clearEpochMs": null,
+        "dropRecoverStatus": null,
+        "enabled": true,
+        "postClearDecodedFramesDelta": null,
+        "postClearFirstDecodedDelayMs": null,
+        "postClearFirstDecodedEpochMs": null,
+        "postClearSamples": null,
+        "preClearDecodedFrames": null
+      },
+      "requirements": [
+        "drop_recover case is attempted with QoE decode enabled",
+        "first decoded frame after netem clear is observed within 15 seconds"
+      ],
+      "status": "SKIP"
+    },
     "sdkRuntimeObservability": {
       "evidence": {
         "baselinePlayAlertsFiles": null,
@@ -118,10 +139,11 @@
       "status": "SKIP"
     }
   },
-  "generatedAt": "2026-05-23T15:46:33Z",
+  "generatedAt": "2026-05-23T17:16:30Z",
   "overallStatus": "PARTIAL",
   "runConfig": {
     "buildDir": "build-webrtc-qos-plain",
+    "buildDirAbs": "/root/mediasoup-cpp/build-webrtc-qos-plain",
     "cases": [
       "baseline"
     ],
@@ -144,13 +166,19 @@
       "inputFormat": null,
       "width": 640
     },
-    "workerBin": "./mediasoup-worker"
+    "workerBin": "./mediasoup-worker",
+    "workerBinAbs": "/root/mediasoup-cpp/mediasoup-worker"
   },
-  "runDir": "/tmp/webrtc-qos-plain-p2-v4l2/20260523T154633Z",
+  "runDir": "/tmp/webrtc-qos-plain-p2-v4l2-p2m9-final/20260523T171630Z",
   "schemaVersion": 1,
+  "sourceRevision": {
+    "gitBranch": "main",
+    "gitCommit": "8279e23d70f63d2dd0f29eef8d850ca5a0d9d2fb"
+  },
   "summary": {
     "attemptedCases": 0,
     "failedCases": 0,
+    "failedChecks": 0,
     "passedCases": 0,
     "skippedCases": 1
   }

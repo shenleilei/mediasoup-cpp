@@ -7,11 +7,11 @@
         "samples": []
       },
       "artifacts": {
-        "caseDir": "/tmp/webrtc-qos-plain-p2-mp4-decode-loop/20260523T145219Z/baseline",
-        "playLog": "/tmp/webrtc-qos-plain-p2-mp4-decode-loop/20260523T145219Z/baseline/play/play.log",
-        "pushLog": "/tmp/webrtc-qos-plain-p2-mp4-decode-loop/20260523T145219Z/baseline/push/push.log",
-        "readyz": "/tmp/webrtc-qos-plain-p2-mp4-decode-loop/20260523T145219Z/baseline/readyz.json",
-        "sfuLog": "/tmp/webrtc-qos-plain-p2-mp4-decode-loop/20260523T145219Z/baseline/sfu.stdout.log"
+        "caseDir": "/tmp/webrtc-qos-plain-p2-mp4-decode-loop-p2m9-final/20260523T171549Z/baseline",
+        "playLog": "/tmp/webrtc-qos-plain-p2-mp4-decode-loop-p2m9-final/20260523T171549Z/baseline/play/play.log",
+        "pushLog": "/tmp/webrtc-qos-plain-p2-mp4-decode-loop-p2m9-final/20260523T171549Z/baseline/push/push.log",
+        "readyz": "/tmp/webrtc-qos-plain-p2-mp4-decode-loop-p2m9-final/20260523T171549Z/baseline/readyz.json",
+        "sfuLog": "/tmp/webrtc-qos-plain-p2-mp4-decode-loop-p2m9-final/20260523T171549Z/baseline/sfu.stdout.log"
       },
       "checks": [
         {
@@ -40,22 +40,22 @@
           "status": "PASS"
         },
         {
-          "evidence": "pushedAu=357",
+          "evidence": "pushedAu=359",
           "name": "push-au-output",
           "status": "PASS"
         },
         {
-          "evidence": "rtpPackets=1631",
+          "evidence": "rtpPackets=1645",
           "name": "play-rtp-input",
           "status": "PASS"
         },
         {
-          "evidence": "outputAu=357",
+          "evidence": "outputAu=359",
           "name": "play-au-output",
           "status": "PASS"
         },
         {
-          "evidence": "rtcpFeedbackPacketsIn=128",
+          "evidence": "rtcpFeedbackPacketsIn=130",
           "name": "push-rtcp-feedback-input",
           "status": "PASS"
         },
@@ -80,22 +80,22 @@
           "status": "PASS"
         },
         {
-          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 164598, \"metricsFiles\": 1, \"processTickCountMax\": 1014, \"receiverReportCountMax\": 9, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 12, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 108}",
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 22917, \"metricsFiles\": 1, \"processTickCountMax\": 1025, \"receiverReportCountMax\": 9, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 12, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 110}",
           "name": "sdk-push-runtime-files",
           "status": "PASS"
         },
         {
-          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 56105, \"metricsFiles\": 1, \"processTickCountMax\": 1161, \"receiverReportCountMax\": 12, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 13, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 229}",
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 23776, \"metricsFiles\": 1, \"processTickCountMax\": 1068, \"receiverReportCountMax\": 10, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 12, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 214}",
           "name": "sdk-play-runtime-files",
           "status": "PASS"
         },
         {
-          "evidence": "twcc=229 rr=12",
+          "evidence": "twcc=214 rr=10",
           "name": "sdk-play-rtcp-generated",
           "status": "PASS"
         },
         {
-          "evidence": "twcc=108 rr=9",
+          "evidence": "twcc=110 rr=9",
           "name": "sdk-push-rtcp-counted",
           "status": "PASS"
         },
@@ -115,37 +115,37 @@
           "status": "PASS"
         },
         {
-          "evidence": "{\"accessUnits\": 332, \"bitrateChanges\": 3, \"currentBitrateBps\": 2061354, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 3, \"forcedKeyframeRequests\": 2, \"forcedKeyframes\": 1, \"fpsChanges\": 2, \"framesEncoded\": 332, \"framesGenerated\": 332, \"height\": 180, \"keyframes\": 13, \"lastKeyframe\": \"true\", \"maxForcedKeyframeDelayUs\": 10195, \"mode\": \"mp4_decode_loop\", \"width\": 320}",
+          "evidence": "{\"accessUnits\": 333, \"bitrateChanges\": 3, \"currentBitrateBps\": 1861454, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 2, \"forcedKeyframeRequests\": 1, \"forcedKeyframes\": 1, \"fpsChanges\": 1, \"framesEncoded\": 333, \"framesGenerated\": 333, \"height\": 180, \"keyframes\": 12, \"lastKeyframe\": \"false\", \"maxForcedKeyframeDelayUs\": 0, \"mode\": \"mp4_decode_loop\", \"width\": 320}",
           "name": "encoder-mode-selected",
           "status": "PASS"
         },
         {
-          "evidence": "accessUnits=332",
+          "evidence": "accessUnits=333",
           "name": "encoder-au-output",
           "status": "PASS"
         },
         {
-          "evidence": "keyframes=13",
+          "evidence": "keyframes=12",
           "name": "encoder-keyframe-output",
           "status": "PASS"
         },
         {
-          "evidence": "forcedKeyframeRequests=2 forcedKeyframes=1 maxForcedKeyframeDelayUs=10195",
+          "evidence": "forcedKeyframeRequests=1 forcedKeyframes=1 maxForcedKeyframeDelayUs=0",
           "name": "encoder-forced-keyframe-response",
           "status": "PASS"
         },
         {
-          "evidence": "{\"accessUnits\": 332, \"bitrateChanges\": 3, \"currentBitrateBps\": 2061354, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 3, \"forcedKeyframeRequests\": 2, \"forcedKeyframes\": 1, \"fpsChanges\": 2, \"framesEncoded\": 332, \"framesGenerated\": 332, \"height\": 180, \"keyframes\": 13, \"lastKeyframe\": \"true\", \"maxForcedKeyframeDelayUs\": 10195, \"mode\": \"mp4_decode_loop\", \"width\": 320}",
+          "evidence": "{\"accessUnits\": 333, \"bitrateChanges\": 3, \"currentBitrateBps\": 1861454, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 2, \"forcedKeyframeRequests\": 1, \"forcedKeyframes\": 1, \"fpsChanges\": 1, \"framesEncoded\": 333, \"framesGenerated\": 333, \"height\": 180, \"keyframes\": 12, \"lastKeyframe\": \"false\", \"maxForcedKeyframeDelayUs\": 0, \"mode\": \"mp4_decode_loop\", \"width\": 320}",
           "name": "encoder-source-shape",
           "status": "PASS"
         },
         {
-          "evidence": "samples=28",
+          "evidence": "samples=26",
           "name": "qoe-metrics-present",
           "status": "PASS"
         },
         {
-          "evidence": "decodedFrames=357",
+          "evidence": "decodedFrames=359",
           "name": "qoe-decodes-frames",
           "status": "PASS"
         },
@@ -163,27 +163,27 @@
       "metrics": {
         "droppedFrames": 0,
         "encoder": {
-          "accessUnits": 332,
+          "accessUnits": 333,
           "bitrateChanges": 3,
-          "currentBitrateBps": 2061354,
+          "currentBitrateBps": 1861454,
           "currentFps": 30,
-          "encoderRecreates": 3,
-          "forcedKeyframeRequests": 2,
+          "encoderRecreates": 2,
+          "forcedKeyframeRequests": 1,
           "forcedKeyframes": 1,
-          "fpsChanges": 2,
-          "framesEncoded": 332,
-          "framesGenerated": 332,
+          "fpsChanges": 1,
+          "framesEncoded": 333,
+          "framesGenerated": 333,
           "height": 180,
-          "keyframes": 13,
-          "maxForcedKeyframeDelayUs": 10195,
+          "keyframes": 12,
+          "maxForcedKeyframeDelayUs": 0,
           "mode": "mp4_decode_loop",
           "name": "x264",
           "samples": 24,
           "width": 320
         },
         "finalTargetBps": {
-          "avg": 1686090.3333333333,
-          "max": 2061354.0,
+          "avg": 1651125.75,
+          "max": 1861454.0,
           "min": 1200000.0
         },
         "nack": 0,
@@ -192,64 +192,65 @@
           "max": 0.0,
           "min": 0.0
         },
-        "playMetricSamples": 26,
-        "playOutputAu": 357,
-        "playRtcpBytesOut": 7504,
+        "playMetricSamples": 24,
+        "playOutputAu": 359,
+        "playRtcpBytesOut": 7564,
         "playRtcpPacketsIn": 9,
-        "playRtcpPacketsOut": 241,
+        "playRtcpPacketsOut": 243,
         "playRtcpSendFailures": 0,
-        "playRtpPackets": 1631,
+        "playRtpPackets": 1645,
         "pli": 0,
         "publishTwccExtId": 5,
         "pushMetricSamples": 24,
-        "pushRtcpFeedbackBytesIn": 4912,
+        "pushRtcpFeedbackBytesIn": 4980,
         "pushRtcpFeedbackFailures": 0,
-        "pushRtcpFeedbackPacketsIn": 128,
-        "pushedAu": 357,
+        "pushRtcpFeedbackPacketsIn": 130,
+        "pushedAu": 359,
         "qoe": {
-          "accessUnitsIn": 357,
+          "accessUnitsIn": 359,
           "decodeErrors": 0,
-          "decodedFrames": 357,
+          "decodedFrames": 359,
           "enabled": true,
           "firstFrameDelayUs": 0,
           "freezeCount": 0,
           "height": 180,
-          "keyframesIn": 13,
-          "maxFrameGapUs": 217080,
-          "outputFps": 30.01,
-          "samples": 28,
+          "keyframesIn": 12,
+          "maxFrameGapUs": 72009,
+          "outputFps": 30.09,
+          "recovery": null,
+          "samples": 26,
           "width": 320
         },
         "retransmission": 0,
         "rttMs": {
-          "avg": 5.5,
-          "max": 16.0,
+          "avg": 6.75,
+          "max": 14.0,
           "min": 0.0
         },
         "sdkRuntime": {
           "play": {
             "alertsFiles": 1,
             "enabled": true,
-            "maxProcessTickGapUs": 56105,
+            "maxProcessTickGapUs": 23776,
             "metricsFiles": 1,
-            "processTickCountMax": 1161,
-            "receiverReportCountMax": 12,
+            "processTickCountMax": 1068,
+            "receiverReportCountMax": 10,
             "runtimeLogFiles": 1,
-            "sessionMetricSamples": 13,
+            "sessionMetricSamples": 12,
             "transportFailureCountMax": 0,
-            "transportFeedbackCountMax": 229
+            "transportFeedbackCountMax": 214
           },
           "push": {
             "alertsFiles": 1,
             "enabled": true,
-            "maxProcessTickGapUs": 164598,
+            "maxProcessTickGapUs": 22917,
             "metricsFiles": 1,
-            "processTickCountMax": 1014,
+            "processTickCountMax": 1025,
             "receiverReportCountMax": 9,
             "runtimeLogFiles": 1,
             "sessionMetricSamples": 12,
             "transportFailureCountMax": 0,
-            "transportFeedbackCountMax": 108
+            "transportFeedbackCountMax": 110
           }
         },
         "selectedTwccExtId": 5,
@@ -259,8 +260,8 @@
           "min": 0.0
         },
         "targetBps": {
-          "avg": 1686090.3333333333,
-          "max": 2061354.0,
+          "avg": 1651125.75,
+          "max": 1861454.0,
           "min": 1200000.0
         },
         "timing": {
@@ -269,11 +270,11 @@
           "clearEpochMs": null,
           "durationSeconds": 12,
           "effectiveDurationSeconds": 12,
-          "endEpochMs": 1779547952907,
+          "endEpochMs": 1779556563168,
           "netemApplied": 0,
           "preSeconds": 0,
           "recoverSeconds": 0,
-          "startEpochMs": 1779547939861,
+          "startEpochMs": 1779556550125,
           "weakSeconds": 0
         }
       },
@@ -283,31 +284,36 @@
     }
   ],
   "environment": {
+    "cmakePrefixPath": "/root/webrtc_qos_sdk/dist/linux-x86_64",
     "ffmpeg": "ffmpeg version 4.2.10 Copyright (c) 2000-2024 the FFmpeg developers",
     "kernel": "Linux iZ6we7qnlv44pdwt9mso62Z 5.10.134-18.al8.x86_64 #1 SMP Fri Dec 13 16:56:53 CST 2024 x86_64 x86_64 x86_64 GNU/Linux",
     "platform": "Linux-5.10.134-18.al8.x86_64-x86_64-with-alinux-3-OpenAnolis_Edition",
     "python": "3.6.8",
-    "tc": "/usr/sbin/tc"
+    "tc": "/usr/sbin/tc",
+    "webrtcQosSdkDir": "/root/webrtc_qos_sdk/dist/linux-x86_64/lib/cmake/WebRtcQosSdk",
+    "webrtcQosSdkDist": "/root/webrtc_qos_sdk/dist/linux-x86_64"
   },
+  "failedChecks": [],
   "gates": {
     "encoderRuntime": {
       "evidence": {
-        "baselineAccessUnits": 332,
-        "baselineCurrentBitrateBps": 2061354,
+        "baselineAccessUnits": 333,
+        "baselineCurrentBitrateBps": 1861454,
         "baselineCurrentFps": 30,
         "baselineEncoderMode": "mp4_decode_loop",
         "baselineEncoderName": "x264",
         "baselineEncoderSamples": 24,
-        "baselineForcedKeyframeRequests": 2,
+        "baselineForcedKeyframeRequests": 1,
         "baselineForcedKeyframes": 1,
         "baselineHeight": 180,
-        "baselineKeyframes": 13,
-        "baselineMaxForcedKeyframeDelayUs": 10195,
+        "baselineKeyframes": 12,
+        "baselineMaxForcedKeyframeDelayUs": 0,
+        "baselineSkipReason": null,
         "baselineWidth": 320,
         "sourceMode": "mp4-decode-loop"
       },
       "requirements": [
-        "synthetic or MP4 decode-loop source uses x264 realtime encoder when requested",
+        "synthetic, MP4 decode-loop, or V4L2 source uses x264 realtime encoder when requested",
         "encoder metrics expose source shape, fps, bitrate, AU count, keyframe count",
         "SDK keyframe requests produce a forced IDR within 1 second"
       ],
@@ -316,12 +322,13 @@
     "nativeDecodeQoe": {
       "evidence": {
         "baselineDecodeErrors": 0,
-        "baselineDecodedFrames": 357,
+        "baselineDecodedFrames": 359,
         "baselineFirstFrameDelayUs": 0,
         "baselineFreezeCount": 0,
         "baselineHeight": 180,
-        "baselineOutputFps": 30.01,
-        "baselineSamples": 28,
+        "baselineOutputFps": 30.09,
+        "baselineSamples": 26,
+        "baselineSkipReason": null,
         "baselineWidth": 320,
         "enabled": true
       },
@@ -333,9 +340,10 @@
     },
     "qosMainline": {
       "evidence": {
-        "baselinePlayRtcpPacketsOut": 241,
-        "baselinePushRtcpFeedbackPacketsIn": 128,
-        "baselineSelectedTwccExtId": 5
+        "baselinePlayRtcpPacketsOut": 243,
+        "baselinePushRtcpFeedbackPacketsIn": 130,
+        "baselineSelectedTwccExtId": 5,
+        "baselineSkipReason": null
       },
       "requirements": [
         "consumer TWCC ext id > 0",
@@ -344,20 +352,38 @@
       ],
       "status": "PASS"
     },
+    "recoveryFirstFrame": {
+      "evidence": {
+        "clearEpochMs": null,
+        "dropRecoverStatus": null,
+        "enabled": true,
+        "postClearDecodedFramesDelta": null,
+        "postClearFirstDecodedDelayMs": null,
+        "postClearFirstDecodedEpochMs": null,
+        "postClearSamples": null,
+        "preClearDecodedFrames": null
+      },
+      "requirements": [
+        "drop_recover case is attempted with QoE decode enabled",
+        "first decoded frame after netem clear is observed within 15 seconds"
+      ],
+      "status": "SKIP"
+    },
     "sdkRuntimeObservability": {
       "evidence": {
         "baselinePlayAlertsFiles": 1,
         "baselinePlayMetricsFiles": 1,
-        "baselinePlayReceiverReportCountMax": 12,
+        "baselinePlayReceiverReportCountMax": 10,
         "baselinePlayRuntimeEnabled": true,
         "baselinePlayRuntimeLogFiles": 1,
-        "baselinePlayTransportFeedbackCountMax": 229,
+        "baselinePlayTransportFeedbackCountMax": 214,
         "baselinePushAlertsFiles": 1,
         "baselinePushMetricsFiles": 1,
         "baselinePushReceiverReportCountMax": 9,
         "baselinePushRuntimeEnabled": true,
         "baselinePushRuntimeLogFiles": 1,
-        "baselinePushTransportFeedbackCountMax": 108
+        "baselinePushTransportFeedbackCountMax": 110,
+        "baselineSkipReason": null
       },
       "requirements": [
         "SDK runtime log/metrics/alerts files enabled for push and play",
@@ -377,17 +403,18 @@
       "status": "SKIP"
     }
   },
-  "generatedAt": "2026-05-23T14:52:48Z",
+  "generatedAt": "2026-05-23T17:16:18Z",
   "overallStatus": "PARTIAL",
   "runConfig": {
     "buildDir": "build-webrtc-qos-plain",
+    "buildDirAbs": "/root/mediasoup-cpp/build-webrtc-qos-plain",
     "cases": [
       "baseline"
     ],
     "decodeQoe": true,
     "durationSeconds": 12,
     "enableNetem": false,
-    "inputFile": "/tmp/webrtc-qos-plain-p2-mp4-decode-loop/input.mp4",
+    "inputFile": "/tmp/webrtc-qos-plain-p2-mp4-decode-loop-p2m9-final/input.mp4",
     "netemDev": "lo",
     "sourceMode": "mp4-decode-loop",
     "strict": false,
@@ -396,13 +423,26 @@
       "height": 180,
       "width": 320
     },
-    "workerBin": "./mediasoup-worker"
+    "v4l2": {
+      "device": "/dev/video0",
+      "fps": 30,
+      "height": 360,
+      "inputFormat": null,
+      "width": 640
+    },
+    "workerBin": "./mediasoup-worker",
+    "workerBinAbs": "/root/mediasoup-cpp/mediasoup-worker"
   },
-  "runDir": "/tmp/webrtc-qos-plain-p2-mp4-decode-loop/20260523T145219Z",
+  "runDir": "/tmp/webrtc-qos-plain-p2-mp4-decode-loop-p2m9-final/20260523T171549Z",
   "schemaVersion": 1,
+  "sourceRevision": {
+    "gitBranch": "main",
+    "gitCommit": "8279e23d70f63d2dd0f29eef8d850ca5a0d9d2fb"
+  },
   "summary": {
     "attemptedCases": 1,
     "failedCases": 0,
+    "failedChecks": 0,
     "passedCases": 1,
     "skippedCases": 0
   }

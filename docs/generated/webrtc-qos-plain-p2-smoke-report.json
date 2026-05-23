@@ -7,11 +7,11 @@
         "samples": []
       },
       "artifacts": {
-        "caseDir": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/baseline",
-        "playLog": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/baseline/play/play.log",
-        "pushLog": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/baseline/push/push.log",
-        "readyz": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/baseline/readyz.json",
-        "sfuLog": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/baseline/sfu.stdout.log"
+        "caseDir": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/baseline",
+        "playLog": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/baseline/play/play.log",
+        "pushLog": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/baseline/push/push.log",
+        "readyz": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/baseline/readyz.json",
+        "sfuLog": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/baseline/sfu.stdout.log"
       },
       "checks": [
         {
@@ -45,17 +45,17 @@
           "status": "PASS"
         },
         {
-          "evidence": "rtpPackets=2660",
+          "evidence": "rtpPackets=2627",
           "name": "play-rtp-input",
           "status": "PASS"
         },
         {
-          "evidence": "outputAu=358",
+          "evidence": "outputAu=359",
           "name": "play-au-output",
           "status": "PASS"
         },
         {
-          "evidence": "rtcpFeedbackPacketsIn=130",
+          "evidence": "rtcpFeedbackPacketsIn=129",
           "name": "push-rtcp-feedback-input",
           "status": "PASS"
         },
@@ -80,12 +80,581 @@
           "status": "PASS"
         },
         {
-          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 32833, \"metricsFiles\": 1, \"processTickCountMax\": 1030, \"receiverReportCountMax\": 9, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 12, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 110}",
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 32716, \"metricsFiles\": 1, \"processTickCountMax\": 1028, \"receiverReportCountMax\": 8, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 12, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 110}",
           "name": "sdk-push-runtime-files",
           "status": "PASS"
         },
         {
-          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 21254, \"metricsFiles\": 1, \"processTickCountMax\": 1166, \"receiverReportCountMax\": 11, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 13, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 232}",
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 23571, \"metricsFiles\": 1, \"processTickCountMax\": 1163, \"receiverReportCountMax\": 11, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 13, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 232}",
+          "name": "sdk-play-runtime-files",
+          "status": "PASS"
+        },
+        {
+          "evidence": "twcc=232 rr=11",
+          "name": "sdk-play-rtcp-generated",
+          "status": "PASS"
+        },
+        {
+          "evidence": "twcc=110 rr=8",
+          "name": "sdk-push-rtcp-counted",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ok",
+          "name": "harness-no-failure",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ok",
+          "name": "runtime-no-unexpected-alerts",
+          "status": "PASS"
+        },
+        {
+          "evidence": "samples=24",
+          "name": "encoder-metrics-present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "{\"accessUnits\": 332, \"bitrateChanges\": 37, \"currentBitrateBps\": 2500000, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 2, \"forcedKeyframeRequests\": 3, \"forcedKeyframes\": 1, \"fpsChanges\": 1, \"framesEncoded\": 332, \"framesGenerated\": 332, \"height\": 180, \"keyframes\": 13, \"lastKeyframe\": \"true\", \"maxForcedKeyframeDelayUs\": 20491, \"mode\": \"synthetic\", \"width\": 320}",
+          "name": "encoder-mode-selected",
+          "status": "PASS"
+        },
+        {
+          "evidence": "accessUnits=332",
+          "name": "encoder-au-output",
+          "status": "PASS"
+        },
+        {
+          "evidence": "keyframes=13",
+          "name": "encoder-keyframe-output",
+          "status": "PASS"
+        },
+        {
+          "evidence": "forcedKeyframeRequests=3 forcedKeyframes=1 maxForcedKeyframeDelayUs=20491",
+          "name": "encoder-forced-keyframe-response",
+          "status": "PASS"
+        },
+        {
+          "evidence": "{\"accessUnits\": 332, \"bitrateChanges\": 37, \"currentBitrateBps\": 2500000, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 2, \"forcedKeyframeRequests\": 3, \"forcedKeyframes\": 1, \"fpsChanges\": 1, \"framesEncoded\": 332, \"framesGenerated\": 332, \"height\": 180, \"keyframes\": 13, \"lastKeyframe\": \"true\", \"maxForcedKeyframeDelayUs\": 20491, \"mode\": \"synthetic\", \"width\": 320}",
+          "name": "encoder-source-shape",
+          "status": "PASS"
+        },
+        {
+          "evidence": "samples=28",
+          "name": "qoe-metrics-present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "decodedFrames=359",
+          "name": "qoe-decodes-frames",
+          "status": "PASS"
+        },
+        {
+          "evidence": "decodeErrors=0",
+          "name": "qoe-decode-errors-zero",
+          "status": "PASS"
+        },
+        {
+          "evidence": "firstFrameDelayUs=0",
+          "name": "qoe-first-frame-observable",
+          "status": "PASS"
+        }
+      ],
+      "metrics": {
+        "droppedFrames": 0,
+        "encoder": {
+          "accessUnits": 332,
+          "bitrateChanges": 37,
+          "currentBitrateBps": 2500000,
+          "currentFps": 30,
+          "encoderRecreates": 2,
+          "forcedKeyframeRequests": 3,
+          "forcedKeyframes": 1,
+          "fpsChanges": 1,
+          "framesEncoded": 332,
+          "framesGenerated": 332,
+          "height": 180,
+          "keyframes": 13,
+          "maxForcedKeyframeDelayUs": 20491,
+          "mode": "synthetic",
+          "name": "x264",
+          "samples": 24,
+          "width": 320
+        },
+        "finalTargetBps": {
+          "avg": 2113877.0,
+          "max": 2500000.0,
+          "min": 1200000.0
+        },
+        "nack": 0,
+        "playLossQ8": {
+          "avg": 0.0,
+          "max": 0.0,
+          "min": 0.0
+        },
+        "playMetricSamples": 26,
+        "playOutputAu": 359,
+        "playRtcpBytesOut": 8388,
+        "playRtcpPacketsIn": 9,
+        "playRtcpPacketsOut": 243,
+        "playRtcpSendFailures": 0,
+        "playRtpPackets": 2627,
+        "pli": 0,
+        "publishTwccExtId": 5,
+        "pushMetricSamples": 24,
+        "pushRtcpFeedbackBytesIn": 5784,
+        "pushRtcpFeedbackFailures": 0,
+        "pushRtcpFeedbackPacketsIn": 129,
+        "pushedAu": 359,
+        "qoe": {
+          "accessUnitsIn": 359,
+          "decodeErrors": 0,
+          "decodedFrames": 359,
+          "enabled": true,
+          "firstFrameDelayUs": 0,
+          "freezeCount": 0,
+          "height": 180,
+          "keyframesIn": 13,
+          "maxFrameGapUs": 74289,
+          "outputFps": 30.06,
+          "recovery": null,
+          "samples": 28,
+          "width": 320
+        },
+        "retransmission": 0,
+        "rttMs": {
+          "avg": 7.416666666666667,
+          "max": 17.0,
+          "min": 0.0
+        },
+        "sdkRuntime": {
+          "play": {
+            "alertsFiles": 1,
+            "enabled": true,
+            "maxProcessTickGapUs": 23571,
+            "metricsFiles": 1,
+            "processTickCountMax": 1163,
+            "receiverReportCountMax": 11,
+            "runtimeLogFiles": 1,
+            "sessionMetricSamples": 13,
+            "transportFailureCountMax": 0,
+            "transportFeedbackCountMax": 232
+          },
+          "push": {
+            "alertsFiles": 1,
+            "enabled": true,
+            "maxProcessTickGapUs": 32716,
+            "metricsFiles": 1,
+            "processTickCountMax": 1028,
+            "receiverReportCountMax": 8,
+            "runtimeLogFiles": 1,
+            "sessionMetricSamples": 12,
+            "transportFailureCountMax": 0,
+            "transportFeedbackCountMax": 110
+          }
+        },
+        "selectedTwccExtId": 5,
+        "senderLossFraction": {
+          "avg": 0.0,
+          "max": 0.0,
+          "min": 0.0
+        },
+        "targetBps": {
+          "avg": 2113877.0,
+          "max": 2500000.0,
+          "min": 1200000.0
+        },
+        "timing": {
+          "applyEpochMs": null,
+          "case": "baseline",
+          "clearEpochMs": null,
+          "durationSeconds": 12,
+          "effectiveDurationSeconds": 12,
+          "endEpochMs": 1779555181570,
+          "netemApplied": 0,
+          "preSeconds": 0,
+          "recoverSeconds": 0,
+          "startEpochMs": 1779555168483,
+          "weakSeconds": 0
+        }
+      },
+      "name": "baseline",
+      "networkCondition": "none",
+      "status": "PASS"
+    },
+    {
+      "alerts": {
+        "count": 0,
+        "ignoredHarnessNoiseCount": 6,
+        "samples": []
+      },
+      "artifacts": {
+        "caseDir": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/delay_100ms",
+        "playLog": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/delay_100ms/play/play.log",
+        "pushLog": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/delay_100ms/push/push.log",
+        "readyz": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/delay_100ms/readyz.json",
+        "sfuLog": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/delay_100ms/sfu.stdout.log"
+      },
+      "checks": [
+        {
+          "evidence": "readyz ok=true",
+          "name": "sfu-readyz-ok",
+          "status": "PASS"
+        },
+        {
+          "evidence": "audioEnabled=false",
+          "name": "push-video-only-publish",
+          "status": "PASS"
+        },
+        {
+          "evidence": "twccExtId=5",
+          "name": "publish-twcc-ext",
+          "status": "PASS"
+        },
+        {
+          "evidence": "twccExtId=5",
+          "name": "play-selected-twcc-ext",
+          "status": "PASS"
+        },
+        {
+          "evidence": "audio consumer absent",
+          "name": "no-audio-consumer",
+          "status": "PASS"
+        },
+        {
+          "evidence": "pushedAu=360",
+          "name": "push-au-output",
+          "status": "PASS"
+        },
+        {
+          "evidence": "rtpPackets=4003",
+          "name": "play-rtp-input",
+          "status": "PASS"
+        },
+        {
+          "evidence": "outputAu=388",
+          "name": "play-au-output",
+          "status": "PASS"
+        },
+        {
+          "evidence": "rtcpFeedbackPacketsIn=313",
+          "name": "push-rtcp-feedback-input",
+          "status": "PASS"
+        },
+        {
+          "evidence": "rtcpFeedbackFailures=0",
+          "name": "push-rtcp-feedback-no-failures",
+          "status": "PASS"
+        },
+        {
+          "evidence": "rtcpSendFailures=0",
+          "name": "play-rtcp-send-no-failures",
+          "status": "PASS"
+        },
+        {
+          "evidence": "enabled=True",
+          "name": "sdk-push-runtime-enabled",
+          "status": "PASS"
+        },
+        {
+          "evidence": "enabled=True",
+          "name": "sdk-play-runtime-enabled",
+          "status": "PASS"
+        },
+        {
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 25229, \"metricsFiles\": 1, \"processTickCountMax\": 1031, \"receiverReportCountMax\": 9, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 12, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 109}",
+          "name": "sdk-push-runtime-files",
+          "status": "PASS"
+        },
+        {
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 27689, \"metricsFiles\": 1, \"processTickCountMax\": 1160, \"receiverReportCountMax\": 11, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 13, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 231}",
+          "name": "sdk-play-runtime-files",
+          "status": "PASS"
+        },
+        {
+          "evidence": "twcc=231 rr=11",
+          "name": "sdk-play-rtcp-generated",
+          "status": "PASS"
+        },
+        {
+          "evidence": "twcc=109 rr=9",
+          "name": "sdk-push-rtcp-counted",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ok",
+          "name": "harness-no-failure",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ok",
+          "name": "runtime-no-unexpected-alerts",
+          "status": "PASS"
+        },
+        {
+          "evidence": "samples=24",
+          "name": "encoder-metrics-present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "{\"accessUnits\": 332, \"bitrateChanges\": 78, \"currentBitrateBps\": 1977567, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 2, \"forcedKeyframeRequests\": 3, \"forcedKeyframes\": 1, \"fpsChanges\": 1, \"framesEncoded\": 332, \"framesGenerated\": 332, \"height\": 180, \"keyframes\": 13, \"lastKeyframe\": \"true\", \"maxForcedKeyframeDelayUs\": 20565, \"mode\": \"synthetic\", \"width\": 320}",
+          "name": "encoder-mode-selected",
+          "status": "PASS"
+        },
+        {
+          "evidence": "accessUnits=332",
+          "name": "encoder-au-output",
+          "status": "PASS"
+        },
+        {
+          "evidence": "keyframes=13",
+          "name": "encoder-keyframe-output",
+          "status": "PASS"
+        },
+        {
+          "evidence": "forcedKeyframeRequests=3 forcedKeyframes=1 maxForcedKeyframeDelayUs=20565",
+          "name": "encoder-forced-keyframe-response",
+          "status": "PASS"
+        },
+        {
+          "evidence": "{\"accessUnits\": 332, \"bitrateChanges\": 78, \"currentBitrateBps\": 1977567, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 2, \"forcedKeyframeRequests\": 3, \"forcedKeyframes\": 1, \"fpsChanges\": 1, \"framesEncoded\": 332, \"framesGenerated\": 332, \"height\": 180, \"keyframes\": 13, \"lastKeyframe\": \"true\", \"maxForcedKeyframeDelayUs\": 20565, \"mode\": \"synthetic\", \"width\": 320}",
+          "name": "encoder-source-shape",
+          "status": "PASS"
+        },
+        {
+          "evidence": "samples=28",
+          "name": "qoe-metrics-present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "decodedFrames=319",
+          "name": "qoe-decodes-frames",
+          "status": "PASS"
+        },
+        {
+          "evidence": "decodeErrors=0",
+          "name": "qoe-decode-errors-zero",
+          "status": "PASS"
+        },
+        {
+          "evidence": "firstFrameDelayUs=0",
+          "name": "qoe-first-frame-observable",
+          "status": "PASS"
+        },
+        {
+          "evidence": "rttMax=222.0",
+          "name": "weak-delay-rtt-observable",
+          "status": "PASS"
+        }
+      ],
+      "metrics": {
+        "droppedFrames": 0,
+        "encoder": {
+          "accessUnits": 332,
+          "bitrateChanges": 78,
+          "currentBitrateBps": 1977567,
+          "currentFps": 30,
+          "encoderRecreates": 2,
+          "forcedKeyframeRequests": 3,
+          "forcedKeyframes": 1,
+          "fpsChanges": 1,
+          "framesEncoded": 332,
+          "framesGenerated": 332,
+          "height": 180,
+          "keyframes": 13,
+          "maxForcedKeyframeDelayUs": 20565,
+          "mode": "synthetic",
+          "name": "x264",
+          "samples": 24,
+          "width": 320
+        },
+        "finalTargetBps": {
+          "avg": 1824620.8333333333,
+          "max": 2243528.0,
+          "min": 1200000.0
+        },
+        "nack": 254,
+        "playLossQ8": {
+          "avg": 0.0,
+          "max": 0.0,
+          "min": 0.0
+        },
+        "playMetricSamples": 26,
+        "playOutputAu": 388,
+        "playRtcpBytesOut": 15880,
+        "playRtcpPacketsIn": 10,
+        "playRtcpPacketsOut": 496,
+        "playRtcpSendFailures": 0,
+        "playRtpPackets": 4003,
+        "pli": 0,
+        "publishTwccExtId": 5,
+        "pushMetricSamples": 24,
+        "pushRtcpFeedbackBytesIn": 12772,
+        "pushRtcpFeedbackFailures": 0,
+        "pushRtcpFeedbackPacketsIn": 313,
+        "pushedAu": 360,
+        "qoe": {
+          "accessUnitsIn": 388,
+          "decodeErrors": 0,
+          "decodedFrames": 319,
+          "enabled": true,
+          "firstFrameDelayUs": 0,
+          "freezeCount": 1,
+          "height": 180,
+          "keyframesIn": 13,
+          "maxFrameGapUs": 569856,
+          "outputFps": 26.69,
+          "recovery": null,
+          "samples": 28,
+          "width": 320
+        },
+        "retransmission": 0,
+        "rttMs": {
+          "avg": 104.41666666666667,
+          "max": 222.0,
+          "min": 0.0
+        },
+        "sdkRuntime": {
+          "play": {
+            "alertsFiles": 1,
+            "enabled": true,
+            "maxProcessTickGapUs": 27689,
+            "metricsFiles": 1,
+            "processTickCountMax": 1160,
+            "receiverReportCountMax": 11,
+            "runtimeLogFiles": 1,
+            "sessionMetricSamples": 13,
+            "transportFailureCountMax": 0,
+            "transportFeedbackCountMax": 231
+          },
+          "push": {
+            "alertsFiles": 1,
+            "enabled": true,
+            "maxProcessTickGapUs": 25229,
+            "metricsFiles": 1,
+            "processTickCountMax": 1031,
+            "receiverReportCountMax": 9,
+            "runtimeLogFiles": 1,
+            "sessionMetricSamples": 12,
+            "transportFailureCountMax": 0,
+            "transportFeedbackCountMax": 109
+          }
+        },
+        "selectedTwccExtId": 5,
+        "senderLossFraction": {
+          "avg": 0.0,
+          "max": 0.0,
+          "min": 0.0
+        },
+        "targetBps": {
+          "avg": 1824620.8333333333,
+          "max": 2243528.0,
+          "min": 1200000.0
+        },
+        "timing": {
+          "applyEpochMs": 1779555200860,
+          "case": "delay_100ms",
+          "clearEpochMs": 1779555206891,
+          "durationSeconds": 12,
+          "effectiveDurationSeconds": 12,
+          "endEpochMs": 1779555209903,
+          "netemApplied": 1,
+          "preSeconds": 3,
+          "recoverSeconds": 3,
+          "startEpochMs": 1779555196823,
+          "weakSeconds": 6
+        }
+      },
+      "name": "delay_100ms",
+      "networkCondition": "100ms delay + 20ms jitter",
+      "status": "PASS"
+    },
+    {
+      "alerts": {
+        "count": 0,
+        "ignoredHarnessNoiseCount": 6,
+        "samples": []
+      },
+      "artifacts": {
+        "caseDir": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/loss_2pct",
+        "playLog": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/loss_2pct/play/play.log",
+        "pushLog": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/loss_2pct/push/push.log",
+        "readyz": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/loss_2pct/readyz.json",
+        "sfuLog": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/loss_2pct/sfu.stdout.log"
+      },
+      "checks": [
+        {
+          "evidence": "readyz ok=true",
+          "name": "sfu-readyz-ok",
+          "status": "PASS"
+        },
+        {
+          "evidence": "audioEnabled=false",
+          "name": "push-video-only-publish",
+          "status": "PASS"
+        },
+        {
+          "evidence": "twccExtId=5",
+          "name": "publish-twcc-ext",
+          "status": "PASS"
+        },
+        {
+          "evidence": "twccExtId=5",
+          "name": "play-selected-twcc-ext",
+          "status": "PASS"
+        },
+        {
+          "evidence": "audio consumer absent",
+          "name": "no-audio-consumer",
+          "status": "PASS"
+        },
+        {
+          "evidence": "pushedAu=359",
+          "name": "push-au-output",
+          "status": "PASS"
+        },
+        {
+          "evidence": "rtpPackets=2627",
+          "name": "play-rtp-input",
+          "status": "PASS"
+        },
+        {
+          "evidence": "outputAu=359",
+          "name": "play-au-output",
+          "status": "PASS"
+        },
+        {
+          "evidence": "rtcpFeedbackPacketsIn=154",
+          "name": "push-rtcp-feedback-input",
+          "status": "PASS"
+        },
+        {
+          "evidence": "rtcpFeedbackFailures=0",
+          "name": "push-rtcp-feedback-no-failures",
+          "status": "PASS"
+        },
+        {
+          "evidence": "rtcpSendFailures=0",
+          "name": "play-rtcp-send-no-failures",
+          "status": "PASS"
+        },
+        {
+          "evidence": "enabled=True",
+          "name": "sdk-push-runtime-enabled",
+          "status": "PASS"
+        },
+        {
+          "evidence": "enabled=True",
+          "name": "sdk-play-runtime-enabled",
+          "status": "PASS"
+        },
+        {
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 34925, \"metricsFiles\": 1, \"processTickCountMax\": 1023, \"receiverReportCountMax\": 9, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 12, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 110}",
+          "name": "sdk-push-runtime-files",
+          "status": "PASS"
+        },
+        {
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 24630, \"metricsFiles\": 1, \"processTickCountMax\": 1157, \"receiverReportCountMax\": 11, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 13, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 232}",
           "name": "sdk-play-runtime-files",
           "status": "PASS"
         },
@@ -115,27 +684,27 @@
           "status": "PASS"
         },
         {
-          "evidence": "{\"accessUnits\": 332, \"bitrateChanges\": 37, \"currentBitrateBps\": 2500000, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 2, \"forcedKeyframeRequests\": 1, \"forcedKeyframes\": 1, \"fpsChanges\": 1, \"framesEncoded\": 332, \"framesGenerated\": 332, \"height\": 180, \"keyframes\": 12, \"lastKeyframe\": \"false\", \"maxForcedKeyframeDelayUs\": 0, \"mode\": \"synthetic\", \"width\": 320}",
+          "evidence": "{\"accessUnits\": 333, \"bitrateChanges\": 33, \"currentBitrateBps\": 2500000, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 2, \"forcedKeyframeRequests\": 3, \"forcedKeyframes\": 1, \"fpsChanges\": 1, \"framesEncoded\": 333, \"framesGenerated\": 333, \"height\": 180, \"keyframes\": 13, \"lastKeyframe\": \"false\", \"maxForcedKeyframeDelayUs\": 20600, \"mode\": \"synthetic\", \"width\": 320}",
           "name": "encoder-mode-selected",
           "status": "PASS"
         },
         {
-          "evidence": "accessUnits=332",
+          "evidence": "accessUnits=333",
           "name": "encoder-au-output",
           "status": "PASS"
         },
         {
-          "evidence": "keyframes=12",
+          "evidence": "keyframes=13",
           "name": "encoder-keyframe-output",
           "status": "PASS"
         },
         {
-          "evidence": "forcedKeyframeRequests=1 forcedKeyframes=1 maxForcedKeyframeDelayUs=0",
+          "evidence": "forcedKeyframeRequests=3 forcedKeyframes=1 maxForcedKeyframeDelayUs=20600",
           "name": "encoder-forced-keyframe-response",
           "status": "PASS"
         },
         {
-          "evidence": "{\"accessUnits\": 332, \"bitrateChanges\": 37, \"currentBitrateBps\": 2500000, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 2, \"forcedKeyframeRequests\": 1, \"forcedKeyframes\": 1, \"fpsChanges\": 1, \"framesEncoded\": 332, \"framesGenerated\": 332, \"height\": 180, \"keyframes\": 12, \"lastKeyframe\": \"false\", \"maxForcedKeyframeDelayUs\": 0, \"mode\": \"synthetic\", \"width\": 320}",
+          "evidence": "{\"accessUnits\": 333, \"bitrateChanges\": 33, \"currentBitrateBps\": 2500000, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 2, \"forcedKeyframeRequests\": 3, \"forcedKeyframes\": 1, \"fpsChanges\": 1, \"framesEncoded\": 333, \"framesGenerated\": 333, \"height\": 180, \"keyframes\": 13, \"lastKeyframe\": \"false\", \"maxForcedKeyframeDelayUs\": 20600, \"mode\": \"synthetic\", \"width\": 320}",
           "name": "encoder-source-shape",
           "status": "PASS"
         },
@@ -145,7 +714,7 @@
           "status": "PASS"
         },
         {
-          "evidence": "decodedFrames=358",
+          "evidence": "decodedFrames=359",
           "name": "qoe-decodes-frames",
           "status": "PASS"
         },
@@ -158,82 +727,87 @@
           "evidence": "firstFrameDelayUs=0",
           "name": "qoe-first-frame-observable",
           "status": "PASS"
+        },
+        {
+          "evidence": "nack=51 retransmission=0 pushRtcpIn=154",
+          "name": "weak-loss-feedback-observable",
+          "status": "PASS"
         }
       ],
       "metrics": {
         "droppedFrames": 0,
         "encoder": {
-          "accessUnits": 332,
-          "bitrateChanges": 37,
+          "accessUnits": 333,
+          "bitrateChanges": 33,
           "currentBitrateBps": 2500000,
           "currentFps": 30,
           "encoderRecreates": 2,
-          "forcedKeyframeRequests": 1,
+          "forcedKeyframeRequests": 3,
           "forcedKeyframes": 1,
           "fpsChanges": 1,
-          "framesEncoded": 332,
-          "framesGenerated": 332,
+          "framesEncoded": 333,
+          "framesGenerated": 333,
           "height": 180,
-          "keyframes": 12,
-          "maxForcedKeyframeDelayUs": 0,
+          "keyframes": 13,
+          "maxForcedKeyframeDelayUs": 20600,
           "mode": "synthetic",
           "name": "x264",
           "samples": 24,
           "width": 320
         },
         "finalTargetBps": {
-          "avg": 2118357.5833333335,
+          "avg": 2080997.6666666667,
           "max": 2500000.0,
           "min": 1200000.0
         },
-        "nack": 0,
+        "nack": 51,
         "playLossQ8": {
           "avg": 0.0,
           "max": 0.0,
           "min": 0.0
         },
         "playMetricSamples": 26,
-        "playOutputAu": 358,
-        "playRtcpBytesOut": 8440,
+        "playOutputAu": 359,
+        "playRtcpBytesOut": 9240,
         "playRtcpPacketsIn": 9,
-        "playRtcpPacketsOut": 243,
+        "playRtcpPacketsOut": 294,
         "playRtcpSendFailures": 0,
-        "playRtpPackets": 2660,
+        "playRtpPackets": 2627,
         "pli": 0,
         "publishTwccExtId": 5,
         "pushMetricSamples": 24,
-        "pushRtcpFeedbackBytesIn": 5868,
+        "pushRtcpFeedbackBytesIn": 6320,
         "pushRtcpFeedbackFailures": 0,
-        "pushRtcpFeedbackPacketsIn": 130,
+        "pushRtcpFeedbackPacketsIn": 154,
         "pushedAu": 359,
         "qoe": {
-          "accessUnitsIn": 358,
+          "accessUnitsIn": 359,
           "decodeErrors": 0,
-          "decodedFrames": 358,
+          "decodedFrames": 359,
           "enabled": true,
           "firstFrameDelayUs": 0,
           "freezeCount": 0,
           "height": 180,
-          "keyframesIn": 12,
-          "maxFrameGapUs": 93541,
-          "outputFps": 30.05,
+          "keyframesIn": 13,
+          "maxFrameGapUs": 92128,
+          "outputFps": 30.09,
           "recovery": null,
           "samples": 28,
           "width": 320
         },
         "retransmission": 0,
         "rttMs": {
-          "avg": 7.083333333333333,
-          "max": 12.0,
+          "avg": 4.75,
+          "max": 21.0,
           "min": 0.0
         },
         "sdkRuntime": {
           "play": {
             "alertsFiles": 1,
             "enabled": true,
-            "maxProcessTickGapUs": 21254,
+            "maxProcessTickGapUs": 24630,
             "metricsFiles": 1,
-            "processTickCountMax": 1166,
+            "processTickCountMax": 1157,
             "receiverReportCountMax": 11,
             "runtimeLogFiles": 1,
             "sessionMetricSamples": 13,
@@ -243,9 +817,9 @@
           "push": {
             "alertsFiles": 1,
             "enabled": true,
-            "maxProcessTickGapUs": 32833,
+            "maxProcessTickGapUs": 34925,
             "metricsFiles": 1,
-            "processTickCountMax": 1030,
+            "processTickCountMax": 1023,
             "receiverReportCountMax": 9,
             "runtimeLogFiles": 1,
             "sessionMetricSamples": 12,
@@ -260,595 +834,21 @@
           "min": 0.0
         },
         "targetBps": {
-          "avg": 2118357.5833333335,
+          "avg": 2080997.6666666667,
           "max": 2500000.0,
           "min": 1200000.0
         },
         "timing": {
-          "applyEpochMs": null,
-          "case": "baseline",
-          "clearEpochMs": null,
-          "durationSeconds": 12,
-          "effectiveDurationSeconds": 12,
-          "endEpochMs": 1779553165470,
-          "netemApplied": 0,
-          "preSeconds": 0,
-          "recoverSeconds": 0,
-          "startEpochMs": 1779553152399,
-          "weakSeconds": 0
-        }
-      },
-      "name": "baseline",
-      "networkCondition": "none",
-      "status": "PASS"
-    },
-    {
-      "alerts": {
-        "count": 0,
-        "ignoredHarnessNoiseCount": 6,
-        "samples": []
-      },
-      "artifacts": {
-        "caseDir": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/delay_100ms",
-        "playLog": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/delay_100ms/play/play.log",
-        "pushLog": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/delay_100ms/push/push.log",
-        "readyz": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/delay_100ms/readyz.json",
-        "sfuLog": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/delay_100ms/sfu.stdout.log"
-      },
-      "checks": [
-        {
-          "evidence": "readyz ok=true",
-          "name": "sfu-readyz-ok",
-          "status": "PASS"
-        },
-        {
-          "evidence": "audioEnabled=false",
-          "name": "push-video-only-publish",
-          "status": "PASS"
-        },
-        {
-          "evidence": "twccExtId=5",
-          "name": "publish-twcc-ext",
-          "status": "PASS"
-        },
-        {
-          "evidence": "twccExtId=5",
-          "name": "play-selected-twcc-ext",
-          "status": "PASS"
-        },
-        {
-          "evidence": "audio consumer absent",
-          "name": "no-audio-consumer",
-          "status": "PASS"
-        },
-        {
-          "evidence": "pushedAu=360",
-          "name": "push-au-output",
-          "status": "PASS"
-        },
-        {
-          "evidence": "rtpPackets=3758",
-          "name": "play-rtp-input",
-          "status": "PASS"
-        },
-        {
-          "evidence": "outputAu=382",
-          "name": "play-au-output",
-          "status": "PASS"
-        },
-        {
-          "evidence": "rtcpFeedbackPacketsIn=291",
-          "name": "push-rtcp-feedback-input",
-          "status": "PASS"
-        },
-        {
-          "evidence": "rtcpFeedbackFailures=0",
-          "name": "push-rtcp-feedback-no-failures",
-          "status": "PASS"
-        },
-        {
-          "evidence": "rtcpSendFailures=0",
-          "name": "play-rtcp-send-no-failures",
-          "status": "PASS"
-        },
-        {
-          "evidence": "enabled=True",
-          "name": "sdk-push-runtime-enabled",
-          "status": "PASS"
-        },
-        {
-          "evidence": "enabled=True",
-          "name": "sdk-play-runtime-enabled",
-          "status": "PASS"
-        },
-        {
-          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 62783, \"metricsFiles\": 1, \"processTickCountMax\": 1017, \"receiverReportCountMax\": 9, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 12, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 108}",
-          "name": "sdk-push-runtime-files",
-          "status": "PASS"
-        },
-        {
-          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 124762, \"metricsFiles\": 1, \"processTickCountMax\": 1149, \"receiverReportCountMax\": 11, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 13, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 229}",
-          "name": "sdk-play-runtime-files",
-          "status": "PASS"
-        },
-        {
-          "evidence": "twcc=229 rr=11",
-          "name": "sdk-play-rtcp-generated",
-          "status": "PASS"
-        },
-        {
-          "evidence": "twcc=108 rr=9",
-          "name": "sdk-push-rtcp-counted",
-          "status": "PASS"
-        },
-        {
-          "evidence": "ok",
-          "name": "harness-no-failure",
-          "status": "PASS"
-        },
-        {
-          "evidence": "ok",
-          "name": "runtime-no-unexpected-alerts",
-          "status": "PASS"
-        },
-        {
-          "evidence": "samples=24",
-          "name": "encoder-metrics-present",
-          "status": "PASS"
-        },
-        {
-          "evidence": "{\"accessUnits\": 332, \"bitrateChanges\": 71, \"currentBitrateBps\": 1608473, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 2, \"forcedKeyframeRequests\": 3, \"forcedKeyframes\": 1, \"fpsChanges\": 1, \"framesEncoded\": 332, \"framesGenerated\": 332, \"height\": 180, \"keyframes\": 13, \"lastKeyframe\": \"true\", \"maxForcedKeyframeDelayUs\": 20556, \"mode\": \"synthetic\", \"width\": 320}",
-          "name": "encoder-mode-selected",
-          "status": "PASS"
-        },
-        {
-          "evidence": "accessUnits=332",
-          "name": "encoder-au-output",
-          "status": "PASS"
-        },
-        {
-          "evidence": "keyframes=13",
-          "name": "encoder-keyframe-output",
-          "status": "PASS"
-        },
-        {
-          "evidence": "forcedKeyframeRequests=3 forcedKeyframes=1 maxForcedKeyframeDelayUs=20556",
-          "name": "encoder-forced-keyframe-response",
-          "status": "PASS"
-        },
-        {
-          "evidence": "{\"accessUnits\": 332, \"bitrateChanges\": 71, \"currentBitrateBps\": 1608473, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 2, \"forcedKeyframeRequests\": 3, \"forcedKeyframes\": 1, \"fpsChanges\": 1, \"framesEncoded\": 332, \"framesGenerated\": 332, \"height\": 180, \"keyframes\": 13, \"lastKeyframe\": \"true\", \"maxForcedKeyframeDelayUs\": 20556, \"mode\": \"synthetic\", \"width\": 320}",
-          "name": "encoder-source-shape",
-          "status": "PASS"
-        },
-        {
-          "evidence": "samples=28",
-          "name": "qoe-metrics-present",
-          "status": "PASS"
-        },
-        {
-          "evidence": "decodedFrames=346",
-          "name": "qoe-decodes-frames",
-          "status": "PASS"
-        },
-        {
-          "evidence": "decodeErrors=0",
-          "name": "qoe-decode-errors-zero",
-          "status": "PASS"
-        },
-        {
-          "evidence": "firstFrameDelayUs=0",
-          "name": "qoe-first-frame-observable",
-          "status": "PASS"
-        },
-        {
-          "evidence": "rttMax=241.0",
-          "name": "weak-delay-rtt-observable",
-          "status": "PASS"
-        }
-      ],
-      "metrics": {
-        "droppedFrames": 0,
-        "encoder": {
-          "accessUnits": 332,
-          "bitrateChanges": 71,
-          "currentBitrateBps": 1608473,
-          "currentFps": 30,
-          "encoderRecreates": 2,
-          "forcedKeyframeRequests": 3,
-          "forcedKeyframes": 1,
-          "fpsChanges": 1,
-          "framesEncoded": 332,
-          "framesGenerated": 332,
-          "height": 180,
-          "keyframes": 13,
-          "maxForcedKeyframeDelayUs": 20556,
-          "mode": "synthetic",
-          "name": "x264",
-          "samples": 24,
-          "width": 320
-        },
-        "finalTargetBps": {
-          "avg": 1619340.0833333333,
-          "max": 1875228.0,
-          "min": 1200000.0
-        },
-        "nack": 246,
-        "playLossQ8": {
-          "avg": 0.0,
-          "max": 0.0,
-          "min": 0.0
-        },
-        "playMetricSamples": 26,
-        "playOutputAu": 382,
-        "playRtcpBytesOut": 15292,
-        "playRtcpPacketsIn": 9,
-        "playRtcpPacketsOut": 486,
-        "playRtcpSendFailures": 0,
-        "playRtpPackets": 3758,
-        "pli": 0,
-        "publishTwccExtId": 5,
-        "pushMetricSamples": 24,
-        "pushRtcpFeedbackBytesIn": 10620,
-        "pushRtcpFeedbackFailures": 0,
-        "pushRtcpFeedbackPacketsIn": 291,
-        "pushedAu": 360,
-        "qoe": {
-          "accessUnitsIn": 382,
-          "decodeErrors": 0,
-          "decodedFrames": 346,
-          "enabled": true,
-          "firstFrameDelayUs": 0,
-          "freezeCount": 0,
-          "height": 180,
-          "keyframesIn": 13,
-          "maxFrameGapUs": 251092,
-          "outputFps": 29.0,
-          "recovery": null,
-          "samples": 28,
-          "width": 320
-        },
-        "retransmission": 0,
-        "rttMs": {
-          "avg": 100.58333333333333,
-          "max": 241.0,
-          "min": 0.0
-        },
-        "sdkRuntime": {
-          "play": {
-            "alertsFiles": 1,
-            "enabled": true,
-            "maxProcessTickGapUs": 124762,
-            "metricsFiles": 1,
-            "processTickCountMax": 1149,
-            "receiverReportCountMax": 11,
-            "runtimeLogFiles": 1,
-            "sessionMetricSamples": 13,
-            "transportFailureCountMax": 0,
-            "transportFeedbackCountMax": 229
-          },
-          "push": {
-            "alertsFiles": 1,
-            "enabled": true,
-            "maxProcessTickGapUs": 62783,
-            "metricsFiles": 1,
-            "processTickCountMax": 1017,
-            "receiverReportCountMax": 9,
-            "runtimeLogFiles": 1,
-            "sessionMetricSamples": 12,
-            "transportFailureCountMax": 0,
-            "transportFeedbackCountMax": 108
-          }
-        },
-        "selectedTwccExtId": 5,
-        "senderLossFraction": {
-          "avg": 0.0,
-          "max": 0.0,
-          "min": 0.0
-        },
-        "targetBps": {
-          "avg": 1619340.0833333333,
-          "max": 1875228.0,
-          "min": 1200000.0
-        },
-        "timing": {
-          "applyEpochMs": 1779553185207,
-          "case": "delay_100ms",
-          "clearEpochMs": 1779553191237,
-          "durationSeconds": 12,
-          "effectiveDurationSeconds": 12,
-          "endEpochMs": 1779553194249,
-          "netemApplied": 1,
-          "preSeconds": 3,
-          "recoverSeconds": 3,
-          "startEpochMs": 1779553181170,
-          "weakSeconds": 6
-        }
-      },
-      "name": "delay_100ms",
-      "networkCondition": "100ms delay + 20ms jitter",
-      "status": "PASS"
-    },
-    {
-      "alerts": {
-        "count": 0,
-        "ignoredHarnessNoiseCount": 6,
-        "samples": []
-      },
-      "artifacts": {
-        "caseDir": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/loss_2pct",
-        "playLog": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/loss_2pct/play/play.log",
-        "pushLog": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/loss_2pct/push/push.log",
-        "readyz": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/loss_2pct/readyz.json",
-        "sfuLog": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/loss_2pct/sfu.stdout.log"
-      },
-      "checks": [
-        {
-          "evidence": "readyz ok=true",
-          "name": "sfu-readyz-ok",
-          "status": "PASS"
-        },
-        {
-          "evidence": "audioEnabled=false",
-          "name": "push-video-only-publish",
-          "status": "PASS"
-        },
-        {
-          "evidence": "twccExtId=5",
-          "name": "publish-twcc-ext",
-          "status": "PASS"
-        },
-        {
-          "evidence": "twccExtId=5",
-          "name": "play-selected-twcc-ext",
-          "status": "PASS"
-        },
-        {
-          "evidence": "audio consumer absent",
-          "name": "no-audio-consumer",
-          "status": "PASS"
-        },
-        {
-          "evidence": "pushedAu=360",
-          "name": "push-au-output",
-          "status": "PASS"
-        },
-        {
-          "evidence": "rtpPackets=2679",
-          "name": "play-rtp-input",
-          "status": "PASS"
-        },
-        {
-          "evidence": "outputAu=360",
-          "name": "play-au-output",
-          "status": "PASS"
-        },
-        {
-          "evidence": "rtcpFeedbackPacketsIn=146",
-          "name": "push-rtcp-feedback-input",
-          "status": "PASS"
-        },
-        {
-          "evidence": "rtcpFeedbackFailures=0",
-          "name": "push-rtcp-feedback-no-failures",
-          "status": "PASS"
-        },
-        {
-          "evidence": "rtcpSendFailures=0",
-          "name": "play-rtcp-send-no-failures",
-          "status": "PASS"
-        },
-        {
-          "evidence": "enabled=True",
-          "name": "sdk-push-runtime-enabled",
-          "status": "PASS"
-        },
-        {
-          "evidence": "enabled=True",
-          "name": "sdk-play-runtime-enabled",
-          "status": "PASS"
-        },
-        {
-          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 21343, \"metricsFiles\": 1, \"processTickCountMax\": 1032, \"receiverReportCountMax\": 9, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 12, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 107}",
-          "name": "sdk-push-runtime-files",
-          "status": "PASS"
-        },
-        {
-          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 20642, \"metricsFiles\": 1, \"processTickCountMax\": 1165, \"receiverReportCountMax\": 11, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 13, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 233}",
-          "name": "sdk-play-runtime-files",
-          "status": "PASS"
-        },
-        {
-          "evidence": "twcc=233 rr=11",
-          "name": "sdk-play-rtcp-generated",
-          "status": "PASS"
-        },
-        {
-          "evidence": "twcc=107 rr=9",
-          "name": "sdk-push-rtcp-counted",
-          "status": "PASS"
-        },
-        {
-          "evidence": "ok",
-          "name": "harness-no-failure",
-          "status": "PASS"
-        },
-        {
-          "evidence": "ok",
-          "name": "runtime-no-unexpected-alerts",
-          "status": "PASS"
-        },
-        {
-          "evidence": "samples=24",
-          "name": "encoder-metrics-present",
-          "status": "PASS"
-        },
-        {
-          "evidence": "{\"accessUnits\": 332, \"bitrateChanges\": 29, \"currentBitrateBps\": 2500000, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 2, \"forcedKeyframeRequests\": 1, \"forcedKeyframes\": 1, \"fpsChanges\": 1, \"framesEncoded\": 332, \"framesGenerated\": 332, \"height\": 180, \"keyframes\": 12, \"lastKeyframe\": \"false\", \"maxForcedKeyframeDelayUs\": 0, \"mode\": \"synthetic\", \"width\": 320}",
-          "name": "encoder-mode-selected",
-          "status": "PASS"
-        },
-        {
-          "evidence": "accessUnits=332",
-          "name": "encoder-au-output",
-          "status": "PASS"
-        },
-        {
-          "evidence": "keyframes=12",
-          "name": "encoder-keyframe-output",
-          "status": "PASS"
-        },
-        {
-          "evidence": "forcedKeyframeRequests=1 forcedKeyframes=1 maxForcedKeyframeDelayUs=0",
-          "name": "encoder-forced-keyframe-response",
-          "status": "PASS"
-        },
-        {
-          "evidence": "{\"accessUnits\": 332, \"bitrateChanges\": 29, \"currentBitrateBps\": 2500000, \"currentFps\": 30, \"encoder\": \"x264\", \"encoderRecreates\": 2, \"forcedKeyframeRequests\": 1, \"forcedKeyframes\": 1, \"fpsChanges\": 1, \"framesEncoded\": 332, \"framesGenerated\": 332, \"height\": 180, \"keyframes\": 12, \"lastKeyframe\": \"false\", \"maxForcedKeyframeDelayUs\": 0, \"mode\": \"synthetic\", \"width\": 320}",
-          "name": "encoder-source-shape",
-          "status": "PASS"
-        },
-        {
-          "evidence": "samples=28",
-          "name": "qoe-metrics-present",
-          "status": "PASS"
-        },
-        {
-          "evidence": "decodedFrames=360",
-          "name": "qoe-decodes-frames",
-          "status": "PASS"
-        },
-        {
-          "evidence": "decodeErrors=0",
-          "name": "qoe-decode-errors-zero",
-          "status": "PASS"
-        },
-        {
-          "evidence": "firstFrameDelayUs=0",
-          "name": "qoe-first-frame-observable",
-          "status": "PASS"
-        },
-        {
-          "evidence": "nack=47 retransmission=0 pushRtcpIn=146",
-          "name": "weak-loss-feedback-observable",
-          "status": "PASS"
-        }
-      ],
-      "metrics": {
-        "droppedFrames": 0,
-        "encoder": {
-          "accessUnits": 332,
-          "bitrateChanges": 29,
-          "currentBitrateBps": 2500000,
-          "currentFps": 30,
-          "encoderRecreates": 2,
-          "forcedKeyframeRequests": 1,
-          "forcedKeyframes": 1,
-          "fpsChanges": 1,
-          "framesEncoded": 332,
-          "framesGenerated": 332,
-          "height": 180,
-          "keyframes": 12,
-          "maxForcedKeyframeDelayUs": 0,
-          "mode": "synthetic",
-          "name": "x264",
-          "samples": 24,
-          "width": 320
-        },
-        "finalTargetBps": {
-          "avg": 2057783.5833333333,
-          "max": 2500000.0,
-          "min": 1200000.0
-        },
-        "nack": 47,
-        "playLossQ8": {
-          "avg": 0.0,
-          "max": 0.0,
-          "min": 0.0
-        },
-        "playMetricSamples": 26,
-        "playOutputAu": 360,
-        "playRtcpBytesOut": 9252,
-        "playRtcpPacketsIn": 10,
-        "playRtcpPacketsOut": 291,
-        "playRtcpSendFailures": 0,
-        "playRtpPackets": 2679,
-        "pli": 0,
-        "publishTwccExtId": 5,
-        "pushMetricSamples": 24,
-        "pushRtcpFeedbackBytesIn": 6152,
-        "pushRtcpFeedbackFailures": 0,
-        "pushRtcpFeedbackPacketsIn": 146,
-        "pushedAu": 360,
-        "qoe": {
-          "accessUnitsIn": 360,
-          "decodeErrors": 0,
-          "decodedFrames": 360,
-          "enabled": true,
-          "firstFrameDelayUs": 0,
-          "freezeCount": 0,
-          "height": 180,
-          "keyframesIn": 12,
-          "maxFrameGapUs": 143129,
-          "outputFps": 30.07,
-          "recovery": null,
-          "samples": 28,
-          "width": 320
-        },
-        "retransmission": 0,
-        "rttMs": {
-          "avg": 8.0,
-          "max": 13.0,
-          "min": 0.0
-        },
-        "sdkRuntime": {
-          "play": {
-            "alertsFiles": 1,
-            "enabled": true,
-            "maxProcessTickGapUs": 20642,
-            "metricsFiles": 1,
-            "processTickCountMax": 1165,
-            "receiverReportCountMax": 11,
-            "runtimeLogFiles": 1,
-            "sessionMetricSamples": 13,
-            "transportFailureCountMax": 0,
-            "transportFeedbackCountMax": 233
-          },
-          "push": {
-            "alertsFiles": 1,
-            "enabled": true,
-            "maxProcessTickGapUs": 21343,
-            "metricsFiles": 1,
-            "processTickCountMax": 1032,
-            "receiverReportCountMax": 9,
-            "runtimeLogFiles": 1,
-            "sessionMetricSamples": 12,
-            "transportFailureCountMax": 0,
-            "transportFeedbackCountMax": 107
-          }
-        },
-        "selectedTwccExtId": 5,
-        "senderLossFraction": {
-          "avg": 0.0,
-          "max": 0.0,
-          "min": 0.0
-        },
-        "targetBps": {
-          "avg": 2057783.5833333333,
-          "max": 2500000.0,
-          "min": 1200000.0
-        },
-        "timing": {
-          "applyEpochMs": 1779553213767,
+          "applyEpochMs": 1779555229265,
           "case": "loss_2pct",
-          "clearEpochMs": 1779553219801,
+          "clearEpochMs": 1779555235305,
           "durationSeconds": 12,
           "effectiveDurationSeconds": 12,
-          "endEpochMs": 1779553222815,
+          "endEpochMs": 1779555238316,
           "netemApplied": 1,
           "preSeconds": 3,
           "recoverSeconds": 3,
-          "startEpochMs": 1779553209720,
+          "startEpochMs": 1779555225225,
           "weakSeconds": 6
         }
       },
@@ -863,11 +863,11 @@
         "samples": []
       },
       "artifacts": {
-        "caseDir": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/bandwidth_600k",
-        "playLog": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/bandwidth_600k/play/play.log",
-        "pushLog": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/bandwidth_600k/push/push.log",
-        "readyz": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/bandwidth_600k/readyz.json",
-        "sfuLog": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/bandwidth_600k/sfu.stdout.log"
+        "caseDir": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/bandwidth_600k",
+        "playLog": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/bandwidth_600k/play/play.log",
+        "pushLog": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/bandwidth_600k/push/push.log",
+        "readyz": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/bandwidth_600k/readyz.json",
+        "sfuLog": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/bandwidth_600k/sfu.stdout.log"
       },
       "checks": [
         {
@@ -896,22 +896,22 @@
           "status": "PASS"
         },
         {
-          "evidence": "pushedAu=226",
+          "evidence": "pushedAu=227",
           "name": "push-au-output",
           "status": "PASS"
         },
         {
-          "evidence": "rtpPackets=768",
+          "evidence": "rtpPackets=853",
           "name": "play-rtp-input",
           "status": "PASS"
         },
         {
-          "evidence": "outputAu=103",
+          "evidence": "outputAu=102",
           "name": "play-au-output",
           "status": "PASS"
         },
         {
-          "evidence": "rtcpFeedbackPacketsIn=90",
+          "evidence": "rtcpFeedbackPacketsIn=83",
           "name": "push-rtcp-feedback-input",
           "status": "PASS"
         },
@@ -936,22 +936,22 @@
           "status": "PASS"
         },
         {
-          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 87774, \"metricsFiles\": 1, \"processTickCountMax\": 1037, \"receiverReportCountMax\": 6, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 12, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 55}",
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 20576, \"metricsFiles\": 1, \"processTickCountMax\": 1048, \"receiverReportCountMax\": 6, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 12, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 56}",
           "name": "sdk-push-runtime-files",
           "status": "PASS"
         },
         {
-          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 78777, \"metricsFiles\": 1, \"processTickCountMax\": 1170, \"receiverReportCountMax\": 11, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 13, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 159}",
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 22119, \"metricsFiles\": 1, \"processTickCountMax\": 1179, \"receiverReportCountMax\": 11, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 13, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 161}",
           "name": "sdk-play-runtime-files",
           "status": "PASS"
         },
         {
-          "evidence": "twcc=159 rr=11",
+          "evidence": "twcc=161 rr=11",
           "name": "sdk-play-rtcp-generated",
           "status": "PASS"
         },
         {
-          "evidence": "twcc=55 rr=6",
+          "evidence": "twcc=56 rr=6",
           "name": "sdk-push-rtcp-counted",
           "status": "PASS"
         },
@@ -971,7 +971,7 @@
           "status": "PASS"
         },
         {
-          "evidence": "{\"accessUnits\": 217, \"bitrateChanges\": 31, \"currentBitrateBps\": 334079, \"currentFps\": 10, \"encoder\": \"x264\", \"encoderRecreates\": 6, \"forcedKeyframeRequests\": 69, \"forcedKeyframes\": 9, \"fpsChanges\": 5, \"framesEncoded\": 217, \"framesGenerated\": 217, \"height\": 180, \"keyframes\": 20, \"lastKeyframe\": \"false\", \"maxForcedKeyframeDelayUs\": 108145, \"mode\": \"synthetic\", \"width\": 320}",
+          "evidence": "{\"accessUnits\": 217, \"bitrateChanges\": 33, \"currentBitrateBps\": 339332, \"currentFps\": 10, \"encoder\": \"x264\", \"encoderRecreates\": 6, \"forcedKeyframeRequests\": 42, \"forcedKeyframes\": 5, \"fpsChanges\": 5, \"framesEncoded\": 217, \"framesGenerated\": 217, \"height\": 180, \"keyframes\": 17, \"lastKeyframe\": \"false\", \"maxForcedKeyframeDelayUs\": 95615, \"mode\": \"synthetic\", \"width\": 320}",
           "name": "encoder-mode-selected",
           "status": "PASS"
         },
@@ -981,17 +981,17 @@
           "status": "PASS"
         },
         {
-          "evidence": "keyframes=20",
+          "evidence": "keyframes=17",
           "name": "encoder-keyframe-output",
           "status": "PASS"
         },
         {
-          "evidence": "forcedKeyframeRequests=69 forcedKeyframes=9 maxForcedKeyframeDelayUs=108145",
+          "evidence": "forcedKeyframeRequests=42 forcedKeyframes=5 maxForcedKeyframeDelayUs=95615",
           "name": "encoder-forced-keyframe-response",
           "status": "PASS"
         },
         {
-          "evidence": "{\"accessUnits\": 217, \"bitrateChanges\": 31, \"currentBitrateBps\": 334079, \"currentFps\": 10, \"encoder\": \"x264\", \"encoderRecreates\": 6, \"forcedKeyframeRequests\": 69, \"forcedKeyframes\": 9, \"fpsChanges\": 5, \"framesEncoded\": 217, \"framesGenerated\": 217, \"height\": 180, \"keyframes\": 20, \"lastKeyframe\": \"false\", \"maxForcedKeyframeDelayUs\": 108145, \"mode\": \"synthetic\", \"width\": 320}",
+          "evidence": "{\"accessUnits\": 217, \"bitrateChanges\": 33, \"currentBitrateBps\": 339332, \"currentFps\": 10, \"encoder\": \"x264\", \"encoderRecreates\": 6, \"forcedKeyframeRequests\": 42, \"forcedKeyframes\": 5, \"fpsChanges\": 5, \"framesEncoded\": 217, \"framesGenerated\": 217, \"height\": 180, \"keyframes\": 17, \"lastKeyframe\": \"false\", \"maxForcedKeyframeDelayUs\": 95615, \"mode\": \"synthetic\", \"width\": 320}",
           "name": "encoder-source-shape",
           "status": "PASS"
         },
@@ -1001,7 +1001,7 @@
           "status": "PASS"
         },
         {
-          "evidence": "decodedFrames=103",
+          "evidence": "decodedFrames=102",
           "name": "qoe-decodes-frames",
           "status": "PASS"
         },
@@ -1016,102 +1016,102 @@
           "status": "PASS"
         },
         {
-          "evidence": "targetMin=300000 targetMax=1863877",
+          "evidence": "targetMin=300000 targetMax=1986686",
           "name": "weak-bandwidth-target-down",
           "status": "PASS"
         }
       ],
       "metrics": {
-        "droppedFrames": 8,
+        "droppedFrames": 4,
         "encoder": {
           "accessUnits": 217,
-          "bitrateChanges": 31,
-          "currentBitrateBps": 334079,
+          "bitrateChanges": 33,
+          "currentBitrateBps": 339332,
           "currentFps": 10,
           "encoderRecreates": 6,
-          "forcedKeyframeRequests": 69,
-          "forcedKeyframes": 9,
+          "forcedKeyframeRequests": 42,
+          "forcedKeyframes": 5,
           "fpsChanges": 5,
           "framesEncoded": 217,
           "framesGenerated": 217,
           "height": 180,
-          "keyframes": 20,
-          "maxForcedKeyframeDelayUs": 108145,
+          "keyframes": 17,
+          "maxForcedKeyframeDelayUs": 95615,
           "mode": "synthetic",
           "name": "x264",
           "samples": 24,
           "width": 320
         },
         "finalTargetBps": {
-          "avg": 933615.75,
-          "max": 1863877.0,
+          "avg": 986637.5,
+          "max": 1986686.0,
           "min": 300000.0
         },
-        "nack": 97,
+        "nack": 86,
         "playLossQ8": {
           "avg": 0.0,
           "max": 0.0,
           "min": 0.0
         },
         "playMetricSamples": 26,
-        "playOutputAu": 103,
-        "playRtcpBytesOut": 11104,
-        "playRtcpPacketsIn": 5,
-        "playRtcpPacketsOut": 269,
+        "playOutputAu": 102,
+        "playRtcpBytesOut": 11040,
+        "playRtcpPacketsIn": 6,
+        "playRtcpPacketsOut": 258,
         "playRtcpSendFailures": 0,
-        "playRtpPackets": 768,
+        "playRtpPackets": 853,
         "pli": 0,
         "publishTwccExtId": 5,
         "pushMetricSamples": 24,
-        "pushRtcpFeedbackBytesIn": 3676,
+        "pushRtcpFeedbackBytesIn": 3636,
         "pushRtcpFeedbackFailures": 0,
-        "pushRtcpFeedbackPacketsIn": 90,
-        "pushedAu": 226,
+        "pushRtcpFeedbackPacketsIn": 83,
+        "pushedAu": 227,
         "qoe": {
-          "accessUnitsIn": 103,
+          "accessUnitsIn": 102,
           "decodeErrors": 0,
-          "decodedFrames": 103,
+          "decodedFrames": 102,
           "enabled": true,
           "firstFrameDelayUs": 0,
           "freezeCount": 3,
           "height": 180,
-          "keyframesIn": 4,
-          "maxFrameGapUs": 693941,
-          "outputFps": 11.59,
+          "keyframesIn": 5,
+          "maxFrameGapUs": 690439,
+          "outputFps": 11.64,
           "recovery": null,
           "samples": 28,
           "width": 320
         },
         "retransmission": 0,
         "rttMs": {
-          "avg": 761.5833333333334,
-          "max": 2861.0,
+          "avg": 733.5,
+          "max": 2801.0,
           "min": 0.0
         },
         "sdkRuntime": {
           "play": {
             "alertsFiles": 1,
             "enabled": true,
-            "maxProcessTickGapUs": 78777,
+            "maxProcessTickGapUs": 22119,
             "metricsFiles": 1,
-            "processTickCountMax": 1170,
+            "processTickCountMax": 1179,
             "receiverReportCountMax": 11,
             "runtimeLogFiles": 1,
             "sessionMetricSamples": 13,
             "transportFailureCountMax": 0,
-            "transportFeedbackCountMax": 159
+            "transportFeedbackCountMax": 161
           },
           "push": {
             "alertsFiles": 1,
             "enabled": true,
-            "maxProcessTickGapUs": 87774,
+            "maxProcessTickGapUs": 20576,
             "metricsFiles": 1,
-            "processTickCountMax": 1037,
+            "processTickCountMax": 1048,
             "receiverReportCountMax": 6,
             "runtimeLogFiles": 1,
             "sessionMetricSamples": 12,
             "transportFailureCountMax": 0,
-            "transportFeedbackCountMax": 55
+            "transportFeedbackCountMax": 56
           }
         },
         "selectedTwccExtId": 5,
@@ -1121,21 +1121,21 @@
           "min": 0.0
         },
         "targetBps": {
-          "avg": 933615.75,
-          "max": 1863877.0,
+          "avg": 986637.5,
+          "max": 1986686.0,
           "min": 300000.0
         },
         "timing": {
-          "applyEpochMs": 1779553242263,
+          "applyEpochMs": 1779555257867,
           "case": "bandwidth_600k",
-          "clearEpochMs": 1779553248295,
+          "clearEpochMs": 1779555263897,
           "durationSeconds": 12,
           "effectiveDurationSeconds": 12,
-          "endEpochMs": 1779553251311,
+          "endEpochMs": 1779555266910,
           "netemApplied": 1,
           "preSeconds": 3,
           "recoverSeconds": 3,
-          "startEpochMs": 1779553238193,
+          "startEpochMs": 1779555253827,
           "weakSeconds": 6
         }
       },
@@ -1150,11 +1150,11 @@
         "samples": []
       },
       "artifacts": {
-        "caseDir": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/drop_recover",
-        "playLog": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/drop_recover/play/play.log",
-        "pushLog": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/drop_recover/push/push.log",
-        "readyz": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/drop_recover/readyz.json",
-        "sfuLog": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z/drop_recover/sfu.stdout.log"
+        "caseDir": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/drop_recover",
+        "playLog": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/drop_recover/play/play.log",
+        "pushLog": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/drop_recover/push/push.log",
+        "readyz": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/drop_recover/readyz.json",
+        "sfuLog": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z/drop_recover/sfu.stdout.log"
       },
       "checks": [
         {
@@ -1183,22 +1183,22 @@
           "status": "PASS"
         },
         {
-          "evidence": "pushedAu=296",
+          "evidence": "pushedAu=298",
           "name": "push-au-output",
           "status": "PASS"
         },
         {
-          "evidence": "rtpPackets=977",
+          "evidence": "rtpPackets=954",
           "name": "play-rtp-input",
           "status": "PASS"
         },
         {
-          "evidence": "outputAu=101",
+          "evidence": "outputAu=96",
           "name": "play-au-output",
           "status": "PASS"
         },
         {
-          "evidence": "rtcpFeedbackPacketsIn=204",
+          "evidence": "rtcpFeedbackPacketsIn=214",
           "name": "push-rtcp-feedback-input",
           "status": "PASS"
         },
@@ -1223,22 +1223,22 @@
           "status": "PASS"
         },
         {
-          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 89933, \"metricsFiles\": 1, \"processTickCountMax\": 2795, \"receiverReportCountMax\": 17, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 30, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 90}",
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 30523, \"metricsFiles\": 1, \"processTickCountMax\": 2793, \"receiverReportCountMax\": 17, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 30, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 77}",
           "name": "sdk-push-runtime-files",
           "status": "PASS"
         },
         {
-          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 93589, \"metricsFiles\": 1, \"processTickCountMax\": 2825, \"receiverReportCountMax\": 29, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 30, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 267}",
+          "evidence": "{\"alertsFiles\": 1, \"maxProcessTickGapUs\": 32510, \"metricsFiles\": 1, \"processTickCountMax\": 2827, \"receiverReportCountMax\": 28, \"runtimeLogFiles\": 1, \"sessionMetricSamples\": 30, \"transportFailureCountMax\": 0, \"transportFeedbackCountMax\": 255}",
           "name": "sdk-play-runtime-files",
           "status": "PASS"
         },
         {
-          "evidence": "twcc=267 rr=29",
+          "evidence": "twcc=255 rr=28",
           "name": "sdk-play-rtcp-generated",
           "status": "PASS"
         },
         {
-          "evidence": "twcc=90 rr=17",
+          "evidence": "twcc=77 rr=17",
           "name": "sdk-push-rtcp-counted",
           "status": "PASS"
         },
@@ -1258,27 +1258,27 @@
           "status": "PASS"
         },
         {
-          "evidence": "{\"accessUnits\": 292, \"bitrateChanges\": 32, \"currentBitrateBps\": 300000, \"currentFps\": 5, \"encoder\": \"x264\", \"encoderRecreates\": 7, \"forcedKeyframeRequests\": 144, \"forcedKeyframes\": 10, \"fpsChanges\": 6, \"framesEncoded\": 292, \"framesGenerated\": 292, \"height\": 180, \"keyframes\": 38, \"lastKeyframe\": \"false\", \"maxForcedKeyframeDelayUs\": 194716, \"mode\": \"synthetic\", \"width\": 320}",
+          "evidence": "{\"accessUnits\": 293, \"bitrateChanges\": 31, \"currentBitrateBps\": 300000, \"currentFps\": 5, \"encoder\": \"x264\", \"encoderRecreates\": 5, \"forcedKeyframeRequests\": 155, \"forcedKeyframes\": 9, \"fpsChanges\": 4, \"framesEncoded\": 293, \"framesGenerated\": 293, \"height\": 180, \"keyframes\": 37, \"lastKeyframe\": \"true\", \"maxForcedKeyframeDelayUs\": 193130, \"mode\": \"synthetic\", \"width\": 320}",
           "name": "encoder-mode-selected",
           "status": "PASS"
         },
         {
-          "evidence": "accessUnits=292",
+          "evidence": "accessUnits=293",
           "name": "encoder-au-output",
           "status": "PASS"
         },
         {
-          "evidence": "keyframes=38",
+          "evidence": "keyframes=37",
           "name": "encoder-keyframe-output",
           "status": "PASS"
         },
         {
-          "evidence": "forcedKeyframeRequests=144 forcedKeyframes=10 maxForcedKeyframeDelayUs=194716",
+          "evidence": "forcedKeyframeRequests=155 forcedKeyframes=9 maxForcedKeyframeDelayUs=193130",
           "name": "encoder-forced-keyframe-response",
           "status": "PASS"
         },
         {
-          "evidence": "{\"accessUnits\": 292, \"bitrateChanges\": 32, \"currentBitrateBps\": 300000, \"currentFps\": 5, \"encoder\": \"x264\", \"encoderRecreates\": 7, \"forcedKeyframeRequests\": 144, \"forcedKeyframes\": 10, \"fpsChanges\": 6, \"framesEncoded\": 292, \"framesGenerated\": 292, \"height\": 180, \"keyframes\": 38, \"lastKeyframe\": \"false\", \"maxForcedKeyframeDelayUs\": 194716, \"mode\": \"synthetic\", \"width\": 320}",
+          "evidence": "{\"accessUnits\": 293, \"bitrateChanges\": 31, \"currentBitrateBps\": 300000, \"currentFps\": 5, \"encoder\": \"x264\", \"encoderRecreates\": 5, \"forcedKeyframeRequests\": 155, \"forcedKeyframes\": 9, \"fpsChanges\": 4, \"framesEncoded\": 293, \"framesGenerated\": 293, \"height\": 180, \"keyframes\": 37, \"lastKeyframe\": \"true\", \"maxForcedKeyframeDelayUs\": 193130, \"mode\": \"synthetic\", \"width\": 320}",
           "name": "encoder-source-shape",
           "status": "PASS"
         },
@@ -1288,7 +1288,7 @@
           "status": "PASS"
         },
         {
-          "evidence": "decodedFrames=101",
+          "evidence": "decodedFrames=96",
           "name": "qoe-decodes-frames",
           "status": "PASS"
         },
@@ -1303,115 +1303,115 @@
           "status": "PASS"
         },
         {
-          "evidence": "targetMin=300000 postClearMax=336560 postClearLast=300000 postClearSamples=30 recoverSeconds=15",
+          "evidence": "targetMin=300000 postClearMax=300000 postClearLast=300000 postClearSamples=30 recoverSeconds=15",
           "name": "weak-recovery-target-up",
-          "status": "PASS"
+          "status": "FAIL"
         },
         {
-          "evidence": "delayMs=111 decodedDelta=10 postClearSamples=32 clearEpochMs=1779553282840",
+          "evidence": "delayMs=130 decodedDelta=3 postClearSamples=32 clearEpochMs=1779555298331",
           "name": "qoe-recovery-first-frame-after-clear",
           "status": "PASS"
         }
       ],
       "metrics": {
-        "droppedFrames": 9,
+        "droppedFrames": 8,
         "encoder": {
-          "accessUnits": 292,
-          "bitrateChanges": 32,
+          "accessUnits": 293,
+          "bitrateChanges": 31,
           "currentBitrateBps": 300000,
           "currentFps": 5,
-          "encoderRecreates": 7,
-          "forcedKeyframeRequests": 144,
-          "forcedKeyframes": 10,
-          "fpsChanges": 6,
-          "framesEncoded": 292,
-          "framesGenerated": 292,
+          "encoderRecreates": 5,
+          "forcedKeyframeRequests": 155,
+          "forcedKeyframes": 9,
+          "fpsChanges": 4,
+          "framesEncoded": 293,
+          "framesGenerated": 293,
           "height": 180,
-          "keyframes": 38,
-          "maxForcedKeyframeDelayUs": 194716,
+          "keyframes": 37,
+          "maxForcedKeyframeDelayUs": 193130,
           "mode": "synthetic",
           "name": "x264",
           "samples": 60,
           "width": 320
         },
         "finalTargetBps": {
-          "avg": 532418.5666666667,
-          "max": 1709291.0,
+          "avg": 570019.9333333333,
+          "max": 1984529.0,
           "min": 300000.0
         },
-        "nack": 1742,
+        "nack": 1774,
         "playLossQ8": {
           "avg": 0.0,
           "max": 0.0,
           "min": 0.0
         },
         "playMetricSamples": 60,
-        "playOutputAu": 101,
-        "playRtcpBytesOut": 59112,
-        "playRtcpPacketsIn": 18,
-        "playRtcpPacketsOut": 2068,
+        "playOutputAu": 96,
+        "playRtcpBytesOut": 61220,
+        "playRtcpPacketsIn": 16,
+        "playRtcpPacketsOut": 2083,
         "playRtcpSendFailures": 0,
-        "playRtpPackets": 977,
+        "playRtpPackets": 954,
         "pli": 0,
         "publishTwccExtId": 5,
         "pushMetricSamples": 60,
-        "pushRtcpFeedbackBytesIn": 6760,
+        "pushRtcpFeedbackBytesIn": 7024,
         "pushRtcpFeedbackFailures": 0,
-        "pushRtcpFeedbackPacketsIn": 204,
-        "pushedAu": 296,
+        "pushRtcpFeedbackPacketsIn": 214,
+        "pushedAu": 298,
         "qoe": {
-          "accessUnitsIn": 101,
+          "accessUnitsIn": 96,
           "decodeErrors": 0,
-          "decodedFrames": 101,
+          "decodedFrames": 96,
           "enabled": true,
           "firstFrameDelayUs": 0,
           "freezeCount": 3,
           "height": 180,
-          "keyframesIn": 4,
-          "maxFrameGapUs": 10556788,
-          "outputFps": 6.79,
+          "keyframesIn": 6,
+          "maxFrameGapUs": 6037408,
+          "outputFps": 6.28,
           "recovery": {
-            "clearEpochMs": 1779553282840,
+            "clearEpochMs": 1779555298331,
             "enabled": true,
-            "postClearDecodedFramesDelta": 10,
-            "postClearFirstDecodedDelayMs": 111,
-            "postClearFirstDecodedEpochMs": 1779553282951,
+            "postClearDecodedFramesDelta": 3,
+            "postClearFirstDecodedDelayMs": 130,
+            "postClearFirstDecodedEpochMs": 1779555298461,
             "postClearSamples": 32,
-            "preClearDecodedFrames": 91
+            "preClearDecodedFrames": 93
           },
           "samples": 62,
           "width": 320
         },
         "retransmission": 0,
         "rttMs": {
-          "avg": 1464.6,
-          "max": 9391.0,
+          "avg": 1407.1,
+          "max": 10636.0,
           "min": 0.0
         },
         "sdkRuntime": {
           "play": {
             "alertsFiles": 1,
             "enabled": true,
-            "maxProcessTickGapUs": 93589,
+            "maxProcessTickGapUs": 32510,
             "metricsFiles": 1,
-            "processTickCountMax": 2825,
-            "receiverReportCountMax": 29,
+            "processTickCountMax": 2827,
+            "receiverReportCountMax": 28,
             "runtimeLogFiles": 1,
             "sessionMetricSamples": 30,
             "transportFailureCountMax": 0,
-            "transportFeedbackCountMax": 267
+            "transportFeedbackCountMax": 255
           },
           "push": {
             "alertsFiles": 1,
             "enabled": true,
-            "maxProcessTickGapUs": 89933,
+            "maxProcessTickGapUs": 30523,
             "metricsFiles": 1,
-            "processTickCountMax": 2795,
+            "processTickCountMax": 2793,
             "receiverReportCountMax": 17,
             "runtimeLogFiles": 1,
             "sessionMetricSamples": 30,
             "transportFailureCountMax": 0,
-            "transportFeedbackCountMax": 90
+            "transportFeedbackCountMax": 77
           }
         },
         "selectedTwccExtId": 5,
@@ -1421,36 +1421,47 @@
           "min": 0.0
         },
         "targetBps": {
-          "avg": 532418.5666666667,
-          "max": 1709291.0,
+          "avg": 570019.9333333333,
+          "max": 1984529.0,
           "min": 300000.0
         },
         "timing": {
-          "applyEpochMs": 1779553270805,
+          "applyEpochMs": 1779555286294,
           "case": "drop_recover",
-          "clearEpochMs": 1779553282840,
+          "clearEpochMs": 1779555298331,
           "durationSeconds": 12,
           "effectiveDurationSeconds": 30,
-          "endEpochMs": 1779553297852,
+          "endEpochMs": 1779555313363,
           "netemApplied": 1,
           "preSeconds": 3,
           "recoverSeconds": 15,
-          "startEpochMs": 1779553266736,
+          "startEpochMs": 1779555282248,
           "weakSeconds": 12
         }
       },
       "name": "drop_recover",
       "networkCondition": "5% loss + 600kbps, then recovery",
-      "status": "PASS"
+      "status": "FAIL"
     }
   ],
   "environment": {
+    "cmakePrefixPath": "/root/webrtc_qos_sdk/dist/linux-x86_64",
     "ffmpeg": "ffmpeg version 4.2.10 Copyright (c) 2000-2024 the FFmpeg developers",
     "kernel": "Linux iZ6we7qnlv44pdwt9mso62Z 5.10.134-18.al8.x86_64 #1 SMP Fri Dec 13 16:56:53 CST 2024 x86_64 x86_64 x86_64 GNU/Linux",
     "platform": "Linux-5.10.134-18.al8.x86_64-x86_64-with-alinux-3-OpenAnolis_Edition",
     "python": "3.6.8",
-    "tc": "/usr/sbin/tc"
+    "tc": "/usr/sbin/tc",
+    "webrtcQosSdkDir": "/root/webrtc_qos_sdk/dist/linux-x86_64/lib/cmake/WebRtcQosSdk",
+    "webrtcQosSdkDist": "/root/webrtc_qos_sdk/dist/linux-x86_64"
   },
+  "failedChecks": [
+    {
+      "case": "drop_recover",
+      "check": "weak-recovery-target-up",
+      "evidence": "targetMin=300000 postClearMax=300000 postClearLast=300000 postClearSamples=30 recoverSeconds=15",
+      "status": "FAIL"
+    }
+  ],
   "gates": {
     "encoderRuntime": {
       "evidence": {
@@ -1460,11 +1471,11 @@
         "baselineEncoderMode": "synthetic",
         "baselineEncoderName": "x264",
         "baselineEncoderSamples": 24,
-        "baselineForcedKeyframeRequests": 1,
+        "baselineForcedKeyframeRequests": 3,
         "baselineForcedKeyframes": 1,
         "baselineHeight": 180,
-        "baselineKeyframes": 12,
-        "baselineMaxForcedKeyframeDelayUs": 0,
+        "baselineKeyframes": 13,
+        "baselineMaxForcedKeyframeDelayUs": 20491,
         "baselineSkipReason": null,
         "baselineWidth": 320,
         "sourceMode": "synthetic"
@@ -1479,11 +1490,11 @@
     "nativeDecodeQoe": {
       "evidence": {
         "baselineDecodeErrors": 0,
-        "baselineDecodedFrames": 358,
+        "baselineDecodedFrames": 359,
         "baselineFirstFrameDelayUs": 0,
         "baselineFreezeCount": 0,
         "baselineHeight": 180,
-        "baselineOutputFps": 30.05,
+        "baselineOutputFps": 30.06,
         "baselineSamples": 28,
         "baselineSkipReason": null,
         "baselineWidth": 320,
@@ -1498,7 +1509,7 @@
     "qosMainline": {
       "evidence": {
         "baselinePlayRtcpPacketsOut": 243,
-        "baselinePushRtcpFeedbackPacketsIn": 130,
+        "baselinePushRtcpFeedbackPacketsIn": 129,
         "baselineSelectedTwccExtId": 5,
         "baselineSkipReason": null
       },
@@ -1511,20 +1522,20 @@
     },
     "recoveryFirstFrame": {
       "evidence": {
-        "clearEpochMs": 1779553282840,
-        "dropRecoverStatus": "PASS",
+        "clearEpochMs": 1779555298331,
+        "dropRecoverStatus": "FAIL",
         "enabled": true,
-        "postClearDecodedFramesDelta": 10,
-        "postClearFirstDecodedDelayMs": 111,
-        "postClearFirstDecodedEpochMs": 1779553282951,
+        "postClearDecodedFramesDelta": 3,
+        "postClearFirstDecodedDelayMs": 130,
+        "postClearFirstDecodedEpochMs": 1779555298461,
         "postClearSamples": 32,
-        "preClearDecodedFrames": 91
+        "preClearDecodedFrames": 93
       },
       "requirements": [
         "drop_recover case is attempted with QoE decode enabled",
         "first decoded frame after netem clear is observed within 15 seconds"
       ],
-      "status": "PASS"
+      "status": "FAIL"
     },
     "sdkRuntimeObservability": {
       "evidence": {
@@ -1536,7 +1547,7 @@
         "baselinePlayTransportFeedbackCountMax": 232,
         "baselinePushAlertsFiles": 1,
         "baselinePushMetricsFiles": 1,
-        "baselinePushReceiverReportCountMax": 9,
+        "baselinePushReceiverReportCountMax": 8,
         "baselinePushRuntimeEnabled": true,
         "baselinePushRuntimeLogFiles": 1,
         "baselinePushTransportFeedbackCountMax": 110,
@@ -1565,10 +1576,11 @@
       "status": "PASS"
     }
   },
-  "generatedAt": "2026-05-23T16:21:53Z",
-  "overallStatus": "PASS",
+  "generatedAt": "2026-05-23T16:55:28Z",
+  "overallStatus": "FAIL",
   "runConfig": {
     "buildDir": "build-webrtc-qos-plain",
+    "buildDirAbs": "/root/mediasoup-cpp/build-webrtc-qos-plain",
     "cases": [
       "baseline",
       "delay_100ms",
@@ -1595,14 +1607,20 @@
       "inputFormat": null,
       "width": 640
     },
-    "workerBin": "./mediasoup-worker"
+    "workerBin": "./mediasoup-worker",
+    "workerBinAbs": "/root/mediasoup-cpp/mediasoup-worker"
   },
-  "runDir": "/tmp/webrtc-qos-plain-p2-fullweak-recovery-first-frame/20260523T161912Z",
+  "runDir": "/tmp/webrtc-qos-plain-p2-fullweak-p2m9-final/20260523T165248Z",
   "schemaVersion": 1,
+  "sourceRevision": {
+    "gitBranch": "main",
+    "gitCommit": "8279e23d70f63d2dd0f29eef8d850ca5a0d9d2fb"
+  },
   "summary": {
     "attemptedCases": 5,
-    "failedCases": 0,
-    "passedCases": 5,
+    "failedCases": 1,
+    "failedChecks": 1,
+    "passedCases": 4,
     "skippedCases": 0
   }
 }
