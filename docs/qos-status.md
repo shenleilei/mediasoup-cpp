@@ -19,6 +19,7 @@
 - browser uplink 主 gate：`55 case`；当前增量验证为原 `43 case` 主 gate `PASS` + `GD1-GD12` targeted `PASS`
 - Linux plain-client matrix：`55 case`；当前增量验证为原 `43 case` 主 gate `PASS` + `GD1-GD12` targeted `PASS`
 - downlink 当前范围：subscriber receive control + zero-demand publisher pause/resume coordination
+- WebRTC QoS Plain P2：native synthetic+QoE 控制面短测已覆盖 baseline/delay/loss/bandwidth/recovery；P2-M8b 把 `drop_recover` 清网后 15 秒内 decoded frames 增长列为独立恢复首帧门禁
 - `dynacast` 与 room-level global bitrate budgeting 仍是后续能力，不计入当前已完成口径
 
 ## 2. 按主题查看
@@ -42,6 +43,8 @@
   [plain-client-qos-parity-checklist.md](./plain-client-qos-parity-checklist.md)
 - full matrix：
   [plain-client-qos-case-results.md](./plain-client-qos-case-results.md)
+- WebRTC QoS Plain P2 执行方案：
+  [webrtc-qos-push-play-client-p2-design_cn.md](./webrtc-qos-push-play-client-p2-design_cn.md)
 
 ### 2.3 downlink
 

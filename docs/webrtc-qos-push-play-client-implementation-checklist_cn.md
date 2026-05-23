@@ -299,13 +299,14 @@ scripts/run_webrtc_qos_plain_p2_smoke.sh \
 | delay netem | PASS | RTT avg/max `109.58/242ms`，`decodedFrames=333`、`decodeErrors=0`、`NACK=249` |
 | loss netem | PASS | `loss_2pct` 下 `NACK=51`、`pushRtcpFeedbackPacketsIn=157`、`decodeErrors=0` |
 | bandwidth netem | PASS | `bandwidth_600k` 下 targetBps min/max `300000/1693914`、`droppedFrames=3`、`decodeErrors=0` |
-| recovery netem | PASS | `drop_recover` 下 targetBps min/max `300000/2023706`，清网后 15 秒窗口内开始回升，`decodeErrors=0` |
+| recovery control-plane netem | PASS | `drop_recover` 下 targetBps min/max `300000/2023706`，清网后 15 秒窗口内开始回升，`decodeErrors=0` |
+| recovery first-frame gate | TODO | P2-M8b 要求 `drop_recover` 清网后 15 秒内 `decodedFrames` 增长；只看到 targetBps 回升不再等同于端到端画面恢复 PASS |
 
 结论：
 
 - P2-M1d、P2-M2、P2-M3 的本地 baseline 主链路已闭环：TWCC 协商、play 反馈输出、push 反馈输入、SDK runtime 文件和 SDK counter 都可观测。
 - P2-M5/P2-M6 的 synthetic+x264 最小切片已闭环：encoder AU、keyframe、bitrate/fps、forced-IDR runtime metrics 和 smoke gate 都可观测；MP4 decode-loop baseline 已补充闭环。
-- P2-M8 的 native decode/QoE baseline 最小切片已闭环：decoded frames、decode errors、first frame、freeze、output fps 都写入日志和报告。
+- P2-M8 的 native decode/QoE baseline 最小切片已闭环：decoded frames、decode errors、first frame、freeze、output fps 都写入日志和报告；P2-M8b 仍需把恢复后首帧作为独立 gate 跑到 PASS。
 - P2-M3 已覆盖 baseline、delay、loss、bandwidth、recovery 真实 netem 短测；browser receiver 自动化已覆盖到 codec capability diagnostics，本机浏览器画面因缺 H264 capability 仍未签 PASS；V4L2 code/CLI/smoke SKIP gate 已覆盖，本机缺设备不能签 camera runtime PASS。
 
 ## 4. 版本差异
@@ -437,5 +438,5 @@ scripts/run_webrtc_qos_plain_p2_smoke.sh \
 以下未在本地短 smoke 中覆盖或未通过：
 
 - browser receiver 可看到 push 画面：自动化已落地，但当前本机 headless Chromium 缺 H264 receive capability，只能环境 `SKIP`。
-- 恢复时首帧时间的专项 browser/输入源验证。
+- 恢复时首帧时间：P2-M8b 已定义为硬门禁，要求 native `drop_recover` 清网后 15 秒内 `decodedFrames` 增长；browser/真实输入源后续也要按同一口径扩展。
 - V4L2 真实摄像头 runtime PASS：source/CLI/smoke SKIP gate 已落地，但当前机器无 `/dev/video*`，需要在有设备机器上补 PASS 报告。
