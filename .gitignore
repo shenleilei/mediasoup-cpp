@@ -13,7 +13,7 @@ build-*/
 *.gcda
 
 # Generated files (can regenerate from fbs/)
-generated/
+/generated/
 
 # mediasoup-worker binary (download separately)
 mediasoup-worker

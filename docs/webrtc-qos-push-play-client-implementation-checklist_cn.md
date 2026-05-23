@@ -1,6 +1,6 @@
 # WebRTC QoS SDK Plain 推拉流客户端实现验收清单
 
-> 状态：P1 已完成本地短链路验收；P2 已完成 consumer TWCC ext 修复、adapter RTCP 边界计数和 video-only publish。浏览器画面、弱网 smoke、SDK play 周期性 RR/TWCC 输出仍需后续验证。
+> 状态：P1 已完成本地短链路验收；P2 已完成 consumer TWCC ext 修复、adapter RTCP 边界计数、video-only publish 和 P2 smoke 报告脚本。浏览器画面、真实弱网 smoke、SDK play 周期性 RR/TWCC 输出仍需后续验证。
 
 ## 1. 已实现项
 
@@ -30,6 +30,7 @@
 | push RTCP feedback 输入计数 | `WebRtcQosPushRuntime` 记录 `rtcpFeedbackPacketsIn/BytesIn/Failures` | P2 smoke：`rtcpFeedbackPacketsIn=86 ... Failures=0` |
 | play RTCP 输出计数 | `WebRtcQosPlayRuntime` 记录 `rtcpPacketsOut/BytesOut/SendFailures` | P2 smoke 字段存在；当前 SDK baseline 输出为 0，列为 P2 后续项 |
 | video-only plain publish | 服务端支持 `enableAudio=false`；新 push 默认不发 `audioSsrc`；旧请求默认仍启用 audio | P2-M4 smoke：`audioEnabled=false` 且 play 只收到 video consumer |
+| P2 smoke 报告脚本 | `scripts/run_webrtc_qos_plain_p2_smoke.sh` 统一启动 SFU/push/play/netem 并生成报告 | `docs/generated/webrtc-qos-plain-p2-smoke-report.{json,md}` |
 
 ## 2. 当前验证命令
 
@@ -55,8 +56,16 @@ g++ -std=c++17 -Isrc -I. -Ithird_party/nlohmann_json/include \
 rg -n "client/qos|sendsidebwe|ccutils|RtcpHandler|NetworkThread|SenderTransportController|H264Packetizer|Vp8Packetizer|PublisherQosController|PacketizeAnnexB" \
   client/webrtc_qos_plain_client CMakeLists.txt
 
+MEDIASOUP_TEST_SFU_BIN=./build-webrtc-qos-plain/mediasoup-sfu \
+MEDIASOUP_TEST_WORKER_BIN=./mediasoup-worker \
 ./build-webrtc-qos-p2/mediasoup_qos_integration_tests \
   --gtest_filter='QosIntegrationTest.PlainPublishSupportsVideoOnlyAndKeepsLegacyAudioDefault:QosIntegrationTest.PlainPublishReplacesOldTransportAndUsesBaselineCodec:QosIntegrationTest.PlainPublishRejectsDuplicateVideoSsrcs'
+
+scripts/run_webrtc_qos_plain_p2_smoke.sh \
+  --cases baseline,delay_100ms \
+  --duration-seconds 6 \
+  --artifact-root /tmp/webrtc-qos-plain-p2-smoke-final \
+  --report-dir docs/generated
 ```
 
 当前结果：
@@ -64,7 +73,8 @@ rg -n "client/qos|sendsidebwe|ccutils|RtcpHandler|NetworkThread|SenderTransportC
 - CMake configure 通过。
 - push/play 两个 target 编译通过。
 - ORTC standalone targeted test 通过。
-- P2-M4 targeted integration test 通过。
+- P2-M4 targeted integration test 通过；非默认 build 目录下通过 `MEDIASOUP_TEST_SFU_BIN` / `MEDIASOUP_TEST_WORKER_BIN` 指定测试 SFU 和 worker。
+- P2 smoke 脚本短测通过：baseline 传输链路 PASS，未启用 netem 的 weak case 正确标记 SKIP。
 - 旧实现依赖门禁没有命中代码；只命中 `client/webrtc_qos_plain_client/README.md` 的说明文本。
 
 ## 3. P1 动态 smoke 结果（历史）
@@ -195,6 +205,38 @@ push/play：
 - P2-M4 已完成：新 push 默认 `enableAudio=false`，服务端不再创建 dummy audio producer。
 - 旧请求不传 `enableAudio` 时仍默认启用 audio，保持旧 plain-client 兼容。
 
+## 3.3 P2-M3 smoke 报告脚本结果
+
+当前报告：
+
+- Markdown：[generated/webrtc-qos-plain-p2-smoke-report.md](./generated/webrtc-qos-plain-p2-smoke-report.md)
+- JSON：[generated/webrtc-qos-plain-p2-smoke-report.json](./generated/webrtc-qos-plain-p2-smoke-report.json)
+
+本地短测命令：
+
+```bash
+scripts/run_webrtc_qos_plain_p2_smoke.sh \
+  --cases baseline,delay_100ms \
+  --duration-seconds 6 \
+  --artifact-root /tmp/webrtc-qos-plain-p2-smoke-final \
+  --report-dir docs/generated
+```
+
+当前结果：
+
+| 验收点 | 结果 | 证据 |
+|---|---:|---|
+| baseline 传输链路 | PASS | `pushedAu=90`、`outputAu=90`、`selectedTwccExtId=5` |
+| video-only | PASS | 报告中无 audio consumer，push `audioEnabled=false` |
+| push RTCP feedback 输入 | PASS | `pushRtcpFeedbackPacketsIn=66` |
+| play RTCP 输出 | FAIL | `playRtcpPacketsOut=0`，P2-M1d 未完成 |
+| 弱网 coverage | SKIP | 未传 `--enable-netem`，`delay_100ms` 不计 PASS |
+
+结论：
+
+- P2-M3 脚本入口和报告制品已完成，可以持续产出 PASS/FAIL/SKIP。
+- 当前结果不能签收完整 P2：QoS 主链路仍卡在 SDK play 周期性 RR/TWCC 输出；真实弱网 case 需要带 `--enable-netem` 在可控环境运行。
+
 ## 4. 版本差异
 
 当前 `/root/webrtc_qos_sdk/dist/linux-x86_64` 发布包头文件没有暴露
@@ -214,6 +256,6 @@ push/play：
 以下未在本地短 smoke 中覆盖或未通过：
 
 - browser receiver 可看到 push 画面。
-- netem 弱网 smoke：延迟、丢包、恢复。
+- netem 弱网 smoke：脚本已支持；当前机器未启用 `--enable-netem`，延迟、丢包、恢复 case 仍未实际签收。
 - SDK play 周期性 RR/TWCC 输出：当前 P2 smoke 中 `rtcpPacketsOut=0`，QoS 主链路不能签收。
 - 当前 SDK dist 包未暴露 runtime 文件配置字段，因此 SDK 内部 metrics/alerts 文件输出未覆盖；adapter spdlog 文件已覆盖。

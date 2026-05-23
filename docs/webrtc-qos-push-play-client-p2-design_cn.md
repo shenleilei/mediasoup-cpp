@@ -777,6 +777,13 @@ scripts/run_webrtc_qos_plain_p2_smoke.sh \
   --report-dir docs/generated
 ```
 
+当前脚本实现状态：
+
+- 默认安全模式只运行 `baseline`，弱网 case 在未传 `--enable-netem` 时写为 `SKIP`，不计 PASS。
+- 需要真实弱网验证时显式传 `--enable-netem`；脚本会预检 `tc`、root/CAP_NET_ADMIN 和目标网卡。
+- 短测报告固定写入 `docs/generated/webrtc-qos-plain-p2-smoke-report.{json,md}`。
+- 当前机器短测结果：`baseline PASS`，`delay_100ms SKIP`，`qosMainline FAIL`，原因是 SDK play 侧 `rtcpPacketsOut=0`，仍需 P2-M1d。
+
 如果脚本名后续调整，必须在本文档和 `docs/README.md` 同步更新。
 
 ### 13.1 功能验收
