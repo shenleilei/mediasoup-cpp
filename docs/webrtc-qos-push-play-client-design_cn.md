@@ -969,7 +969,10 @@ mediasoup-sfu
 
 ## 21. 后续扩展
 
-第二期可考虑：
+原第二期和第三期已合并为一个“大第二期”，详见
+[webrtc-qos-push-play-client-p2-design_cn.md](./webrtc-qos-push-play-client-p2-design_cn.md)。
+
+大第二期覆盖：
 
 - 实时 H264 encoder。
 - `GetTrackEncoderAdaptation()` 驱动 bitrate/fps/keyframe。
