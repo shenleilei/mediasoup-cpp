@@ -10,6 +10,7 @@
 #include "common/PlainUdpTransport.h"
 #include "push/H264AnnexBSource.h"
 #include "push/PushSignalingSession.h"
+#include "push/RealtimeH264Source.h"
 #include "webrtc_qos/video_push_client.h"
 
 namespace webrtc_qos_plain {

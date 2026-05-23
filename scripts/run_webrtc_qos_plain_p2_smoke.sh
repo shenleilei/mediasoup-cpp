@@ -8,6 +8,10 @@ WORKER_BIN="$ROOT_DIR/mediasoup-worker"
 REPORT_DIR="$ROOT_DIR/docs/generated"
 ARTIFACT_ROOT="${TMPDIR:-/tmp}/webrtc-qos-plain-p2-smoke"
 INPUT_FILE=""
+SOURCE_MODE="copy"
+SYNTHETIC_WIDTH=320
+SYNTHETIC_HEIGHT=180
+SYNTHETIC_FPS=15
 CASES="baseline,delay_100ms,loss_2pct,loss_5pct,bandwidth_600k,drop_recover"
 DURATION_SECONDS=10
 BASE_PORT=33131
@@ -31,6 +35,10 @@ Options:
   --report-dir <path>        Report output directory. Default: docs/generated.
   --artifact-root <path>     Runtime logs/artifacts root. Default: /tmp/webrtc-qos-plain-p2-smoke.
   --input <path>             H264 MP4 input. If omitted, a short synthetic input is generated.
+  --source <copy|synthetic>   Push source mode. copy uses --input; synthetic uses x264 realtime source.
+  --synthetic-width <px>      Synthetic source width. Default: 320.
+  --synthetic-height <px>     Synthetic source height. Default: 180.
+  --synthetic-fps <n>         Synthetic source fps. Default: 15.
   --base-port <port>         First SFU signaling port. Default: 33131.
   --play-base-port <port>    First play UDP listen port. Default: 43131.
   --server-ip <ip>           SFU signaling IP. Default: 127.0.0.1.
@@ -70,6 +78,14 @@ while [[ $# -gt 0 ]]; do
 		--artifact-root=*) ARTIFACT_ROOT="${1#*=}"; shift ;;
 		--input) require_arg "$1" "${2:-}"; INPUT_FILE="$2"; shift 2 ;;
 		--input=*) INPUT_FILE="${1#*=}"; shift ;;
+		--source) require_arg "$1" "${2:-}"; SOURCE_MODE="$2"; shift 2 ;;
+		--source=*) SOURCE_MODE="${1#*=}"; shift ;;
+		--synthetic-width) require_arg "$1" "${2:-}"; SYNTHETIC_WIDTH="$2"; shift 2 ;;
+		--synthetic-width=*) SYNTHETIC_WIDTH="${1#*=}"; shift ;;
+		--synthetic-height) require_arg "$1" "${2:-}"; SYNTHETIC_HEIGHT="$2"; shift 2 ;;
+		--synthetic-height=*) SYNTHETIC_HEIGHT="${1#*=}"; shift ;;
+		--synthetic-fps) require_arg "$1" "${2:-}"; SYNTHETIC_FPS="$2"; shift 2 ;;
+		--synthetic-fps=*) SYNTHETIC_FPS="${1#*=}"; shift ;;
 		--base-port) require_arg "$1" "${2:-}"; BASE_PORT="$2"; shift 2 ;;
 		--base-port=*) BASE_PORT="${1#*=}"; shift ;;
 		--play-base-port) require_arg "$1" "${2:-}"; PLAY_BASE_PORT="$2"; shift 2 ;;
@@ -115,7 +131,12 @@ RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 RUN_DIR="$ARTIFACT_ROOT/$RUN_ID"
 mkdir -p "$RUN_DIR"
 
-if [[ -z "$INPUT_FILE" ]]; then
+if [[ "$SOURCE_MODE" != "copy" && "$SOURCE_MODE" != "synthetic" ]]; then
+	echo "--source must be copy or synthetic" >&2
+	exit 2
+fi
+
+if [[ "$SOURCE_MODE" == "copy" && -z "$INPUT_FILE" ]]; then
 	INPUT_FILE="$ARTIFACT_ROOT/input.mp4"
 fi
 
@@ -349,17 +370,28 @@ run_case() {
 
 	sleep 0.7
 
-	setsid "$PUSH_BIN" \
-		--server-ip="$SERVER_IP" \
-		--server-port="$port" \
-		--room="$room" \
-		--peer="$push_peer" \
-		--input="$INPUT_FILE" \
-		--loop-input=true \
-		--video-ssrc="$((11111111 + index))" \
-		--media-remote-ip="$MEDIA_IP" \
-		--log-dir="$case_dir/push" \
-		>"$case_dir/push.stdout.log" 2>&1 &
+	local push_args=(
+		"$PUSH_BIN"
+		--server-ip="$SERVER_IP"
+		--server-port="$port"
+		--room="$room"
+		--peer="$push_peer"
+		--video-ssrc="$((11111111 + index))"
+		--media-remote-ip="$MEDIA_IP"
+		--log-dir="$case_dir/push"
+	)
+	if [[ "$SOURCE_MODE" == "synthetic" ]]; then
+		push_args+=(
+			--input-synthetic=true
+			--encoder=x264
+			--synthetic-width="$SYNTHETIC_WIDTH"
+			--synthetic-height="$SYNTHETIC_HEIGHT"
+			--synthetic-fps="$SYNTHETIC_FPS"
+		)
+	else
+		push_args+=(--input="$INPUT_FILE" --loop-input=true)
+	fi
+	setsid "${push_args[@]}" >"$case_dir/push.stdout.log" 2>&1 &
 	push_pid=$!
 
 	if case_requires_netem "$case_name"; then
@@ -390,7 +422,7 @@ run_case() {
 render_report() {
 	local report_json="$REPORT_DIR/webrtc-qos-plain-p2-smoke-report.json"
 	local report_md="$REPORT_DIR/webrtc-qos-plain-p2-smoke-report.md"
-	python3 - "$RUN_DIR" "$REPORT_DIR" "$report_json" "$report_md" "$CASES" "$DURATION_SECONDS" "$BUILD_DIR" "$WORKER_BIN" "$INPUT_FILE" "$ENABLE_NETEM" "$NETEM_DEV" "$STRICT" <<'PY'
+	python3 - "$RUN_DIR" "$REPORT_DIR" "$report_json" "$report_md" "$CASES" "$DURATION_SECONDS" "$BUILD_DIR" "$WORKER_BIN" "$INPUT_FILE" "$ENABLE_NETEM" "$NETEM_DEV" "$STRICT" "$SOURCE_MODE" "$SYNTHETIC_WIDTH" "$SYNTHETIC_HEIGHT" "$SYNTHETIC_FPS" <<'PY'
 import datetime
 import glob
 import json
@@ -410,6 +442,10 @@ input_file = sys.argv[9]
 enable_netem = sys.argv[10] == '1'
 netem_dev = sys.argv[11]
 strict = sys.argv[12] == '1'
+source_mode = sys.argv[13]
+synthetic_width = int(sys.argv[14])
+synthetic_height = int(sys.argv[15])
+synthetic_fps = int(sys.argv[16])
 
 ANSI_RE = re.compile(r'\x1b\[[0-9;]*m')
 
@@ -494,6 +530,34 @@ def parse_play_metrics(text):
             'droppedRetransmission': int(match.group(10)),
             'rttMs': float(match.group(11)),
             'lossQ8': int(match.group(12)),
+        })
+    return rows
+
+def parse_encoder_metrics(text):
+    rows = []
+    pattern = re.compile(
+        r'encoder_metrics mode=(\w+) encoder=(\w+) currentBitrateBps=(\d+) '
+        r'currentFps=(\d+) width=(\d+) height=(\d+) framesGenerated=(\d+) '
+        r'framesEncoded=(\d+) accessUnits=(\d+) keyframes=(\d+) '
+        r'encoderRecreates=(\d+) bitrateChanges=(\d+) fpsChanges=(\d+) '
+        r'forcedKeyframeRequests=(\d+) lastKeyframe=(\w+)')
+    for match in pattern.finditer(text):
+        rows.append({
+            'mode': match.group(1),
+            'encoder': match.group(2),
+            'currentBitrateBps': int(match.group(3)),
+            'currentFps': int(match.group(4)),
+            'width': int(match.group(5)),
+            'height': int(match.group(6)),
+            'framesGenerated': int(match.group(7)),
+            'framesEncoded': int(match.group(8)),
+            'accessUnits': int(match.group(9)),
+            'keyframes': int(match.group(10)),
+            'encoderRecreates': int(match.group(11)),
+            'bitrateChanges': int(match.group(12)),
+            'fpsChanges': int(match.group(13)),
+            'forcedKeyframeRequests': int(match.group(14)),
+            'lastKeyframe': match.group(15),
         })
     return rows
 
@@ -605,6 +669,7 @@ def parse_case(case_name):
 
     push_metrics = parse_push_metrics(push_text)
     play_metrics = parse_play_metrics(play_text)
+    encoder_metrics = parse_encoder_metrics(push_text)
     push_sdk_runtime_enabled = re.search(r'sdk_runtime_files role=push enabled=true', push_text) is not None
     play_sdk_runtime_enabled = re.search(r'sdk_runtime_files role=play enabled=true', play_text) is not None
     push_sdk_runtime = parse_sdk_runtime(case_dir, 'push')
@@ -624,6 +689,7 @@ def parse_case(case_name):
     max_nack = max([m['nack'] for m in play_metrics] or [0])
     max_pli = max([m['pli'] for m in play_metrics] or [0])
     max_retransmission = max([m['retransmission'] for m in play_metrics] or [0])
+    last_encoder = encoder_metrics[-1] if encoder_metrics else {}
 
     warning_lines = []
     ignored_warning_lines = []
@@ -659,6 +725,14 @@ def parse_case(case_name):
         make_check('sdk-push-rtcp-counted', push_sdk_runtime['transportFeedbackCountMax'] > 0 and push_sdk_runtime['receiverReportCountMax'] > 0, 'twcc={} rr={}'.format(push_sdk_runtime['transportFeedbackCountMax'], push_sdk_runtime['receiverReportCountMax'])),
         make_check('harness-no-failure', not bool(harness_failure), harness_failure or 'ok'),
     ]
+
+    if source_mode == 'synthetic':
+        checks.extend([
+            make_check('encoder-metrics-present', bool(encoder_metrics), 'samples={}'.format(len(encoder_metrics))),
+            make_check('encoder-au-output', bool(last_encoder.get('accessUnits', 0) > 0), 'accessUnits={}'.format(last_encoder.get('accessUnits'))),
+            make_check('encoder-keyframe-output', bool(last_encoder.get('keyframes', 0) > 0), 'keyframes={}'.format(last_encoder.get('keyframes'))),
+            make_check('encoder-source-shape', last_encoder.get('width') == synthetic_width and last_encoder.get('height') == synthetic_height and last_encoder.get('currentFps', 0) > 0 and last_encoder.get('currentBitrateBps', 0) > 0, json.dumps(last_encoder, sort_keys=True)),
+        ])
 
     if case_name != 'baseline':
         if case_name == 'delay_100ms':
@@ -698,6 +772,23 @@ def parse_case(case_name):
         'retransmission': max_retransmission,
         'pushMetricSamples': len(push_metrics),
         'playMetricSamples': len(play_metrics),
+        'encoder': {
+            'mode': last_encoder.get('mode'),
+            'name': last_encoder.get('encoder'),
+            'samples': len(encoder_metrics),
+            'currentBitrateBps': last_encoder.get('currentBitrateBps'),
+            'currentFps': last_encoder.get('currentFps'),
+            'width': last_encoder.get('width'),
+            'height': last_encoder.get('height'),
+            'framesGenerated': last_encoder.get('framesGenerated'),
+            'framesEncoded': last_encoder.get('framesEncoded'),
+            'accessUnits': last_encoder.get('accessUnits'),
+            'keyframes': last_encoder.get('keyframes'),
+            'encoderRecreates': last_encoder.get('encoderRecreates'),
+            'bitrateChanges': last_encoder.get('bitrateChanges'),
+            'fpsChanges': last_encoder.get('fpsChanges'),
+            'forcedKeyframeRequests': last_encoder.get('forcedKeyframeRequests'),
+        },
         'sdkRuntime': {
             'push': {
                 'enabled': push_sdk_runtime_enabled,
@@ -781,6 +872,32 @@ sdk_observability_pass = bool(
     baseline_play_sdk.get('transportFeedbackCountMax', 0) > 0 and
     baseline_play_sdk.get('receiverReportCountMax', 0) > 0)
 
+baseline_encoder = baseline.get('metrics', {}).get('encoder', {}) if baseline else {}
+encoder_gate_evidence = {
+    'sourceMode': source_mode,
+    'baselineEncoderMode': baseline_encoder.get('mode'),
+    'baselineEncoderName': baseline_encoder.get('name'),
+    'baselineEncoderSamples': baseline_encoder.get('samples'),
+    'baselineAccessUnits': baseline_encoder.get('accessUnits'),
+    'baselineKeyframes': baseline_encoder.get('keyframes'),
+    'baselineCurrentBitrateBps': baseline_encoder.get('currentBitrateBps'),
+    'baselineCurrentFps': baseline_encoder.get('currentFps'),
+    'baselineWidth': baseline_encoder.get('width'),
+    'baselineHeight': baseline_encoder.get('height'),
+}
+encoder_gate_pass = (
+    True if source_mode != 'synthetic' else bool(
+        baseline and
+        baseline_encoder.get('mode') == 'synthetic' and
+        baseline_encoder.get('name') == 'x264' and
+        baseline_encoder.get('samples', 0) > 0 and
+        baseline_encoder.get('accessUnits', 0) > 0 and
+        baseline_encoder.get('keyframes', 0) > 0 and
+        baseline_encoder.get('width') == synthetic_width and
+        baseline_encoder.get('height') == synthetic_height and
+        baseline_encoder.get('currentFps', 0) > 0 and
+        baseline_encoder.get('currentBitrateBps', 0) > 0))
+
 gates = {
     'qosMainline': {
         'status': 'PASS' if qos_gate_pass else 'FAIL',
@@ -799,6 +916,14 @@ gates = {
             'SDK play metrics count generated TWCC and RR',
         ],
         'evidence': sdk_observability_evidence,
+    },
+    'encoderRuntime': {
+        'status': 'PASS' if encoder_gate_pass else 'FAIL',
+        'requirements': [
+            'synthetic source uses x264 realtime encoder when requested',
+            'encoder metrics expose source shape, fps, bitrate, AU count, keyframe count',
+        ],
+        'evidence': encoder_gate_evidence,
     },
     'weakNetworkCoverage': {
         'status': 'PASS' if not skipped_cases and any(c['name'] != 'baseline' for c in attempted) else 'SKIP',
@@ -828,6 +953,12 @@ report = {
         'buildDir': build_dir,
         'workerBin': worker_bin,
         'inputFile': input_file,
+        'sourceMode': source_mode,
+        'synthetic': {
+            'width': synthetic_width,
+            'height': synthetic_height,
+            'fps': synthetic_fps,
+        },
         'enableNetem': enable_netem,
         'netemDev': netem_dev,
         'strict': strict,
@@ -878,6 +1009,7 @@ lines.append('| Generated At | `{}` |'.format(report['generatedAt']))
 lines.append('| Run Dir | `{}` |'.format(run_dir))
 lines.append('| Duration Seconds | `{}` |'.format(duration_seconds))
 lines.append('| Netem | `{}` on `{}` |'.format('enabled' if enable_netem else 'disabled', netem_dev))
+lines.append('| Source Mode | `{}` |'.format(source_mode))
 lines.append('| Input | `{}` |'.format(input_file))
 lines.append('')
 lines.append('## Gates')
@@ -889,12 +1021,12 @@ for name, gate in gates.items():
 lines.append('')
 lines.append('## Cases')
 lines.append('')
-lines.append('| Case | Status | Network | pushedAu | outputAu | RTP in | push RTCP in | play RTCP out | TWCC ext | RTT min/avg/max | Loss min/avg/max | targetBps min/avg/max | NACK/PLI/RTX | Notes |')
-lines.append('|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|')
+lines.append('| Case | Status | Network | pushedAu | outputAu | RTP in | push RTCP in | play RTCP out | TWCC ext | Encoder AU/keyframes | RTT min/avg/max | Loss min/avg/max | targetBps min/avg/max | NACK/PLI/RTX | Notes |')
+lines.append('|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|')
 for case in cases:
     metrics = case.get('metrics', {})
     if case['status'] == 'SKIP':
-        lines.append('| `{}` | `{}` | {} | - | - | - | - | - | - | - | - | - | - | {} |'.format(
+        lines.append('| `{}` | `{}` | {} | - | - | - | - | - | - | - | - | - | - | - | {} |'.format(
             case['name'], case['status'], case.get('networkCondition', '-'), case.get('skipReason', '-')))
         continue
     twcc = metrics.get('selectedTwccExtId') or metrics.get('publishTwccExtId')
@@ -904,7 +1036,11 @@ for case in cases:
             notes.append('{}: {}'.format(check.get('name'), check.get('evidence')))
     if case.get('alerts', {}).get('count'):
         notes.append('alerts={}'.format(case['alerts']['count']))
-    lines.append('| `{}` | `{}` | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {}/{}/{} | {} |'.format(
+    encoder = metrics.get('encoder') or {}
+    encoder_summary = '-'
+    if encoder.get('accessUnits') is not None:
+        encoder_summary = '{}/{}'.format(fmt(encoder.get('accessUnits')), fmt(encoder.get('keyframes')))
+    lines.append('| `{}` | `{}` | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {}/{}/{} | {} |'.format(
         case['name'],
         case['status'],
         case.get('networkCondition', '-'),
@@ -914,6 +1050,7 @@ for case in cases:
         fmt(metrics.get('pushRtcpFeedbackPacketsIn')),
         fmt(metrics.get('playRtcpPacketsOut')),
         fmt(twcc),
+        encoder_summary,
         fmt_triplet(metrics.get('rttMs')),
         fmt_triplet(metrics.get('senderLossFraction')),
         fmt_triplet(metrics.get('targetBps')),
@@ -933,6 +1070,7 @@ lines.append('- `PASS` case means SFU/push/play transport smoke met its checks.'
 lines.append('- `SKIP` means the case was not verified and must not be counted as PASS.')
 lines.append('- `qosMainline=PASS` means TWCC negotiation, push RTCP feedback input, and play RTCP feedback output are all observable.')
 lines.append('- `sdkRuntimeObservability=PASS` means push/play SDK runtime log, metrics, alerts files exist and SDK RR/TWCC counters are non-zero.')
+lines.append('- `encoderRuntime=PASS` means requested synthetic x264 mode produced encoded H264 access units and keyframes with observable encoder metrics.')
 lines.append('- `weakNetworkCoverage=SKIP` means tc netem cases were intentionally not run; use `--enable-netem` when the host permits network emulation.')
 
 with open(report_md, 'w', encoding='utf-8') as f:
@@ -948,7 +1086,9 @@ if strict and overall != 'PASS':
 PY
 }
 
-generate_input_if_needed
+if [[ "$SOURCE_MODE" == "copy" ]]; then
+	generate_input_if_needed
+fi
 
 IFS=',' read -r -a CASE_LIST <<<"$CASES"
 if [[ "${#CASE_LIST[@]}" -eq 0 ]]; then
