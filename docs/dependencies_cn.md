@@ -3,7 +3,7 @@
 > 文档性质
 >
 > 这份文档回答的是：
-> - 当前仓库构建 `mediasoup-sfu` / `plain-client` / 测试 / harness 分别依赖什么
+> - 当前仓库构建 `mediasoup-sfu` / WebRTC QoS Plain push/play client / 测试 / harness 分别依赖什么
 > - 哪些依赖是系统安装，哪些是仓库 vendored，哪些是运行时才需要
 > - 当前 `CMake` / `setup.sh` 如何解析这些依赖
 
@@ -13,7 +13,8 @@
 
 | 层级 | 典型项 | 来源 | 用途 |
 |---|---|---|---|
-| 系统构建依赖 | `cmake`、`g++`、`pkg-config`、OpenSSL、FFmpeg、hiredis | OS 包管理器 | 编译 SFU、plain-client、测试 |
+| 系统构建依赖 | `cmake`、`g++`、`pkg-config`、OpenSSL、FFmpeg、hiredis | OS 包管理器 | 编译 SFU、WebRTC QoS Plain client、测试 |
+| 外部 SDK | `webrtc_qos_sdk` | 本地安装或独立构建产物 | 编译 `webrtc-qos-plain-push-client` / `webrtc-qos-plain-play-client` |
 | 仓库内 vendored 依赖 | `flatbuffers`、`uWebSockets`、`spdlog`、`nlohmann/json`、`ip2region`、`googletest` | `third_party/` | 编译期直接引用或随仓库构建 |
 | 运行时外部依赖 | `mediasoup-worker`、Redis、`ip2region.xdb` | 下载 / 本地部署 | 启动 SFU、多节点、Geo 路由 |
 | 测试 / harness 依赖 | Node.js、`esbuild`、`puppeteer-core` | `npm` | 浏览器 / QoS harness、矩阵回归 |
@@ -23,9 +24,9 @@
 默认的 `./setup.sh` 和常见本地构建会同时构建：
 
 - `build/mediasoup-sfu`
-- `client/build/plain-client`
 - `build/mediasoup_tests`
-- `build/mediasoup_thread_integration_tests`
+- `build/mediasoup_qos_unit_tests`
+- 如果 CMake 能找到 `WebRtcQosSdk`，还会构建 `webrtc-qos-plain-push-client` / `webrtc-qos-plain-play-client`
 
 因此，“当前仓库要能完整构建”这一口径下，下面这些系统库都应视为必需：
 
@@ -78,8 +79,8 @@
 
 说明：
 
-- `libavdevice` 对当前 threaded `plain-client` 不是“纯可选”库，因为 `client/SourceWorker.h` 已直接包含 `libavdevice/avdevice.h`
-- `x264` 不直接由仓库链接，而是通过 FFmpeg 的 H264 encoder 能力间接使用；如果发行版 FFmpeg 缺失对应 encoder，`plain-client` 的重编码路径能力会受限
+- `libavdevice` 主要用于 WebRTC QoS Plain P2 的 V4L2 输入源；没有摄像头设备时，对应 smoke 会记录为环境 `SKIP`。
+- `x264` 不直接由仓库链接，而是通过 FFmpeg 的 H264 encoder 能力间接使用；如果发行版 FFmpeg 缺失对应 encoder，实时编码路径能力会受限。
 
 ### 3.3 Debian / Ubuntu 参考安装
 
@@ -237,7 +238,7 @@ npm install
 
 ### 7.1 FFmpeg
 
-当前 `CMakeLists.txt` 与 `client/CMakeLists.txt` 的解析顺序应理解为：
+当前 `CMakeLists.txt` 的解析顺序应理解为：
 
 1. 优先尝试 `pkg-config`
 2. 如果 `pkg-config` 没给出完整头文件路径，则尝试显式 include 目录 hint
@@ -267,6 +268,16 @@ npm install
 - `pkg-config --exists hiredis`
 - 发行版是否已安装 `libhiredis-dev` / `hiredis-devel`
 
+### 7.3 `webrtc_qos_sdk`
+
+WebRTC QoS Plain push/play client 通过 CMake package 查找 SDK：
+
+- `find_package(WebRtcQosSdk CONFIG QUIET)`
+- 找到 `WebRtcQosSdk::role_push*` 和 `WebRtcQosSdk::role_play*` 后才注册 push/play target
+- 常用方式是在配置时传入 `-DCMAKE_PREFIX_PATH=/root/webrtc_qos_sdk/dist/linux-x86_64`
+
+如果没有 SDK，服务端和普通测试仍可构建，但 `webrtc-qos-plain-push-client`、`webrtc-qos-plain-play-client` 与 P2 smoke 不会可用。
+
 ## 8. `setup.sh` 的职责边界
 
 `setup.sh` 当前负责：
@@ -276,7 +287,7 @@ npm install
 3. 初始化 `third_party`
 4. 构建 `flatc` 并生成 FlatBuffers 头文件
 5. 下载 `mediasoup-worker`
-6. 构建 SFU、plain-client、测试
+6. 构建 SFU、测试，以及可用时的 WebRTC QoS Plain push/play client
 
 它不负责：
 
@@ -292,8 +303,8 @@ npm install
 2. [README.md](../README.md)
 3. [DEVELOPMENT.md](./DEVELOPMENT.md)
 
-如果目标是“理解 Linux plain-client 相关依赖”：
+如果目标是“理解 WebRTC QoS Plain push/play 相关依赖”：
 
 1. 本文档
-2. [linux-client-architecture_cn.md](./linux-client-architecture_cn.md)
-3. [plain-client-qos-status.md](./plain-client-qos-status.md)
+2. [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md)
+3. [webrtc-qos-push-play-client-p2-design_cn.md](./webrtc-qos-push-play-client-p2-design_cn.md)

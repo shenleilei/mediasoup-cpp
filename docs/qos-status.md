@@ -11,15 +11,14 @@
 当前仓库的 QoS 文档体系已经拆成三条主线：
 
 1. browser uplink QoS
-2. Linux `PlainTransport C++ client` uplink QoS
+2. WebRTC QoS Plain P2 push/play client
 3. downlink QoS
 
 当前稳定口径：
 
 - browser uplink 主 gate：`55 case`；当前增量验证为原 `43 case` 主 gate `PASS` + `GD1-GD12` targeted `PASS`
-- Linux plain-client matrix：`55 case`；当前增量验证为原 `43 case` 主 gate `PASS` + `GD1-GD12` targeted `PASS`
-- downlink 当前范围：subscriber receive control + zero-demand publisher pause/resume coordination
 - WebRTC QoS Plain P2：native synthetic+QoE 已覆盖 baseline/delay/loss/bandwidth/recovery；`qosMainline/sdkRuntimeObservability/encoderRuntime/nativeDecodeQoe/recoveryFirstFrame/weakNetworkCoverage` 当前均为 `PASS`
+- downlink 当前范围：subscriber receive control + zero-demand publisher pause/resume coordination
 - `dynacast` 与 room-level global bitrate budgeting 仍是后续能力，不计入当前已完成口径
 
 ## 2. 按主题查看
@@ -33,18 +32,14 @@
 - 逐 case：
   [uplink-qos-case-results.md](./uplink-qos-case-results.md)
 
-### 2.2 Linux plain-client
+### 2.2 WebRTC QoS Plain P2
 
-- 当前状态摘要：
-  [plain-client-qos-status.md](./plain-client-qos-status.md)
-- Linux client 架构：
-  [linux-client-architecture_cn.md](./linux-client-architecture_cn.md)
-- 对位清单：
-  [plain-client-qos-parity-checklist.md](./plain-client-qos-parity-checklist.md)
-- full matrix：
-  [plain-client-qos-case-results.md](./plain-client-qos-case-results.md)
+- 推拉流客户端总设计：
+  [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md)
 - WebRTC QoS Plain P2 执行方案：
   [webrtc-qos-push-play-client-p2-design_cn.md](./webrtc-qos-push-play-client-p2-design_cn.md)
+- 实现对照清单：
+  [webrtc-qos-push-play-client-implementation-checklist_cn.md](./webrtc-qos-push-play-client-implementation-checklist_cn.md)
 - WebRTC QoS Plain P2 当前主报告：
   [generated/webrtc-qos-plain-p2-smoke-report.md](./generated/webrtc-qos-plain-p2-smoke-report.md)
 - WebRTC QoS Plain P2 恢复首帧专项报告：
@@ -66,7 +61,7 @@
 ### 3.1 已进入“当前主口径”的内容
 
 - browser uplink 主测试集
-- Linux plain-client uplink 对位与 matrix
+- WebRTC QoS Plain P2 synthetic+QoE、恢复首帧、MP4 decode-loop、browser receiver 和 V4L2 环境能力门禁
 - downlink 现有 subscriber-side / publisher-supply 协调能力
 
 ### 3.2 不在“当前已完成”口径里的内容
@@ -80,8 +75,8 @@
 后续只要 QoS 能力继续变化，优先更新：
 
 1. 这份总状态页
-2. 对应分支状态页
-   - [plain-client-qos-status.md](./plain-client-qos-status.md)
+2. 对应分支状态页或设计页
+   - [webrtc-qos-push-play-client-p2-design_cn.md](./webrtc-qos-push-play-client-p2-design_cn.md)
    - [downlink-qos-status.md](./downlink-qos-status.md)
 3. 对应主结果页
 4. `docs/generated/README.md`

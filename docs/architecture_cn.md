@@ -6,10 +6,10 @@
 - `uWS` 主线程、`WorkerThread`、`mediasoup-worker` 分别负责什么
 - 一个请求从 WebSocket 进入后，在哪些地方发生线程切换、进程 IPC、Redis 访问
 - 房间、多节点、QoS、录制、故障恢复分别挂在哪条链路上
-- 仓库内 Linux `PlainTransport C++ client` 这条补充路径如何接入同一套房间 / QoS 体系
+- 仓库内 WebRTC QoS Plain push/play client 如何接入同一套 PlainTransport 信令和 QoS 体系
 
 如果只需要构建、测试和常规开发入口，先读 [DEVELOPMENT.md](./DEVELOPMENT.md)。如果需要理解运行时控制流、所有权和时序，再读本文。
-如果需要专门看 Linux client，请继续看 [linux-client-architecture_cn.md](./linux-client-architecture_cn.md)。
+如果需要专门看 WebRTC QoS Plain push/play client，请继续看 [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md)。
 
 ## 1. 设计结论
 
@@ -186,43 +186,33 @@ flowchart TB
 - 在 `RoomRegistry` 之外新增随手 Redis 访问
 - 在 `WorkerThread` 之外做 non-threaded `Channel` IPC
 
-### 4.5 仓库内 Linux `PlainTransport C++ client`
+### 4.5 仓库内 WebRTC QoS Plain Push/Play Client
 
-这个仓库除了浏览器信令 / WebRTC 路径，还维护一条 Linux `PlainTransport C++ client` 路径：
+这个仓库除了浏览器信令 / WebRTC 路径，还维护一条 WebRTC QoS SDK PlainTransport 推拉流客户端路径：
 
-- 薄入口：`client/main.cpp`
-- shared orchestration / session bootstrap：`client/PlainClientApp.*`
-- threaded / legacy runtime orchestration：`client/PlainClientThreaded.cpp`, `client/PlainClientLegacy.cpp`
-- RTCP：`client/RtcpHandler.h`
-- QoS：`client/qos/*`
+- 共用信令：`client/WsClient.*`
+- 新客户端目录：`client/webrtc_qos_plain_client/`
+- push target：`webrtc-qos-plain-push-client`
+- play target：`webrtc-qos-plain-play-client`
 
-它不属于服务端进程内部线程模型的一部分，但它是当前 `plainPublish`、`clientStats`、`qosPolicy`、`qosOverride`、`cpp-client-harness`、`cpp-client-matrix` 这些链路的重要一端。
+它不属于服务端进程内部线程模型的一部分，但它复用当前 `plainPublish`、`plainSubscribe`、`clientStats`、`qosPolicy`、`qosOverride` 这些服务端协议能力。
 
-从职责上看，它可以拆成 4 层：
+从职责上看，它可以拆成 3 层：
 
 1. `WsClient`
    - `join`
-   - `plainPublish`
+   - `plainPublish` / `plainSubscribe`
    - `clientStats`
-   - `getStats`
    - 异步 response / notification 分发
-2. FFmpeg / RTP 数据面
-   - MP4 demux
-   - H264 copy 或 `decode -> x264 re-encode`
-   - Opus 音频转码
-   - RTP packetize + UDP
-3. RTCP
-   - SR / RR
-   - RTT / jitter
-   - NACK / PLI / FIR
-   - per-SSRC retransmission / keyframe cache
-4. QoS runtime
-   - 每 video track 一个 `PublisherQosController`
-   - peer 内多 track budget 协调
-   - `clientStats` snapshot 上报
-   - `qosPolicy` / `qosOverride` 消费
+2. UDP PlainTransport 数据面
+   - push/play 绑定 PlainTransport RTP/RTCP 端口
+   - 外围只负责 socket I/O 和 packet 交给 SDK
+3. WebRTC QoS SDK runtime
+   - add/receive track
+   - 编码、packetize、pacer、GoogCC、NACK/PLI/FEC
+   - SDK stats / QoE / `clientStats` snapshot 上报
 
-当前主架构文档只保留这一层摘要；完整细节见 [linux-client-architecture_cn.md](./linux-client-architecture_cn.md)。
+当前主架构文档只保留这一层摘要；完整细节见 [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md)。
 
 ## 5. 跨线程与跨进程通信机制
 
@@ -579,31 +569,32 @@ uWS 主线程 timer
 | `clientStats` | 否 | 只更新控制面的 QoS 聚合状态 |
 | `peerJoined` / `newConsumer` / `qosPolicy` 这类通知 | 否 | 只是控制面回主线程发信令 |
 
-### 7.8 `plainPublish` 与 Linux client 补充路径
+### 7.8 `plainPublish` / `plainSubscribe` 与 WebRTC QoS Plain 补充路径
 
 浏览器路径走的是 `createWebRtcTransport -> connectWebRtcTransport -> produce`。
 
-Linux `PlainTransport C++ client` 走的是另一条链路：
+WebRTC QoS Plain push client 走的是另一条链路：
 
 ```text
-plain-client
+webrtc-qos-plain-push-client
   -> WebSocket join
   -> plainPublish(videoSsrcs, audioSsrc)
   -> RoomService::plainPublish()
   -> Router::createPlainTransport()
   -> Transport::produce() for N video tracks + 1 audio track
   -> 返回 {ip, port, videoTracks[], audioPt}
-  -> client 建立 UDP socket
-  -> 发送 comedia 探测 RTP
-  -> 按 producerId / trackId / ssrc 建立本地 runtime
+  -> push client 建立 UDP RTP/RTCP socket
+  -> webrtc_qos_sdk 负责 track、编码、packetize、pacer、GoogCC、NACK/PLI/FEC
 ```
 
 这条链路的几个关键差异：
 
 - 服务端不做 WebRTC 协商
-- 客户端自己维护 RTP / RTCP 状态
-- `clientStats` 不是浏览器 `getStats()`，而是 `RTCP + 本地计数 + server getStats` 的组合
+- 客户端外围只管理 PlainTransport 信令和 UDP socket
+- 媒体 QoS 状态由 `webrtc_qos_sdk` 维护，并导出 SDK stats / QoE
 - `qosPolicy` / `qosOverride` 仍然通过同一个 WebSocket 通知通道进入
+
+play client 对称使用 `plainSubscribe` 获取 server PlainTransport 的订阅端口，再把收到的 RTP/RTCP 交给 SDK 解码与 QoE 统计。
 
 ## 8. 多节点与 Redis 架构
 
@@ -707,12 +698,12 @@ Client -> 主线程
 这条路径同时服务于两类 client：
 
 - 浏览器 / JS client
-- Linux `PlainTransport C++ client`
+- WebRTC QoS Plain push/play client
 
 两者 payload schema 相同，但 stats 来源不同：
 
 - 浏览器：`RTCPeerConnection.getStats()`
-- Linux client：`RTCP RR + 本地 RTP 计数 + server getStats`
+- WebRTC QoS Plain client：`webrtc_qos_sdk` stats / QoE / 本地 RTP 计数
 
 ### 9.2 录制
 

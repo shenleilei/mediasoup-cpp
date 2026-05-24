@@ -47,7 +47,6 @@ When these files exist after the run, the runner snapshots and attaches them:
 
 - `docs/full-regression-test-results.md`
 - `docs/uplink-qos-case-results.md`
-- `docs/plain-client-qos-case-results.md`
 - `docs/downlink-qos-test-results-summary.md`
 - `docs/downlink-qos-case-results.md`
 

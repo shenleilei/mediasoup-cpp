@@ -1,6 +1,6 @@
 # 旧 plain-client 直接删除方案
 
-状态：设计文档，尚未删除源码。
+状态：已按本方案直接删除旧源码、旧 runner、旧报告和当前文档入口。
 
 日期：2026-05-24
 
@@ -193,7 +193,7 @@ SEARCH_PATHS=(CMakeLists.txt client tests scripts docs README.md)
 [[ -d changes ]] && SEARCH_PATHS+=(changes)
 if rg -n "client/build/plain-client|plain-client-qos|PlainClient(App|Support|Legacy|Threaded)?|cpp-client|cpp_client|client/qos|client/sendsidebwe|client/ccutils|NetworkThread|SourceWorker|Vp8Packetizer|SenderTransportController|RtcpHandler" \
   "${SEARCH_PATHS[@]}" | \
-  rg -v "docs/plain-client-legacy-removal-plan_cn.md|docs/webrtc-qos-push-play-client|client/webrtc_qos_plain_client|webrtc-qos-plain|plainPublish|plainSubscribe"; then
+  rg -v "docs/plain-client-legacy-removal-plan_cn.md|docs/README.md|README.md|README_en.md|docs/webrtc-qos-push-play-client|client/webrtc_qos_plain_client|webrtc-qos-plain|plainPublish|plainSubscribe"; then
   echo "unexpected legacy plain-client references remain" >&2
   exit 1
 fi
@@ -275,8 +275,9 @@ cd /root/mediasoup-cpp
 ./build-webrtc-qos-plain/mediasoup_webrtc_qos_plain_unit_tests
 ./scripts/run_webrtc_qos_plain_p2_smoke.sh \
   --build-dir build-webrtc-qos-plain \
-  --sdk-dir /root/webrtc_qos_sdk \
-  --report-dir docs/generated
+  --report-dir docs/generated \
+  --enable-netem \
+  --decode-qoe
 ```
 
 通过标准：

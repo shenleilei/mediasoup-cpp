@@ -21,8 +21,6 @@
 #include "StaticFileResponder.h"
 #include "WorkerThread.h"
 #include "webRtcTransport_generated.h"
-#include "../client/ccutils/Prober.h"
-#include "../client/RtcpHandler.h"
 #include "../src/Recorder.h"
 #include <algorithm>
 #include <future>
@@ -36,70 +34,6 @@
 using namespace mediasoup;
 
 namespace {
-
-class BlockingProbeListener : public mediasoup::ccutils::ProberListener {
-public:
-	void OnProbeClusterSwitch(const mediasoup::ccutils::ProbeClusterInfo& info) override
-	{
-		std::lock_guard<std::mutex> lock(mutex_);
-		startedIds_.push_back(info.id);
-		cv_.notify_all();
-	}
-
-	void OnSendProbe(int) override
-	{
-		std::unique_lock<std::mutex> lock(mutex_);
-		sendCount_++;
-		if (sendCount_ == 1) {
-			firstSendEntered_ = true;
-			cv_.notify_all();
-			cv_.wait(lock, [&] { return releaseFirstSend_; });
-		} else {
-			cv_.notify_all();
-		}
-	}
-
-	bool waitForFirstSend(std::chrono::milliseconds timeout)
-	{
-		std::unique_lock<std::mutex> lock(mutex_);
-		return cv_.wait_for(lock, timeout, [&] { return firstSendEntered_; });
-	}
-
-	void releaseFirstSend()
-	{
-		std::lock_guard<std::mutex> lock(mutex_);
-		releaseFirstSend_ = true;
-		cv_.notify_all();
-	}
-
-	bool waitForClusterStart(
-		mediasoup::ccutils::ProbeClusterId clusterId,
-		std::chrono::milliseconds timeout)
-	{
-		std::unique_lock<std::mutex> lock(mutex_);
-		return cv_.wait_for(lock, timeout, [&] {
-			return std::find(startedIds_.begin(), startedIds_.end(), clusterId) != startedIds_.end();
-		});
-	}
-
-private:
-	std::mutex mutex_;
-	std::condition_variable cv_;
-	std::vector<mediasoup::ccutils::ProbeClusterId> startedIds_;
-	int sendCount_{ 0 };
-	bool firstSendEntered_{ false };
-	bool releaseFirstSend_{ false };
-};
-
-mediasoup::ccutils::ProbeClusterGoal MakeTestProbeGoal()
-{
-	mediasoup::ccutils::ProbeClusterGoal goal;
-	goal.availableBandwidthBps = 500000;
-	goal.expectedUsageBps = 100000;
-	goal.desiredBps = 250000;
-	goal.duration = std::chrono::milliseconds(60);
-	return goal;
-}
 
 bool ReadExact(int fd, uint8_t* data, size_t len)
 {
@@ -689,39 +623,6 @@ TEST(RoomRegistrySelectionTest, NoGeoComparatorPreservesStrictWeakOrderingForSel
 	EXPECT_FALSE(mediasoup::roomregistry::CompareNoGeoCandidates(peer, self, "ws://self"));
 }
 
-TEST(ProberConcurrencyFixTest, ResetRestartsWorkerForClusterQueuedDuringReset) {
-	BlockingProbeListener listener;
-	mediasoup::ccutils::Prober prober(&listener);
-
-	const auto first = prober.AddCluster(
-		mediasoup::ccutils::ProbeClusterMode::Uniform,
-		MakeTestProbeGoal());
-	ASSERT_TRUE(first.IsValid());
-	ASSERT_TRUE(listener.waitForFirstSend(std::chrono::milliseconds(500)));
-
-	auto resetFuture = std::async(std::launch::async, [&prober] {
-		prober.Reset();
-	});
-	EXPECT_EQ(
-		resetFuture.wait_for(std::chrono::milliseconds(20)),
-		std::future_status::timeout);
-
-	const auto queuedDuringReset = prober.AddCluster(
-		mediasoup::ccutils::ProbeClusterMode::Uniform,
-		MakeTestProbeGoal());
-	ASSERT_TRUE(queuedDuringReset.IsValid());
-
-	listener.releaseFirstSend();
-	EXPECT_EQ(
-		resetFuture.wait_for(std::chrono::seconds(1)),
-		std::future_status::ready);
-	EXPECT_TRUE(listener.waitForClusterStart(
-		queuedDuringReset.id,
-		std::chrono::seconds(1)));
-
-	prober.Reset();
-}
-
 TEST(ChannelThreadSafetyFixTest, ProcessAvailableDataRejectedInThreadedMode) {
 	int producerPipe[2];
 	int consumerPipe[2];
@@ -958,74 +859,6 @@ TEST(StaticFileResponderTest, MatchesOnlyRealSuffixes) {
 	EXPECT_EQ(ContentTypeForPath("/assets/app.css.backup"), "application/octet-stream");
 	EXPECT_EQ(ContentTypeForPath("/assets/report.json"), "application/json");
 	EXPECT_EQ(ContentTypeForPath("/assets/report.json.tmp"), "application/octet-stream");
-}
-
-TEST(RtcpSuppressionFixTest, SuppressedVideoSkipsPliAndNackRetransmissions) {
-	int sv[2];
-	ASSERT_EQ(::socketpair(AF_UNIX, SOCK_DGRAM, 0, sv), 0);
-
-	RtcpContext rtcp;
-	uint32_t ssrc = 0x12345678;
-	uint16_t seq = 3456;
-	int pliCalls = 0;
-
-	rtcp.registerVideoStream(ssrc, 96, &seq);
-	rtcp.canSendVideoFn = [](uint32_t) { return false; };
-	rtcp.sendH264Fn = [&](int, const uint8_t*, int, uint8_t, uint32_t, uint32_t, uint16_t&) {
-		++pliCalls;
-	};
-
-	uint8_t rtp[16]{};
-	rtp[0] = 0x80;
-	rtp[1] = 96;
-	rtp[2] = static_cast<uint8_t>(seq >> 8);
-	rtp[3] = static_cast<uint8_t>(seq & 0xFF);
-	rtp[4] = 0x00;
-	rtp[5] = 0x01;
-	rtp[6] = 0x5F;
-	rtp[7] = 0x90;
-	rtp[8] = static_cast<uint8_t>(ssrc >> 24);
-	rtp[9] = static_cast<uint8_t>(ssrc >> 16);
-	rtp[10] = static_cast<uint8_t>(ssrc >> 8);
-	rtp[11] = static_cast<uint8_t>(ssrc & 0xFF);
-	rtcp.onVideoRtpSent(rtp, sizeof(rtp));
-	rtcp.cacheKeyframe(ssrc, rtp, sizeof(rtp), 90000);
-
-	uint8_t pli[12]{};
-	pli[0] = 0x81;
-	pli[1] = RTCP_PT_PSFB;
-	pli[2] = 0x00;
-	pli[3] = 0x02;
-	pli[8] = static_cast<uint8_t>(ssrc >> 24);
-	pli[9] = static_cast<uint8_t>(ssrc >> 16);
-	pli[10] = static_cast<uint8_t>(ssrc >> 8);
-	pli[11] = static_cast<uint8_t>(ssrc & 0xFF);
-	ASSERT_EQ(::send(sv[1], pli, sizeof(pli), 0), static_cast<ssize_t>(sizeof(pli)));
-
-	uint8_t nack[16]{};
-	nack[0] = 0x81;
-	nack[1] = RTCP_PT_RTPFB;
-	nack[2] = 0x00;
-	nack[3] = 0x03;
-	nack[8] = static_cast<uint8_t>(ssrc >> 24);
-	nack[9] = static_cast<uint8_t>(ssrc >> 16);
-	nack[10] = static_cast<uint8_t>(ssrc >> 8);
-	nack[11] = static_cast<uint8_t>(ssrc & 0xFF);
-	nack[12] = static_cast<uint8_t>(seq >> 8);
-	nack[13] = static_cast<uint8_t>(seq & 0xFF);
-	ASSERT_EQ(::send(sv[1], nack, sizeof(nack), 0), static_cast<ssize_t>(sizeof(nack)));
-
-	rtcp.processIncomingRtcp(sv[0]);
-
-	EXPECT_EQ(pliCalls, 0);
-	EXPECT_EQ(rtcp.pliResponded, 0);
-	EXPECT_EQ(rtcp.nackRetransmitted, 0);
-
-	uint8_t recvBuf[1500];
-	EXPECT_LT(::recv(sv[1], recvBuf, sizeof(recvBuf), MSG_DONTWAIT), 0);
-
-	::close(sv[0]);
-	::close(sv[1]);
 }
 
 // ── F1: unwrapTimestamp backward-wrap state consistency ─────────────

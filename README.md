@@ -50,9 +50,9 @@ mediasoup 得到了广泛应用，但其默认的控制平面是 Node.js。本�
 
 ### 2. 业界天花板级的端到端 QoS 体系
 目前绝大多数开源 SFU 的 QoS 仅停留在算法拼凑的“功能实现”层面，而本项目不仅实现了算法，还提供了一套**有严格 SLA 数据背书的、高度自动化的毫秒级 QoS 矩阵测试台 (Matrix Harness)**：
-- **系统级量化的弱网对抗：** 通过脚本驱动无头浏览器或 C++ 客户端，精准注入极端弱网（如盲区：`200kbps带宽 / 20%丢包 / 500ms RTT`），不但测试能否恢复，更能够**精确量化退避和恢复生命周期的每一个关键帧 (精确到毫秒)**。
+- **系统级量化的弱网对抗：** 通过脚本驱动无头浏览器和 WebRTC QoS Plain push/play 客户端，精准注入弱网（延迟、丢包、带宽受限、断网恢复），不但测试能否恢复，更能够**精确量化退避和恢复生命周期的每一个关键帧 (精确到毫秒)**。
 - **极其细腻的上行状态机 (Uplink State Machine)：** 实现了从 `stable` -> `early_warning` -> `congested` -> `recovering` 的多级阶梯降级 (Ladder Control)。独创的两阶段快速恢复 (Fast-Path Recovery) 机制，在不引起网络震荡 (overshoot) 的前提下，将极端弱网后的视频恢复时间硬生生提前了 5~6 秒，超越了标准的 LiveKit 分配器与探测策略。
-- **纯 C++ 客户端对齐 (Plain-Client Parity)：** 仓库内包含一个硬核的 Linux C++ 纯客户端，完美复刻了浏览器的发送端带宽评估 (Send-Side BWE)、探测流隔离 (Probe Isolation) 以及平滑发送 (Pacing) 逻辑，并在数十个严苛的独立矩阵测试中跑通。
+- **SDK 化的 PlainTransport 推拉流客户端：** 新客户端只保留 WebSocket 信令和 UDP Socket 外围集成，把 WebRTC 接口、GoogCC、pacer、NACK/PLI/FEC 等媒体 QoS 收敛到 `webrtc_qos_sdk`，避免再维护自研 BWE/RTCP/packetizer。
 - **铁血的防回归护栏 (Nightly Full Regression)：** 所有的 QoS 指标结果被强绑定到 Nightly CI 和质量关卡中。任何可能导致弱网恢复变慢（即使慢了2秒）的代码修改都会被立即阻断报警，确保拥塞控制算法的演进极其稳健。
 
 ### 3. 同类开源 SFU 方案对比 (Comparison)
@@ -112,40 +112,24 @@ mediasoup-worker 进程
 RTP / SRTP / ICE / DTLS
 ```
 
-## Linux 纯传输客户端 (Linux PlainTransport Client)
+## WebRTC QoS Plain Push/Play Client
 
-除了浏览器路径，本仓库还提供了一个 Linux `PlainTransport C++ 客户端`，用于端到端的发布 / QoS 验证以及矩阵回归测试。
+除了浏览器路径，本仓库保留一个新的 PlainTransport 推拉流客户端目录：`client/webrtc_qos_plain_client/`。
 
-```text
-MP4
-  -> FFmpeg 解封装 / 解码
-  -> 每轨 x264 重新编码 (或 H264 拷贝路径)
-  -> RTP 打包
-  -> UDP
-  -> mediasoup PlainTransport
+这个客户端只负责最小外围集成：
 
-WebSocket 控制平面
-  -> join / plainPublish / clientStats / getStats
-  -> qosPolicy / qosOverride 通知
+- WebSocket 信令：`join`、`plainPublish`、`plainSubscribe`
+- UDP Socket：连接 mediasoup PlainTransport 的 RTP/RTCP 收发口
+- WebRTC 接口：通过 SDK 完成 add track、编码、packetize、pacer、GoogCC、NACK/PLI/FEC、统计和 QoE 观测
 
-RTCP 侧边路径
-  -> SR / RR / RTT / jitter
-  -> NACK / PLI / FIR
-  -> 每轨重传 + 关键帧缓存
-```
-
-当前的架构文档：
+旧自研 Linux plain-client 已被移除，不再保留自研 BWE、RTCP、packetizer 和 pacing 路径。当前实现和验收文档：
 
 - [docs/dependencies_cn.md](./docs/dependencies_cn.md)
 - [docs/webrtc-qos-push-play-client-design_cn.md](./docs/webrtc-qos-push-play-client-design_cn.md)
 - [docs/webrtc-qos-push-play-client-p2-design_cn.md](./docs/webrtc-qos-push-play-client-p2-design_cn.md)
 - [docs/webrtc-qos-push-play-client-implementation-checklist_cn.md](./docs/webrtc-qos-push-play-client-implementation-checklist_cn.md)
 - [docs/plain-client-legacy-removal-plan_cn.md](./docs/plain-client-legacy-removal-plan_cn.md)
-- [docs/linux-client-architecture_cn.md](./docs/linux-client-architecture_cn.md)
-- [docs/linux-client-multi-source-thread-model_cn.md](./docs/linux-client-multi-source-thread-model_cn.md)
-- [docs/linux-client-threaded-implementation-checklist_cn.md](./docs/linux-client-threaded-implementation-checklist_cn.md)
 - [docs/architecture_cn.md](./docs/architecture_cn.md)
-- [docs/plain-client-qos-parity-checklist.md](./docs/plain-client-qos-parity-checklist.md)
 
 ## 多节点路由架构 (Multi-Node Routing Architecture)
 
@@ -206,9 +190,6 @@ SignalingServer
 当前仓库文档和生成的制品显示：
 
 - 浏览器上行矩阵主闸门 (main gate)：`43 / 43 PASS` (`2026-04-13`)
-- PlainTransport C++ 客户端矩阵：`48 / 48 PASS` (`2026-04-26`)
-- PlainTransport C++ 客户端信令测试套件：`PASS`
-- C++ 客户端 QoS 单元测试对齐 (parity)：`PASS`
 - WebRTC QoS Plain P2 synthetic+QoE 当前主报告：`qosMainline=PASS`，`sdkRuntimeObservability=PASS`，`encoderRuntime=PASS`，`nativeDecodeQoe=PASS`，`weakNetworkCoverage=PASS`，`recoveryFirstFrame=PASS`；overall 为 `PASS`，`failedChecks=0`
 - P2 已实测 `baseline`、`delay_100ms`、`loss_2pct`、`bandwidth_600k`、`drop_recover`：当前主报告 `5 / 5 PASS`；100ms delay RTT avg/max 为 `78.25/220ms`，600kbps bandwidth targetBps min/max 为 `300000/2500000`，`drop_recover` targetBps min/avg/max 为 `300000/1398037.20/2500000`
 - P2 恢复首帧已列为独立硬门禁：主报告中 `drop_recover` 清网后 `144ms` 看到 native QoE `decodedFrames` 增长，decoded delta=`376`；专项恢复报告 `drop_recover=PASS`、`failedChecks=0`，清网后 `2122ms` 看到首帧，decoded delta=`416`
@@ -218,7 +199,7 @@ SignalingServer
 
 当前范围提示：
 
-- 上行 QoS 主链路在浏览器和 PlainTransport C++ 客户端上均已闭环
+- 上行 QoS 主链路在浏览器和 WebRTC QoS Plain P2 客户端上均已闭环
 - 下行目前覆盖接收端控制以及零需求发布端暂停/恢复协调
 - WebRTC QoS Plain P2 目前已签收 native baseline/delay/loss/bandwidth/recovery synthetic+QoE 短测、MP4 decode-loop baseline、browser receiver 自动化入口和 V4L2 输入源入口；本机浏览器缺 H264 能力、当前机器无 `/dev/video0`，对应真实画面/摄像头运行结果仍只能记录 `SKIP/PARTIAL`
 - `dynacast` 和房间级全局比特率预算划分是后续工作
@@ -229,9 +210,6 @@ SignalingServer
 - 最终总结：[docs/uplink-qos-final-report.md](./docs/uplink-qos-final-report.md)
 - 结果总结：[docs/uplink-qos-test-results-summary.md](./docs/uplink-qos-test-results-summary.md)
 - 逐 Case 最终结果：[docs/uplink-qos-case-results.md](./docs/uplink-qos-case-results.md)
-- 纯客户端当前状态：[docs/plain-client-qos-status.md](./docs/plain-client-qos-status.md)
-- 纯客户端对齐检查单：[docs/plain-client-qos-parity-checklist.md](./docs/plain-client-qos-parity-checklist.md)
-- 纯客户端矩阵结果：[docs/plain-client-qos-case-results.md](./docs/plain-client-qos-case-results.md)
 - WebRTC QoS Plain P2 smoke 报告：[docs/generated/webrtc-qos-plain-p2-smoke-report.md](./docs/generated/webrtc-qos-plain-p2-smoke-report.md)
 - WebRTC QoS Plain P2 设计和验收门禁：[docs/webrtc-qos-push-play-client-p2-design_cn.md](./docs/webrtc-qos-push-play-client-p2-design_cn.md)
 - WebRTC QoS Plain P2 恢复首帧专项报告：[docs/generated/webrtc-qos-plain-p2-recovery-first-frame-report.md](./docs/generated/webrtc-qos-plain-p2-recovery-first-frame-report.md)
@@ -240,7 +218,6 @@ SignalingServer
 - WebRTC QoS Plain P2 V4L2 source 报告：[docs/generated/webrtc-qos-plain-p2-v4l2-report.md](./docs/generated/webrtc-qos-plain-p2-v4l2-report.md)
 - 旧 plain-client 直接删除方案：[docs/plain-client-legacy-removal-plan_cn.md](./docs/plain-client-legacy-removal-plan_cn.md)
 - 下行当前状态：[docs/downlink-qos-status.md](./docs/downlink-qos-status.md)
-- Linux 客户端架构：[docs/linux-client-architecture_cn.md](./docs/linux-client-architecture_cn.md)
 - 测试覆盖地图：[docs/qos-test-coverage_cn.md](./docs/qos-test-coverage_cn.md)
 - 生成的矩阵制品：[docs/generated/uplink-qos-matrix-report.json](./docs/generated/uplink-qos-matrix-report.json)
 
@@ -382,17 +359,15 @@ client -> produce
       -> 录制器 (recorder) 可能会追加写入 QoS snapshot
 ```
 
-### Linux 纯传输客户端 (PlainTransport Linux Client)
+### WebRTC QoS Plain Push/Play Client
 
 ```text
-linux plain-client
-      -> WebSocket join / plainPublish
-      -> 往 PlainTransport 发送 UDP RTP
-      -> RTCP SR / RR / NACK / PLI
-      -> 辅助 async getStats 进行采样
-      -> 每个视频轨独立的 PublisherQosController
-      -> 采集 clientStats snapshots
-      -> 接收 qosPolicy / qosOverride 通知
+webrtc-qos-plain-push-client / webrtc-qos-plain-play-client
+      -> WebSocket join / plainPublish / plainSubscribe
+      -> 绑定 mediasoup PlainTransport UDP RTP/RTCP
+      -> 通过 webrtc_qos_sdk add track / receive track
+      -> SDK 负责 GoogCC / pacer / NACK / PLI / FEC
+      -> 导出 SDK stats / QoE / clientStats snapshots
 ```
 
 ### Media
@@ -551,7 +526,7 @@ Dependency reference:
 备注：
 
 - 对于单节点、仅本地路由（local-only）的模式，Redis 在运行时是可选的，但目前的默认构建依然会链接 `hiredis`。
-- 目前的 `plain-client` 线程化路径直接引入了 `libavdevice`，因此 `libavdevice-dev` / `ffmpeg-devel` 也是构建要求的一部分，而不仅仅是事后为了支持摄像头才需要的。
+- WebRTC QoS Plain P2 的 V4L2 输入源需要 `libavdevice`；没有 `/dev/video0` 的机器会把摄像头 smoke 记为环境 `SKIP`。
 
 ### 构建 (Build)
 

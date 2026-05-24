@@ -75,27 +75,3 @@ test('browser uplink renderer honors stored verdict when it disagrees with deriv
   assert.doesNotMatch(rendered, /\| 实际结果 \| PASS（符合） \|/);
   assert.doesNotMatch(rendered, /\| 重点分析 \| 判定=符合。/);
 });
-
-test('plain-client renderer honors stored verdict when it disagrees with derived pass', () => {
-  const rendered = renderWith('render_cpp_client_case_report.mjs', 'B1');
-  assert.match(rendered, /\| 结果 \| FAIL（forced-fail） \|/);
-  assert.doesNotMatch(rendered, /\| 结果 \| PASS（符合） \|/);
-});
-
-test('plain-client renderer derives summary and failure list when stored verdict is absent', () => {
-  const rendered = renderWith('render_cpp_client_case_report.mjs', 'B1', {
-    caseResult: makeBaseCase('B1', { includeStoredVerdict: false }),
-    summary: {
-      total: 1,
-      executed: 1,
-      passed: 0,
-      failed: 1,
-      errors: 0,
-    },
-  });
-
-  assert.match(rendered, /\| 结果 \| PASS（符合） \|/);
-  assert.match(rendered, /- 通过：`1`/);
-  assert.match(rendered, /- 失败：`0`/);
-  assert.doesNotMatch(rendered, /### 1\.1 失败 \/ 错误 Case/);
-});

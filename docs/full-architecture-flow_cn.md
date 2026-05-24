@@ -271,56 +271,44 @@ Redis Key 设计:
 - 默认运行契约下，Redis 是 readiness 强依赖：Redis 不可用时启动失败，运行中 `/readyz` 变为 `503`
 - 只有显式配置 `redisRequired=false` 时才允许 `registry_ == nullptr` 的 local-only 模式；该模式不属于默认多节点路由契约
 
-## 8. Linux PlainTransport C++ client 与 PlainTransport 发布路径
+## 8. WebRTC QoS Plain Push/Play 与 PlainTransport 路径
 
 ```text
-plain-client(main.cpp)
+webrtc-qos-plain-push-client
   -> WsClient.connect()
   -> join(roomId, peerId)
   -> plainPublish(videoSsrcs, audioSsrc)
   -> 服务端返回 {ip, port, videoTracks[], audioPt}
-  -> 本地 UDP connect 到 PlainTransport
-  -> 发送 comedia probe RTP
-  -> registerVideoStream(ssrc, pt, seqPtr)
-  -> 进入主发送循环
+  -> 本地 UDP socket 绑定 PlainTransport RTP/RTCP
+  -> webrtc_qos_sdk add track / encode / packetize / send
 
-主发送循环:
-  MP4 demux
-    -> video:
-       copy path
-       或 decode -> x264 per-track encode
-       -> RTP packetize -> UDP send
-    -> audio:
-       AAC decode -> Opus encode -> RTP send
-    -> processIncomingRtcp()
-    -> maybeSendSR()
-    -> QoS sampling
+webrtc-qos-plain-play-client
+  -> WsClient.connect()
+  -> join(roomId, peerId)
+  -> plainSubscribe(producerId / room media)
+  -> 服务端返回 {ip, port, ...}
+  -> 本地 UDP socket 绑定 PlainTransport RTP/RTCP
+  -> webrtc_qos_sdk receive / decode / QoE sampling
 ```
 
 QoS 侧链路：
 
 ```text
-RTCP RR + local counters + async getStats
-  -> RawSenderSnapshot
-  -> PublisherQosController (per video track)
-  -> actionSink
-     - setEncodingParameters
-     - enter/exitAudioOnly
-     - pause/resumeUpstream
-  -> serializeSnapshot()
+webrtc_qos_sdk stats / QoE + local counters
+  -> runtime snapshot
   -> clientStats
 
 notification:
   qosPolicy / qosOverride
-    -> plain-client main thread
-    -> handlePolicy / handleOverride
+    -> push/play runtime
+    -> SDK encoding / pacing / pause-resume control
 ```
 
 关键点：
 
-- Linux client 不走 WebRTC sender，但仍走同一套 QoS schema 和通知协议。
-- 多 video track 共享同一个 peer 级采样窗口，但每个 track 有独立的 encoder / RTCP / controller state。
-- `pauseUpstream` / `audio-only` 不只停止主发送路径，也会阻止 RTCP 触发的视频重传 / keyframe 补发。
+- 外围客户端只保留 WebSocket 信令和 UDP Socket，媒体 QoS 由 SDK 接管。
+- 服务端继续使用同一套 `plainPublish` / `plainSubscribe` / `clientStats` / `qosOverride` 协议。
+- P2 smoke 通过 synthetic+QoE、恢复首帧、MP4 decode-loop、browser receiver、V4L2 环境能力门禁验证链路。
 
 ## 9. QoS 控制链路
 

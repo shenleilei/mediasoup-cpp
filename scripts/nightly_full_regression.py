@@ -24,7 +24,6 @@ DEFAULT_MAX_BACKUP_RUNS = 100
 DEFAULT_ATTACHMENTS = [
     "docs/full-regression-test-results.md",
     "docs/uplink-qos-case-results.md",
-    "docs/plain-client-qos-case-results.md",
     "docs/downlink-qos-test-results-summary.md",
     "docs/downlink-qos-case-results.md",
 ]
@@ -733,10 +732,7 @@ def parse_task_blocks(log_path, report_summary):
                 block.explicit_failed = counts["failed"]
             continue
 
-        matrix_line = re.match(
-            r"^(?:cpp-client )?matrix summary: passed=(\d+) failed=(\d+) errors=(\d+) total=(\d+)$",
-            line,
-        )
+        matrix_line = re.match(r"^matrix summary: passed=(\d+) failed=(\d+) errors=(\d+) total=(\d+)$", line)
         if matrix_line:
             block.explicit_total = int(matrix_line.group(4))
             block.explicit_failed = int(matrix_line.group(2)) + int(matrix_line.group(3))

@@ -5,10 +5,10 @@ Generated at: `2026-04-18 18:31:09 CST`
 ## Summary
 
 - Script: `scripts/run_all_tests.sh`
-- Selected groups: `unit`, `integration`, `topology`, `threaded`
+- Selected groups: `unit`, `integration`, `topology`
 - Overall status: `PASS`
-- Attempted tasks: `8`
-- Passed tasks: `8`
+- Attempted tasks: `7`
+- Passed tasks: `7`
 - Failed tasks: `0`
 - Failed groups: none
 
@@ -27,4 +27,3 @@ Generated at: `2026-04-18 18:31:09 CST`
 | `integration:mediasoup_review_fix_tests` | `integration` | `PASS` | `111s` |
 | `topology:mediasoup_topology_tests` | `topology` | `PASS` | `50s` |
 | `topology:mediasoup_multinode_tests` | `topology` | `PASS` | `76s` |
-| `threaded:mediasoup_thread_integration_tests` | `threaded` | `PASS` | `27s` |

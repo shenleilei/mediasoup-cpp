@@ -37,7 +37,7 @@ done
 
 if [ ${#missing_pkgs[@]} -gt 0 ]; then
   echo "ERROR: missing pkg-config libs: ${missing_pkgs[*]}"
-  echo "  Required for current default build (SFU + plain-client + tests)."
+  echo "  Required for current default build (SFU + tests)."
   echo "  Ubuntu/Debian:"
   echo "    apt install libssl-dev zlib1g-dev libhiredis-dev \\"
   echo "      libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libavdevice-dev"
@@ -109,21 +109,15 @@ else
 fi
 
 # 5. Build
-echo "[5/5] Building mediasoup-cpp SFU + plain-client + tests..."
+echo "[5/5] Building mediasoup-cpp SFU + tests..."
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
-
-# Build plain-client (threaded multi-source publisher)
-cmake -B client/build -S client -DCMAKE_BUILD_TYPE=Release
-cmake --build client/build -j$(nproc)
 
 echo ""
 echo "=== Build complete ==="
 echo ""
 echo "SFU binary:    $(ls -lh build/mediasoup-sfu 2>/dev/null | awk '{print $5, $NF}')"
-echo "Plain client:  $(ls -lh client/build/plain-client 2>/dev/null | awk '{print $5, $NF}')"
 echo "Unit tests:    $(ls -lh build/mediasoup_tests 2>/dev/null | awk '{print $5, $NF}')"
-echo "Thread tests:  $(ls -lh build/mediasoup_thread_integration_tests 2>/dev/null | awk '{print $5, $NF}')"
 echo ""
 echo "Run SFU:"
 echo "  cd $SCRIPT_DIR"
@@ -133,18 +127,12 @@ echo "    --workerBin=$SCRIPT_DIR/mediasoup-worker \\"
 echo "    --port=3003 \\"
 echo "    --announcedIp=<YOUR_PUBLIC_IP>"
 echo ""
-echo "Run plain-client (single track, legacy mode):"
-echo "  ./client/build/plain-client SERVER_IP PORT ROOM PEER file.mp4"
-echo ""
-echo "Run plain-client (multi-camera, threaded mode):"
-echo "  PLAIN_CLIENT_THREADED=1 \\"
-echo "  PLAIN_CLIENT_VIDEO_TRACK_COUNT=2 \\"
-echo "  PLAIN_CLIENT_VIDEO_SOURCES=/dev/video0,/dev/video2 \\"
-echo "  ./client/build/plain-client SERVER_IP PORT ROOM PEER dummy.mp4"
+echo "Run WebRTC QoS plain push/play clients:"
+echo "  Build with -DCMAKE_PREFIX_PATH=<webrtc_qos_sdk>/dist/linux-x86_64"
+echo "  See README.md and docs/webrtc-qos-push-play-client-implementation-plan_cn.md"
 echo ""
 echo "Run tests:"
 echo "  cd $SCRIPT_DIR && ./build/mediasoup_tests"
-echo "  cd $SCRIPT_DIR && ./build/mediasoup_thread_integration_tests"
 echo ""
 echo "Optional browser / harness dependencies:"
 echo "  npm install"

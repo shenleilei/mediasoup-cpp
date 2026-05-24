@@ -68,7 +68,7 @@ g++ -std=c++17 -Isrc -I. -Ithird_party/nlohmann_json/include \
 
 /tmp/test_ortc_p2 --gtest_filter='*TransportCc*:*Consumable*'
 
-rg -n "client/qos|sendsidebwe|ccutils|RtcpHandler|NetworkThread|SenderTransportController|H264Packetizer|Vp8Packetizer|PublisherQosController|PacketizeAnnexB" \
+rg -n "H264Packetizer|PublisherQosController|PacketizeAnnexB" \
   client/webrtc_qos_plain_client CMakeLists.txt
 
 MEDIASOUP_TEST_SFU_BIN=./build-webrtc-qos-plain/mediasoup-sfu \
@@ -259,7 +259,7 @@ push/play：
 结论：
 
 - P2-M4 已完成：新 push 默认 `enableAudio=false`，服务端不再创建 dummy audio producer。
-- 旧请求不传 `enableAudio` 时仍默认启用 audio，保持旧 plain-client 兼容。
+- 旧请求不传 `enableAudio` 时仍默认启用 audio，保持既有 `plainPublish` 调用兼容。
 
 ## 3.3 P2-M3 smoke 报告脚本结果
 
