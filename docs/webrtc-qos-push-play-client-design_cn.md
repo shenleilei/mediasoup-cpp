@@ -7,9 +7,8 @@
 
 ## 1. 背景
 
-当前仓库里的 `client/plain-client` 是早期研发的 `PlainTransport` C++
-推流客户端。它已经具备可复用的 mediasoup 信令路径，但媒体面和 QoS
-面逐步膨胀成一套自研 RTC stack：
+已删除的早期 PlainTransport C++ 推流客户端曾具备可复用的 mediasoup
+信令路径，但媒体面和 QoS 面逐步膨胀成一套自研 RTC stack：
 
 - 自研 RTP packetizer。
 - 自研 RTCP SR/RR/NACK/PLI/TWCC 处理。
@@ -63,7 +62,7 @@ client/webrtc_qos_plain_client/
 - 将 `VideoPlayClient` 输出的 Annex-B AU 写文件或交给后续 decoder/QoE
   harness。
 
-目标不是修补旧 `plain-client`，而是建立一条新的、边界清晰的 SDK 推拉流闭环。
+目标不是修补已删除的旧实现，而是建立一条新的、边界清晰的 SDK 推拉流闭环。
 
 ## 3. 核心原则
 
@@ -75,15 +74,14 @@ client/webrtc_qos_plain_client/
 - 新客户端不解析或生成 NACK/PLI/TWCC。
 - 新客户端不实现 jitter buffer。
 - 新客户端不写自研带宽估计。
-- 新客户端不复用旧 `client/qos/*`。
+- 新客户端不复用已删除的自研 QoS/BWE/RTCP/packetizer 实现。
 
 ## 4. 非目标
 
 第一期不做：
 
-- 不继续增强旧 `client/plain-client`。
-- 不把旧 `client/qos/*` 迁移到新客户端。
-- 不复用旧 `RtcpHandler.h`、`NetworkThread.h`、`SenderTransportController.h`。
+- 不继续增强已删除的旧 C++ 推流客户端。
+- 不把已删除的自研 QoS/BWE/RTCP/packetizer 迁移到新客户端。
 - 不做 VP8。
 - 不做 audio QoS。
 - 不做多接收端 fanout 产品化。
@@ -142,14 +140,13 @@ helper 放在 `common/`，避免同一类 PlainTransport glue 复制两份。
 
 | 模块 | 不复用原因 |
 |---|---|
-| `client/qos/*` | 自研 QoS 状态机和 SDK GoogCC/Pacer/NACK 路线冲突。 |
-| `client/sendsidebwe/*` | 自研 send-side BWE，和 SDK WebRTC GoogCC 重复。 |
-| `client/ccutils/*` | 自研 probe/trend/regulator，和 WebRTC probing/pacing 重复。 |
-| `client/RtcpHandler.h` | 自研 RTCP、NACK、PLI 和重传缓存，应该由 SDK 接管。 |
-| `client/NetworkThread.h` | 汇聚了自研 packetizer、RTCP、TWCC rewrite、BWE 和 pacing。 |
-| `client/SenderTransportController.h` | 自研 pacing/queue/retransmission controller，应该由 SDK pacer 接管。 |
+| 自研 QoS 状态机 | 和 SDK GoogCC/Pacer/NACK 路线冲突。 |
+| 自研 send-side BWE | 和 SDK WebRTC GoogCC 重复。 |
+| 自研 probe/trend/regulator | 和 WebRTC probing/pacing 重复。 |
+| 自研 RTCP/NACK/PLI/重传缓存 | 应该由 SDK 接管。 |
+| 自研 packetizer/TWCC rewrite/pacing | 应该由 SDK pacer 和 RTP/RTCP 模块接管。 |
 | `common/media/rtp/H264Packetizer.*` | 新客户端 H264 RTP packetization 由 SDK 内部完成。 |
-| `client/Vp8Packetizer.h` | 新客户端第一期不支持 VP8。 |
+| 自研 VP8 packetizer | 新客户端第一期不支持 VP8。 |
 
 ### 6.3 借鉴原 Play 的部分
 
@@ -778,7 +775,7 @@ else:
 
 - 不把 `webrtc_qos_sdk/src` 直接加进 mediasoup-cpp target。
 - 不 include SDK internal header。
-- 不链接旧 `client/qos`、`sendsidebwe`、`ccutils`。
+- 不链接已删除的自研 QoS/BWE/congestion-control 代码。
 
 ## 17. CLI 方案
 
@@ -843,14 +840,9 @@ play 可选参数：
 
 ```text
 webrtc-qos-plain-push-client and webrtc-qos-plain-play-client must not depend on:
-  client/qos
-  client/sendsidebwe
-  client/ccutils
-  RtcpHandler.h
-  NetworkThread.h
-  SenderTransportController.h
+  deleted self-managed QoS / BWE / RTCP / packetizer code
   H264Packetizer
-  Vp8Packetizer
+  self-managed VP8 packetizer
 ```
 
 ### 18.2 信令 smoke
@@ -993,7 +985,7 @@ mediasoup-sfu
 
 评审本文档时重点确认：
 
-- 新 push/play 客户端是否必须在同一个 `webrtc_qos_plain_client` 目录下独立于旧 `plain-client`。
+- 新 push/play 客户端是否必须在同一个 `webrtc_qos_plain_client` 目录下，并保持与已删除旧实现解耦。
 - 第一版是否只做 H264 video push + play。
 - play 端是否必须严格使用 `VideoPlayClient`，不自研 receiver/jitter/RTCP。
 - 是否接受借鉴原 Play 的 `newConsumer` queue 和 `requestConsumerKeyFrame` 信令，但不复用浏览器媒体/QoS 栈。

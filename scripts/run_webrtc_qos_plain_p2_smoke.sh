@@ -907,6 +907,15 @@ def is_ignored_alert(line):
 def make_check(name, passed, evidence):
     return {'name': name, 'status': 'PASS' if passed else 'FAIL', 'evidence': evidence}
 
+def is_number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+def positive(value):
+    return is_number(value) and value > 0
+
+def non_negative(value):
+    return is_number(value) and value >= 0
+
 def status_from_checks(checks):
     return 'PASS' if all(c['status'] == 'PASS' for c in checks) else 'FAIL'
 
@@ -1001,21 +1010,21 @@ def parse_case(case_name):
     checks = [
         make_check('sfu-readyz-ok', ready_ok, 'readyz ok=true' if ready_ok else 'missing or non-ok readyz'),
         make_check('push-video-only-publish', bool(audio_enabled_false), 'audioEnabled=false' if audio_enabled_false else 'plain_publish_ok audioEnabled=false not found'),
-        make_check('publish-twcc-ext', bool(publish_twcc and publish_twcc > 0), 'twccExtId={}'.format(publish_twcc)),
-        make_check('play-selected-twcc-ext', bool(selected_twcc and selected_twcc > 0), 'twccExtId={}'.format(selected_twcc)),
+        make_check('publish-twcc-ext', positive(publish_twcc), 'twccExtId={}'.format(publish_twcc)),
+        make_check('play-selected-twcc-ext', positive(selected_twcc), 'twccExtId={}'.format(selected_twcc)),
         make_check('no-audio-consumer', not has_audio_consumer, 'audio consumer absent' if not has_audio_consumer else 'audio consumer notification found'),
-        make_check('push-au-output', bool(pushed_au and pushed_au > 0), 'pushedAu={}'.format(pushed_au)),
-        make_check('play-rtp-input', bool(play_rtp and play_rtp > 0), 'rtpPackets={}'.format(play_rtp)),
-        make_check('play-au-output', bool(output_au and output_au > 0), 'outputAu={}'.format(output_au)),
-        make_check('push-rtcp-feedback-input', bool(push_rtcp_in and push_rtcp_in > 0), 'rtcpFeedbackPacketsIn={}'.format(push_rtcp_in)),
+        make_check('push-au-output', positive(pushed_au), 'pushedAu={}'.format(pushed_au)),
+        make_check('play-rtp-input', positive(play_rtp), 'rtpPackets={}'.format(play_rtp)),
+        make_check('play-au-output', positive(output_au), 'outputAu={}'.format(output_au)),
+        make_check('push-rtcp-feedback-input', positive(push_rtcp_in), 'rtcpFeedbackPacketsIn={}'.format(push_rtcp_in)),
         make_check('push-rtcp-feedback-no-failures', push_rtcp_failures == 0, 'rtcpFeedbackFailures={}'.format(push_rtcp_failures)),
         make_check('play-rtcp-send-no-failures', play_rtcp_send_failures == 0, 'rtcpSendFailures={}'.format(play_rtcp_send_failures)),
         make_check('sdk-push-runtime-enabled', push_sdk_runtime_enabled, 'enabled={}'.format(push_sdk_runtime_enabled)),
         make_check('sdk-play-runtime-enabled', play_sdk_runtime_enabled, 'enabled={}'.format(play_sdk_runtime_enabled)),
-        make_check('sdk-push-runtime-files', push_sdk_runtime['runtimeLogFiles'] > 0 and push_sdk_runtime['metricsFiles'] > 0 and push_sdk_runtime['alertsFiles'] > 0, json.dumps(push_sdk_runtime, sort_keys=True)),
-        make_check('sdk-play-runtime-files', play_sdk_runtime['runtimeLogFiles'] > 0 and play_sdk_runtime['metricsFiles'] > 0 and play_sdk_runtime['alertsFiles'] > 0, json.dumps(play_sdk_runtime, sort_keys=True)),
-        make_check('sdk-play-rtcp-generated', play_sdk_runtime['transportFeedbackCountMax'] > 0 and play_sdk_runtime['receiverReportCountMax'] > 0, 'twcc={} rr={}'.format(play_sdk_runtime['transportFeedbackCountMax'], play_sdk_runtime['receiverReportCountMax'])),
-        make_check('sdk-push-rtcp-counted', push_sdk_runtime['transportFeedbackCountMax'] > 0 and push_sdk_runtime['receiverReportCountMax'] > 0, 'twcc={} rr={}'.format(push_sdk_runtime['transportFeedbackCountMax'], push_sdk_runtime['receiverReportCountMax'])),
+        make_check('sdk-push-runtime-files', positive(push_sdk_runtime.get('runtimeLogFiles')) and positive(push_sdk_runtime.get('metricsFiles')) and positive(push_sdk_runtime.get('alertsFiles')), json.dumps(push_sdk_runtime, sort_keys=True)),
+        make_check('sdk-play-runtime-files', positive(play_sdk_runtime.get('runtimeLogFiles')) and positive(play_sdk_runtime.get('metricsFiles')) and positive(play_sdk_runtime.get('alertsFiles')), json.dumps(play_sdk_runtime, sort_keys=True)),
+        make_check('sdk-play-rtcp-generated', positive(play_sdk_runtime.get('transportFeedbackCountMax')) and positive(play_sdk_runtime.get('receiverReportCountMax')), 'twcc={} rr={}'.format(play_sdk_runtime.get('transportFeedbackCountMax'), play_sdk_runtime.get('receiverReportCountMax'))),
+        make_check('sdk-push-rtcp-counted', positive(push_sdk_runtime.get('transportFeedbackCountMax')) and positive(push_sdk_runtime.get('receiverReportCountMax')), 'twcc={} rr={}'.format(push_sdk_runtime.get('transportFeedbackCountMax'), push_sdk_runtime.get('receiverReportCountMax'))),
         make_check('harness-no-failure', not bool(harness_failure), harness_failure or 'ok'),
         make_check('runtime-no-unexpected-alerts', not bool(warning_lines), 'alerts={}'.format(len(warning_lines)) if warning_lines else 'ok'),
     ]
@@ -1032,31 +1041,32 @@ def parse_case(case_name):
                 last_encoder.get('height') == v4l2_height)
         else:
             source_shape_ok = (
-                last_encoder.get('width', 0) > 0 and
-                last_encoder.get('height', 0) > 0)
+                positive(last_encoder.get('width')) and
+                positive(last_encoder.get('height')))
         checks.extend([
             make_check('encoder-metrics-present', bool(encoder_metrics), 'samples={}'.format(len(encoder_metrics))),
             make_check('encoder-mode-selected', last_encoder.get('mode') == expected_encoder_mode and last_encoder.get('encoder') == 'x264', json.dumps(last_encoder, sort_keys=True)),
-            make_check('encoder-au-output', bool(last_encoder.get('accessUnits', 0) > 0), 'accessUnits={}'.format(last_encoder.get('accessUnits'))),
-            make_check('encoder-keyframe-output', bool(last_encoder.get('keyframes', 0) > 0), 'keyframes={}'.format(last_encoder.get('keyframes'))),
+            make_check('encoder-au-output', positive(last_encoder.get('accessUnits')), 'accessUnits={}'.format(last_encoder.get('accessUnits'))),
+            make_check('encoder-keyframe-output', positive(last_encoder.get('keyframes')), 'keyframes={}'.format(last_encoder.get('keyframes'))),
             make_check(
                 'encoder-forced-keyframe-response',
                 bool(
-                    last_encoder.get('forcedKeyframeRequests', 0) > 0 and
-                    last_encoder.get('forcedKeyframes', 0) > 0 and
-                    0 <= last_encoder.get('maxForcedKeyframeDelayUs', -1) <= 1000000),
+                    positive(last_encoder.get('forcedKeyframeRequests')) and
+                    positive(last_encoder.get('forcedKeyframes')) and
+                    is_number(last_encoder.get('maxForcedKeyframeDelayUs')) and
+                    0 <= last_encoder.get('maxForcedKeyframeDelayUs') <= 1000000),
                 'forcedKeyframeRequests={} forcedKeyframes={} maxForcedKeyframeDelayUs={}'.format(
                     last_encoder.get('forcedKeyframeRequests'),
                     last_encoder.get('forcedKeyframes'),
                     last_encoder.get('maxForcedKeyframeDelayUs'))),
-            make_check('encoder-source-shape', source_shape_ok and last_encoder.get('currentFps', 0) > 0 and last_encoder.get('currentBitrateBps', 0) > 0, json.dumps(last_encoder, sort_keys=True)),
+            make_check('encoder-source-shape', source_shape_ok and positive(last_encoder.get('currentFps')) and positive(last_encoder.get('currentBitrateBps')), json.dumps(last_encoder, sort_keys=True)),
         ])
     if decode_qoe:
         checks.extend([
             make_check('qoe-metrics-present', bool(qoe_metrics), 'samples={}'.format(len(qoe_metrics))),
-            make_check('qoe-decodes-frames', bool(last_qoe.get('decodedFrames', 0) > 0), 'decodedFrames={}'.format(last_qoe.get('decodedFrames'))),
+            make_check('qoe-decodes-frames', positive(last_qoe.get('decodedFrames')), 'decodedFrames={}'.format(last_qoe.get('decodedFrames'))),
             make_check('qoe-decode-errors-zero', last_qoe.get('decodeErrors', 0) == 0, 'decodeErrors={}'.format(last_qoe.get('decodeErrors'))),
-            make_check('qoe-first-frame-observable', last_qoe.get('firstFrameDelayUs', -1) >= 0, 'firstFrameDelayUs={}'.format(last_qoe.get('firstFrameDelayUs'))),
+            make_check('qoe-first-frame-observable', non_negative(last_qoe.get('firstFrameDelayUs')), 'firstFrameDelayUs={}'.format(last_qoe.get('firstFrameDelayUs'))),
         ])
 
     if case_name != 'baseline':
@@ -1064,7 +1074,7 @@ def parse_case(case_name):
             rtt = [m['rttMs'] for m in push_metrics if m.get('rttMs') is not None]
             checks.append(make_check('weak-delay-rtt-observable', bool(rtt and max(rtt) >= 50), 'rttMax={}'.format(max(rtt) if rtt else None)))
         elif case_name.startswith('loss_'):
-            checks.append(make_check('weak-loss-feedback-observable', bool(max_nack > 0 or max_retransmission > 0 or (push_rtcp_in and push_rtcp_in > 0)), 'nack={} retransmission={} pushRtcpIn={}'.format(max_nack, max_retransmission, push_rtcp_in)))
+            checks.append(make_check('weak-loss-feedback-observable', bool(max_nack > 0 or max_retransmission > 0 or positive(push_rtcp_in)), 'nack={} retransmission={} pushRtcpIn={}'.format(max_nack, max_retransmission, push_rtcp_in)))
         elif case_name == 'bandwidth_600k':
             targets = [m['targetBps'] for m in push_metrics]
             dropped = bool(targets and min(targets) < max(targets) * 0.9)
@@ -1096,16 +1106,19 @@ def parse_case(case_name):
                     len(post_targets),
                     timing.get('recoverSeconds'))))
             if decode_qoe:
+                recovery_delay_ms = recovery_qoe.get('postClearFirstDecodedDelayMs')
+                recovery_decoded_delta = recovery_qoe.get('postClearDecodedFramesDelta')
                 recovery_first_frame_ok = bool(
-                    recovery_qoe.get('postClearFirstDecodedDelayMs') is not None and
-                    0 <= recovery_qoe.get('postClearFirstDecodedDelayMs') <= 15000 and
-                    recovery_qoe.get('postClearDecodedFramesDelta', 0) > 0)
+                    isinstance(recovery_delay_ms, (int, float)) and
+                    0 <= recovery_delay_ms <= 15000 and
+                    isinstance(recovery_decoded_delta, (int, float)) and
+                    recovery_decoded_delta > 0)
                 checks.append(make_check(
                     'qoe-recovery-first-frame-after-clear',
                     recovery_first_frame_ok,
                     'delayMs={} decodedDelta={} postClearSamples={} clearEpochMs={}'.format(
-                        recovery_qoe.get('postClearFirstDecodedDelayMs'),
-                        recovery_qoe.get('postClearDecodedFramesDelta'),
+                        recovery_delay_ms,
+                        recovery_decoded_delta,
                         recovery_qoe.get('postClearSamples'),
                         recovery_qoe.get('clearEpochMs'))))
 
@@ -1222,9 +1235,9 @@ qos_gate_evidence = {
 }
 qos_gate_pass = bool(
     baseline and
-    baseline.get('metrics', {}).get('selectedTwccExtId') and baseline.get('metrics', {}).get('selectedTwccExtId') > 0 and
-    baseline.get('metrics', {}).get('pushRtcpFeedbackPacketsIn') and baseline.get('metrics', {}).get('pushRtcpFeedbackPacketsIn') > 0 and
-    baseline.get('metrics', {}).get('playRtcpPacketsOut') and baseline.get('metrics', {}).get('playRtcpPacketsOut') > 0)
+    positive(baseline.get('metrics', {}).get('selectedTwccExtId')) and
+    positive(baseline.get('metrics', {}).get('pushRtcpFeedbackPacketsIn')) and
+    positive(baseline.get('metrics', {}).get('playRtcpPacketsOut')))
 
 baseline_sdk = baseline.get('metrics', {}).get('sdkRuntime', {}) if baseline else {}
 baseline_push_sdk = baseline_sdk.get('push', {})
@@ -1248,16 +1261,16 @@ sdk_observability_pass = bool(
     baseline and
     baseline_push_sdk.get('enabled') is True and
     baseline_play_sdk.get('enabled') is True and
-    baseline_push_sdk.get('runtimeLogFiles', 0) > 0 and
-    baseline_push_sdk.get('metricsFiles', 0) > 0 and
-    baseline_push_sdk.get('alertsFiles', 0) > 0 and
-    baseline_play_sdk.get('runtimeLogFiles', 0) > 0 and
-    baseline_play_sdk.get('metricsFiles', 0) > 0 and
-    baseline_play_sdk.get('alertsFiles', 0) > 0 and
-    baseline_push_sdk.get('transportFeedbackCountMax', 0) > 0 and
-    baseline_push_sdk.get('receiverReportCountMax', 0) > 0 and
-    baseline_play_sdk.get('transportFeedbackCountMax', 0) > 0 and
-    baseline_play_sdk.get('receiverReportCountMax', 0) > 0)
+    positive(baseline_push_sdk.get('runtimeLogFiles')) and
+    positive(baseline_push_sdk.get('metricsFiles')) and
+    positive(baseline_push_sdk.get('alertsFiles')) and
+    positive(baseline_play_sdk.get('runtimeLogFiles')) and
+    positive(baseline_play_sdk.get('metricsFiles')) and
+    positive(baseline_play_sdk.get('alertsFiles')) and
+    positive(baseline_push_sdk.get('transportFeedbackCountMax')) and
+    positive(baseline_push_sdk.get('receiverReportCountMax')) and
+    positive(baseline_play_sdk.get('transportFeedbackCountMax')) and
+    positive(baseline_play_sdk.get('receiverReportCountMax')))
 
 baseline_encoder = baseline.get('metrics', {}).get('encoder', {}) if baseline else {}
 encoder_source_modes = ('synthetic', 'mp4-decode-loop', 'v4l2')
@@ -1272,8 +1285,8 @@ elif source_mode == 'v4l2':
         baseline_encoder.get('height') == v4l2_height)
 else:
     baseline_encoder_shape_ok = (
-        baseline_encoder.get('width', 0) > 0 and
-        baseline_encoder.get('height', 0) > 0)
+        positive(baseline_encoder.get('width')) and
+        positive(baseline_encoder.get('height')))
 encoder_gate_evidence = {
     'sourceMode': source_mode,
     'baselineEncoderMode': baseline_encoder.get('mode'),
@@ -1295,15 +1308,16 @@ encoder_gate_pass = (
         baseline and
         baseline_encoder.get('mode') == expected_encoder_mode and
         baseline_encoder.get('name') == 'x264' and
-        baseline_encoder.get('samples', 0) > 0 and
-        baseline_encoder.get('accessUnits', 0) > 0 and
-        baseline_encoder.get('keyframes', 0) > 0 and
-        baseline_encoder.get('forcedKeyframeRequests', 0) > 0 and
-        baseline_encoder.get('forcedKeyframes', 0) > 0 and
-        0 <= baseline_encoder.get('maxForcedKeyframeDelayUs', -1) <= 1000000 and
+        positive(baseline_encoder.get('samples')) and
+        positive(baseline_encoder.get('accessUnits')) and
+        positive(baseline_encoder.get('keyframes')) and
+        positive(baseline_encoder.get('forcedKeyframeRequests')) and
+        positive(baseline_encoder.get('forcedKeyframes')) and
+        is_number(baseline_encoder.get('maxForcedKeyframeDelayUs')) and
+        0 <= baseline_encoder.get('maxForcedKeyframeDelayUs') <= 1000000 and
         baseline_encoder_shape_ok and
-        baseline_encoder.get('currentFps', 0) > 0 and
-        baseline_encoder.get('currentBitrateBps', 0) > 0))
+        positive(baseline_encoder.get('currentFps')) and
+        positive(baseline_encoder.get('currentBitrateBps'))))
 
 baseline_qoe = baseline.get('metrics', {}).get('qoe', {}) if baseline else {}
 qoe_gate_evidence = {
@@ -1321,30 +1335,33 @@ qoe_gate_evidence = {
 drop_recover_case = next((c for c in cases if c['name'] == 'drop_recover'), None)
 drop_recover_qoe = drop_recover_case.get('metrics', {}).get('qoe', {}) if drop_recover_case else {}
 drop_recover_recovery_qoe = drop_recover_qoe.get('recovery') or {}
+drop_recover_recovery_delay_ms = drop_recover_recovery_qoe.get('postClearFirstDecodedDelayMs')
+drop_recover_recovery_decoded_delta = drop_recover_recovery_qoe.get('postClearDecodedFramesDelta')
 recovery_first_frame_evidence = {
     'enabled': decode_qoe,
     'dropRecoverStatus': drop_recover_case and drop_recover_case.get('status'),
     'clearEpochMs': drop_recover_recovery_qoe.get('clearEpochMs'),
     'preClearDecodedFrames': drop_recover_recovery_qoe.get('preClearDecodedFrames'),
     'postClearFirstDecodedEpochMs': drop_recover_recovery_qoe.get('postClearFirstDecodedEpochMs'),
-    'postClearFirstDecodedDelayMs': drop_recover_recovery_qoe.get('postClearFirstDecodedDelayMs'),
-    'postClearDecodedFramesDelta': drop_recover_recovery_qoe.get('postClearDecodedFramesDelta'),
+    'postClearFirstDecodedDelayMs': drop_recover_recovery_delay_ms,
+    'postClearDecodedFramesDelta': drop_recover_recovery_decoded_delta,
     'postClearSamples': drop_recover_recovery_qoe.get('postClearSamples'),
 }
 recovery_first_frame_pass = bool(
     decode_qoe and
     drop_recover_case and
     drop_recover_case.get('status') == 'PASS' and
-    drop_recover_recovery_qoe.get('postClearFirstDecodedDelayMs') is not None and
-    0 <= drop_recover_recovery_qoe.get('postClearFirstDecodedDelayMs') <= 15000 and
-    drop_recover_recovery_qoe.get('postClearDecodedFramesDelta', 0) > 0)
+    isinstance(drop_recover_recovery_delay_ms, (int, float)) and
+    0 <= drop_recover_recovery_delay_ms <= 15000 and
+    isinstance(drop_recover_recovery_decoded_delta, (int, float)) and
+    drop_recover_recovery_decoded_delta > 0)
 qoe_gate_pass = (
     True if not decode_qoe else bool(
         baseline and
-        baseline_qoe.get('samples', 0) > 0 and
-        baseline_qoe.get('decodedFrames', 0) > 0 and
+        positive(baseline_qoe.get('samples')) and
+        positive(baseline_qoe.get('decodedFrames')) and
         baseline_qoe.get('decodeErrors', 0) == 0 and
-        baseline_qoe.get('firstFrameDelayUs', -1) >= 0))
+        non_negative(baseline_qoe.get('firstFrameDelayUs'))))
 
 gates = {
     'qosMainline': {

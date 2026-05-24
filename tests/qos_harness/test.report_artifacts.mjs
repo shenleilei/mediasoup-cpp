@@ -13,9 +13,6 @@ import {
   getReportSetPaths,
   sanitizeArchiveTimestamp,
 } from './report_artifacts.mjs';
-import {
-  getCppClientReportSetPaths,
-} from './cpp_client_report_artifacts.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,29 +32,6 @@ test('full and targeted report paths stay isolated', () => {
   assert.equal(
     targeted.caseMarkdownPath,
     '/tmp/mediasoup-cpp/docs/generated/uplink-qos-case-results.targeted.md'
-  );
-});
-
-test('plain-client full and targeted report paths stay isolated', () => {
-  const repoRoot = '/tmp/mediasoup-cpp';
-  const full = getCppClientReportSetPaths(repoRoot, 'full');
-  const targeted = getCppClientReportSetPaths(repoRoot, 'targeted');
-
-  assert.equal(
-    full.matrixJsonPath,
-    '/tmp/mediasoup-cpp/docs/generated/uplink-qos-cpp-client-matrix-report.json'
-  );
-  assert.equal(
-    full.caseMarkdownPath,
-    '/tmp/mediasoup-cpp/docs/plain-client-qos-case-results.md'
-  );
-  assert.equal(
-    targeted.matrixJsonPath,
-    '/tmp/mediasoup-cpp/docs/generated/uplink-qos-cpp-client-matrix-report.targeted.json'
-  );
-  assert.equal(
-    targeted.caseMarkdownPath,
-    '/tmp/mediasoup-cpp/docs/generated/plain-client-qos-case-results.targeted.md'
   );
 });
 
@@ -156,15 +130,7 @@ test('shell runner targeted report outputs stay aligned with helper paths', () =
   );
   assert.match(
     shellScript,
-    /docs\/generated\/plain-client-qos-case-results\.targeted\.md/
-  );
-  assert.match(
-    shellScript,
     /docs\/generated\/downlink-qos-case-results\.targeted\.md/
-  );
-  assert.doesNotMatch(
-    shellScript,
-    /docs\/generated\/uplink-qos-cpp-client-case-results\.targeted\.md/
   );
 });
 

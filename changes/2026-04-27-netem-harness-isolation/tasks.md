@@ -1,5 +1,0 @@
-- [x] Add a shared Node netem guard with exclusive lock, stale lock recovery, and exit cleanup.
-- [x] Integrate the guard into loopback, cpp-client, and browser priority netem harnesses.
-- [x] Add shell-level loopback qdisc cleanup around netem-based QoS groups in `scripts/run_qos_tests.sh`.
-- [x] Add matrix baseline contamination fail-fast behavior.
-- [x] Add regression coverage for the guard and rerun targeted browser/matrix verification.

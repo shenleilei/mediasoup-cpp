@@ -7,9 +7,9 @@
 仓库内同时维护两条客户端相关路径：
 
 - 浏览器 / WebRTC 路径
-- Linux `PlainTransport C++ client` 路径
+- WebRTC QoS Plain push/play 客户端路径
 
-如果要理解 Linux client 本身怎么工作，请继续看 [linux-client-architecture_cn.md](./linux-client-architecture_cn.md)。
+如果要理解 push/play 客户端本身怎么工作，请继续看 [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md) 和 [webrtc-qos-push-play-client-p2-design_cn.md](./webrtc-qos-push-play-client-p2-design_cn.md)。
 
 ## 线程模型
 
@@ -123,36 +123,24 @@ WorkerThread 检测到 worker 死亡（channel fd EOF）→ `onWorkerDied()` →
 4. UDP connect trick（`connect(8.8.8.8:53)` + `getsockname`，零网络开销）
 5. 最后才回退到 127.0.0.1（带 warn 日志）
 
-## Linux PlainTransport C++ client
+## WebRTC QoS Plain Push/Play Client
 
-Linux client 的核心入口在：
+新 PlainTransport 推拉流客户端的核心入口在 `client/webrtc_qos_plain_client/`，共用 `client/WsClient.*` 完成 WebSocket 信令。
 
-- `client/main.cpp`
-- `client/RtcpHandler.h`
-- `client/qos/*`
+它的职责是提供最小外围集成：
 
-它的职责不是浏览器替代，而是：
-
-- `PlainTransport` 端到端验证
-- Linux 侧 QoS 闭环
-- `cpp-client-harness` / `cpp-client-matrix`
-
-运行模型：
-
-- 主线程负责 MP4 demux、视频编码、RTP 发送、RTCP 处理、QoS 采样
-- `WsClient` reader thread 负责异步接收 response / notification
-- 每个 video track 有独立 runtime：`ssrc / producerId / encoder / qosCtrl`
+- 通过 `join`、`plainPublish`、`plainSubscribe` 接入服务端 PlainTransport 信令。
+- 绑定 mediasoup PlainTransport 的 UDP RTP/RTCP 收发端口。
+- 把 add track、编码、packetize、pacer、GoogCC、NACK/PLI/FEC、QoE 观测交给 `webrtc_qos_sdk`。
 
 主路径：
 
 ```text
 join
-  -> plainPublish
-  -> UDP PlainTransport publish
-  -> RTCP SR / RR / NACK / PLI
-  -> getStats-assisted QoS sampling
-  -> clientStats
-  -> qosPolicy / qosOverride notifications
+  -> plainPublish / plainSubscribe
+  -> UDP PlainTransport RTP/RTCP
+  -> webrtc_qos_sdk media engine
+  -> SDK stats / QoE / clientStats snapshots
 ```
 
 ## 数据流
@@ -188,7 +176,7 @@ join
 | 套件 | 内容 |
 |------|------|
 | mediasoup_tests | ORTC、RTP 类型、Room/Peer、geo、多节点辅助、request timeout、review fixes、基础稳定性单测 |
-| mediasoup_qos_unit_tests | uplink/downlink QoS 单测、plain-client QoS 单测、downlink planner / demand / supply、threaded control helper / thread-model 单测 |
+| mediasoup_qos_unit_tests | uplink/downlink QoS 单测、downlink planner / demand / supply 单测 |
 | mediasoup_integration_tests | 黑盒：真实 SFU + WebSocket 客户端 |
 | mediasoup_review_fix_tests | 重连、geo 路由、country isolation、缓存、session identity |
 | mediasoup_stability_integration_tests | close/disconnect 各种时序 |
@@ -320,12 +308,8 @@ src/
 ├── EventEmitter.h            # 轻量事件系统
 └── Logger.h                  # spdlog 封装
 client/
-├── main.cpp                  # 薄入口：只调用 PlainClientApp
-├── PlainClientApp.{h,cpp}    # plain-client shared orchestration / session bootstrap / teardown
-├── PlainClientLegacy.cpp     # legacy single-thread runtime orchestration
-├── PlainClientThreaded.cpp   # threaded runtime orchestration
-├── PlainClientSupport.{h,cpp} # stats / matrix / test helper support
-├── WsClient.{h,cpp}          # WS request/response/notification client
+├── WsClient.{h,cpp}          # WS request/response/notification client, reused by push/play
+└── webrtc_qos_plain_client/  # WebRTC QoS SDK PlainTransport push/play clients
 tests/
 ├── test_ortc.cpp                      # ORTC 协商
 ├── test_room.cpp                      # Room/Peer 管理
@@ -336,7 +320,6 @@ tests/
 ├── test_request_timeout.cpp           # Channel IPC 超时
 ├── test_review_fixes.cpp              # 历史 review 修复回归
 ├── test_common_media.cpp              # 共享 RTP/H264 helper 单测
-├── test_client_qos.cpp                # PlainTransport C++ client QoS 单测
 ├── test_qos_unit.cpp                  # QoS 数据结构
 ├── test_qos_accuracy.cpp             # QoS 精度（真实 UDP 收发）
 ├── test_qos_recording_accuracy.cpp   # 录制 QoS 精度

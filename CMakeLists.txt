@@ -234,8 +234,6 @@ if(BUILD_TESTS)
     target_compile_definitions(mediasoup_build_test_support INTERFACE MEDIASOUP_TEST_HOOKS)
 
     set(MEDIASOUP_QOS_UNIT_TEST_SOURCES
-        client/PlainClientSupport.cpp
-        tests/test_client_qos.cpp
         tests/test_downlink_allocator.cpp
         tests/test_downlink_health.cpp
         tests/test_downlink_v2.cpp
@@ -246,7 +244,6 @@ if(BUILD_TESTS)
         tests/test_qos_room_aggregator.cpp
         tests/test_qos_unit.cpp
         tests/test_qos_validator.cpp
-        tests/test_thread_model.cpp
     )
 
     set(MEDIASOUP_UNIT_TEST_SOURCES
@@ -257,7 +254,6 @@ if(BUILD_TESTS)
         tests/test_common_media.cpp
         tests/test_multinode.cpp
         tests/test_ortc.cpp
-        tests/test_plain_client_vp8.cpp
         tests/test_request_timeout.cpp
         tests/test_review_fixes.cpp
         tests/test_room.cpp
@@ -390,30 +386,4 @@ if(BUILD_TESTS)
             mediasoup_build_ffmpeg_core
     )
 
-    mediasoup_add_gtest_target(mediasoup_thread_integration_tests
-        SOURCES tests/test_thread_integration.cpp
-        LINK_LIBRARIES
-            mediasoup_build_test_support
-            mediasoup_lib
-            mediasoup_build_pthread
-            mediasoup_build_ffmpeg_extended
-    )
-
-    mediasoup_add_gtest_target(mediasoup_source_worker_failure_tests
-        SOURCES tests/test_source_worker_failure.cpp
-        LINK_LIBRARIES
-            mediasoup_build_test_support
-            mediasoup_build_pthread
-            mediasoup_build_ffmpeg_extended
-            spdlog::spdlog
-    )
-
-    mediasoup_add_gtest_target(mediasoup_source_worker_integration_tests
-        SOURCES tests/test_source_worker_integration.cpp
-        LINK_LIBRARIES
-            mediasoup_build_test_support
-            mediasoup_build_pthread
-            mediasoup_build_ffmpeg_extended
-            spdlog::spdlog
-    )
 endif()

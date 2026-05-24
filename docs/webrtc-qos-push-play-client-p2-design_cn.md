@@ -140,7 +140,7 @@ P2 签收分三层，不同层的失败不能互相替代：
 - 多房间 / 多节点 / 集群级容量测试。
 - 生产长时间 soak。
 - GPU 编码作为必需项。
-- 恢复旧 `plain-client` 自研 QoS。
+- 恢复已删除旧实现里的自研 QoS。
 - 在客户端自研 NACK/PLI/TWCC 解析逻辑。
 
 说明：
@@ -211,8 +211,7 @@ Plain push/play adapter 负责：
 
 禁止：
 
-- 新客户端不 include `client/qos`、`sendsidebwe`、`ccutils`。
-- 新客户端不链接旧 `NetworkThread`、`RtcpHandler`、`SenderTransportController`。
+- 新客户端不 include 或链接已删除的自研 QoS/BWE/RTCP/pacing 实现。
 - 新客户端不重新实现 RTP packetizer、NACK、PLI、TWCC。
 
 ### 4.2 第二期新增模块
@@ -630,7 +629,7 @@ P2 失败时按下面顺序定位，不允许直接从现象跳到改 QoS 算法
 - `plainPublish` 支持 `enableAudio=false`，此时允许 `audioSsrc` 缺省或为 0。
 - response 明确返回 `audioEnabled=false`。
 - 新 `webrtc-qos-plain-push-client` 默认发送 `enableAudio=false`，不再发送 `audioSsrc`。
-- 未传 `enableAudio` 的旧请求仍默认 `true`，保持旧 plain-client 行为。
+- 未传 `enableAudio` 的旧请求仍默认 `true`，保持既有服务端协议行为。
 
 目标：
 
@@ -651,7 +650,7 @@ P2 失败时按下面顺序定位，不允许直接从现象跳到改 QoS 算法
 
 兼容策略：
 
-- 未传 `enableAudio` 时保持旧行为，避免破坏旧 plain-client。
+- 未传 `enableAudio` 时保持旧行为，避免破坏已有调用方。
 - `enableAudio=false` 时允许 `audioSsrc` 缺省或为 0。
 - response 中明确返回 `audioEnabled=false`。
 
@@ -1124,7 +1123,7 @@ P2-M4 video-only publish
 - 实施：`plainPublish enableAudio=false`，新 push 默认 video-only；旧请求不传 `enableAudio` 时保持原行为。
 - 验证：targeted integration 验证新旧请求；smoke 验证无 audio producer、play 只收到 video consumer。
 - 观测：`plain_publish_ok audioEnabled=false`、stats report producer 列表、无 audio auto-subscribe error。
-- 退出条件：破坏旧 plain-client 兼容或仍创建 dummy audio producer 时不得合入。
+- 退出条件：破坏既有 `plainPublish` 调用兼容或仍创建 dummy audio producer 时不得合入。
 
 #### P2-M5 实时 x264 encoder
 
@@ -1282,14 +1281,9 @@ scripts/run_webrtc_qos_plain_p2_smoke.sh \
 
 ```text
 webrtc-qos-plain-push-client and webrtc-qos-plain-play-client must not depend on:
-  client/qos
-  client/sendsidebwe
-  client/ccutils
-  RtcpHandler.h
-  NetworkThread.h
-  SenderTransportController.h
+  deleted self-managed QoS / BWE / RTCP / pacing code
   H264Packetizer
-  Vp8Packetizer
+  self-managed VP8 packetizer
   PublisherQosController
 ```
 
@@ -1305,7 +1299,7 @@ webrtc-qos-plain-push-client and webrtc-qos-plain-play-client must not depend on
 | PLI force IDR 不稳定 | 加 encoder 级日志和 AU keyframe 标记，验收看 1 秒内 IDR。 |
 | 浏览器自动化不稳定或浏览器缺 H264 capability | browser smoke 独立成可重试 case；缺 capability 时输出 device/router codecs 并记 `SKIP/PARTIAL`，不阻塞 native QoS harness 的基础报告，也不能声明 browser PASS。 |
 | V4L2 环境缺设备 | V4L2 case 可 SKIP；synthetic 和 MP4 decode loop 是必跑。 |
-| video-only 影响旧 plain-client | `enableAudio` 默认保持旧行为，新客户端显式传 `false`。 |
+| video-only 影响既有调用方 | `enableAudio` 默认保持旧行为，新客户端显式传 `false`。 |
 
 ### 14.1 风险里程碑
 

@@ -11,7 +11,6 @@ FAILURES_FILE="$ARTIFACTS_DIR/last-failures.txt"
 DOWNLINK_SUMMARY_FILE="$ROOT_DIR/docs/downlink-qos-test-results-summary.md"
 GENERATE_CASE_REPORT=0
 GENERATE_DOWNLINK_CASE_REPORT=0
-GENERATE_CPP_CLIENT_CASE_REPORT=0
 MATRIX_INCLUDE_EXTENDED=0
 MATRIX_CASES=""
 
@@ -21,9 +20,6 @@ ALL_GROUPS=(
   cpp-integration
   cpp-accuracy
   cpp-recording
-  cpp-client-matrix
-  cpp-client-harness
-  cpp-threaded
   node-harness
   browser-harness
   matrix
@@ -65,9 +61,6 @@ Available groups:
   cpp-integration   服务端 QoS 集成测试（包含 uplink/downlink QoS 集成测试）
   cpp-accuracy      QoS accuracy 测试
   cpp-recording     QoS recording accuracy 测试
-  cpp-client-matrix PlainTransport C++ client weak-network matrix（run_cpp_client_matrix.mjs）
-  cpp-client-harness PlainTransport C++ client signaling / publish snapshot / override harness
-  cpp-threaded      PlainTransport C++ client threaded gtest / threaded harness regression
   node-harness      Node QoS harness 场景
   browser-harness   browser_server_signal + browser_loopback + downlink browser harnesses
   matrix            browser loopback full matrix（run_matrix.mjs）
@@ -141,7 +134,6 @@ cleanup_test_processes_fallback() {
     "mediasoup-sfu.*--port=${port}"
     "mediasoup_qos_integration_tests"
     "tests/qos_harness/run.mjs"
-    "tests/qos_harness/run_cpp_client_matrix.mjs"
     "tests/qos_harness/browser_server_signal.mjs"
     "tests/qos_harness/browser_loopback.mjs"
     "tests/qos_harness/browser_downlink_controls.mjs"
@@ -150,7 +142,6 @@ cleanup_test_processes_fallback() {
     "tests/qos_harness/browser_downlink_v2.mjs"
     "tests/qos_harness/browser_downlink_v3.mjs"
     "tests/qos_harness/run_matrix.mjs"
-    "client/build/plain-client 127.0.0.1 14"
     "headless_shell .*puppeteer_dev_chrome_profile-"
   )
 
@@ -230,31 +221,6 @@ ensure_target_built() {
       --cwd "$ROOT_DIR" \
       cmake --build "$BUILD_DIR" --target "$target"
   fi
-}
-
-ensure_plain_client_built() {
-  local build_dir="$ROOT_DIR/client/build"
-  local binary="$build_dir/plain-client"
-
-  require_file "$build_dir/Makefile"
-
-  local rebuild=0
-  if [[ ! -x "$binary" ]]; then
-    rebuild=1
-  elif find "$ROOT_DIR/client" -maxdepth 2 \
-      \( -name '*.cpp' -o -name '*.h' -o -name 'CMakeLists.txt' \) \
-      -newer "$binary" | grep -q .; then
-    rebuild=1
-  fi
-
-  if ((rebuild)); then
-    run_cmd \
-      "build:plain-client" \
-      --cwd "$build_dir" \
-      cmake --build . --target plain-client
-  fi
-
-  require_file "$binary"
 }
 
 run_loopback_netem_preflight() {
@@ -562,7 +528,7 @@ normalize_groups() {
         requested=("${ALL_GROUPS[@]}")
         break
       fi
-      if [[ "$group" == node-harness:* || "$group" == browser-harness:* || "$group" == cpp-client-harness:* ]]; then
+      if [[ "$group" == node-harness:* || "$group" == browser-harness:* ]]; then
         requested+=("$group")
         continue
       fi
@@ -639,18 +605,6 @@ run_cpp_unit() {
     mediasoup_qos_unit_tests \
     "$BUILD_DIR/mediasoup_qos_unit_tests" \
     "$ROOT_DIR/CMakeLists.txt" \
-    "$ROOT_DIR/tests/test_client_qos.cpp" \
-    "$ROOT_DIR/client/qos/QosConstants.h" \
-    "$ROOT_DIR/client/qos/QosController.h" \
-    "$ROOT_DIR/client/qos/QosCoordinator.h" \
-    "$ROOT_DIR/client/qos/QosExecutor.h" \
-    "$ROOT_DIR/client/qos/QosPlanner.h" \
-    "$ROOT_DIR/client/qos/QosProbe.h" \
-    "$ROOT_DIR/client/qos/QosProfiles.h" \
-    "$ROOT_DIR/client/qos/QosProtocol.h" \
-    "$ROOT_DIR/client/qos/QosSignals.h" \
-    "$ROOT_DIR/client/qos/QosStateMachine.h" \
-    "$ROOT_DIR/client/qos/QosTypes.h" \
     "$ROOT_DIR/tests/test_downlink_allocator.cpp" \
     "$ROOT_DIR/tests/test_downlink_health.cpp" \
     "$ROOT_DIR/tests/test_downlink_v2.cpp" \
@@ -660,9 +614,7 @@ run_cpp_unit() {
     "$ROOT_DIR/tests/test_qos_registry.cpp" \
     "$ROOT_DIR/tests/test_qos_aggregator.cpp" \
     "$ROOT_DIR/tests/test_qos_room_aggregator.cpp" \
-    "$ROOT_DIR/tests/test_qos_override.cpp" \
-    "$ROOT_DIR/tests/test_thread_model.cpp" \
-    "$ROOT_DIR/client/ThreadedControlHelpers.h"
+    "$ROOT_DIR/tests/test_qos_override.cpp"
   run_cmd \
     "cpp-unit" \
     --cwd "$ROOT_DIR" \
@@ -707,100 +659,6 @@ run_cpp_recording() {
     "$BUILD_DIR/mediasoup_qos_recording_accuracy_tests"
 }
 
-run_cpp_client_matrix() {
-  require_file "$BUILD_DIR/mediasoup-sfu"
-  ensure_target_built \
-    mediasoup-sfu \
-    "$BUILD_DIR/mediasoup-sfu" \
-    "$ROOT_DIR/src/main.cpp" \
-    "$ROOT_DIR/src/SignalingServer.cpp" \
-    "$ROOT_DIR/src/RoomService.cpp"
-  ensure_plain_client_built
-  prepare_test_port 14019 "QoS cpp-client matrix SFU port 14019"
-  clear_loopback_root_qdisc
-  if ! run_loopback_netem_preflight "cpp-client-matrix:netem-preflight"; then
-    clear_loopback_root_qdisc
-    return 1
-  fi
-  local matrix_args=()
-  if ((MATRIX_INCLUDE_EXTENDED)); then
-    matrix_args+=("--include-extended")
-  fi
-  if [[ -n "$MATRIX_CASES" ]]; then
-    matrix_args+=("--cases=$MATRIX_CASES")
-  fi
-  local rc=0
-  if ! run_cmd \
-    "cpp-client-matrix" \
-    --cwd "$ROOT_DIR" \
-    node "$ROOT_DIR/tests/qos_harness/run_cpp_client_matrix.mjs" "${matrix_args[@]}"; then
-    rc=1
-  fi
-  clear_loopback_root_qdisc
-  return "$rc"
-}
-
-run_cpp_client_harness() {
-  require_file "$BUILD_DIR/mediasoup-sfu"
-  ensure_target_built \
-    mediasoup-sfu \
-    "$BUILD_DIR/mediasoup-sfu" \
-    "$ROOT_DIR/src/main.cpp" \
-    "$ROOT_DIR/src/SignalingServer.cpp" \
-    "$ROOT_DIR/src/RoomService.cpp"
-  ensure_plain_client_built
-  prepare_test_port 14020 "QoS cpp-client harness SFU port 14020"
-  if ! run_loopback_netem_preflight "cpp-client-harness:netem-preflight"; then
-    return 1
-  fi
-  local scenarios=(
-    publish_snapshot
-    stale_seq
-    policy_update
-    auto_override_poor
-    override_force_audio_only
-    manual_clear
-    multi_video_budget
-    multi_track_snapshot
-    threaded_generation_switch
-    threaded_quick
-  )
-
-  local failed=0
-  for scenario in "${scenarios[@]}"; do
-    if ! run_cmd \
-      "cpp-client-harness:$scenario" \
-      --cwd "$ROOT_DIR" \
-      env QOS_CPP_CLIENT_HARNESS_PORT=14020 \
-      node "$ROOT_DIR/tests/qos_harness/run_cpp_client_harness.mjs" "$scenario"; then
-      failed=1
-    fi
-  done
-  return "$failed"
-}
-
-run_cpp_threaded() {
-  require_file "$BUILD_DIR/mediasoup_thread_integration_tests"
-  ensure_target_built \
-    mediasoup_thread_integration_tests \
-    "$BUILD_DIR/mediasoup_thread_integration_tests" \
-    "$ROOT_DIR/tests/test_thread_integration.cpp" \
-    "$ROOT_DIR/tests/TestWsClient.h" \
-    "$ROOT_DIR/tests/TestProcessUtils.h" \
-    "$ROOT_DIR/client/ThreadTypes.h" \
-    "$ROOT_DIR/client/ThreadedControlHelpers.h" \
-    "$ROOT_DIR/client/NetworkThread.h" \
-    "$ROOT_DIR/client/SourceWorker.h" \
-    "$ROOT_DIR/client/main.cpp"
-  ensure_plain_client_built
-  prepare_test_port 14021 "threaded integration SFU port 14021"
-  run_cmd \
-    "cpp-threaded:gtest" \
-    --cwd "$ROOT_DIR" \
-    env QOS_THREAD_INTEGRATION_PORT=14021 \
-    "$BUILD_DIR/mediasoup_thread_integration_tests"
-}
-
 run_node_harness() {
   prepare_test_port 14011 "QoS node harness SFU port 14011"
   local failed=0
@@ -831,14 +689,12 @@ run_node_harness() {
 }
 
 run_browser_harness() {
-  ensure_plain_client_built
   prepare_test_port 14012 "QoS browser harness SFU port 14012"
   prepare_test_port 14013 "Downlink control harness SFU port 14013"
   prepare_test_port 14014 "Downlink E2E harness SFU port 14014"
   prepare_test_port 14015 "Downlink priority harness SFU port 14015"
   prepare_test_port 14016 "Downlink v2 harness SFU port 14016"
   prepare_test_port 14017 "Downlink v3 harness SFU port 14017"
-  prepare_test_port 14022 "Public interop browser harness SFU port 14022"
   clear_loopback_root_qdisc
   if ! run_loopback_netem_preflight "browser-harness:netem-preflight"; then
     clear_loopback_root_qdisc
@@ -846,14 +702,6 @@ run_browser_harness() {
   fi
   log_system_snapshot "pre-browser-harness"
   local failed=0
-  if ! run_cmd \
-    "browser-harness:public-interop" \
-    --cwd "$ROOT_DIR" \
-    env QOS_BROWSER_PUBLIC_INTEROP_PORT=14022 \
-    node "$ROOT_DIR/tests/qos_harness/browser_public_interop.mjs"; then
-    failed=1
-  fi
-
   if ! run_cmd \
     "browser-harness:server-signal" \
     --cwd "$ROOT_DIR" \
@@ -953,9 +801,6 @@ run_group() {
     cpp-integration) run_cpp_integration ;;
     cpp-accuracy) run_cpp_accuracy ;;
     cpp-recording) run_cpp_recording ;;
-    cpp-client-matrix) run_cpp_client_matrix ;;
-    cpp-client-harness) run_cpp_client_harness ;;
-    cpp-threaded) run_cpp_threaded ;;
     node-harness) run_node_harness ;;
     browser-harness) run_browser_harness ;;
     matrix) run_matrix ;;
@@ -967,25 +812,8 @@ run_group() {
 run_target() {
   local target="$1"
   case "$target" in
-    client-js|cpp-unit|cpp-integration|cpp-accuracy|cpp-recording|cpp-client-matrix|cpp-client-harness|cpp-threaded|node-harness|browser-harness|matrix|downlink-matrix)
+    client-js|cpp-unit|cpp-integration|cpp-accuracy|cpp-recording|node-harness|browser-harness|matrix|downlink-matrix)
       run_group "$target"
-      ;;
-    cpp-client-harness:*)
-      prepare_test_port 14020 "QoS cpp-client harness SFU port 14020"
-      local scenario="${target#cpp-client-harness:}"
-      run_cmd \
-        "$target" \
-        --cwd "$ROOT_DIR" \
-        env QOS_CPP_CLIENT_HARNESS_PORT=14020 \
-        node "$ROOT_DIR/tests/qos_harness/run_cpp_client_harness.mjs" "$scenario"
-      ;;
-    cpp-threaded:*)
-      prepare_test_port 14021 "threaded integration SFU port 14021"
-      run_cmd \
-        "$target" \
-        --cwd "$ROOT_DIR" \
-        env QOS_THREAD_INTEGRATION_PORT=14021 \
-        "$BUILD_DIR/mediasoup_thread_integration_tests"
       ;;
     node-harness:*)
       prepare_test_port 14011 "QoS node harness SFU port 14011"
@@ -1008,15 +836,6 @@ run_target() {
         "$target" \
         --cwd "$ROOT_DIR" \
         node "$ROOT_DIR/tests/qos_harness/browser_server_signal.mjs"
-      ;;
-    browser-harness:public-interop)
-      ensure_plain_client_built
-      prepare_test_port 14022 "Public interop browser harness SFU port 14022"
-      run_cmd \
-        "$target" \
-        --cwd "$ROOT_DIR" \
-        env QOS_BROWSER_PUBLIC_INTEROP_PORT=14022 \
-        node "$ROOT_DIR/tests/qos_harness/browser_public_interop.mjs"
       ;;
     browser-harness:loopback)
       prepare_test_port 14012 "QoS browser harness SFU port 14012"
@@ -1121,9 +940,6 @@ for group in "${GROUPS_TO_RUN[@]}"; do
   if [[ "$group" == "downlink-matrix" ]]; then
     GENERATE_DOWNLINK_CASE_REPORT=1
   fi
-  if [[ "$group" == "cpp-client-matrix" ]]; then
-    GENERATE_CPP_CLIENT_CASE_REPORT=1
-  fi
 done
 
 FAILED_TASKS=()
@@ -1181,33 +997,6 @@ if ((GENERATE_CASE_REPORT)) && [[ -f "$CASE_REPORT_SCRIPT" ]]; then
   else
     echo "<== [case-report] WARN (generation failed)" >&2
   fi
-  fi
-fi
-
-CPP_CLIENT_CASE_REPORT_SCRIPT="$ROOT_DIR/tests/qos_harness/render_cpp_client_case_report.mjs"
-if ((GENERATE_CPP_CLIENT_CASE_REPORT)) && [[ -f "$CPP_CLIENT_CASE_REPORT_SCRIPT" ]]; then
-  if [[ -n "$MATRIX_CASES" ]]; then
-    CPP_CLIENT_CASE_REPORT_JSON="$ROOT_DIR/docs/generated/uplink-qos-cpp-client-matrix-report.targeted.json"
-    CPP_CLIENT_CASE_REPORT_OUTPUT="$ROOT_DIR/docs/generated/plain-client-qos-case-results.targeted.md"
-  else
-    CPP_CLIENT_CASE_REPORT_JSON="$ROOT_DIR/docs/generated/uplink-qos-cpp-client-matrix-report.json"
-    CPP_CLIENT_CASE_REPORT_OUTPUT="$ROOT_DIR/docs/plain-client-qos-case-results.md"
-  fi
-
-  if [[ ! -f "$CPP_CLIENT_CASE_REPORT_JSON" ]]; then
-    echo
-    echo "<== [cpp-client-case-report] WARN (matrix json not found: $CPP_CLIENT_CASE_REPORT_JSON)" >&2
-  else
-    echo
-    echo "==> [cpp-client-case-report]"
-    if node \
-      "$CPP_CLIENT_CASE_REPORT_SCRIPT" \
-      "--input=$CPP_CLIENT_CASE_REPORT_JSON" \
-      "--output=$CPP_CLIENT_CASE_REPORT_OUTPUT"; then
-      echo "<== [cpp-client-case-report] PASS"
-    else
-      echo "<== [cpp-client-case-report] WARN (generation failed)" >&2
-    fi
   fi
 fi
 

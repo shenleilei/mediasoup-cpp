@@ -241,7 +241,7 @@ scenario definition
 
 ## 8. GCC-oriented expectation 对齐
 
-当前主线已进一步对齐一批 `cpp-client` synthetic 用例期望，使其符合更常见的 GCC 直觉，而不是更保守的产品级预警策略。
+当前主线已进一步对齐一批 synthetic 用例期望，使其符合更常见的 GCC 直觉，而不是更保守的产品级预警策略。
 
 已放宽的 case：
 

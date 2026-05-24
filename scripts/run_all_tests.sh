@@ -3,7 +3,6 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build"
-CLIENT_BUILD_DIR="$ROOT_DIR/client/build"
 REPORT_FILE="$ROOT_DIR/docs/full-regression-test-results.md"
 JOBS="${JOBS:-$(nproc)}"
 
@@ -12,7 +11,6 @@ ALL_GROUPS=(
   integration
   qos
   topology
-  threaded
 )
 ALIAS_GROUPS=(
   non-qos
@@ -117,7 +115,7 @@ usage() {
   cat <<'EOF'
 Usage:
   scripts/run_all_tests.sh
-  scripts/run_all_tests.sh unit threaded
+  scripts/run_all_tests.sh unit qos
   scripts/run_all_tests.sh non-qos
   scripts/run_all_tests.sh --list
 
@@ -131,15 +129,12 @@ Groups:
   integration  integration / e2e / stability / review-fix binaries
   qos          full QoS regression delegated to scripts/run_qos_tests.sh
   topology     topology + multinode binaries
-  threaded     compatibility alias for threaded QoS regression only
   non-qos      alias for unit + integration + topology
 
 Notes:
   - This script is the full repository regression entry.
   - Selected groups keep running after a test failure; the script exits non-zero at the end if any group failed.
   - It covers the native groups here and delegates the full QoS regression surface to scripts/run_qos_tests.sh.
-  - If qos is selected, threaded is skipped automatically because qos already includes the threaded QoS slice.
-  - threaded tests require client/build/plain-client.
   - mediasoup_review_fix_tests, mediasoup_multinode_tests, and mediasoup_topology_tests
     start an isolated Redis and require redis-server in PATH.
 EOF
@@ -152,7 +147,6 @@ list_groups() {
 
 normalize_selected_groups() {
   local group
-  local has_qos=0
   local -a normalized=()
 
   for group in "${SELECTED_GROUPS[@]}"; do
@@ -179,19 +173,7 @@ normalize_selected_groups() {
     esac
 
     normalized+=("$group")
-    if [[ "$group" == "qos" ]]; then
-      has_qos=1
-    fi
   done
-
-  if ((has_qos)); then
-    local -a filtered=()
-    for group in "${normalized[@]}"; do
-      [[ "$group" == "threaded" ]] && continue
-      filtered+=("$group")
-    done
-    normalized=("${filtered[@]}")
-  fi
 
   SELECTED_GROUPS=("${normalized[@]}")
 }
@@ -327,14 +309,11 @@ write_report() {
     echo "|---|---|---|---|"
     append_report_link_row "$ROOT_DIR/docs/uplink-qos-test-results-summary.md" "Uplink Summary" "Uplink QoS summary"
     append_report_link_row "$ROOT_DIR/docs/uplink-qos-case-results.md" "Uplink Cases" "Browser uplink per-case report"
-    append_report_link_row "$ROOT_DIR/docs/plain-client-qos-case-results.md" "Plain Client Cases" "PlainTransport C++ client per-case report"
     append_report_link_row "$ROOT_DIR/docs/downlink-qos-test-results-summary.md" "Downlink Summary" "Downlink QoS summary"
     append_report_link_row "$ROOT_DIR/docs/downlink-qos-case-results.md" "Downlink Cases" "Downlink per-case report"
     append_report_link_row "$ROOT_DIR/docs/generated/uplink-qos-matrix-report.json" "Uplink Matrix JSON" "Latest browser uplink matrix artifact"
-    append_report_link_row "$ROOT_DIR/docs/generated/uplink-qos-cpp-client-matrix-report.json" "Plain Client Matrix JSON" "Latest C++ client matrix artifact"
     append_report_link_row "$ROOT_DIR/docs/generated/downlink-qos-matrix-report.json" "Downlink Matrix JSON" "Latest downlink matrix artifact"
     append_latest_artifact_row "changes/2026-04-21-livekit-aligned-send-side-bwe/artifacts/full43-compare" "LiveKit 48-Case Compare" "Latest livekit-aligned 43-case comparison"
-    append_latest_artifact_row "changes/2026-04-21-plain-client-sender-transport-control/artifacts/twcc-ab-eval" "TWCC A/B Eval" "Latest TWCC A/B effectiveness report"
   } > "$REPORT_FILE"
 }
 
@@ -413,11 +392,7 @@ build_targets() {
     mediasoup_multinode_tests \
     mediasoup_review_fix_tests \
     mediasoup_qos_accuracy_tests \
-    mediasoup_qos_recording_accuracy_tests \
-    mediasoup_thread_integration_tests \
-    mediasoup_source_worker_failure_tests \
-    mediasoup_source_worker_integration_tests
-  cmake --build "$CLIENT_BUILD_DIR" -j"$JOBS" --target plain-client
+    mediasoup_qos_recording_accuracy_tests
   log_system_snapshot "post-build"
 }
 
@@ -504,14 +479,6 @@ run_topology() {
   return "$failed"
 }
 
-run_threaded() {
-  require_file "$ROOT_DIR/scripts/run_qos_tests.sh" "threaded:preflight:run_qos_tests.sh" || return 1
-  cleanup_test_ports
-  run_cmd \
-    "threaded:qos-threaded-regression" \
-    "$ROOT_DIR/scripts/run_qos_tests.sh" cpp-threaded
-}
-
 run_group() {
   local group="$1"
   case "$group" in
@@ -519,7 +486,6 @@ run_group() {
     integration) run_integration ;;
     qos) run_qos ;;
     topology) run_topology ;;
-    threaded) run_threaded ;;
     *) echo "error: unknown group '$group'" >&2; return 1 ;;
   esac
 }
