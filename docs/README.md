@@ -5,17 +5,15 @@
 - 当前仍在使用的主文档
 - QoS 专项文档
 - 运维 / 上线文档
-- 历史 review / 开发记录
 - 机器生成的辅助结果
 
-为了避免把“历史快照”和“当前结论”混在一起，建议按下面顺序阅读。
+为了避免把一次性过程材料和当前结论文档混在一起，建议按下面顺序阅读。
 
 ## 1. 按角色阅读
 
 | 角色 | 建议起点 |
 |---|---|
 | 新接手开发 | [DEVELOPMENT.md](./DEVELOPMENT.md) |
-| 整理 AI 协作规范 | [aicoding/README.md](./aicoding/README.md) |
 | 搭环境 / 查依赖 | [dependencies_cn.md](./dependencies_cn.md) → [README.md](../README.md) → [DEVELOPMENT.md](./DEVELOPMENT.md) |
 | 做仓库全量回归 | [README.md](../README.md) → [DEVELOPMENT.md](./DEVELOPMENT.md) → [run_all_tests.sh](../scripts/run_all_tests.sh) → [full-regression-test-results.md](./full-regression-test-results.md) |
 | 配 nightly 全量回归邮件 | [nightly-full-regression.md](./nightly-full-regression.md) → [run_all_tests.sh](../scripts/run_all_tests.sh) → [full-regression-test-results.md](./full-regression-test-results.md) |
@@ -26,8 +24,6 @@
 | 查 QoS 详细 case 结果 | [uplink-qos-case-analysis.md](./uplink-qos-case-analysis.md) |
 | 查 QoS 测试覆盖地图 | [qos-test-coverage_cn.md](./qos-test-coverage_cn.md) |
 | 做上线 / 运维准备 | [PRODUCTION_CHECKLIST.md](./PRODUCTION_CHECKLIST.md) → [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) |
-| 做商业化排期 | [commercialization-plan_cn.md](./commercialization-plan_cn.md) → [q1.md](./q1.md) |
-| 查历史背景 | [archive/CODE_REVIEW_2026-04-08.md](./archive/CODE_REVIEW_2026-04-08.md) / [archive/DEVELOPMENT_2026-04-08.md](./archive/DEVELOPMENT_2026-04-08.md) |
 
 ## 2. 当前主文档
 
@@ -47,8 +43,6 @@
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | 项目开发主文档，包含架构、线程模型、构建与测试入口。 |
 | [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) | 监控、告警与值班处理流程。 |
 | [PRODUCTION_CHECKLIST.md](./PRODUCTION_CHECKLIST.md) | 上线前检查项。 |
-| [commercialization-plan_cn.md](./commercialization-plan_cn.md) | 商业化路线图，回答三个月可商用与十二个月领先要补什么。 |
-| [q1.md](./q1.md) | 截止 `2026-07-14` 的执行版计划，按 `2026-07-01` 上线和 `2026-07-14` QoS 强化拆分。 |
 | [mediasoup-worker-architecture-analysis_cn.md](./mediasoup-worker-architecture-analysis_cn.md) | 基于 `mediasoup-worker 3.14.6` 源码的架构与模块分析，从进程入口到 `Router/Transport/Producer/Consumer/BWE`。 |
 | [REDIS_KEY_GUIDELINES.md](./REDIS_KEY_GUIDELINES.md) | Redis key 设计和约束。 |
 
@@ -77,9 +71,8 @@
 19. [uplink-qos-case-analysis.md](./uplink-qos-case-analysis.md)
 20. [uplink-qos-blind-spot-scenario.md](./uplink-qos-blind-spot-scenario.md)
 21. [uplink-qos-loopback-boundary-investigation.md](./uplink-qos-loopback-boundary-investigation.md)
-22. [uplink-qos-priority-roadmap.md](./uplink-qos-priority-roadmap.md)
-23. [uplink-qos-test-execution-checklist.md](./uplink-qos-test-execution-checklist.md)
-24. [qos-test-coverage_cn.md](./qos-test-coverage_cn.md)
+22. [uplink-qos-test-execution-checklist.md](./uplink-qos-test-execution-checklist.md)
+23. [qos-test-coverage_cn.md](./qos-test-coverage_cn.md)
 
 说明：
 
@@ -99,15 +92,14 @@
 - [uplink-qos-blind-spot-scenario.md](./uplink-qos-blind-spot-scenario.md) 用来汇总“高质量网络突入长时盲区再恢复”这一类极端转场场景的理论时序和实测结果。
 - [uplink-qos-loopback-boundary-investigation.md](./uplink-qos-loopback-boundary-investigation.md) 用来记录 `BW2` 一类 loopback 边界 case 的专项排查结论、runner 特性和后续治理方向。
 - full matrix 当前机器结果在 [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json)。
-- targeted rerun 当前机器结果在 [generated/uplink-qos-case-results.targeted.md](./generated/uplink-qos-case-results.targeted.md) 和 [generated/uplink-qos-matrix-report.targeted.json](./generated/uplink-qos-matrix-report.targeted.json)。
+- targeted rerun 结果由脚本生成到 `docs/generated/uplink-qos-case-results.targeted.md` 和 `docs/generated/uplink-qos-matrix-report.targeted.json`；当前仓库不保留这类临时 targeted 结果。
 - WebRTC QoS P2 smoke 当前机器报告在 [generated/webrtc-qos-plain-p2-smoke-report.md](./generated/webrtc-qos-plain-p2-smoke-report.md)，原始 JSON 在 [generated/webrtc-qos-plain-p2-smoke-report.json](./generated/webrtc-qos-plain-p2-smoke-report.json)。当前主报告 `qosMainline/sdkRuntimeObservability/encoderRuntime/nativeDecodeQoe/recoveryFirstFrame/weakNetworkCoverage` 均为 `PASS`。
 - WebRTC QoS P2 执行方案在 [webrtc-qos-push-play-client-p2-design_cn.md](./webrtc-qos-push-play-client-p2-design_cn.md)，其中 P2-M8b 把 `drop_recover` 清网后 15 秒内 decoded frames 增长列为恢复首帧硬门禁；专项报告在 [generated/webrtc-qos-plain-p2-recovery-first-frame-report.md](./generated/webrtc-qos-plain-p2-recovery-first-frame-report.md)，原始 JSON 在 [generated/webrtc-qos-plain-p2-recovery-first-frame-report.json](./generated/webrtc-qos-plain-p2-recovery-first-frame-report.json)。
 - WebRTC QoS P2 MP4 decode-loop baseline 报告在 [generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md](./generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md)，原始 JSON 在 [generated/webrtc-qos-plain-p2-mp4-decode-loop-report.json](./generated/webrtc-qos-plain-p2-mp4-decode-loop-report.json)。
 - WebRTC QoS P2 browser receiver 报告在 [generated/webrtc-qos-plain-p2-browser-receiver-report.md](./generated/webrtc-qos-plain-p2-browser-receiver-report.md)，原始 JSON 在 [generated/webrtc-qos-plain-p2-browser-receiver-report.json](./generated/webrtc-qos-plain-p2-browser-receiver-report.json)。当前本机 headless Chromium 缺 H264 receive capability，所以浏览器收流 case 记录为环境 `SKIP`。
 - WebRTC QoS P2 V4L2 source 报告在 [generated/webrtc-qos-plain-p2-v4l2-report.md](./generated/webrtc-qos-plain-p2-v4l2-report.md)，原始 JSON 在 [generated/webrtc-qos-plain-p2-v4l2-report.json](./generated/webrtc-qos-plain-p2-v4l2-report.json)。当前机器无 `/dev/video0`，所以 V4L2 baseline 记录为环境 `SKIP`。
 - downlink 当前状态摘要在 [downlink-qos-status.md](./downlink-qos-status.md)。
-- 每次报告生成的历史快照都归档在 [archive/uplink-qos-runs](./archive/uplink-qos-runs)。
-- 已删除的历史迁移 / review / blocker / matrix 方案过程稿不再保留在 `docs/` 中；如需追历史判断，请直接看 git 历史。
+- 一次性过程稿、历史 review、商业化排期和旧归档快照不再保留在 `docs/` 中；如需追历史判断，请直接看 git 历史。
 
 ## 4. QoS 测试入口
 
@@ -142,18 +134,10 @@ cd /root/mediasoup-cpp
 |---|---|
 | [fix-subscriber-busyloop.md](./fix-subscriber-busyloop.md) | subscriber busy loop 问题的根因和修复过程。 |
 
-## 6. 历史记录 / 归档
-
-| 文档 | 用途 |
-|---|---|
-| [archive/CODE_REVIEW_2026-04-08.md](./archive/CODE_REVIEW_2026-04-08.md) | 2026-04-08 的静态代码审查记录。 |
-| [archive/DEVELOPMENT_2026-04-08.md](./archive/DEVELOPMENT_2026-04-08.md) | 2026-04-08 的阶段性开发笔记。 |
-
-## 7. 目录约定
+## 6. 目录约定
 
 后续建议按下面规则继续维护：
 
 - 当前结论文档：放在“当前主文档”或“QoS 专项文档”
-- 历史 review / 一次性记录：保留日期后缀，放在“历史记录 / 归档”
-- 机器生成结果：优先用 `.json` / artifact 形式保留，不当作主结论文档
+- 机器生成结果：优先用 `.json` / artifact 形式保留，只保留当前仍被 README 或状态页引用的结果
 - 临时文件不要留在 `docs/`

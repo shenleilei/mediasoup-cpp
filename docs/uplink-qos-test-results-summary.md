@@ -47,8 +47,8 @@
 补充说明：
 
 - latest full matrix `generatedAt=2026-04-13T03:34:38.058Z`，当前重渲染结果见 [uplink-qos-case-results.md](./uplink-qos-case-results.md)。
-- latest targeted 组合回归结果见 [generated/uplink-qos-case-results.targeted.md](./generated/uplink-qos-case-results.targeted.md)。
-- full / targeted 的原始机器 artifact 仍分别保留在 [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json) 和 [generated/uplink-qos-matrix-report.targeted.json](./generated/uplink-qos-matrix-report.targeted.json)。
+- latest targeted 组合回归结果由脚本生成到 `docs/generated/uplink-qos-case-results.targeted.md`；当前仓库不保留这类临时 targeted 结果。
+- full matrix 原始机器 artifact 保留在 [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json)；targeted artifact 由脚本按需生成到 `docs/generated/uplink-qos-matrix-report.targeted.json`。
 - 新增 `GD1-GD12` 的 gate 扩张验证采用 targeted rerun；当前 browser targeted 结果为 `12 / 12 PASS`。
 - latest 组合 targeted regression 覆盖：
   `T9,T10,T11,J3,J4,J5,BW2,T1,S4`
