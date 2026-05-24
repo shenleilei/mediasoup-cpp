@@ -39,33 +39,24 @@ mediasoup 得到了广泛应用，但其默认的控制平面是 Node.js。本�
 - 对 mediasoup 媒体内部机制的重写
 - `mediasoup-worker` 的替代品
 
-## 核心优势与业界对比 (Core Advantages)
+## 核心价值 (Core Value)
 
-相比于原版 mediasoup (Node.js 控制面)、LiveKit (Go)、SRS 或 Licode 等业界主流开源 SFU 方案，本项目在架构设计与工程交付上做出了具有针对性的降维打击级改进：
+本项目不是重写 mediasoup 的媒体 worker，而是把外围控制面和原生客户端集成面收敛到一套可部署、可验证、可排障的 C++ 工程里。
 
-### 1. 极致的性能与无锁并发模型
-- **纯 C++17 单文件部署 (Single-Binary)：** 彻底摒弃 Node.js / V8 引擎，采用 `uWebSockets` 作为信令和 HTTP 层，消除了系统垃圾回收 (GC) 的停顿尖峰，大幅降低高并发 Join/Leave 时的信令延迟与内存开销。
-- **无锁状态机 (Thread-per-Room)：** 独创的 WorkerThread 线程池机制，将单个房间的完整生命周期绑定在唯一的串行事件循环中，**彻底避免了多线程并发读写房间状态时的细粒度锁冲突**。
-- **现代化零拷贝 IPC：** 信令面与底层 `mediasoup-worker` 进程间采用基于 Unix 管道的 **FlatBuffers 通信**，将海量 RTP 统计快照和控制指令的传递序列化开销压缩到了极致。
+### 1. C++ 控制面和房间线程模型
+- **C++17 控制面：** 使用 `uWebSockets` 处理 HTTP/WebSocket，媒体面继续复用上游 `mediasoup-worker`。
+- **房间串行执行：** `WorkerThread` 绑定房间生命周期，减少房间状态跨线程共享和锁竞争。
+- **FlatBuffers IPC：** 控制面通过 Unix pipe + FlatBuffers 与 `mediasoup-worker` 通信，协议边界清晰。
 
-### 2. 业界天花板级的端到端 QoS 体系
-目前绝大多数开源 SFU 的 QoS 仅停留在算法拼凑的“功能实现”层面，而本项目不仅实现了算法，还提供了一套**有严格 SLA 数据背书的、高度自动化的毫秒级 QoS 矩阵测试台 (Matrix Harness)**：
-- **系统级量化的弱网对抗：** 通过脚本驱动无头浏览器和 WebRTC QoS 推拉流客户端，精准注入弱网（延迟、丢包、带宽受限、断网恢复），不但测试能否恢复，更能够**精确量化退避和恢复生命周期的每一个关键帧 (精确到毫秒)**。
-- **极其细腻的上行状态机 (Uplink State Machine)：** 实现了从 `stable` -> `early_warning` -> `congested` -> `recovering` 的多级阶梯降级 (Ladder Control)。独创的两阶段快速恢复 (Fast-Path Recovery) 机制，在不引起网络震荡 (overshoot) 的前提下，将极端弱网后的视频恢复时间硬生生提前了 5~6 秒，超越了标准的 LiveKit 分配器与探测策略。
-- **SDK 化的推拉流客户端：** 客户端只保留 WebSocket 信令和 UDP Socket 外围集成，把 WebRTC 接口、GoogCC、pacer、NACK/PLI/FEC 等媒体 QoS 收敛到 `webrtc_qos_sdk`。
-- **铁血的防回归护栏 (Nightly Full Regression)：** 所有的 QoS 指标结果被强绑定到 Nightly CI 和质量关卡中。任何可能导致弱网恢复变慢（即使慢了2秒）的代码修改都会被立即阻断报警，确保拥塞控制算法的演进极其稳健。
+### 2. SDK 化推拉流客户端
+- **外围最小化：** push/play 客户端只保留 WebSocket 信令和 UDP Socket I/O。
+- **媒体 QoS 下沉：** add track、编码、packetize、pacer、GoogCC、NACK/PLI/FEC、统计和 QoE 观测交给 `webrtc_qos_sdk`。
+- **PlainTransport 对接：** 客户端复用 `plainPublish` / `plainSubscribe`，用于验证 mediasoup PlainTransport 和 SDK 推拉流闭环。
 
-### 3. 同类开源 SFU 方案对比 (Comparison)
-
-| 特性对比 | mediasoup-cpp (本项目) | 原版 mediasoup (Node.js) | LiveKit (Go) | SRS (C++) | Licode (Erlang/C++) |
-|:---|:---|:---|:---|:---|:---|
-| **核心语言/运行时** | **纯 C++17** (极致性能, 无GC) | Node.js + C++ (有V8 GC) | Go (有 GC 开销与调度) | C++ (主攻RTMP/直播) | Erlang + C++ (架构古老) |
-| **并发与状态管理** | **无锁 Thread-per-Room** | Node.js 单线程事件循环 | Goroutine 多线程锁机制 | 单线程 (需多进程协作) | 多进程 Actor 模型 |
-| **QoS 弱网对抗** | **精细化梯级降级 + 极速恢复** | 依赖业务层自行实现控制 | 基于分配器的基础降级 | 基础的 WebRTC 拥塞控制 | 基础控制机制 |
-| **自动化测试与量化** | **独创毫秒级量化回归矩阵 CI**| 丰富的 API 级别测试 | 标准单元测试 + 集成测试| 直播流维度的测试 | 较少的自动化矩阵测试 |
-| **部署与运维** | **纯粹单二进制文件守护进程** | 需维护复杂的 Node 运行环境 | 单文件极简部署 (便捷) | 单文件部署 (便捷) | 依赖组件众多 (部署复杂) |
-| **进程/组件通信** | **Zero-Copy FlatBuffers IPC**| 序列化字符串/JSON IPC | Go 内部直接函数调用 | 进程内调用 / HTTP 回调 | 相对较重的 RPC 通信 |
-| **开箱即用业务能力**| 房间路由、多节点集群、录制等 | 纯底层媒体 API 库 | 高度产品化 (云服务全家桶)| 偏向大规模流媒体单向分发 | MCU/SFU 混合早期架构 |
+### 3. 可复现 QoS 验证
+- **浏览器 uplink 矩阵：** 保留浏览器/Node harness，用于验证上行 QoS 状态机和服务端聚合链路。
+- **native push/play 弱网短测：** P2 主报告覆盖 baseline、delay、loss、bandwidth、drop/recover，并记录 RTP/RTCP、TWCC、target bitrate、native decode QoE 和恢复首帧。
+- **环境 SKIP 规则：** browser H264 capability、V4L2 设备、netem 权限等环境前置不足时只允许记录 `SKIP/PARTIAL`，不能计入 PASS。
 
 ## 高层架构 (High-Level Architecture)
 
@@ -188,10 +179,11 @@ SignalingServer
 
 当前仓库文档和生成的制品显示：
 
-- 浏览器上行矩阵主闸门 (main gate)：`43 / 43 PASS` (`2026-04-13`)
-- WebRTC QoS P2 synthetic+QoE 当前主报告：`qosMainline=PASS`，`sdkRuntimeObservability=PASS`，`encoderRuntime=PASS`，`nativeDecodeQoe=PASS`，`weakNetworkCoverage=PASS`，`recoveryFirstFrame=PASS`；overall 为 `PASS`，`failedChecks=0`
-- P2 已实测 `baseline`、`delay_100ms`、`loss_2pct`、`loss_5pct`、`bandwidth_600k`、`drop_recover`：当前主报告 `6 / 6 PASS`；100ms delay RTT avg/max 为 `78.25/220ms`，600kbps bandwidth targetBps min/max 为 `300000/2500000`，`drop_recover` targetBps min/avg/max 为 `300000/1398037.20/2500000`
-- P2 恢复首帧已列为独立硬门禁：主报告中 `drop_recover` 清网后 `144ms` 看到 native QoE `decodedFrames` 增长，decoded delta=`376`；专项恢复报告 `drop_recover=PASS`、`failedChecks=0`，清网后 `2122ms` 看到首帧，decoded delta=`416`
+- 浏览器上行矩阵：原 `43 / 43 PASS` 主 gate (`2026-04-13`) + `GD1-GD12` targeted PASS，当前总口径为 `55 case`
+- WebRTC QoS P2 当前主报告：`sourceMode=copy`，`enableNetem=true`，`decodeQoe=true`；`baseline`、`delay_100ms`、`loss_2pct`、`loss_5pct`、`bandwidth_600k`、`drop_recover` 为 `6 / 6 PASS`，`failedChecks=0`
+- P2 主报告 gate：`qosMainline=PASS`，`sdkRuntimeObservability=PASS`，`nativeDecodeQoe=PASS`，`weakNetworkCoverage=PASS`，`recoveryFirstFrame=PASS`；`encoderRuntime=SKIP`，因为 copy 输入不经过实时 x264 encoder
+- P2 弱网 QoS 数据：100ms delay RTT avg/max 为 `86.3/247ms`，600kbps bandwidth targetBps min/avg/max 为 `300000/1237333/1994666`，`drop_recover` targetBps min/avg/max 为 `300000/632260.23/1994666`
+- P2 恢复首帧已列为独立门禁：主报告中 `drop_recover` 清网后 `120ms` 看到 native QoE `decodedFrames` 增长，decoded delta=`241`；专项恢复报告 `drop_recover=PASS`、`failedChecks=0`，清网后 `2122ms` 看到首帧，decoded delta=`416`
 - WebRTC QoS P2 MP4 decode-loop baseline：`qosMainline=PASS`，`sdkRuntimeObservability=PASS`，`encoderRuntime=PASS`，`nativeDecodeQoe=PASS`；baseline `pushedAu=359`、`decodedFrames=359`、`decodeErrors=0`
 - WebRTC QoS P2 browser receiver smoke：push 发布链路 `PASS`；当前 headless Chromium 只暴露 VP8/VP9、不暴露 H264 packetization-mode=1，浏览器收流 case 按环境能力记为 `SKIP`，overall 为 `PARTIAL`
 - WebRTC QoS P2 V4L2 source：V4L2 CLI/source/smoke SKIP gate 已落地；当前机器无 `/dev/video0`，baseline 按环境能力 `SKIP`，overall 为 `PARTIAL`
@@ -200,7 +192,7 @@ SignalingServer
 
 - 上行 QoS 主链路在浏览器和 WebRTC QoS P2 客户端上均已闭环
 - 下行目前覆盖接收端控制以及零需求发布端暂停/恢复协调
-- WebRTC QoS P2 目前已签收 native baseline/delay/loss/bandwidth/recovery synthetic+QoE 短测、MP4 decode-loop baseline、browser receiver 自动化入口和 V4L2 输入源入口；本机浏览器缺 H264 能力、当前机器无 `/dev/video0`，对应真实画面/摄像头运行结果仍只能记录 `SKIP/PARTIAL`
+- WebRTC QoS P2 已签收 native push/play copy 输入弱网短测和 MP4 decode-loop baseline；browser receiver 与 V4L2 已有自动化入口，但本机浏览器缺 H264 能力、当前机器无 `/dev/video0`，对应真实画面/摄像头运行结果仍只能记录 `SKIP/PARTIAL`
 - `dynacast` 和房间级全局比特率预算划分是后续工作
 
 事实来源链接 (Source-of-truth links)：

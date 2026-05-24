@@ -1274,6 +1274,7 @@ sdk_observability_pass = bool(
 
 baseline_encoder = baseline.get('metrics', {}).get('encoder', {}) if baseline else {}
 encoder_source_modes = ('synthetic', 'mp4-decode-loop', 'v4l2')
+encoder_runtime_applicable = source_mode in encoder_source_modes
 expected_encoder_mode = source_mode.replace('-', '_')
 if source_mode == 'synthetic':
     baseline_encoder_shape_ok = (
@@ -1289,6 +1290,7 @@ else:
         positive(baseline_encoder.get('height')))
 encoder_gate_evidence = {
     'sourceMode': source_mode,
+    'skipReason': None if encoder_runtime_applicable else 'source mode does not exercise the x264 runtime encoder',
     'baselineEncoderMode': baseline_encoder.get('mode'),
     'baselineEncoderName': baseline_encoder.get('name'),
     'baselineEncoderSamples': baseline_encoder.get('samples'),
@@ -1304,7 +1306,7 @@ encoder_gate_evidence = {
     'baselineSkipReason': baseline_skip_reason,
 }
 encoder_gate_pass = (
-    True if source_mode not in encoder_source_modes else bool(
+    False if not encoder_runtime_applicable else bool(
         baseline and
         baseline_encoder.get('mode') == expected_encoder_mode and
         baseline_encoder.get('name') == 'x264' and
@@ -1383,7 +1385,9 @@ gates = {
         'evidence': sdk_observability_evidence,
     },
     'encoderRuntime': {
-        'status': 'SKIP' if baseline_unavailable else ('PASS' if encoder_gate_pass else 'FAIL'),
+        'status': (
+            'SKIP' if baseline_unavailable or not encoder_runtime_applicable
+            else ('PASS' if encoder_gate_pass else 'FAIL')),
         'requirements': [
             'synthetic, MP4 decode-loop, or V4L2 source uses x264 realtime encoder when requested',
             'encoder metrics expose source shape, fps, bitrate, AU count, keyframe count',
@@ -1419,9 +1423,14 @@ gates = {
     },
 }
 
+blocking_gates = {
+    name: gate for name, gate in gates.items()
+    if not (name == 'encoderRuntime' and not encoder_runtime_applicable)
+}
+
 if failed_cases:
     overall = 'FAIL'
-elif all(g['status'] == 'PASS' for g in gates.values()):
+elif all(g['status'] == 'PASS' for g in blocking_gates.values()):
     overall = 'PASS'
 else:
     overall = 'PARTIAL'
@@ -1524,7 +1533,7 @@ def fmt_triplet(metric):
     return '{}/{}/{}'.format(fmt(metric.get('min')), fmt(metric.get('avg')), fmt(metric.get('max')))
 
 lines = []
-lines.append('# WebRTC QoS Plain P2 Smoke Report')
+lines.append('# WebRTC QoS P2 Push/Play Smoke Report')
 lines.append('')
 lines.append('| Item | Value |')
 lines.append('|---|---|')
@@ -1607,6 +1616,7 @@ lines.append('- `SKIP` means the case was not verified and must not be counted a
 lines.append('- `qosMainline=PASS` means TWCC negotiation, push RTCP feedback input, and play RTCP feedback output are all observable.')
 lines.append('- `sdkRuntimeObservability=PASS` means push/play SDK runtime log, metrics, alerts files exist and SDK RR/TWCC counters are non-zero.')
 lines.append('- `encoderRuntime=PASS` means requested synthetic, MP4 decode-loop, or V4L2 x264 mode produced encoded H264 access units/keyframes, and SDK keyframe requests produced an IDR within 1 second.')
+lines.append('- `encoderRuntime=SKIP` with `Source Mode=copy` means the report used MP4 H264 copy input and did not exercise the realtime x264 encoder; use synthetic, MP4 decode-loop, or V4L2 reports for encoder runtime evidence.')
 lines.append('- `nativeDecodeQoe=PASS` means requested native FFmpeg decode/QoE produced decoded frames and first-frame/decode-error metrics.')
 lines.append('- `recoveryFirstFrame=PASS` means `drop_recover` observed decoded frame growth after netem clear within 15 seconds.')
 lines.append('- `droppedFrames` is the SDK push-side pacer backpressure counter; non-zero values are acceptable in bandwidth/recovery cases when transport remains alive and QoE decode continues.')

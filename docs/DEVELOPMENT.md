@@ -7,7 +7,7 @@
 仓库内同时维护两条客户端相关路径：
 
 - 浏览器 / WebRTC 路径
-- WebRTC QoS Plain push/play 客户端路径
+- WebRTC QoS 推拉流客户端路径
 
 如果要理解 push/play 客户端本身怎么工作，请继续看 [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md) 和 [webrtc-qos-push-play-client-p2-design_cn.md](./webrtc-qos-push-play-client-p2-design_cn.md)。
 
@@ -123,9 +123,9 @@ WorkerThread 检测到 worker 死亡（channel fd EOF）→ `onWorkerDied()` →
 4. UDP connect trick（`connect(8.8.8.8:53)` + `getsockname`，零网络开销）
 5. 最后才回退到 127.0.0.1（带 warn 日志）
 
-## WebRTC QoS Plain Push/Play Client
+## WebRTC QoS 推拉流客户端
 
-新 PlainTransport 推拉流客户端的核心入口在 `client/webrtc_qos_plain_client/`，共用 `client/WsClient.*` 完成 WebSocket 信令。
+推拉流客户端的核心入口在 `client/webrtc_qos_plain_client/`，共用 `client/WsClient.*` 完成 WebSocket 信令，并通过 mediasoup `PlainTransport` 做 RTP/RTCP UDP 对接。
 
 它的职责是提供最小外围集成：
 

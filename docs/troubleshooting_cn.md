@@ -265,7 +265,7 @@ curl -H "X-Forwarded-For: 1.2.3.4" -s "http://127.0.0.1:3000/api/resolve?roomId=
 
 这是本仓库已经实际遇到过的一类联调现象：
 
-- WebRTC QoS Plain push client 日志里已经出现：
+- WebRTC QoS push client 日志里已经出现：
   - `WS connected`
   - `Joined room=...`
   - `plainPublish` 成功并拿到服务端 PlainTransport 端口

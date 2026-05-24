@@ -3,7 +3,7 @@
 > 文档性质
 >
 > 这份文档回答的是：
-> - 当前仓库构建 `mediasoup-sfu` / WebRTC QoS Plain push/play client / 测试 / harness 分别依赖什么
+> - 当前仓库构建 `mediasoup-sfu` / WebRTC QoS 推拉流客户端 / 测试 / harness 分别依赖什么
 > - 哪些依赖是系统安装，哪些是仓库 vendored，哪些是运行时才需要
 > - 当前 `CMake` / `setup.sh` 如何解析这些依赖
 
@@ -13,7 +13,7 @@
 
 | 层级 | 典型项 | 来源 | 用途 |
 |---|---|---|---|
-| 系统构建依赖 | `cmake`、`g++`、`pkg-config`、OpenSSL、FFmpeg、hiredis | OS 包管理器 | 编译 SFU、WebRTC QoS Plain client、测试 |
+| 系统构建依赖 | `cmake`、`g++`、`pkg-config`、OpenSSL、FFmpeg、hiredis | OS 包管理器 | 编译 SFU、WebRTC QoS 推拉流客户端、测试 |
 | 外部 SDK | `webrtc_qos_sdk` | 本地安装或独立构建产物 | 编译 `webrtc-qos-plain-push-client` / `webrtc-qos-plain-play-client` |
 | 仓库内 vendored 依赖 | `flatbuffers`、`uWebSockets`、`spdlog`、`nlohmann/json`、`ip2region`、`googletest` | `third_party/` | 编译期直接引用或随仓库构建 |
 | 运行时外部依赖 | `mediasoup-worker`、Redis、`ip2region.xdb` | 下载 / 本地部署 | 启动 SFU、多节点、Geo 路由 |
@@ -79,7 +79,7 @@
 
 说明：
 
-- `libavdevice` 主要用于 WebRTC QoS Plain P2 的 V4L2 输入源；没有摄像头设备时，对应 smoke 会记录为环境 `SKIP`。
+- `libavdevice` 主要用于 WebRTC QoS P2 的 V4L2 输入源；没有摄像头设备时，对应 smoke 会记录为环境 `SKIP`。
 - `x264` 不直接由仓库链接，而是通过 FFmpeg 的 H264 encoder 能力间接使用；如果发行版 FFmpeg 缺失对应 encoder，实时编码路径能力会受限。
 
 ### 3.3 Debian / Ubuntu 参考安装
@@ -270,7 +270,7 @@ npm install
 
 ### 7.3 `webrtc_qos_sdk`
 
-WebRTC QoS Plain push/play client 通过 CMake package 查找 SDK：
+WebRTC QoS 推拉流客户端通过 CMake package 查找 SDK：
 
 - `find_package(WebRtcQosSdk CONFIG QUIET)`
 - 找到 `WebRtcQosSdk::role_push*` 和 `WebRtcQosSdk::role_play*` 后才注册 push/play target
@@ -287,7 +287,7 @@ WebRTC QoS Plain push/play client 通过 CMake package 查找 SDK：
 3. 初始化 `third_party`
 4. 构建 `flatc` 并生成 FlatBuffers 头文件
 5. 下载 `mediasoup-worker`
-6. 构建 SFU、测试，以及可用时的 WebRTC QoS Plain push/play client
+6. 构建 SFU、测试，以及可用时的 WebRTC QoS 推拉流客户端
 
 它不负责：
 
@@ -303,7 +303,7 @@ WebRTC QoS Plain push/play client 通过 CMake package 查找 SDK：
 2. [README.md](../README.md)
 3. [DEVELOPMENT.md](./DEVELOPMENT.md)
 
-如果目标是“理解 WebRTC QoS Plain push/play 相关依赖”：
+如果目标是“理解 WebRTC QoS 推拉流相关依赖”：
 
 1. 本文档
 2. [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md)

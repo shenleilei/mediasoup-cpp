@@ -1,4 +1,4 @@
-# WebRTC QoS Plain P2 Smoke Report
+# WebRTC QoS P2 Push/Play Smoke Report
 
 | Item | Value |
 |---|---|

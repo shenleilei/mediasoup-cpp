@@ -1,8 +1,8 @@
-# WebRTC QoS SDK Plain 推拉流客户端第二期设计方案
+# WebRTC QoS SDK 推拉流客户端第二期设计方案
 
 > 文档状态：review draft
 > 范围：把原计划中的第二期和第三期合并为一个“大第二期”。
-> 前置：第一期已完成 native Plain push/play 本地短链路 smoke，详见
+> 前置：第一期已完成 native push/play 本地短链路 smoke，详见
 > [webrtc-qos-push-play-client-implementation-checklist_cn.md](./webrtc-qos-push-play-client-implementation-checklist_cn.md)。
 
 ## 1. 背景
@@ -22,9 +22,9 @@
 - mediasoup consumer 下行 `rtpParameters.headerExtensions=[]`，play 只能降级为无 TWCC 接收。
 - 本地 smoke 只验证 RTP/RTCP/AU 闭环，未完整验证下行 TWCC 主链路。
 - 旧 SDK dist 包未暴露 runtime logs/metrics/alerts 配置字段；当前 dist 已更新，但需要 smoke gate 固化防回归。
-- MP4 copy path 不能根据 SDK adaptation 改 bitrate/fps，也不能响应 PLI 强制 IDR；当前已补 synthetic+x264 最小实时编码路径，并已在 baseline/delay/loss/bandwidth/recovery netem 下验证 QoS/RTCP/QoE 不崩溃；MP4 decode-loop baseline 已补充验证；V4L2 CLI/source/smoke SKIP gate 已落地，当前机器无 `/dev/video0`，不能签摄像头运行 PASS。
+- MP4 copy path 不能根据 SDK adaptation 改 bitrate/fps，也不能响应 PLI 强制 IDR；当前 P2 主报告使用 copy 输入验证 native push/play、RTCP/TWCC、弱网和 decode QoE，不把 copy 输入计入 encoder runtime。实时 x264 encoder runtime 由 synthetic、MP4 decode-loop 或 V4L2 输入源单独验证；当前 MP4 decode-loop baseline 已补充验证，V4L2 CLI/source/smoke SKIP gate 已落地，当前机器无 `/dev/video0`，不能签摄像头运行 PASS。
 - `plainPublish` 当前强制创建 dummy audio producer，服务端语义不干净。
-- 弱网 smoke harness 已支持 `--enable-netem` 并完成 baseline、delay、loss、bandwidth、recovery 短测；当前主报告中 baseline/delay/loss/bandwidth/drop_recover 全部 PASS；browser receiver smoke 已落地，但当前本机 headless Chromium 不暴露 H264 packetization-mode=1 receive capability，浏览器收流 case 只能按环境能力记录 `SKIP`；V4L2 smoke 在无设备机器上记录 `SKIP` 和明确 skip reason。
+- 弱网 smoke harness 已支持 `--enable-netem` 并完成 baseline、delay、loss、bandwidth、recovery 短测；当前主报告中 `baseline`、`delay_100ms`、`loss_2pct`、`loss_5pct`、`bandwidth_600k`、`drop_recover` 全部 PASS；browser receiver smoke 已落地，但当前本机 headless Chromium 不暴露 H264 packetization-mode=1 receive capability，浏览器收流 case 只能按环境能力记录 `SKIP`；V4L2 smoke 在无设备机器上记录 `SKIP` 和明确 skip reason。
 
 当前实施进展：
 
@@ -33,12 +33,12 @@
 - push/play adapter 已补 RTCP 边界计数日志。
 - P2-M4 已支持 `plainPublish enableAudio=false`，新 push 默认 video-only，旧请求保持 audio 默认兼容。
 - 当前 SDK play facade 已生成周期性 RR/TWCC feedback；本地 baseline smoke 已验证 `qosMainline=PASS` 和 `sdkRuntimeObservability=PASS`。
-- P2-M5/M6 已落地最小 synthetic+x264 路径：`RealtimeH264Source` 生成 raw frame，libx264 输出 Annex-B AU，push runtime 应用 SDK encoder adaptation；本地 synthetic baseline smoke 已验证 `encoderRuntime=PASS`，SDK keyframe request 到 IDR 输出最大延迟 `20491us`。
+- P2-M5/M6 已落地最小 synthetic+x264 路径：`RealtimeH264Source` 生成 raw frame，libx264 输出 Annex-B AU，push runtime 应用 SDK encoder adaptation；当前可引用的 encoder runtime 证据以 MP4 decode-loop 报告为准，synthetic 路径保留单测和可重跑 smoke 入口。
 - P2-M6 已补充 MP4 decode-loop baseline：`Mp4DecodeH264Source` 解码 MP4 video frame 后重新 x264 编码，报告 `encoderRuntime=PASS`、`nativeDecodeQoe=PASS`，baseline `pushedAu=359`、`decodedFrames=359`、`decodeErrors=0`。
 - P2-M6 已补充 V4L2 source 入口：`V4L2H264Source` 通过 FFmpeg v4l2 capture 解码 raw frame 后 x264 编码，push runtime 应用同一套 SDK bitrate/fps/keyframe adaptation；当前机器无 `/dev/video0`，报告以 `v4l2 device not found` 记为环境 `SKIP/PARTIAL`。
-- P2-M3/P2-M8 已完成真实 netem 短测：`baseline`、`delay_100ms`、`loss_2pct`、`bandwidth_600k`、`drop_recover` 均为 PASS；100ms delay RTT avg/max `78.25/220ms`，bandwidth targetBps min/max `300000/2500000`，`drop_recover` targetBps min/avg/max `300000/1398037.20/2500000`，所有已跑 case `decodeErrors=0`，报告 `weakNetworkCoverage=PASS`。
+- P2-M3/P2-M8 已完成真实 netem 短测：`baseline`、`delay_100ms`、`loss_2pct`、`loss_5pct`、`bandwidth_600k`、`drop_recover` 均为 PASS；100ms delay RTT avg/max `86.3/247ms`，bandwidth targetBps min/avg/max `300000/1237333/1994666`，`drop_recover` targetBps min/avg/max `300000/632260.23/1994666`，所有已跑 case `decodeErrors=0`，报告 `weakNetworkCoverage=PASS`。
 - P2-M7 已新增 browser receiver smoke：`tests/qos_harness/browser_plain_receiver.mjs` 启动 SFU + plain push + headless Chromium，并输出 `docs/generated/webrtc-qos-plain-p2-browser-receiver-report.{json,md}`；当前报告 plain push 链路 `PASS`，browser H264 capability `SKIP`，overall `PARTIAL`。
-- P2-M8b 已新增恢复首帧门禁：`drop_recover` 不只看 target bitrate 回升，还要求 netem clear 后 15 秒内看到 native QoE `decodedFrames` 增长；当前主报告清网后 `144ms` decoded frames 增长，delta=`376`，同 case target bitrate 离开最低档并恢复到 `2500000`，`recoveryFirstFrame=PASS`。
+- P2-M8b 已新增恢复首帧门禁：`drop_recover` 不只看 target bitrate 回升，还要求 netem clear 后 15 秒内看到 native QoE `decodedFrames` 增长；当前主报告清网后 `120ms` decoded frames 增长，delta=`241`，同 case target bitrate 离开最低档，`recoveryFirstFrame=PASS`。
 
 第二期目标是把第一期从“最小可跑”推进到“可验证、可观测、可调优、可接真实输入”的状态。
 
@@ -96,9 +96,9 @@
 | 目标 | 可实施性 | 可验证性 | 可观测性 | 退出条件 |
 |---|---|---|---|---|
 | QoS 主链路闭环 | 修改 ORTC header extension 透传、push/play RTCP 边界计数，mediasoup-cpp 只消费 SDK public facade。 | ORTC targeted test；native baseline smoke；`twccExtId != 0`、play RTCP out > 0、push RTCP in > 0、SDK RR/TWCC counter 增长。 | `selected_consumer`、`play_metrics`、`push_metrics`、SDK metrics jsonl、report `qosMainline`。 | TWCC ext、RTCP out/in 或 SDK counter 任一为 0，停止弱网签收。 |
-| 弱网自动化 | `scripts/run_webrtc_qos_plain_p2_smoke.sh` 统一启动 SFU/push/play/netem，并生成 Markdown/JSON report。 | `baseline,delay_100ms,loss_2pct,bandwidth_600k,drop_recover` 可重复执行；无 netem 权限时明确 `SKIP`。 | report 记录 RTT、loss、targetBps、NACK、PLI、RTX、droppedFrames、QoE、alerts 和 artifact path。 | case 不能复现、不能生成 report、或 `SKIP` 被记成 `PASS`，停止。 |
+| 弱网自动化 | `scripts/run_webrtc_qos_plain_p2_smoke.sh` 统一启动 SFU/push/play/netem，并生成 Markdown/JSON report。 | `baseline,delay_100ms,loss_2pct,loss_5pct,bandwidth_600k,drop_recover` 可重复执行；无 netem 权限时明确 `SKIP`。 | report 记录 RTT、loss、targetBps、NACK、PLI、RTX、droppedFrames、QoE、alerts 和 artifact path。 | case 不能复现、不能生成 report、或 `SKIP` 被记成 `PASS`，停止。 |
 | 文件化观测 | adapter 日志、SDK runtime logs、metrics、alerts 全部写文件；stdout 只作为附件。 | smoke gate `sdkRuntimeObservability=PASS`；push/play runtime 文件存在且持续写入。 | `<artifact>/<case>/push/*`、`play/*`、`netem.log`、report gates。 | metrics/alerts 缺失时不允许用 stdout 替代。 |
-| 实时编码和输入源 | synthetic、MP4 decode-loop、V4L2 都走 x264 -> SDK push；copy path 保留兼容。 | synthetic 必跑；MP4 decode-loop baseline 必跑；V4L2 有设备时 PASS，无设备时 `SKIP`。 | `encoder_metrics`、source mode、device/format/size/fps、forced-IDR 延迟、decode QoE。 | 输入源失败不能静默降级；encoder adaptation 没落到 bitrate/fps/keyframe 时失败。 |
+| 实时编码和输入源 | synthetic、MP4 decode-loop、V4L2 都走 x264 -> SDK push；copy path 保留兼容。 | MP4 decode-loop baseline 必跑；synthetic 保留单测和可重跑 smoke；V4L2 有设备时 PASS，无设备时 `SKIP`。 | `encoder_metrics`、source mode、device/format/size/fps、forced-IDR 延迟、decode QoE。 | 输入源失败不能静默降级；encoder adaptation 没落到 bitrate/fps/keyframe 时失败。 |
 | QoE 和恢复首帧 | play `--decode-qoe=true` 接 FFmpeg decode sink；`drop_recover` 增加 clear 后首帧门禁。 | baseline decode error 为 0；弱网恢复后 decoded frames 增长；netem clear 后 15 秒内首个 decoded frame 增长。 | `qoe_metrics`、`case_timing.clearEpochMs`、report `nativeDecodeQoe` 和 `recoveryFirstFrame`。 | targetBps 未回升或 decodedFrames 不增长时，恢复场景都不签收。 |
 | 浏览器接收 | browser receiver harness 复用 mediasoup-client 消费 plain push 发布的视频。 | 有 H264 capability 的 Chromium 必须看到 consumer、inbound packets/frames 或 video currentTime 增长；无 H264 capability 时 `SKIP`。 | browser stats、track state、codec diagnostics、console/error、SFU/push/chromium artifact。 | native play 通过不能替代 browser receiver；缺 capability 不能伪造 PASS。 |
 
@@ -359,10 +359,8 @@ Adapter 日志必须记录：
 - push 已可观测到 mediasoup 侧返回的 RTCP feedback：
   `rtcpFeedbackPacketsIn=86 rtcpFeedbackBytesIn=2376 rtcpFeedbackFailures=0`。
 - SDK push snapshot 已输出 `rttMs`、`loss`、`targetBps`、`pacingBps`、`finalTargetBps`。
-- play adapter 已记录 `rtcpPacketsOut`，但 baseline smoke 中仍为 `0`。
-- 审查 SDK 源码确认当前 `VideoPlayClient` 只在 NACK/PLI 事件时输出 RTCP，
-  没有周期性 RR/TWCC 生成路径；这必须在 SDK public API/dist 层补齐，mediasoup-cpp
-  不应自研 TWCC/RR 生成。
+- play adapter 已记录 `rtcpPacketsOut`，当前 baseline smoke 中 `playRtcpPacketsOut > 0`。
+- SDK public facade/dist 已补齐周期性 RR/TWCC 生成和 runtime counter；mediasoup-cpp 只消费 SDK public API，不自研 TWCC/RR 生成。
 
 验收：
 
@@ -609,10 +607,10 @@ P2 失败时按下面顺序定位，不允许直接从现象跳到改 QoS 算法
 历史主报告曾把 `drop_recover` 失败定位到恢复控制面，而不是信令、编码或基础收流；当前已在 SDK sender facade 内补齐生产可用的恢复探测，并由 P2 主报告签收：
 
 - 可实施入口：mediasoup-cpp push 侧只调用 SDK public facade，包括 `OnTransportFeedback()`、`GetEncoderAdaptation()`、`PushAnnexBAccessUnit()`；不允许在 adapter 中自研 GoogCC、NACK、PLI 或 TWCC。
-- 可验证入口：运行 `scripts/run_webrtc_qos_plain_p2_smoke.sh --enable-netem --decode-qoe --cases baseline,delay_100ms,loss_2pct,bandwidth_600k,drop_recover`，主报告必须 `overall=PASS`，且 `weak-recovery-target-up=PASS`。
+- 可验证入口：运行 `scripts/run_webrtc_qos_plain_p2_smoke.sh --enable-netem --decode-qoe --cases baseline,delay_100ms,loss_2pct,loss_5pct,bandwidth_600k,drop_recover`，主报告必须 `overall=PASS`，且 `weak-recovery-target-up=PASS`。
 - 可观测入口：`drop_recover` case 必须同时给出 `case_timing.clearEpochMs`、push `targetBps` timeline、play `qoe_metrics`、SDK runtime `transportFeedbackCountMax/receiverReportCountMax`、`failedChecks`、artifact path，以及 SDK runtime log 中的 `sender_recovery_probe` 事件。
 - 当前实现：SDK sender facade 在 target 长时间处于最低档、曾观察到高 RTT、随后 RTT/反馈恢复时触发内部 recovery probe；mediasoup-cpp 不感知 netem clear 时间，也不在 adapter 中伪造 route change。
-- 当前证据：主报告 `drop_recover=PASS`，targetBps min/avg/max 为 `300000/1398037.20/2500000`；清网后 `144ms` 内 QoE decoded frames 增长，delta=`376`，`decodeErrors=0`；SDK runtime log 记录 `sender_recovery_probe before_target_bps=300000 after_target_bps=1200000 latest_rtt_ms=6 feedback_age_us=0`。
+- 当前证据：主报告 `drop_recover=PASS`，targetBps min/avg/max 为 `300000/632260.23/1994666`；清网后 `120ms` 内 QoE decoded frames 增长，delta=`241`，`decodeErrors=0`；`weak-recovery-target-up=PASS`。
 
 ## 8. P2-D：服务端 Plain 信令清理
 
@@ -905,7 +903,7 @@ node tests/qos_harness/browser_plain_receiver.mjs \
 - 无设备时 baseline case 必须 `SKIP`，`skipReason` 写明缺失设备，所有依赖 baseline 的 gate 写为 `SKIP`，overall 为 `PARTIAL`。
 - report 必须写入 `runConfig.v4l2.device/width/height/fps/inputFormat`，方便复现同一摄像头参数。
 
-当前已在 delay/loss/bandwidth/recovery 真实 netem 下验证反馈闭环、target bitrate 下探/恢复、PLI/SDK keyframe request 后 1 秒内 IDR，以及 native decode 稳定性。P2-M8b 已把“清网后首帧”提升为独立门禁；当前 `drop_recover` 主报告已通过 target 恢复和 decoded frames 增长双门禁。
+当前已在 delay/loss/bandwidth/recovery 真实 netem 下验证反馈闭环、target bitrate 下探/恢复，以及 native decode 稳定性。PLI/SDK keyframe request 后 1 秒内 IDR 属于 x264 输入源报告的 encoder runtime 验证，不由 copy 输入主报告证明。P2-M8b 已把“清网后首帧”提升为独立门禁；当前 `drop_recover` 主报告已通过 target 恢复和 decoded frames 增长双门禁。
 
 ## 10. P2-F：浏览器和 native QoE 验证
 
@@ -1080,7 +1078,7 @@ P2-M4 video-only publish
 | P2-M7 | 浏览器兼容 | browser receiver smoke 已落地；本机浏览器缺 H264 capability 时输出诊断并 SKIP，具备 H264 的 Chromium 环境必须验证 receiver stats 增长。 |
 | P2-M8 | native decode/QoE | play decode sink 和 QoE 报告。 |
 | P2-M8b | recovery first-frame | `drop_recover` 在 netem clear 后 15 秒内必须看到 decoded frames 增长。 |
-| P2-M9 | 签收回归 | 全部 P2 smoke PASS，报告入 docs/generated。 |
+| P2-M9 | 签收回归 | 非环境依赖的 P2 smoke 必须 PASS；browser/V4L2 环境不足时只能 `SKIP/PARTIAL`，报告入 docs/generated。 |
 
 推荐顺序：
 
@@ -1114,7 +1112,7 @@ P2-M4 video-only publish
 #### P2-M3 弱网 harness
 
 - 实施：脚本统一启动 SFU、push、play、netem、artifact 收集和 report 生成；所有 case 统一 PASS/FAIL/SKIP。
-- 验证：`baseline,delay_100ms,loss_2pct,bandwidth_600k,drop_recover` 可单独或组合执行；无 netem 权限时弱网 case SKIP。
+- 验证：`baseline,delay_100ms,loss_2pct,loss_5pct,bandwidth_600k,drop_recover` 可单独或组合执行；无 netem 权限时弱网 case SKIP。
 - 观测：report 输出 RTT/loss/target bitrate/NACK/PLI/retransmission/droppedFrames/QoE/alerts。
 - 退出条件：case 不能复现、不能生成 report、或 SKIP 被记成 PASS 时停止。
 
@@ -1128,14 +1126,14 @@ P2-M4 video-only publish
 #### P2-M5 实时 x264 encoder
 
 - 实施：synthetic raw frame -> x264 baseline/zerolatency -> Annex-B AU；push runtime 每 tick 应用 SDK adaptation。
-- 验证：单测覆盖 encoder 输出；baseline smoke `encoderRuntime=PASS`；bandwidth case 证明 bitrate/fps/keyframe adaptation 实际落到 encoder。
+- 验证：单测覆盖 encoder 输出；MP4 decode-loop 或 synthetic source smoke `encoderRuntime=PASS`；bandwidth case 如需证明 encoder bitrate/fps/keyframe adaptation，必须使用 x264 输入源而不是 copy 输入源。
 - 观测：`encoder_metrics accessUnits/keyframes/currentBitrateBps/currentFps/recreateCount/bitrateChangeCount/fpsChangeCount`。
 - 退出条件：只打印 target 而不改 encoder、PLI 后不能 force IDR、或 encoder metrics 缺失时失败。
 
 #### P2-M6 输入源扩展
 
-- 实施：保留 MP4 H264 copy path；新增 synthetic 必跑路径、MP4 decode-loop path 和 V4L2 source。
-- 验证：synthetic 在 CI/普通 CPU 环境必跑；MP4 decode-loop baseline 必跑；无 `/dev/video*` 时 V4L2 case SKIP，有设备时 V4L2 baseline 必须 PASS。
+- 实施：保留 MP4 H264 copy path；新增 synthetic 可重跑路径、MP4 decode-loop path 和 V4L2 source。
+- 验证：synthetic 在 CI/普通 CPU 环境至少保留单测和可重跑 smoke；MP4 decode-loop baseline 必跑；无 `/dev/video*` 时 V4L2 case SKIP，有设备时 V4L2 baseline 必须 PASS。
 - 观测：report 记录实际 source mode；synthetic/MP4 decode-loop/V4L2 输出 source frame count、fps、encoder AU/keyframe、forced-IDR；V4L2 额外记录 device/format/size/fps 和 open failure reason。
 - 退出条件：输入源失败不能静默降级到其他源；必须在 report 里显示实际 source 和 PASS/FAIL/SKIP 原因。
 
@@ -1158,7 +1156,7 @@ P2-M4 video-only publish
 - 实施：smoke report 解析 `case_timing.clearEpochMs` 和 `qoe_metrics epochMs/decodedFrames`，新增 `recoveryFirstFrame` gate；必要时 play adapter 基于 QoE freeze 请求关键帧，但不得自研 jitter/NACK/TWCC。
 - 验证：`drop_recover` 启用 `--decode-qoe` 和 `--enable-netem`；清网后 15 秒内 `decodedFrames` 必须大于清网前最后一次采样值。
 - 观测：report 记录 `clearEpochMs`、`preClearDecodedFrames`、`postClearFirstDecodedEpochMs`、`postClearFirstDecodedDelayMs`、`postClearDecodedFramesDelta`、`postClearSamples`。
-- 当前证据：主报告 `drop_recover=PASS`，清网后 `postClearFirstDecodedDelayMs=144`、`postClearDecodedFramesDelta=376`，targetBps min/avg/max 为 `300000/1398037.20/2500000`；专项恢复报告 `drop_recover=PASS`、`postClearFirstDecodedDelayMs=2122`、`postClearDecodedFramesDelta=416`，可作为快速回归入口，最终签收仍以主报告为准。
+- 当前证据：主报告 `drop_recover=PASS`，清网后 `postClearFirstDecodedDelayMs=120`、`postClearDecodedFramesDelta=241`，targetBps min/avg/max 为 `300000/632260.23/1994666`；专项恢复报告 `drop_recover=PASS`、`postClearFirstDecodedDelayMs=2122`、`postClearDecodedFramesDelta=416`，可作为快速回归入口，最终签收仍以主报告为准。
 - 退出条件：target bitrate 未回升或 `decodedFramesDelta=0` 时，P2-M8b/P2-M9 失败；该问题必须定位到 SDK sender recovery、SDK play recovery、关键帧请求链路、RTP depacketizer/jitter buffer 或 SFU RTCP 转发中的具体一段。
 
 #### P2-M9 签收回归
@@ -1179,12 +1177,12 @@ P2-M4 video-only publish
 | P2-M1c adapter RTCP boundary counters | 修改 push/play runtime counters。 | baseline smoke 验证 push `rtcpFeedbackPacketsIn > 0`，play 记录 `rtcpPacketsOut` 字段。 | push/play metrics 输出 `rtcpFeedbackPacketsIn`、`rtcpFeedbackBytesIn`、`rtcpFeedbackFailures`、`rtcpPacketsOut`、`rtcpBytesOut`、`rtcpSendFailures`、`rttMs`、`loss`。 |
 | P2-M1d SDK play RR/TWCC feedback output | 在 `webrtc_qos_sdk` public facade/dist 补 play 周期性 RR/TWCC 输出和 snapshot counter；mediasoup-cpp 只升级 dist 并验证。 | baseline smoke 必须看到 play `rtcpPacketsOut > 0`、SDK TWCC feedback counter 增长、push feedback input 增长。 | SDK metrics 输出 TWCC/RR counters；adapter 不自研解析 TWCC。 |
 | P2-M2 SDK runtime dist | 更新 SDK install/dist；mediasoup-cpp 仅更新 `CMAKE_PREFIX_PATH` 和兼容检查。 | 启动日志必须是 `sdk_runtime_files enabled=true`；metrics/alerts 文件存在。 | `push_metrics.jsonl`、`play_metrics.jsonl`、alerts jsonl 持续写入。 |
-| P2-M3 弱网 harness | 新增 `client/webrtc_qos_plain_client/harness` 或 `tests/qos_harness` 脚本，统一启动 SFU/push/play/netem。 | baseline/delay/loss/bandwidth/recovery case 输出 PASS/FAIL/SKIP。 | 生成 `docs/generated/webrtc-qos-plain-p2-smoke-report.{json,md}`。 |
+| P2-M3 弱网 harness | 新增 `client/webrtc_qos_plain_client/harness` 或 `tests/qos_harness` 脚本，统一启动 SFU/push/play/netem。 | baseline/delay/loss_2/loss_5/bandwidth/recovery case 输出 PASS/FAIL/SKIP。 | 生成 `docs/generated/webrtc-qos-plain-p2-smoke-report.{json,md}`。 |
 | P2-M4 video-only publish | 修改 `RoomService::plainPublish()`、signaling dispatcher、push signaling；保持旧请求兼容。 | `enableAudio=false` 时无 audio producer；旧 `audioSsrc` 请求仍通过；P2-M4 targeted integration 和 smoke 通过。 | SFU stats/report 中 `audioEnabled=false`；无 dummy audio consumer 日志。 |
-| P2-M5 realtime x264 encoder | 已新增 `RealtimeH264Source` 最小 x264 encoder，并在 push runtime 调 `ApplyEncoderAdaptation()`；后续再拆 `H264EncoderAdapter` 时保持同一外部行为。 | 当前 synthetic baseline、bandwidth netem 和单测已验证 encoder AU/keyframe/adaptation、target bitrate 下探，以及 SDK keyframe request 后 1 秒内 IDR；recovery 回升仍未稳定签收。 | 当前输出 `encoder_metrics` 的 bitrate/fps/AU/keyframe/recreate/change/forced-IDR counters；后续补 frameDrop 和 keyframe alert。 |
-| P2-M6 输入源扩展 | 已新增 synthetic raw frame source、MP4 decode-loop source 和 V4L2 source；V4L2 走 FFmpeg v4l2 capture/decode -> x264 -> SDK push。 | 当前 synthetic 必跑；MP4 decode-loop baseline 已通过；V4L2 无设备时 case SKIP，有 `/dev/video*` 时 baseline 必须 PASS。 | 当前 encoder/source metrics 输出 frame count、input fps、AU/keyframe/forced-IDR；report 输出 `sourceMode=synthetic`、`sourceMode=mp4-decode-loop` 或 `sourceMode=v4l2`，并记录 V4L2 device/width/height/fps/inputFormat 和 open failure reason。 |
+| P2-M5 realtime x264 encoder | 已新增 `RealtimeH264Source` 最小 x264 encoder，并在 push runtime 调 `ApplyEncoderAdaptation()`；后续再拆 `H264EncoderAdapter` 时保持同一外部行为。 | 当前 MP4 decode-loop 报告和单测已验证 encoder AU/keyframe/adaptation，以及 SDK keyframe request 后 1 秒内 IDR；copy 输入主报告不计入 encoder runtime。 | 当前输出 `encoder_metrics` 的 bitrate/fps/AU/keyframe/recreate/change/forced-IDR counters；后续补 frameDrop 和 keyframe alert。 |
+| P2-M6 输入源扩展 | 已新增 synthetic raw frame source、MP4 decode-loop source 和 V4L2 source；V4L2 走 FFmpeg v4l2 capture/decode -> x264 -> SDK push。 | MP4 decode-loop baseline 已通过；synthetic 保留单测和可重跑 smoke；V4L2 无设备时 case SKIP，有 `/dev/video*` 时 baseline 必须 PASS。 | 当前 encoder/source metrics 输出 frame count、input fps、AU/keyframe/forced-IDR；report 输出 `sourceMode=synthetic`、`sourceMode=mp4-decode-loop` 或 `sourceMode=v4l2`，并记录 V4L2 device/width/height/fps/inputFormat 和 open failure reason。 |
 | P2-M7 浏览器兼容 | 已新增 browser receiver smoke，复用现有 web/signaling 和 mediasoup-client。 | 当前脚本可运行；plain push 发布 PASS；本机 headless Chromium 缺 H264 packetization-mode=1 时 browser 收流 SKIP；具备 H264 的 Chromium 环境必须看到 consumer 和 inbound stats 增长。 | report 附 browser stats、keyframeRequests、device/router codecs、console/error 摘要和 artifact 路径。 |
-| P2-M8 native decode/QoE | 已新增 `FfmpegDecodeSink` 解码和 QoE 指标；复杂 `QoeProbe` 可后续独立扩展。 | 当前 baseline/delay/loss/bandwidth/recovery 已验证 decode error 为 0；`drop_recover` 清网后 target bitrate 回升仍未稳定签收；browser QoE 仍待覆盖。 | 当前 report 输出 first-frame、freeze、decode errors、output fps。 |
+| P2-M8 native decode/QoE | 已新增 `FfmpegDecodeSink` 解码和 QoE 指标；复杂 `QoeProbe` 可后续独立扩展。 | 当前 baseline/delay/loss/bandwidth/recovery 已验证 decode error 为 0；`drop_recover` 清网后 target bitrate 回升和 decoded frames 增长已由主报告签收；browser QoE 仍待覆盖。 | 当前 report 输出 first-frame、freeze、decode errors、output fps。 |
 | P2-M8b recovery first-frame | 在 smoke report 中按 `case_timing.clearEpochMs` 对齐 QoE 采样，新增恢复首帧门禁；恢复相关修复只能调用 SDK public API 或信令 keyframe request，不能在 adapter 自研 jitter/NACK/TWCC。 | `drop_recover` 清网后 15 秒内 `decodedFrames` 必须增长，且 target bitrate 必须离开最低档；只看到其中一个不算 PASS。 | report 输出 `recoveryFirstFrame` gate、清网时间、清网前 decodedFrames、清网后首个 decoded frame delay、decoded delta 和 `weak-recovery-target-up` 证据。 |
 | P2-M9 签收回归 | 聚合所有 case 和门禁。 | 一条命令生成最终报告；失败非零退出。 | report 可直接定位失败发生在 signaling/UDP/RTP/RTCP/SDK/encoder/sink。 |
 
@@ -1204,10 +1202,10 @@ cmake --build build-webrtc-qos-plain \
 scripts/run_webrtc_qos_plain_p2_smoke.sh \
   --build-dir build-webrtc-qos-plain \
   --worker-bin ./mediasoup-worker \
-  --source synthetic \
+  --source copy \
   --decode-qoe \
-  --cases baseline,delay_100ms,loss_2pct,bandwidth_600k,drop_recover \
-  --duration-seconds 12 \
+  --cases baseline,delay_100ms,loss_2pct,loss_5pct,bandwidth_600k,drop_recover \
+  --duration-seconds 10 \
   --enable-netem \
   --report-dir docs/generated
 
@@ -1240,8 +1238,8 @@ scripts/run_webrtc_qos_plain_p2_smoke.sh \
 - 默认安全模式只运行 `baseline`，弱网 case 在未传 `--enable-netem` 时写为 `SKIP`，不计 PASS。
 - 需要真实弱网验证时显式传 `--enable-netem`；脚本会预检 `tc`、root/CAP_NET_ADMIN 和目标网卡。
 - 默认短测报告写入 `docs/generated/webrtc-qos-plain-p2-smoke-report.{json,md}`；专项报告可用 `--report-name` 指定 basename，例如 MP4 decode-loop baseline 写入 `docs/generated/webrtc-qos-plain-p2-mp4-decode-loop-report.{json,md}`。
-- 当前机器 synthetic+QoE+netem 主报告结果：`baseline PASS`、`delay_100ms PASS`、`loss_2pct PASS`、`bandwidth_600k PASS`、`drop_recover PASS`；`qosMainline PASS`，`sdkRuntimeObservability PASS`，`encoderRuntime PASS`，`nativeDecodeQoe PASS`，`weakNetworkCoverage PASS`，`recoveryFirstFrame PASS`，overall 为 `PASS`。
-- 当前 `drop_recover` 签收证据：清网后 native QoE 在 `144ms` 内增长，decoded delta=`376`，`decodeErrors=0`；target bitrate 在恢复窗口内离开 `300000` 并恢复到 `2500000`，`weak-recovery-target-up=PASS`；SDK runtime log 可观测 `sender_recovery_probe before_target_bps=300000 after_target_bps=1200000 latest_rtt_ms=6 feedback_age_us=0`。
+- 当前机器 copy+QoE+netem 主报告结果：`baseline PASS`、`delay_100ms PASS`、`loss_2pct PASS`、`loss_5pct PASS`、`bandwidth_600k PASS`、`drop_recover PASS`；`qosMainline PASS`，`sdkRuntimeObservability PASS`，`nativeDecodeQoe PASS`，`weakNetworkCoverage PASS`，`recoveryFirstFrame PASS`，overall 为 `PASS`。`encoderRuntime=SKIP` 是预期结果，因为 copy 输入不经过实时 x264 encoder。
+- 当前 `drop_recover` 签收证据：清网后 native QoE 在 `120ms` 内增长，decoded delta=`241`，`decodeErrors=0`；target bitrate 在恢复窗口内离开 `300000`，`weak-recovery-target-up=PASS`。
 - 当前机器 MP4 decode-loop baseline 短测结果：`baseline PASS`，`qosMainline PASS`，`sdkRuntimeObservability PASS`，`encoderRuntime PASS`，`nativeDecodeQoe PASS`；弱网 coverage 未跑，overall 为 `PARTIAL`。
 - 当前机器 V4L2 source 短测结果：`/dev/video0` 不存在，baseline 按环境能力 `SKIP`，所有 baseline 依赖 gate 为 `SKIP`，overall 为 `PARTIAL`；有设备机器必须用同一命令升级为 runtime PASS。
 - 当前机器 browser receiver 短测结果：plain push 发布 `PASS`；headless Chromium `handlerName=Chrome111`，只暴露 VP8/VP9，不暴露 H264 packetization-mode=1，browser consumer/media-flow/track-live 记录为环境 `SKIP`，overall 为 `PARTIAL`。
@@ -1320,9 +1318,9 @@ webrtc-qos-plain-push-client and webrtc-qos-plain-play-client must not depend on
 
 - 文档中的 P2-M1 到 P2-M9 全部完成；只有环境依赖型 case 允许 SKIP。
 - 本地 native smoke PASS。
-- 弱网 smoke 关键 case PASS；当前 `baseline/delay_100ms/loss_2pct/bandwidth_600k/drop_recover` 全部通过。
-- `drop_recover` 清网后 15 秒内 native QoE decoded frames 增长；当前主报告 `postClearFirstDecodedDelayMs=144`、decoded delta=`376`。
-- `drop_recover` 清网后 target bitrate 离开最低档，`weak-recovery-target-up=PASS`；当前主报告 targetBps min/avg/max `300000/1398037.20/2500000`。
+- 弱网 smoke 关键 case PASS；当前 `baseline/delay_100ms/loss_2pct/loss_5pct/bandwidth_600k/drop_recover` 全部通过。
+- `drop_recover` 清网后 15 秒内 native QoE decoded frames 增长；当前主报告 `postClearFirstDecodedDelayMs=120`、decoded delta=`241`。
+- `drop_recover` 清网后 target bitrate 离开最低档，`weak-recovery-target-up=PASS`；当前主报告 targetBps min/avg/max `300000/632260.23/1994666`。
 - 浏览器 receiver smoke 在具备 H264 receive capability 的 Chromium 环境 PASS；当前本机缺 capability 时允许 `SKIP/PARTIAL`，但不能计入浏览器画面完成。
 - V4L2 source 在具备 `/dev/video*` 的 Linux 环境 PASS；当前无设备机器允许 `SKIP/PARTIAL`，但不能计入真实摄像头 demo 完成。
 - SDK runtime 文件输出启用。
