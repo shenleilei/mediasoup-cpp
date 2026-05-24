@@ -50,9 +50,9 @@ Compared to vanilla mediasoup (Node.js control plane), LiveKit (Go), SRS, or Lic
 
 ### 2. Industry-Leading End-to-End QoS
 While most open-source SFUs stop at throwing together congestion control algorithms, this project features a **highly automated, millisecond-quantified QoS Matrix Harness with strict SLA data backing**:
-- **Systematic Weak-Network Matrix:** Drives headless browsers and WebRTC QoS Plain push/play clients via scripts to inject delay, loss, bandwidth limits, and drop/recover profiles. It doesn't just test *if* it recovers, it **precisely quantifies every keyframe of the backoff and recovery lifecycle down to the millisecond**.
+- **Systematic Weak-Network Matrix:** Drives headless browsers and WebRTC QoS push/play clients via scripts to inject delay, loss, bandwidth limits, and drop/recover profiles. It doesn't just test *if* it recovers, it **precisely quantifies every keyframe of the backoff and recovery lifecycle down to the millisecond**.
 - **Meticulous Uplink State Machine:** Implements multi-level Ladder Control (`stable` -> `early_warning` -> `congested` -> `recovering`). An original Fast-Path Recovery mechanism safely advances video recovery times by 5~6 seconds over standard allocator probing strategies without overshoot.
-- **SDK-based PlainTransport Push/Play Client:** Keeps only the WebSocket signaling and UDP Socket integration in the outer client, while WebRTC interfaces, GoogCC, pacer, NACK/PLI/FEC, stats, and QoE observation are delegated to `webrtc_qos_sdk`.
+- **SDK-based Push/Play Client:** Keeps only the WebSocket signaling and UDP Socket integration in the outer client, while WebRTC interfaces, GoogCC, pacer, NACK/PLI/FEC, stats, and QoE observation are delegated to `webrtc_qos_sdk`.
 - **Ironclad Anti-Regression Guardrails (Nightly Full Regression):** All QoS metric results are strictly tied to Nightly CI and quality gates. Any code change that slows weak-network recovery by even 2 seconds is immediately blocked, ensuring rock-solid congestion control evolution.
 
 ### 3. Open-Source SFU Comparison
@@ -112,23 +112,22 @@ mediasoup-worker process
 RTP / SRTP / ICE / DTLS
 ```
 
-## WebRTC QoS Plain Push/Play Client
+## WebRTC QoS Push/Play Client
 
-Besides the browser path, this repo keeps a new PlainTransport push/play client under `client/webrtc_qos_plain_client/`.
+Besides the browser path, this repo provides native push/play clients based on `webrtc_qos_sdk` to connect server signaling, UDP RTP/RTCP I/O, and SDK media QoS.
 
 The client owns only the minimal integration surface:
 
 - WebSocket signaling: `join`, `plainPublish`, `plainSubscribe`
-- UDP Socket I/O for mediasoup PlainTransport RTP/RTCP ports
+- UDP Socket I/O for mediasoup RTP/RTCP ports
 - WebRTC SDK APIs for add track, encoding, packetization, pacing, GoogCC, NACK/PLI/FEC, stats, and QoE observation
 
-The old self-managed Linux plain-client has been removed. Current implementation and validation docs:
+Current implementation and validation docs:
 
 - [docs/dependencies_cn.md](./docs/dependencies_cn.md)
 - [docs/webrtc-qos-push-play-client-design_cn.md](./docs/webrtc-qos-push-play-client-design_cn.md)
 - [docs/webrtc-qos-push-play-client-p2-design_cn.md](./docs/webrtc-qos-push-play-client-p2-design_cn.md)
 - [docs/webrtc-qos-push-play-client-implementation-checklist_cn.md](./docs/webrtc-qos-push-play-client-implementation-checklist_cn.md)
-- [docs/plain-client-legacy-removal-plan_cn.md](./docs/plain-client-legacy-removal-plan_cn.md)
 - [docs/architecture_cn.md](./docs/architecture_cn.md)
 
 ## Multi-Node Routing Architecture
@@ -190,15 +189,15 @@ Current downlink scope is subscriber receive control plus zero-demand publisher 
 Current repo docs and generated artifacts show:
 
 - browser uplink matrix main gate: `43 / 43 PASS` (`2026-04-13`)
-- WebRTC QoS Plain P2 synthetic+QoE main report: `qosMainline=PASS`, `sdkRuntimeObservability=PASS`, `encoderRuntime=PASS`, `nativeDecodeQoe=PASS`, `weakNetworkCoverage=PASS`, `recoveryFirstFrame=PASS`; overall is `PASS`, `failedChecks=0`
-- P2 covered `baseline`, `delay_100ms`, `loss_2pct`, `bandwidth_600k`, and `drop_recover`; current main report is `5 / 5 PASS`
+- WebRTC QoS P2 synthetic+QoE main report: `qosMainline=PASS`, `sdkRuntimeObservability=PASS`, `encoderRuntime=PASS`, `nativeDecodeQoe=PASS`, `weakNetworkCoverage=PASS`, `recoveryFirstFrame=PASS`; overall is `PASS`, `failedChecks=0`
+- P2 covered `baseline`, `delay_100ms`, `loss_2pct`, `loss_5pct`, `bandwidth_600k`, and `drop_recover`; current main report is `6 / 6 PASS`
 - P2 recovery-first-frame is a hard gate; the main report saw decoded-frame growth `144ms` after network recovery, and the dedicated recovery report saw first frame at `2122ms`
 - P2 MP4 decode-loop baseline: `pushedAu=359`, `decodedFrames=359`, `decodeErrors=0`
 - P2 browser receiver and V4L2 source entries exist, but this machine records browser H264 and `/dev/video0` gaps as environment `SKIP/PARTIAL`
 
 Current scope note:
 
-- uplink QoS main path is closed on both browser and WebRTC QoS Plain P2 client
+- uplink QoS main path is closed on both browser and WebRTC QoS P2 client
 - downlink currently covers subscriber receive control plus zero-demand publisher pause/resume coordination
 - `dynacast` and room-level global bitrate budgeting remain follow-on work
 
@@ -208,13 +207,12 @@ Source-of-truth links:
 - final summary: [docs/uplink-qos-final-report.md](./docs/uplink-qos-final-report.md)
 - result summary: [docs/uplink-qos-test-results-summary.md](./docs/uplink-qos-test-results-summary.md)
 - per-case final result: [docs/uplink-qos-case-results.md](./docs/uplink-qos-case-results.md)
-- WebRTC QoS Plain P2 smoke report: [docs/generated/webrtc-qos-plain-p2-smoke-report.md](./docs/generated/webrtc-qos-plain-p2-smoke-report.md)
-- WebRTC QoS Plain P2 design and gates: [docs/webrtc-qos-push-play-client-p2-design_cn.md](./docs/webrtc-qos-push-play-client-p2-design_cn.md)
-- WebRTC QoS Plain P2 recovery-first-frame report: [docs/generated/webrtc-qos-plain-p2-recovery-first-frame-report.md](./docs/generated/webrtc-qos-plain-p2-recovery-first-frame-report.md)
-- WebRTC QoS Plain P2 MP4 decode-loop report: [docs/generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md](./docs/generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md)
-- WebRTC QoS Plain P2 browser receiver report: [docs/generated/webrtc-qos-plain-p2-browser-receiver-report.md](./docs/generated/webrtc-qos-plain-p2-browser-receiver-report.md)
-- WebRTC QoS Plain P2 V4L2 source report: [docs/generated/webrtc-qos-plain-p2-v4l2-report.md](./docs/generated/webrtc-qos-plain-p2-v4l2-report.md)
-- legacy plain-client removal plan: [docs/plain-client-legacy-removal-plan_cn.md](./docs/plain-client-legacy-removal-plan_cn.md)
+- WebRTC QoS P2 smoke report: [docs/generated/webrtc-qos-plain-p2-smoke-report.md](./docs/generated/webrtc-qos-plain-p2-smoke-report.md)
+- WebRTC QoS P2 design and gates: [docs/webrtc-qos-push-play-client-p2-design_cn.md](./docs/webrtc-qos-push-play-client-p2-design_cn.md)
+- WebRTC QoS P2 recovery-first-frame report: [docs/generated/webrtc-qos-plain-p2-recovery-first-frame-report.md](./docs/generated/webrtc-qos-plain-p2-recovery-first-frame-report.md)
+- WebRTC QoS P2 MP4 decode-loop report: [docs/generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md](./docs/generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md)
+- WebRTC QoS P2 browser receiver report: [docs/generated/webrtc-qos-plain-p2-browser-receiver-report.md](./docs/generated/webrtc-qos-plain-p2-browser-receiver-report.md)
+- WebRTC QoS P2 V4L2 source report: [docs/generated/webrtc-qos-plain-p2-v4l2-report.md](./docs/generated/webrtc-qos-plain-p2-v4l2-report.md)
 - downlink current status: [docs/downlink-qos-status.md](./docs/downlink-qos-status.md)
 - test coverage map: [docs/qos-test-coverage_cn.md](./docs/qos-test-coverage_cn.md)
 - generated matrix artifact: [docs/generated/uplink-qos-matrix-report.json](./docs/generated/uplink-qos-matrix-report.json)
@@ -357,12 +355,12 @@ timer -> main thread
       -> recorder may append QoS snapshots
 ```
 
-### WebRTC QoS Plain Push/Play Client
+### WebRTC QoS Push/Play Client
 
 ```text
 webrtc-qos-plain-push-client / webrtc-qos-plain-play-client
       -> WebSocket join / plainPublish / plainSubscribe
-      -> bind mediasoup PlainTransport UDP RTP/RTCP
+      -> bind mediasoup UDP RTP/RTCP
       -> add / receive tracks through webrtc_qos_sdk
       -> SDK owns GoogCC / pacer / NACK / PLI / FEC
       -> export SDK stats / QoE / clientStats snapshots
@@ -524,7 +522,7 @@ Dependency reference:
 Notes:
 
 - Redis is optional at runtime for single-node local-only mode, but the current default build still links `hiredis`.
-- WebRTC QoS Plain P2 V4L2 source tests need `libavdevice`; machines without `/dev/video0` record the camera smoke as environment `SKIP`.
+- WebRTC QoS P2 V4L2 source tests need `libavdevice`; machines without `/dev/video0` record the camera smoke as environment `SKIP`.
 
 ### Build
 
