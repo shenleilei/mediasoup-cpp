@@ -11,13 +11,13 @@
 当前仓库的 QoS 文档体系已经拆成三条主线：
 
 1. browser uplink QoS
-2. WebRTC QoS Plain P2 push/play client
+2. WebRTC QoS P2 push/play client
 3. downlink QoS
 
 当前稳定口径：
 
 - browser uplink 主 gate：`55 case`；当前增量验证为原 `43 case` 主 gate `PASS` + `GD1-GD12` targeted `PASS`
-- WebRTC QoS Plain P2：native synthetic+QoE 已覆盖 baseline/delay/loss/bandwidth/recovery；`qosMainline/sdkRuntimeObservability/encoderRuntime/nativeDecodeQoe/recoveryFirstFrame/weakNetworkCoverage` 当前均为 `PASS`
+- WebRTC QoS P2：native push/play 主报告以 `sourceMode=copy` 覆盖 baseline/delay/loss/bandwidth/recovery，`6 / 6 PASS`，`failedChecks=0`；`qosMainline/sdkRuntimeObservability/nativeDecodeQoe/recoveryFirstFrame/weakNetworkCoverage` 为 `PASS`，`encoderRuntime=SKIP` 因 copy 输入不经过实时 x264 encoder
 - downlink 当前范围：subscriber receive control + zero-demand publisher pause/resume coordination
 - `dynacast` 与 room-level global bitrate budgeting 仍是后续能力，不计入当前已完成口径
 
@@ -32,17 +32,17 @@
 - 逐 case：
   [uplink-qos-case-results.md](./uplink-qos-case-results.md)
 
-### 2.2 WebRTC QoS Plain P2
+### 2.2 WebRTC QoS P2
 
 - 推拉流客户端总设计：
   [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md)
-- WebRTC QoS Plain P2 执行方案：
+- WebRTC QoS P2 执行方案：
   [webrtc-qos-push-play-client-p2-design_cn.md](./webrtc-qos-push-play-client-p2-design_cn.md)
 - 实现对照清单：
   [webrtc-qos-push-play-client-implementation-checklist_cn.md](./webrtc-qos-push-play-client-implementation-checklist_cn.md)
-- WebRTC QoS Plain P2 当前主报告：
+- WebRTC QoS P2 当前主报告：
   [generated/webrtc-qos-plain-p2-smoke-report.md](./generated/webrtc-qos-plain-p2-smoke-report.md)
-- WebRTC QoS Plain P2 恢复首帧专项报告：
+- WebRTC QoS P2 恢复首帧专项报告：
   [generated/webrtc-qos-plain-p2-recovery-first-frame-report.md](./generated/webrtc-qos-plain-p2-recovery-first-frame-report.md)
 
 ### 2.3 downlink
@@ -61,7 +61,7 @@
 ### 3.1 已进入“当前主口径”的内容
 
 - browser uplink 主测试集
-- WebRTC QoS Plain P2 synthetic+QoE、恢复首帧、MP4 decode-loop、browser receiver 和 V4L2 环境能力门禁
+- WebRTC QoS P2 copy 输入弱网主报告、恢复首帧、MP4 decode-loop、browser receiver 和 V4L2 环境能力门禁
 - downlink 现有 subscriber-side / publisher-supply 协调能力
 
 ### 3.2 不在“当前已完成”口径里的内容

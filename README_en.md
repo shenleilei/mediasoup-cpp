@@ -39,33 +39,24 @@ This project is not:
 - a rewrite of mediasoup media internals
 - a replacement for `mediasoup-worker`
 
-## Core Advantages & Comparison
+## Core Value
 
-Compared to vanilla mediasoup (Node.js control plane), LiveKit (Go), SRS, or Licode, this project introduces hard-core architectural and engineering improvements tailored for high-concurrency low-latency WebRTC:
+This project does not rewrite the mediasoup media worker. It keeps the upstream worker and builds the surrounding C++ control plane and native client integration surface into something deployable, testable, and observable.
 
-### 1. Extreme Performance & Lock-Free Concurrency
-- **Pure C++17 Single-Binary:** Abandons Node.js/V8 entirely, using `uWebSockets` for signaling and HTTP. Eliminates GC pause spikes and drastically reduces signaling latency and memory overhead during massive Join/Leave bursts.
-- **Lock-Free State Machine (Thread-per-Room):** An innovative `WorkerThread` pool mechanism binds a room's entire lifecycle to a single serial event loop, **completely eliminating fine-grained lock contention** when concurrently reading/mutating room states.
-- **Modern Zero-Copy IPC:** Uses **FlatBuffers** over Unix pipes between the signaling plane and the underlying `mediasoup-worker` processes, compressing the serialization overhead of massive RTP stats snapshots and control messages to the absolute minimum.
+### 1. C++ Control Plane And Room Threading
+- **C++17 control plane:** `uWebSockets` handles HTTP/WebSocket while media remains in the upstream `mediasoup-worker`.
+- **Room-serial execution:** each room is bound to a `WorkerThread`, reducing cross-thread room-state sharing and lock contention.
+- **FlatBuffers IPC:** the control plane talks to `mediasoup-worker` through Unix pipes and FlatBuffers with explicit protocol boundaries.
 
-### 2. Industry-Leading End-to-End QoS
-While most open-source SFUs stop at throwing together congestion control algorithms, this project features a **highly automated, millisecond-quantified QoS Matrix Harness with strict SLA data backing**:
-- **Systematic Weak-Network Matrix:** Drives headless browsers and WebRTC QoS push/play clients via scripts to inject delay, loss, bandwidth limits, and drop/recover profiles. It doesn't just test *if* it recovers, it **precisely quantifies every keyframe of the backoff and recovery lifecycle down to the millisecond**.
-- **Meticulous Uplink State Machine:** Implements multi-level Ladder Control (`stable` -> `early_warning` -> `congested` -> `recovering`). An original Fast-Path Recovery mechanism safely advances video recovery times by 5~6 seconds over standard allocator probing strategies without overshoot.
-- **SDK-based Push/Play Client:** Keeps only the WebSocket signaling and UDP Socket integration in the outer client, while WebRTC interfaces, GoogCC, pacer, NACK/PLI/FEC, stats, and QoE observation are delegated to `webrtc_qos_sdk`.
-- **Ironclad Anti-Regression Guardrails (Nightly Full Regression):** All QoS metric results are strictly tied to Nightly CI and quality gates. Any code change that slows weak-network recovery by even 2 seconds is immediately blocked, ensuring rock-solid congestion control evolution.
+### 2. SDK-Based Push/Play Client
+- **Minimal outer client:** push/play only owns WebSocket signaling and UDP Socket I/O.
+- **Media QoS in the SDK:** add track, encoding, packetization, pacing, GoogCC, NACK/PLI/FEC, stats, and QoE observation are delegated to `webrtc_qos_sdk`.
+- **PlainTransport integration:** clients reuse `plainPublish` / `plainSubscribe` to validate the mediasoup PlainTransport and SDK push/play loop.
 
-### 3. Open-Source SFU Comparison
-
-| Feature | mediasoup-cpp (This Project) | Vanilla mediasoup (Node.js) | LiveKit (Go) | SRS (C++) | Licode (Erlang/C++) |
-|:---|:---|:---|:---|:---|:---|
-| **Core Language/Runtime** | **Pure C++17** (Peak perf, No GC) | Node.js + C++ (V8 GC) | Go (GC & scheduler overhead) | C++ (RTMP/Live focus) | Erlang + C++ (Legacy) |
-| **Concurrency & State** | **Lock-free Thread-per-Room** | Node.js single-thread loop | Goroutine multi-thread locks | Single thread (Multi-process) | Multi-process Actor model |
-| **QoS / Weak Network** | **Fine-grained ladder + Fast recovery** | Relies on user implementation | Allocator-based downgrade | Basic WebRTC CC | Basic control mechanisms |
-| **Automation & Quant.** | **Unique ms-quantified CI matrix** | Rich API-level tests | Standard unit + integration | Live-stream centric tests | Fewer automated matrix tests |
-| **Deployment & Ops** | **Pure single-binary daemon** | Complex Node.js env needed | Single-binary (Convenient) | Single-binary (Convenient) | Many dependencies (Complex) |
-| **IPC / Component Comm** | **Zero-Copy FlatBuffers IPC** | String/JSON serialization | Direct Go function calls | In-process / HTTP callbacks | Relatively heavy RPC |
-| **Out-of-the-Box Features**| Room routing, multi-node, recording | Low-level media API only | Highly productized (Cloud-ready) | Live streaming distribution | Early MCU/SFU hybrid architecture |
+### 3. Reproducible QoS Validation
+- **Browser uplink matrix:** browser/Node harnesses validate the uplink QoS state machine and server aggregation path.
+- **Native push/play weak-network smoke:** the P2 report covers baseline, delay, loss, bandwidth, drop/recover, RTP/RTCP, TWCC, target bitrate, native decode QoE, and recovery-first-frame evidence.
+- **Explicit environment SKIP rules:** missing browser H264 capability, V4L2 devices, or netem privileges must be recorded as `SKIP/PARTIAL`, not counted as PASS.
 
 ## High-Level Architecture
 
@@ -188,10 +179,11 @@ Current downlink scope is subscriber receive control plus zero-demand publisher 
 
 Current repo docs and generated artifacts show:
 
-- browser uplink matrix main gate: `43 / 43 PASS` (`2026-04-13`)
-- WebRTC QoS P2 synthetic+QoE main report: `qosMainline=PASS`, `sdkRuntimeObservability=PASS`, `encoderRuntime=PASS`, `nativeDecodeQoe=PASS`, `weakNetworkCoverage=PASS`, `recoveryFirstFrame=PASS`; overall is `PASS`, `failedChecks=0`
-- P2 covered `baseline`, `delay_100ms`, `loss_2pct`, `loss_5pct`, `bandwidth_600k`, and `drop_recover`; current main report is `6 / 6 PASS`
-- P2 recovery-first-frame is a hard gate; the main report saw decoded-frame growth `144ms` after network recovery, and the dedicated recovery report saw first frame at `2122ms`
+- browser uplink matrix: original `43 / 43 PASS` main gate (`2026-04-13`) plus `GD1-GD12` targeted PASS; current total scope is `55 case`
+- WebRTC QoS P2 main report: `sourceMode=copy`, `enableNetem=true`, `decodeQoe=true`; `baseline`, `delay_100ms`, `loss_2pct`, `loss_5pct`, `bandwidth_600k`, and `drop_recover` are `6 / 6 PASS`, `failedChecks=0`
+- P2 main gates: `qosMainline=PASS`, `sdkRuntimeObservability=PASS`, `nativeDecodeQoe=PASS`, `weakNetworkCoverage=PASS`, `recoveryFirstFrame=PASS`; `encoderRuntime=SKIP` because copy input does not exercise the realtime x264 encoder
+- P2 weak-network data: 100ms delay RTT avg/max is `86.3/247ms`; 600kbps bandwidth targetBps min/avg/max is `300000/1237333/1994666`; `drop_recover` targetBps min/avg/max is `300000/632260.23/1994666`
+- P2 recovery-first-frame is a dedicated gate; the main report saw decoded-frame growth `120ms` after network recovery with decoded delta=`241`, and the dedicated recovery report saw first frame at `2122ms`
 - P2 MP4 decode-loop baseline: `pushedAu=359`, `decodedFrames=359`, `decodeErrors=0`
 - P2 browser receiver and V4L2 source entries exist, but this machine records browser H264 and `/dev/video0` gaps as environment `SKIP/PARTIAL`
 

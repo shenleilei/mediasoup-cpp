@@ -6,10 +6,10 @@
 - `uWS` 主线程、`WorkerThread`、`mediasoup-worker` 分别负责什么
 - 一个请求从 WebSocket 进入后，在哪些地方发生线程切换、进程 IPC、Redis 访问
 - 房间、多节点、QoS、录制、故障恢复分别挂在哪条链路上
-- 仓库内 WebRTC QoS Plain push/play client 如何接入同一套 PlainTransport 信令和 QoS 体系
+- 仓库内 WebRTC QoS 推拉流客户端如何接入同一套 PlainTransport 信令和 QoS 体系
 
 如果只需要构建、测试和常规开发入口，先读 [DEVELOPMENT.md](./DEVELOPMENT.md)。如果需要理解运行时控制流、所有权和时序，再读本文。
-如果需要专门看 WebRTC QoS Plain push/play client，请继续看 [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md)。
+如果需要专门看 WebRTC QoS 推拉流客户端，请继续看 [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md)。
 
 ## 1. 设计结论
 
@@ -186,9 +186,9 @@ flowchart TB
 - 在 `RoomRegistry` 之外新增随手 Redis 访问
 - 在 `WorkerThread` 之外做 non-threaded `Channel` IPC
 
-### 4.5 仓库内 WebRTC QoS Plain Push/Play Client
+### 4.5 仓库内 WebRTC QoS 推拉流客户端
 
-这个仓库除了浏览器信令 / WebRTC 路径，还维护一条 WebRTC QoS SDK PlainTransport 推拉流客户端路径：
+这个仓库除了浏览器信令 / WebRTC 路径，还维护一条基于 WebRTC QoS SDK 的 PlainTransport 推拉流客户端路径：
 
 - 共用信令：`client/WsClient.*`
 - 新客户端目录：`client/webrtc_qos_plain_client/`
@@ -569,11 +569,11 @@ uWS 主线程 timer
 | `clientStats` | 否 | 只更新控制面的 QoS 聚合状态 |
 | `peerJoined` / `newConsumer` / `qosPolicy` 这类通知 | 否 | 只是控制面回主线程发信令 |
 
-### 7.8 `plainPublish` / `plainSubscribe` 与 WebRTC QoS Plain 补充路径
+### 7.8 `plainPublish` / `plainSubscribe` 与 WebRTC QoS 推拉流补充路径
 
 浏览器路径走的是 `createWebRtcTransport -> connectWebRtcTransport -> produce`。
 
-WebRTC QoS Plain push client 走的是另一条链路：
+WebRTC QoS push client 走的是另一条链路：
 
 ```text
 webrtc-qos-plain-push-client
@@ -698,12 +698,12 @@ Client -> 主线程
 这条路径同时服务于两类 client：
 
 - 浏览器 / JS client
-- WebRTC QoS Plain push/play client
+- WebRTC QoS push/play client
 
 两者 payload schema 相同，但 stats 来源不同：
 
 - 浏览器：`RTCPeerConnection.getStats()`
-- WebRTC QoS Plain client：`webrtc_qos_sdk` stats / QoE / 本地 RTP 计数
+- WebRTC QoS client：`webrtc_qos_sdk` stats / QoE / 本地 RTP 计数
 
 ### 9.2 录制
 

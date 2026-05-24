@@ -1,4 +1,4 @@
-# WebRTC QoS Plain P2 Browser Receiver Report
+# WebRTC QoS P2 Browser Receiver Report
 
 | Item | Value |
 |---|---|

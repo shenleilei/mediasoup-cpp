@@ -343,7 +343,7 @@ function writeReport({ report, reportJson, reportMd }) {
 
   const c = report.case;
   const lines = [];
-  lines.push('# WebRTC QoS Plain P2 Browser Receiver Report');
+  lines.push('# WebRTC QoS P2 Browser Receiver Report');
   lines.push('');
   lines.push('| Item | Value |');
   lines.push('|---|---|');

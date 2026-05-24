@@ -271,7 +271,7 @@ Redis Key 设计:
 - 默认运行契约下，Redis 是 readiness 强依赖：Redis 不可用时启动失败，运行中 `/readyz` 变为 `503`
 - 只有显式配置 `redisRequired=false` 时才允许 `registry_ == nullptr` 的 local-only 模式；该模式不属于默认多节点路由契约
 
-## 8. WebRTC QoS Plain Push/Play 与 PlainTransport 路径
+## 8. WebRTC QoS Push/Play 与 PlainTransport 路径
 
 ```text
 webrtc-qos-plain-push-client
@@ -308,7 +308,7 @@ notification:
 
 - 外围客户端只保留 WebSocket 信令和 UDP Socket，媒体 QoS 由 SDK 接管。
 - 服务端继续使用同一套 `plainPublish` / `plainSubscribe` / `clientStats` / `qosOverride` 协议。
-- P2 smoke 通过 synthetic+QoE、恢复首帧、MP4 decode-loop、browser receiver、V4L2 环境能力门禁验证链路。
+- P2 smoke 通过 copy 输入弱网主报告、恢复首帧、MP4 decode-loop、browser receiver、V4L2 环境能力门禁验证链路；copy 输入不计入实时 encoder runtime，encoder runtime 以 x264 输入源报告为准。
 
 ## 9. QoS 控制链路
 
