@@ -87,5 +87,5 @@ cd /root/mediasoup-cpp
 
 - [x] 需要补一份“主 gate rerun + extended sentinel rerun”都更易审计的独立归档 artifact
   说明：这项工作已归入 P1 的“full matrix 稳定性固化与归档”。
-  当前 full matrix / targeted rerun / archive 快照已经拆分；执行后应确认本轮结果已同步到 `docs/archive/uplink-qos-runs/<generatedAt>/`，方便后续和上一轮直接对比；
+  当前 full matrix / targeted rerun 结果已经拆分；执行后应确认 `docs/generated/` 下的主报告和 targeted 报告互不覆盖；
   但这不影响本轮“自动化主测试集已收敛并可签收”的结论。

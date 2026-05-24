@@ -169,10 +169,7 @@
 
 在第一次引入 `T9` 时，case 能进入 `congested/L4`，但在 `30s` recovery window 内始终回不到 baseline。
 
-归档结果见：
-
-- [第一次失败快照](./archive/uplink-qos-runs/2026-04-19T20-58-23.877Z/docs/uplink-qos-case-results.md)
-- [第一次失败 JSON](./archive/uplink-qos-runs/2026-04-19T20-58-23.877Z/docs/generated/uplink-qos-matrix-report.json)
+历史失败快照不再保留在当前文档树；需要追溯第一次失败结果时直接查看 git 历史。
 
 当时的关键结论是：
 
@@ -319,15 +316,10 @@
 
 当前 targeted 结果见：
 
-- [当前 targeted case report](./generated/uplink-qos-case-results.targeted.md)
-- [当前 targeted matrix json](./generated/uplink-qos-matrix-report.targeted.json)
+- `docs/generated/uplink-qos-case-results.targeted.md`
+- `docs/generated/uplink-qos-matrix-report.targeted.json`
 
-归档快照见：
-
-- [第一次修正后通过快照](./archive/uplink-qos-runs/2026-04-19T20-58-23.877Z/docs/uplink-qos-case-results.md)
-- [第一次修正后通过 JSON](./archive/uplink-qos-runs/2026-04-19T20-58-23.877Z/docs/generated/uplink-qos-matrix-report.json)
-- [最新稳定收尾快照](./archive/uplink-qos-runs/2026-04-19T20-58-23.877Z/docs/uplink-qos-case-results.md)
-- [最新稳定收尾 JSON](./archive/uplink-qos-runs/2026-04-19T20-58-23.877Z/docs/generated/uplink-qos-matrix-report.json)
+历史通过快照不再保留在当前文档树；当前状态以 `docs/generated/` 下的 targeted 报告为准。
 
 关键结果如下：
 
@@ -406,8 +398,8 @@ node tests/qos_harness/render_case_report.mjs --input=docs/generated/uplink-qos-
 
 latest targeted artifact 为：
 
-- [最新 targeted case report](./generated/uplink-qos-case-results.targeted.md)
-- [最新 targeted matrix json](./generated/uplink-qos-matrix-report.targeted.json)
+- `docs/generated/uplink-qos-case-results.targeted.md`
+- `docs/generated/uplink-qos-matrix-report.targeted.json`
 
 这次的关键结果变成：
 
@@ -447,8 +439,8 @@ latest targeted artifact 为：
 
 对应 artifact 为：
 
-- [组合 targeted case report](./generated/uplink-qos-case-results.targeted.md)
-- [组合 targeted matrix json](./generated/uplink-qos-matrix-report.targeted.json)
+- `docs/generated/uplink-qos-case-results.targeted.md`
+- `docs/generated/uplink-qos-matrix-report.targeted.json`
 
 这轮的关键信息是：
 
@@ -543,8 +535,8 @@ node tests/qos_harness/render_case_report.mjs --input=docs/generated/uplink-qos-
 
 对应 artifact 为：
 
-- [latest targeted case report](./generated/uplink-qos-case-results.targeted.md)
-- [latest targeted matrix json](./generated/uplink-qos-matrix-report.targeted.json)
+- `docs/generated/uplink-qos-case-results.targeted.md`
+- `docs/generated/uplink-qos-matrix-report.targeted.json`
 
 这轮的关键信息是：
 

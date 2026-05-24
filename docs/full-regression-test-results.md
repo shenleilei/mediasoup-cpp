@@ -54,5 +54,4 @@ Generated at: `2026-04-28 12:45:10 CST`
 | Downlink Summary | Downlink QoS summary | [downlink-qos-test-results-summary.md](downlink-qos-test-results-summary.md) | 2026-04-28 12:44:11 |
 | Downlink Cases | Downlink per-case report | [downlink-qos-case-results.md](downlink-qos-case-results.md) | 2026-04-28 12:44:11 |
 | Uplink Matrix JSON | Latest browser uplink matrix artifact | [uplink-qos-matrix-report.json](generated/uplink-qos-matrix-report.json) | 2026-04-28 12:38:31 |
-| Downlink Matrix JSON | Latest downlink matrix artifact | [downlink-qos-matrix-report.json](generated/downlink-qos-matrix-report.json) | 2026-04-28 12:44:10 |
-| LiveKit 48-Case Compare | Latest livekit-aligned 43-case comparison | - | - |
+| Downlink Matrix JSON | Latest downlink matrix artifact | `generated/downlink-qos-matrix-report.json` is generated on demand and is not retained in the current tree | 2026-04-28 12:44:10 |

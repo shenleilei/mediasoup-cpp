@@ -156,13 +156,13 @@
 - client JS 单测实际执行结果：`27 / 27 PASS`
 - Node/browser harness 实际执行结果：全部通过
 - full matrix 主 gate 当前重渲染结果：[uplink-qos-case-results.md](./uplink-qos-case-results.md)
-- latest targeted 组合回归结果：[generated/uplink-qos-case-results.targeted.md](./generated/uplink-qos-case-results.targeted.md)
+- latest targeted 组合回归结果由脚本生成到 `docs/generated/uplink-qos-case-results.targeted.md`；当前仓库不保留这类临时 targeted 结果。
 
 补充说明：
 
 - full matrix 原始机器输出保留在 [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json)。
-- targeted rerun 原始机器输出保留在 [generated/uplink-qos-matrix-report.targeted.json](./generated/uplink-qos-matrix-report.targeted.json)。
-- 每次报告生成都会按 `generatedAt` 归档到 [archive/uplink-qos-runs](./archive/uplink-qos-runs)。
+- targeted rerun 原始机器输出由脚本生成到 `docs/generated/uplink-qos-matrix-report.targeted.json`；当前仓库不保留这类临时 targeted 结果。
+- 历史报告快照不再保留在当前文档树；需要追溯旧矩阵结果时直接查看 git 历史。
 - `T1 / S4` 的边界波动依据，来自至少两份不同 full matrix 快照的对比。
 - `BW2` 的边界结论来自 dedicated strict targeted fail、latest 组合 targeted regression pass，以及 [uplink-qos-loopback-boundary-investigation.md](./uplink-qos-loopback-boundary-investigation.md) 中的专项排查。
 - `T9` 第二轮 fast-path 的实测改进、`T10/T11` 的 tail oscillation 复现、以及 latest tail-fix targeted rerun 的结果，见 [uplink-qos-blind-spot-scenario.md](./uplink-qos-blind-spot-scenario.md) 与 latest targeted report。

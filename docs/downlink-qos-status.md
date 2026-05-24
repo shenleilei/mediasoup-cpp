@@ -30,8 +30,7 @@ downlink 当前的运行结果仍以“机器结果页 + generated artifact”�
 - 当前机器结果页：
   [downlink-qos-case-results.md](./downlink-qos-case-results.md)
 - full / targeted generated artifact：
-  [generated/downlink-qos-matrix-report.json](./generated/downlink-qos-matrix-report.json)
-  [generated/downlink-qos-matrix-report.json](./generated/downlink-qos-matrix-report.json)
+  脚本按需生成到 `docs/generated/downlink-qos-matrix-report.json` 和 `docs/generated/downlink-qos-matrix-report.targeted.json`；当前仓库不保留 downlink generated JSON。
 
 注意：
 

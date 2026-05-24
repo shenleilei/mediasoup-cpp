@@ -47,7 +47,7 @@ subscriber 侧 `bytesReceived` 在 pause 后不再增长。
 
 当前 matrix D8 只覆盖控制面延迟和振荡检测，不直接测量首帧恢复时间。
 对应数据见：
-[docs/generated/downlink-qos-matrix-report.json](../docs/generated/downlink-qos-matrix-report.json)
+`docs/generated/downlink-qos-matrix-report.json`。该文件由 downlink matrix 脚本按需生成，当前仓库不保留该临时 JSON。
 
 #### 3. pauseUpstream 对 producer 的影响
 
