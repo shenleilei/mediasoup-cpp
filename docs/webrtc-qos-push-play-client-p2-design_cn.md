@@ -38,7 +38,7 @@
 - P2-M6 已补充 V4L2 source 入口：`V4L2H264Source` 通过 FFmpeg v4l2 capture 解码 raw frame 后 x264 编码，push runtime 应用同一套 SDK bitrate/fps/keyframe adaptation；当前机器无 `/dev/video0`，报告以 `v4l2 device not found` 记为环境 `SKIP/PARTIAL`。
 - P2-M3/P2-M8 已完成真实 netem 短测：`baseline`、`delay_100ms`、`loss_2pct`、`loss_5pct`、`bandwidth_600k`、`drop_recover` 均为 PASS；100ms delay RTT avg/max `86.3/247ms`，bandwidth targetBps min/avg/max `300000/1237333/1994666`，`drop_recover` targetBps min/avg/max `300000/632260.23/1994666`，所有已跑 case `decodeErrors=0`，报告 `weakNetworkCoverage=PASS`。
 - P2-M7 已新增 browser receiver smoke：`tests/qos_harness/browser_plain_receiver.mjs` 启动 SFU + plain push + headless Chromium，并输出 `docs/generated/webrtc-qos-plain-p2-browser-receiver-report.{json,md}`；当前报告 plain push 链路 `PASS`，browser H264 capability `SKIP`，overall `PARTIAL`。
-- P2-M8b 已新增恢复首帧门禁：`drop_recover` 不只看 target bitrate 回升，还要求 netem clear 后 15 秒内看到 native QoE `decodedFrames` 增长；当前主报告清网后 `120ms` decoded frames 增长，delta=`241`，同 case target bitrate 离开最低档，`recoveryFirstFrame=PASS`。
+- P2-M8b 已新增恢复首帧门禁：`drop_recover` 不只看 target bitrate 是否离开最低档，还要求 netem clear 后 15 秒内看到 native QoE `decodedFrames` 增长；当前主报告清网后 `120ms` decoded frames 增长，delta=`241`，同 case `weak-recovery-target-up=PASS`，`recoveryFirstFrame=PASS`。
 
 第二期目标是把第一期从“最小可跑”推进到“可验证、可观测、可调优、可接真实输入”的状态。
 
@@ -111,6 +111,7 @@ P2 签收分三层，不同层的失败不能互相替代：
 | 静态和单测 | 编译、ORTC 参数、source/decode sink 单测、旧 QoS 依赖门禁。 | `cmake --build`、`mediasoup_webrtc_qos_plain_unit_tests`、`rg` 静态门禁。 | 构建和单测通过；新客户端不链接旧 QoS。 |
 | Native 端到端 | SFU + native push + native play + SDK QoS + 文件观测。 | `docs/generated/webrtc-qos-plain-p2-smoke-report.{json,md}`。 | 主 gates PASS；弱网 case PASS 或环境 SKIP。 |
 | 兼容和真实输入 | browser receiver、MP4 decode-loop、V4L2/camera。 | `browser-receiver-report`、`mp4-decode-loop-report`、`v4l2-report`。 | 环境满足时 PASS；环境不满足时报告明确 SKIP reason。 |
+| P2 聚合验收 | 一条命令执行构建、plain client 单测、ORTC/TWCC targeted test、PlainPublish 集成测试、边界检查和报告复核；正式刷新时可加 `--run-smoke --enable-netem` 重跑主弱网、恢复首帧、MP4 decode-loop 和 V4L2 报告。 | `scripts/run_qos_tests.sh p2-acceptance` 或 `scripts/run_webrtc_qos_plain_p2_acceptance.sh`。 | plain client 只消费 SDK public facade；主弱网 PASS；copy encoderRuntime 只能 SKIP；MP4 encoderRuntime PASS；V4L2/browser 只能按环境能力 SKIP，不能伪造成 PASS。 |
 
 ### 2.3 环境 SKIP 规则
 
@@ -610,7 +611,7 @@ P2 失败时按下面顺序定位，不允许直接从现象跳到改 QoS 算法
 - 可验证入口：运行 `scripts/run_webrtc_qos_plain_p2_smoke.sh --enable-netem --decode-qoe --cases baseline,delay_100ms,loss_2pct,loss_5pct,bandwidth_600k,drop_recover`，主报告必须 `overall=PASS`，且 `weak-recovery-target-up=PASS`。
 - 可观测入口：`drop_recover` case 必须同时给出 `case_timing.clearEpochMs`、push `targetBps` timeline、play `qoe_metrics`、SDK runtime `transportFeedbackCountMax/receiverReportCountMax`、`failedChecks`、artifact path，以及 SDK runtime log 中的 `sender_recovery_probe` 事件。
 - 当前实现：SDK sender facade 在 target 长时间处于最低档、曾观察到高 RTT、随后 RTT/反馈恢复时触发内部 recovery probe；mediasoup-cpp 不感知 netem clear 时间，也不在 adapter 中伪造 route change。
-- 当前证据：主报告 `drop_recover=PASS`，targetBps min/avg/max 为 `300000/632260.23/1994666`；清网后 `120ms` 内 QoE decoded frames 增长，delta=`241`，`decodeErrors=0`；`weak-recovery-target-up=PASS`。
+- 当前证据：主报告 `drop_recover=PASS`，targetBps min/avg/max 为 `300000/632260.23/1994666`；清网后 `120ms` 内 QoE decoded frames 增长，delta=`241`，`decodeErrors=0`；`weak-recovery-target-up=PASS`。主报告证明清网后离开最低档，专项恢复报告证明清网后回到高档。
 
 ## 8. P2-D：服务端 Plain 信令清理
 
@@ -1156,13 +1157,13 @@ P2-M4 video-only publish
 - 实施：smoke report 解析 `case_timing.clearEpochMs` 和 `qoe_metrics epochMs/decodedFrames`，新增 `recoveryFirstFrame` gate；必要时 play adapter 基于 QoE freeze 请求关键帧，但不得自研 jitter/NACK/TWCC。
 - 验证：`drop_recover` 启用 `--decode-qoe` 和 `--enable-netem`；清网后 15 秒内 `decodedFrames` 必须大于清网前最后一次采样值。
 - 观测：report 记录 `clearEpochMs`、`preClearDecodedFrames`、`postClearFirstDecodedEpochMs`、`postClearFirstDecodedDelayMs`、`postClearDecodedFramesDelta`、`postClearSamples`。
-- 当前证据：主报告 `drop_recover=PASS`，清网后 `postClearFirstDecodedDelayMs=120`、`postClearDecodedFramesDelta=241`，targetBps min/avg/max 为 `300000/632260.23/1994666`；专项恢复报告 `drop_recover=PASS`、`postClearFirstDecodedDelayMs=2122`、`postClearDecodedFramesDelta=416`，可作为快速回归入口，最终签收仍以主报告为准。
+- 当前证据：主报告 `drop_recover=PASS`，清网后 `postClearFirstDecodedDelayMs=120`、`postClearDecodedFramesDelta=241`，targetBps min/avg/max 为 `300000/632260.23/1994666`，`weak-recovery-target-up=PASS`；专项恢复报告 `drop_recover=PASS`、`postClearFirstDecodedDelayMs=2122`、`postClearDecodedFramesDelta=416`，清网后 targetBps 回到高档，可作为快速回归入口，最终签收仍以主报告为准。
 - 退出条件：target bitrate 未回升或 `decodedFramesDelta=0` 时，P2-M8b/P2-M9 失败；该问题必须定位到 SDK sender recovery、SDK play recovery、关键帧请求链路、RTP depacketizer/jitter buffer 或 SFU RTCP 转发中的具体一段。
 
 #### P2-M9 签收回归
 
 - 实施：聚合构建、单测、静态门禁、native smoke、弱网 smoke、browser smoke 和 report。
-- 验证：一条最终命令生成 `docs/generated/webrtc-qos-plain-p2-smoke-report.{json,md}`，失败返回非 0。
+- 验证：`scripts/run_qos_tests.sh p2-acceptance` 一条命令完成构建、plain client 单测、ORTC/TWCC targeted test、PlainPublish 集成测试、静态门禁和现有 P2 report 复核，失败返回非 0；脚本优先使用显式 `--cmake-prefix-path` 或环境变量 `CMAKE_PREFIX_PATH`，未配置时自动探测 `../webrtc_qos_sdk/dist/linux-x86_64`。正式刷新报告时运行 `scripts/run_webrtc_qos_plain_p2_acceptance.sh --run-smoke --enable-netem`，重跑主弱网、恢复首帧、MP4 decode-loop 和 V4L2 报告后再复核。
 - 观测：report 包含 commit id、SDK dist 路径、case 状态、核心指标、alerts、failedChecks 和 artifact 路径。
 - 退出条件：任何非环境依赖型 case 未跑或失败时，P2 不完成。
 
@@ -1184,7 +1185,7 @@ P2-M4 video-only publish
 | P2-M7 浏览器兼容 | 已新增 browser receiver smoke，复用现有 web/signaling 和 mediasoup-client。 | 当前脚本可运行；plain push 发布 PASS；本机 headless Chromium 缺 H264 packetization-mode=1 时 browser 收流 SKIP；具备 H264 的 Chromium 环境必须看到 consumer 和 inbound stats 增长。 | report 附 browser stats、keyframeRequests、device/router codecs、console/error 摘要和 artifact 路径。 |
 | P2-M8 native decode/QoE | 已新增 `FfmpegDecodeSink` 解码和 QoE 指标；复杂 `QoeProbe` 可后续独立扩展。 | 当前 baseline/delay/loss/bandwidth/recovery 已验证 decode error 为 0；`drop_recover` 清网后 target bitrate 回升和 decoded frames 增长已由主报告签收；browser QoE 仍待覆盖。 | 当前 report 输出 first-frame、freeze、decode errors、output fps。 |
 | P2-M8b recovery first-frame | 在 smoke report 中按 `case_timing.clearEpochMs` 对齐 QoE 采样，新增恢复首帧门禁；恢复相关修复只能调用 SDK public API 或信令 keyframe request，不能在 adapter 自研 jitter/NACK/TWCC。 | `drop_recover` 清网后 15 秒内 `decodedFrames` 必须增长，且 target bitrate 必须离开最低档；只看到其中一个不算 PASS。 | report 输出 `recoveryFirstFrame` gate、清网时间、清网前 decodedFrames、清网后首个 decoded frame delay、decoded delta 和 `weak-recovery-target-up` 证据。 |
-| P2-M9 签收回归 | 聚合所有 case 和门禁。 | 一条命令生成最终报告；失败非零退出。 | report 可直接定位失败发生在 signaling/UDP/RTP/RTCP/SDK/encoder/sink。 |
+| P2-M9 签收回归 | 聚合构建、plain client 单测、ORTC/TWCC targeted test、PlainPublish 集成测试、静态边界、native/browser/V4L2 报告和门禁。 | `scripts/run_qos_tests.sh p2-acceptance`；正式刷新报告用 `scripts/run_webrtc_qos_plain_p2_acceptance.sh --run-smoke --enable-netem`。 | report 可直接定位失败发生在 signaling/UDP/RTP/RTCP/SDK/encoder/sink。 |
 
 ### 13.0.1 建议验收命令
 
@@ -1198,6 +1199,16 @@ cmake --build build-webrtc-qos-plain \
   -j"$(nproc)"
 
 ./build-webrtc-qos-plain/mediasoup_tests --gtest_filter='*Ortc*:*Plain*'
+
+scripts/run_qos_tests.sh p2-acceptance
+
+scripts/run_webrtc_qos_plain_p2_acceptance.sh \
+  --build-dir build-webrtc-qos-plain \
+  --worker-bin ./mediasoup-worker \
+  --run-smoke \
+  --enable-netem
+
+scripts/run_webrtc_qos_plain_p2_acceptance.sh --preflight-netem-only
 
 scripts/run_webrtc_qos_plain_p2_smoke.sh \
   --build-dir build-webrtc-qos-plain \
@@ -1320,7 +1331,7 @@ webrtc-qos-plain-push-client and webrtc-qos-plain-play-client must not depend on
 - 本地 native smoke PASS。
 - 弱网 smoke 关键 case PASS；当前 `baseline/delay_100ms/loss_2pct/loss_5pct/bandwidth_600k/drop_recover` 全部通过。
 - `drop_recover` 清网后 15 秒内 native QoE decoded frames 增长；当前主报告 `postClearFirstDecodedDelayMs=120`、decoded delta=`241`。
-- `drop_recover` 清网后 target bitrate 离开最低档，`weak-recovery-target-up=PASS`；当前主报告 targetBps min/avg/max `300000/632260.23/1994666`。
+- `drop_recover` 清网后 target bitrate 离开最低档，`weak-recovery-target-up=PASS`；当前主报告 targetBps min/avg/max `300000/632260.23/1994666`，专项恢复报告清网后 targetBps 回到高档。
 - 浏览器 receiver smoke 在具备 H264 receive capability 的 Chromium 环境 PASS；当前本机缺 capability 时允许 `SKIP/PARTIAL`，但不能计入浏览器画面完成。
 - V4L2 source 在具备 `/dev/video*` 的 Linux 环境 PASS；当前无设备机器允许 `SKIP/PARTIAL`，但不能计入真实摄像头 demo 完成。
 - SDK runtime 文件输出启用。

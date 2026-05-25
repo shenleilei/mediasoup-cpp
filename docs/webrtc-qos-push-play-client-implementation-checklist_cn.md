@@ -22,14 +22,14 @@
 | RTP/RTCP 最小分类 | `RtpRtcpClassifier` 只按 version/PT 分类 | 不解析 NACK/PLI/TWCC 内容 |
 | runtime loop 持续 `Process()` | push/play 每 tick 调用 SDK `Process()` | `WebRtcQosPushRuntime` / `WebRtcQosPlayRuntime` |
 | runtime loop 持续处理 WS notification | push/play loop 调 `DispatchNotifications()` | 支持 `qosPolicy`/`newConsumer` 等通知观测 |
-| 不复用旧自研 QoS/RTCP/packetizer | 源码和 target 不引用旧模块 | `rg -n "H264Packetizer\|PublisherQosController\|PacketizeAnnexB" client/webrtc_qos_plain_client CMakeLists.txt` 无命中 |
+| 不复用旧自研 QoS/RTCP/packetizer | 源码和 target 不引用旧模块 | `scripts/run_qos_tests.sh p2-report` 和 `scripts/run_qos_tests.sh p2-acceptance` 中边界检查均 PASS |
 | CLI 兼容 `--key value` 和 `--key=value` | `ClientArgs` | smoke 使用 `--server-ip=127.0.0.1` 等参数通过 |
 | play 兼容历史 dummy audio producer | receive capabilities 暂保留 Opus，runtime 只选择 video | P1 历史 smoke 不再出现 audio auto-subscribe error |
 | consumer TWCC ext 透传 | `ortc::getConsumableRtpParameters()` 保留 producer/router 均支持的 header extension | P2 smoke：`selected_consumer ... twccExtId=5` |
 | consumer 无 TWCC ext 降级 | 保留 `consumer_without_twcc_ext` 日志，兼容异常环境继续启动 `VideoPlayClient` | 降级可播放，但不允许作为 QoS 主链路 PASS |
 | push RTCP feedback 输入计数 | `WebRtcQosPushRuntime` 记录 `rtcpFeedbackPacketsIn/BytesIn/Failures` | P2 smoke：`rtcpFeedbackPacketsIn=66 ... Failures=0` |
 | play RTCP 输出计数 | `WebRtcQosPlayRuntime` 记录 `rtcpPacketsOut/BytesOut/SendFailures` | P2 smoke：`rtcpPacketsOut=98 ... SendFailures=0` |
-| SDK RR/TWCC counter | `webrtc_qos_sdk` play 生成 RR/TWCC，push 统计收到的 RR/TWCC | P2 smoke：play `transportFeedbackCountMax=92`、`receiverReportCountMax=6`；push `transportFeedbackCountMax=50`、`receiverReportCountMax=4` |
+| SDK RR/TWCC counter | `webrtc_qos_sdk` play 生成 RR/TWCC，push 统计收到的 RR/TWCC | P2 smoke gate：play `transportFeedbackCountMax=152`、`receiverReportCountMax=9`；push `transportFeedbackCountMax=90`、`receiverReportCountMax=7` |
 | SDK runtime 文件观测 | dist 暴露 `logging/metrics/alerts`，adapter 自动启用 SDK runtime 文件 | P2 smoke：push/play 均 `sdk_runtime_files enabled=true`，各生成 log/metrics/alerts 文件 |
 | video-only plain publish | 服务端支持 `enableAudio=false`；新 push 默认不发 `audioSsrc`；旧请求默认仍启用 audio | P2-M4 smoke：`audioEnabled=false` 且 play 只收到 video consumer |
 | P2 smoke 报告脚本 | `scripts/run_webrtc_qos_plain_p2_smoke.sh` 统一启动 SFU/push/play/netem 并生成报告 | `docs/generated/webrtc-qos-plain-p2-smoke-report.{json,md}` |
@@ -37,7 +37,7 @@
 | encoder adaptation 接入 | push runtime 每 tick 调 `GetEncoderAdaptation()` 并应用到 x264 bitrate/fps/keyframe | MP4 decode-loop 报告：`encoderRuntime=PASS`，encoder `accessUnits=333`、`keyframes=12`、`currentFps=30` |
 | encoder runtime 观测 | push log 输出 `encoder_metrics`，报告解析 encoder AU/keyframe/fps/bitrate/recreate/change/forced-IDR counters | MP4 decode-loop 报告 `forcedKeyframeRequests=1`、`forcedKeyframes=1`、`maxForcedKeyframeDelayUs=0` |
 | native decode/QoE baseline | play 端 `--decode-qoe` 启用 `FfmpegDecodeSink`，对 SDK 输出的 Annex-B AU 做 H264 解码 | `WebRtcQosDecodeSinkTest.*` 通过；smoke `nativeDecodeQoe=PASS` |
-| QoE runtime 观测 | play log 输出 `qoe_metrics` / `qoe_runtime_stopped`，报告解析 decoded frames、decode errors、first frame、freeze、output fps | 当前主报告：baseline decodedFrames=150、decodeErrors=0、freezeCount=0、outputFps=15.04；所有已跑 case decodeErrors=0 |
+| QoE runtime 观测 | play log 输出 `qoe_metrics` / `qoe_runtime_stopped`，报告解析 decoded frames、decode errors、first frame、freeze、output fps | 当前主报告：baseline decodedFrames=150、decodeErrors=0、freezeCount=0、outputFps=15.06；所有已跑 case decodeErrors=0 |
 | MP4 decode-loop 输入源 | `Mp4DecodeH264Source` 解码 MP4 video frame，经 libx264 baseline/zerolatency 重新编码，push runtime 应用 SDK bitrate/fps/keyframe adaptation | [generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md](./generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md)：baseline PASS，encoder `mode=mp4_decode_loop`，`accessUnits=333`、`keyframes=12`、`forcedKeyframes=1`，QoE `decodedFrames=359`、`decodeErrors=0` |
 | V4L2 输入源入口 | `V4L2H264Source` 通过 FFmpeg v4l2 capture/decode 获取 raw frame，经 libx264 baseline/zerolatency 重新编码，push runtime 应用 SDK bitrate/fps/keyframe adaptation | [generated/webrtc-qos-plain-p2-v4l2-report.md](./generated/webrtc-qos-plain-p2-v4l2-report.md)：当前机器无 `/dev/video0`，baseline `SKIP`，gate `SKIP`，skipReason=`v4l2 device not found: /dev/video0` |
 | delay/loss/bandwidth/recovery netem 弱网短测 | `scripts/run_webrtc_qos_plain_p2_smoke.sh --enable-netem --cases baseline,delay_100ms,loss_2pct,loss_5pct,bandwidth_600k,drop_recover` | 当前主报告：`sourceMode=copy`，`6 / 6 PASS`，`failedChecks=0`，`weakNetworkCoverage=PASS`；delay RTT avg/max `86.3/247ms`，bandwidth targetBps min/avg/max `300000/1237333/1994666`，`drop_recover` targetBps min/avg/max `300000/632260.23/1994666` |
@@ -52,7 +52,7 @@ cmake -S . -B build-webrtc-qos-plain \
   -DBUILD_TESTS=ON
 
 cmake --build build-webrtc-qos-plain \
-  --target webrtc-qos-plain-push-client webrtc-qos-plain-play-client mediasoup_webrtc_qos_plain_unit_tests \
+  --target mediasoup-sfu webrtc-qos-plain-push-client webrtc-qos-plain-play-client mediasoup_tests mediasoup_webrtc_qos_plain_unit_tests mediasoup_qos_integration_tests \
   -j1
 
 ./build-webrtc-qos-plain/mediasoup_webrtc_qos_plain_unit_tests \
@@ -67,14 +67,6 @@ g++ -std=c++17 -Isrc -I. -Ithird_party/nlohmann_json/include \
   -pthread -o /tmp/test_ortc_p2
 
 /tmp/test_ortc_p2 --gtest_filter='*TransportCc*:*Consumable*'
-
-rg -n "H264Packetizer|PublisherQosController|PacketizeAnnexB" \
-  client/webrtc_qos_plain_client CMakeLists.txt
-
-MEDIASOUP_TEST_SFU_BIN=./build-webrtc-qos-plain/mediasoup-sfu \
-MEDIASOUP_TEST_WORKER_BIN=./mediasoup-worker \
-./build-webrtc-qos-p2/mediasoup_qos_integration_tests \
-  --gtest_filter='QosIntegrationTest.PlainPublishSupportsVideoOnlyAndKeepsLegacyAudioDefault:QosIntegrationTest.PlainPublishReplacesOldTransportAndUsesBaselineCodec:QosIntegrationTest.PlainPublishRejectsDuplicateVideoSsrcs'
 
 scripts/run_webrtc_qos_plain_p2_smoke.sh \
   --build-dir build-webrtc-qos-plain \
@@ -109,6 +101,35 @@ scripts/run_webrtc_qos_plain_p2_smoke.sh \
   --artifact-root /tmp/webrtc-qos-plain-p2-v4l2 \
   --report-dir docs/generated \
   --report-name webrtc-qos-plain-p2-v4l2-report
+
+scripts/run_qos_tests.sh p2-report
+
+scripts/run_qos_tests.sh p2-acceptance
+
+scripts/run_webrtc_qos_plain_p2_acceptance.sh \
+  --build-dir build-webrtc-qos-plain \
+  --worker-bin ./mediasoup-worker
+
+# SDK dist 默认使用 CMAKE_PREFIX_PATH；未配置时自动探测 ../webrtc_qos_sdk/dist/linux-x86_64。
+# 如果 SDK 放在其他位置，显式追加 --cmake-prefix-path /path/to/webrtc_qos_sdk/dist。
+
+# p2-acceptance 内部已包含：
+# - WebRtcQosRealtimeSourceTest.* / WebRtcQosDecodeSinkTest.*
+# - OrtcTest.ConsumableAndConsumerRtpParametersPreserveTransportCcExtension
+# - QosIntegrationTest.PlainPublishSupportsVideoOnlyAndKeepsLegacyAudioDefault
+# - QosIntegrationTest.PlainPublishReplacesOldTransportAndUsesBaselineCodec
+# - QosIntegrationTest.PlainPublishRejectsDuplicateVideoSsrcs
+# - verify_webrtc_qos_plain_client_boundaries.py
+# - verify_webrtc_qos_plain_p2_reports.py
+
+# 正式刷新报告时使用：
+scripts/run_webrtc_qos_plain_p2_acceptance.sh --preflight-netem-only
+
+scripts/run_webrtc_qos_plain_p2_acceptance.sh \
+  --build-dir build-webrtc-qos-plain \
+  --worker-bin ./mediasoup-worker \
+  --run-smoke \
+  --enable-netem
 
 node tests/qos_harness/browser_plain_receiver.mjs \
   --build-dir build-webrtc-qos-plain \
@@ -274,7 +295,7 @@ push/play：
 scripts/run_webrtc_qos_plain_p2_smoke.sh \
   --build-dir build-webrtc-qos-plain \
   --worker-bin ./mediasoup-worker \
-  --source synthetic \
+  --source copy \
   --decode-qoe \
   --cases baseline,delay_100ms,loss_2pct,loss_5pct,bandwidth_600k,drop_recover \
   --duration-seconds 10 \
@@ -294,12 +315,12 @@ scripts/run_webrtc_qos_plain_p2_smoke.sh \
 | SDK runtime 文件 | PASS | push/play 均 `sdk_runtime_files enabled=true`，各有 log/metrics/alerts 文件 |
 | SDK RR/TWCC counter | PASS | play/push runtime files 和 counters 已由 `sdkRuntimeObservability=PASS` 覆盖 |
 | realtime encoder runtime | SKIP | 主报告 `sourceMode=copy`，不经过实时 x264 encoder；encoder runtime 以 MP4 decode-loop 或 synthetic/V4L2 报告为准 |
-| native decode/QoE | PASS | `nativeDecodeQoe=PASS`，baseline `decodedFrames=150`、`decodeErrors=0`、`freezeCount=0`、`outputFps=15.04` |
+| native decode/QoE | PASS | `nativeDecodeQoe=PASS`，baseline `decodedFrames=150`、`decodeErrors=0`、`freezeCount=0`、`outputFps=15.06` |
 | 弱网 coverage | PASS | `delay_100ms`、`loss_2pct`、`loss_5pct`、`bandwidth_600k`、`drop_recover` 实际启用 netem，全部 PASS |
 | delay netem | PASS | RTT avg/max `86.3/247ms`，`decodeErrors=0` |
 | loss netem | PASS | `loss_2pct`、`loss_5pct` 下 `decodeErrors=0`，NACK/RTCP feedback 可观测 |
 | bandwidth netem | PASS | `bandwidth_600k` 下 targetBps min/avg/max `300000/1237333/1994666`、`decodeErrors=0` |
-| recovery control-plane netem | PASS | `drop_recover` 下 targetBps min/avg/max `300000/632260.23/1994666`，清网后离开最低档 |
+| recovery control-plane netem | PASS | `drop_recover` 下 targetBps min/avg/max `300000/632260.23/1994666`，`weak-recovery-target-up=PASS`；主报告证明清网后离开最低档，专项恢复报告证明清网后回到高档 |
 | recovery first-frame gate | PASS | `drop_recover` 清网后 `120ms` decoded frames 增长，decoded delta=`241`，主报告签收 |
 
 结论：
@@ -351,8 +372,8 @@ scripts/run_webrtc_qos_plain_p2_smoke.sh \
 | MP4 decode-loop baseline | PASS | `pushedAu=359`、`outputAu=359`、`selectedTwccExtId=5` |
 | encoder runtime | PASS | `mode=mp4_decode_loop`、`accessUnits=333`、`keyframes=12`、`currentFps=30`、`currentBitrateBps=1861454` |
 | PLI/SDK keyframe request 响应 IDR | PASS | `forcedKeyframeRequests=1`、`forcedKeyframes=1`、`maxForcedKeyframeDelayUs=0` |
-| native decode/QoE | PASS | `decodedFrames=359`、`decodeErrors=0`、`freezeCount=0`、`outputFps=30.08` |
-| SDK runtime 文件 | PASS | push/play 均有 SDK log、metrics、alerts 文件；push `transportFeedbackCountMax=110`，play `transportFeedbackCountMax=215` |
+| native decode/QoE | PASS | `decodedFrames=359`、`decodeErrors=0`、`freezeCount=0`、`outputFps=30.09` |
+| SDK runtime 文件 | PASS | push/play 均有 SDK log、metrics、alerts 文件；push `transportFeedbackCountMax=110`，play `transportFeedbackCountMax=214` |
 
 结论：
 

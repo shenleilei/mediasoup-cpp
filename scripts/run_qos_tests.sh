@@ -11,6 +11,7 @@ FAILURES_FILE="$ARTIFACTS_DIR/last-failures.txt"
 DOWNLINK_SUMMARY_FILE="$ROOT_DIR/docs/downlink-qos-test-results-summary.md"
 GENERATE_CASE_REPORT=0
 GENERATE_DOWNLINK_CASE_REPORT=0
+GENERATE_DOWNLINK_SUMMARY=1
 MATRIX_INCLUDE_EXTENDED=0
 MATRIX_CASES=""
 
@@ -20,6 +21,8 @@ ALL_GROUPS=(
   cpp-integration
   cpp-accuracy
   cpp-recording
+  p2-report
+  p2-acceptance
   node-harness
   browser-harness
   matrix
@@ -61,9 +64,12 @@ Available groups:
   cpp-integration   服务端 QoS 集成测试（包含 uplink/downlink QoS 集成测试）
   cpp-accuracy      QoS accuracy 测试
   cpp-recording     QoS recording accuracy 测试
+  p2-report         WebRTC QoS P2 generated reports 离线验收
+  p2-acceptance     WebRTC QoS P2 构建/单测/边界/报告聚合验收
   node-harness      Node QoS harness 场景
   browser-harness   browser_server_signal + browser_loopback + downlink browser harnesses
   matrix            browser loopback full matrix（run_matrix.mjs）
+  downlink-matrix   browser downlink weak-network matrix（run_downlink_matrix.mjs）
 
 Notes:
   - 默认会顺序执行所有分组；单个任务失败后会继续执行其余选中项，最后统一汇总失败。
@@ -528,7 +534,7 @@ normalize_groups() {
         requested=("${ALL_GROUPS[@]}")
         break
       fi
-      if [[ "$group" == node-harness:* || "$group" == browser-harness:* ]]; then
+      if [[ "$group" == node-harness:* || "$group" == browser-harness:* || "$group" == p2-report:* ]]; then
         requested+=("$group")
         continue
       fi
@@ -657,6 +663,31 @@ run_cpp_recording() {
     "cpp-recording" \
     --cwd "$ROOT_DIR" \
     "$BUILD_DIR/mediasoup_qos_recording_accuracy_tests"
+}
+
+run_p2_report() {
+  require_file "$ROOT_DIR/scripts/verify_webrtc_qos_plain_p2_reports.py"
+  require_file "$ROOT_DIR/scripts/verify_webrtc_qos_plain_client_boundaries.py"
+  local failed=0
+  run_cmd \
+    "p2-report:boundaries" \
+    --cwd "$ROOT_DIR" \
+    python3 "$ROOT_DIR/scripts/verify_webrtc_qos_plain_client_boundaries.py" || failed=1
+  run_cmd \
+    "p2-report:reports" \
+    --cwd "$ROOT_DIR" \
+    python3 "$ROOT_DIR/scripts/verify_webrtc_qos_plain_p2_reports.py" || failed=1
+  return "$failed"
+}
+
+run_p2_acceptance() {
+  require_file "$ROOT_DIR/scripts/run_webrtc_qos_plain_p2_acceptance.sh"
+  run_cmd \
+    "p2-acceptance" \
+    --cwd "$ROOT_DIR" \
+    "$ROOT_DIR/scripts/run_webrtc_qos_plain_p2_acceptance.sh" \
+      --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+      --worker-bin "$ROOT_DIR/mediasoup-worker"
 }
 
 run_node_harness() {
@@ -801,6 +832,8 @@ run_group() {
     cpp-integration) run_cpp_integration ;;
     cpp-accuracy) run_cpp_accuracy ;;
     cpp-recording) run_cpp_recording ;;
+    p2-report) run_p2_report ;;
+    p2-acceptance) run_p2_acceptance ;;
     node-harness) run_node_harness ;;
     browser-harness) run_browser_harness ;;
     matrix) run_matrix ;;
@@ -812,8 +845,22 @@ run_group() {
 run_target() {
   local target="$1"
   case "$target" in
-    client-js|cpp-unit|cpp-integration|cpp-accuracy|cpp-recording|node-harness|browser-harness|matrix|downlink-matrix)
+    client-js|cpp-unit|cpp-integration|cpp-accuracy|cpp-recording|p2-report|p2-acceptance|node-harness|browser-harness|matrix|downlink-matrix)
       run_group "$target"
+      ;;
+    p2-report:boundaries)
+      require_file "$ROOT_DIR/scripts/verify_webrtc_qos_plain_client_boundaries.py"
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        python3 "$ROOT_DIR/scripts/verify_webrtc_qos_plain_client_boundaries.py"
+      ;;
+    p2-report:reports)
+      require_file "$ROOT_DIR/scripts/verify_webrtc_qos_plain_p2_reports.py"
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        python3 "$ROOT_DIR/scripts/verify_webrtc_qos_plain_p2_reports.py"
       ;;
     node-harness:*)
       prepare_test_port 14011 "QoS node harness SFU port 14011"
@@ -932,6 +979,18 @@ done
 
 mapfile -t GROUPS_TO_RUN < <(normalize_groups)
 ((${#GROUPS_TO_RUN[@]} > 0)) || fail "no groups selected after applying options"
+if ((${#GROUPS_TO_RUN[@]} > 0)); then
+  ONLY_P2_GROUPS=1
+  for group in "${GROUPS_TO_RUN[@]}"; do
+    if [[ "$group" != "p2-report" && "$group" != "p2-acceptance" && "$group" != p2-report:* ]]; then
+      ONLY_P2_GROUPS=0
+      break
+    fi
+  done
+  if ((ONLY_P2_GROUPS)); then
+    GENERATE_DOWNLINK_SUMMARY=0
+  fi
+fi
 
 for group in "${GROUPS_TO_RUN[@]}"; do
   if [[ "$group" == "matrix" ]]; then
@@ -1027,12 +1086,14 @@ if ((GENERATE_DOWNLINK_CASE_REPORT)) && [[ -f "$DOWNLINK_CASE_REPORT_SCRIPT" ]];
   fi
 fi
 
-echo
-echo "==> [downlink-report]"
-if write_downlink_report; then
-  echo "<== [downlink-report] PASS ($DOWNLINK_SUMMARY_FILE)"
-else
-  echo "<== [downlink-report] WARN (generation failed)" >&2
+if ((GENERATE_DOWNLINK_SUMMARY)); then
+  echo
+  echo "==> [downlink-report]"
+  if write_downlink_report; then
+    echo "<== [downlink-report] PASS ($DOWNLINK_SUMMARY_FILE)"
+  else
+    echo "<== [downlink-report] WARN (generation failed)" >&2
+  fi
 fi
 
 echo

@@ -19,7 +19,7 @@
 | 配 nightly 全量回归邮件 | [nightly-full-regression.md](./nightly-full-regression.md) → [run_all_tests.sh](../scripts/run_all_tests.sh) → [full-regression-test-results.md](./full-regression-test-results.md) |
 | 做线上排障 | [troubleshooting_cn.md](./troubleshooting_cn.md) → [architecture_cn.md](./architecture_cn.md) → [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) |
 | 做 QoS 改动 | [qos-status.md](./qos-status.md) → [uplink-qos-design_cn.md](./uplink-qos-design_cn.md) → [downlink-qos-design_cn.md](./downlink-qos-design_cn.md) → [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md) → [downlink-qos-v3-design_cn.md](./downlink-qos-v3-design_cn.md) → [downlink-qos-v3-implementation-plan_cn.md](./downlink-qos-v3-implementation-plan_cn.md) → [run_qos_tests.sh](../scripts/run_qos_tests.sh) |
-| 做 WebRTC QoS 推拉流客户端 | [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md) → [webrtc-qos-push-play-client-p2-design_cn.md](./webrtc-qos-push-play-client-p2-design_cn.md) → [webrtc-qos-push-play-client-implementation-checklist_cn.md](./webrtc-qos-push-play-client-implementation-checklist_cn.md) |
+| 做 WebRTC QoS 推拉流客户端 | [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md) → [webrtc-qos-push-play-client-p2-design_cn.md](./webrtc-qos-push-play-client-p2-design_cn.md) → [webrtc-qos-push-play-client-implementation-checklist_cn.md](./webrtc-qos-push-play-client-implementation-checklist_cn.md) → `scripts/run_qos_tests.sh p2-acceptance` |
 | 查 worker 架构 | [mediasoup-worker-architecture-analysis_cn.md](./mediasoup-worker-architecture-analysis_cn.md) |
 | 查 QoS 详细 case 结果 | [uplink-qos-case-analysis.md](./uplink-qos-case-analysis.md) |
 | 查 QoS 测试覆盖地图 | [qos-test-coverage_cn.md](./qos-test-coverage_cn.md) |
@@ -98,6 +98,7 @@
 - WebRTC QoS P2 MP4 decode-loop baseline 报告在 [generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md](./generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md)，原始 JSON 在 [generated/webrtc-qos-plain-p2-mp4-decode-loop-report.json](./generated/webrtc-qos-plain-p2-mp4-decode-loop-report.json)。
 - WebRTC QoS P2 browser receiver 报告在 [generated/webrtc-qos-plain-p2-browser-receiver-report.md](./generated/webrtc-qos-plain-p2-browser-receiver-report.md)，原始 JSON 在 [generated/webrtc-qos-plain-p2-browser-receiver-report.json](./generated/webrtc-qos-plain-p2-browser-receiver-report.json)。当前本机 headless Chromium 缺 H264 receive capability，所以浏览器收流 case 记录为环境 `SKIP`。
 - WebRTC QoS P2 V4L2 source 报告在 [generated/webrtc-qos-plain-p2-v4l2-report.md](./generated/webrtc-qos-plain-p2-v4l2-report.md)，原始 JSON 在 [generated/webrtc-qos-plain-p2-v4l2-report.json](./generated/webrtc-qos-plain-p2-v4l2-report.json)。当前机器无 `/dev/video0`，所以 V4L2 baseline 记录为环境 `SKIP`。
+- WebRTC QoS P2 聚合验收入口是 `scripts/run_qos_tests.sh p2-acceptance`；它执行构建、plain client 单测、ORTC/TWCC targeted test、PlainPublish 集成测试、边界检查和报告复核。脚本优先使用显式 `--cmake-prefix-path` 或环境变量 `CMAKE_PREFIX_PATH`，未配置时会自动探测 `../webrtc_qos_sdk/dist/linux-x86_64`。正式刷新报告入口是 `scripts/run_webrtc_qos_plain_p2_acceptance.sh --run-smoke --enable-netem`，会重跑主弱网、恢复首帧、MP4 decode-loop 和 V4L2 报告。轻量离线复核入口是 `scripts/run_qos_tests.sh p2-report`，只校验新 plain client 没有回退到旧自研 QoS/packetizer，并校验当前 `docs/generated` 下主弱网、MP4 decode-loop、V4L2、browser receiver、恢复首帧报告的 PASS/SKIP/PARTIAL 口径。
 - downlink 当前状态摘要在 [downlink-qos-status.md](./downlink-qos-status.md)。
 - 一次性过程稿、历史 review、商业化排期和旧归档快照不再保留在 `docs/` 中；如需追历史判断，请直接看 git 历史。
 
@@ -124,9 +125,12 @@ cd /root/mediasoup-cpp
 - `cpp-integration`: 服务端 QoS 集成测试
 - `cpp-accuracy`: QoS 统计精度测试
 - `cpp-recording`: QoS 录制精度测试
+- `p2-report`: WebRTC QoS P2 generated reports 离线验收
+- `p2-acceptance`: WebRTC QoS P2 构建、单测、边界和报告聚合验收
 - `node-harness`: Node QoS harness
 - `browser-harness`: browser signaling / loopback
 - `matrix`: browser loopback 弱网矩阵
+- `downlink-matrix`: browser downlink 弱网矩阵
 
 ## 5. 运维 / 缺陷专题
 
