@@ -35,7 +35,7 @@
 - 当前 SDK play facade 已生成周期性 RR/TWCC feedback；本地 baseline smoke 已验证 `qosMainline=PASS` 和 `sdkRuntimeObservability=PASS`。
 - P2-M5/M6 已落地最小 synthetic+x264 路径：`RealtimeH264Source` 生成 raw frame，libx264 输出 Annex-B AU，push runtime 应用 SDK encoder adaptation；当前可引用的 encoder runtime 证据以 MP4 decode-loop 报告为准，synthetic 路径保留单测和可重跑 smoke 入口。
 - P2-M6 已补充 MP4 decode-loop baseline：`Mp4DecodeH264Source` 解码 MP4 video frame 后重新 x264 编码，报告 `encoderRuntime=PASS`、`nativeDecodeQoe=PASS`，baseline `pushedAu=359`、`decodedFrames=359`、`decodeErrors=0`。
-- P2-M6 已补充 V4L2 source 入口：`V4L2H264Source` 通过 FFmpeg v4l2 capture 解码 raw frame 后 x264 编码，push runtime 应用同一套 SDK bitrate/fps/keyframe adaptation；当前机器无 `/dev/video0`，报告以 `v4l2 device not found` 记为环境 `SKIP/PARTIAL`。
+- P2-M6 已补充 V4L2 source 入口；P3 后当前实现改为 `V4L2RawFrameCaptureWorker -> RawFrameQueue -> RawFrameEncodeWorker`，push runtime 应用同一套 SDK bitrate/fps/keyframe adaptation；当前机器无 `/dev/video0`，报告以 `v4l2 device not found` 记为环境 `SKIP/PARTIAL`。
 - P2-M3/P2-M8 已完成真实 netem 短测：`baseline`、`delay_100ms`、`loss_2pct`、`loss_5pct`、`bandwidth_600k`、`drop_recover` 均为 PASS；100ms delay RTT avg/max `86.3/247ms`，bandwidth targetBps min/avg/max `300000/1237333/1994666`，`drop_recover` targetBps min/avg/max `300000/632260.23/1994666`，所有已跑 case `decodeErrors=0`，报告 `weakNetworkCoverage=PASS`。
 - P2-M7 已新增 browser receiver smoke：`tests/qos_harness/browser_plain_receiver.mjs` 启动 SFU + plain push + headless Chromium，并输出 `docs/generated/webrtc-qos-plain-p2-browser-receiver-report.{json,md}`；当前报告 plain push 链路 `PASS`，browser H264 capability `SKIP`，overall `PARTIAL`。
 - P2-M8b 已新增恢复首帧门禁：`drop_recover` 不只看 target bitrate 是否离开最低档，还要求 netem clear 后 15 秒内看到 native QoE `decodedFrames` 增长；当前主报告清网后 `120ms` decoded frames 增长，delta=`241`，同 case `weak-recovery-target-up=PASS`，`recoveryFirstFrame=PASS`。
@@ -96,7 +96,7 @@
 | 目标 | 可实施性 | 可验证性 | 可观测性 | 退出条件 |
 |---|---|---|---|---|
 | QoS 主链路闭环 | 修改 ORTC header extension 透传、push/play RTCP 边界计数，mediasoup-cpp 只消费 SDK public facade。 | ORTC targeted test；native baseline smoke；`twccExtId != 0`、play RTCP out > 0、push RTCP in > 0、SDK RR/TWCC counter 增长。 | `selected_consumer`、`play_metrics`、`push_metrics`、SDK metrics jsonl、report `qosMainline`。 | TWCC ext、RTCP out/in 或 SDK counter 任一为 0，停止弱网签收。 |
-| 弱网自动化 | `scripts/run_webrtc_qos_plain_p2_smoke.sh` 统一启动 SFU/push/play/netem，并生成 Markdown/JSON report。 | `baseline,delay_100ms,loss_2pct,loss_5pct,bandwidth_600k,drop_recover` 可重复执行；无 netem 权限时明确 `SKIP`。 | report 记录 RTT、loss、targetBps、NACK、PLI、RTX、droppedFrames、QoE、alerts 和 artifact path。 | case 不能复现、不能生成 report、或 `SKIP` 被记成 `PASS`，停止。 |
+| 弱网自动化 | `scripts/run_webrtc_qos_plain_p2_smoke.sh` 统一启动 SFU/push/play/netem，并生成 Markdown/JSON report。 | `baseline,delay_100ms,loss_2pct,loss_5pct,bandwidth_600k,drop_recover` 可重复执行；无 netem 权限时明确 `SKIP`。 | report 记录 RTT、loss、targetBps、NACK、PLI、retransmission、droppedFrames、QoE、alerts 和 artifact path。 | case 不能复现、不能生成 report、或 `SKIP` 被记成 `PASS`，停止。 |
 | 文件化观测 | adapter 日志、SDK runtime logs、metrics、alerts 全部写文件；stdout 只作为附件。 | smoke gate `sdkRuntimeObservability=PASS`；push/play runtime 文件存在且持续写入。 | `<artifact>/<case>/push/*`、`play/*`、`netem.log`、report gates。 | metrics/alerts 缺失时不允许用 stdout 替代。 |
 | 实时编码和输入源 | synthetic、MP4 decode-loop、V4L2 都走 x264 -> SDK push；copy path 保留兼容。 | MP4 decode-loop baseline 必跑；synthetic 保留单测和可重跑 smoke；V4L2 有设备时 PASS，无设备时 `SKIP`。 | `encoder_metrics`、source mode、device/format/size/fps、forced-IDR 延迟、decode QoE。 | 输入源失败不能静默降级；encoder adaptation 没落到 bitrate/fps/keyframe 时失败。 |
 | QoE 和恢复首帧 | play `--decode-qoe=true` 接 FFmpeg decode sink；`drop_recover` 增加 clear 后首帧门禁。 | baseline decode error 为 0；弱网恢复后 decoded frames 增长；netem clear 后 15 秒内首个 decoded frame 增长。 | `qoe_metrics`、`case_timing.clearEpochMs`、report `nativeDecodeQoe` 和 `recoveryFirstFrame`。 | targetBps 未回升或 decodedFrames 不增长时，恢复场景都不签收。 |
@@ -694,7 +694,7 @@ getRouterRtpCapabilities
 
 ```text
 VideoPushClient::GetTrackEncoderAdaptation()
-  -> RealtimeH264Source/Mp4DecodeH264Source/V4L2H264Source::ApplyEncoderAdaptation()
+  -> RealtimeH264Source/Mp4DecodeH264Source/RawFrameEncodeWorker::ApplyEncoderAdaptation()
   -> libx264 bitrate/fps/keyframe control
   -> VideoPushClient::PushAnnexBAccessUnit()
 ```
@@ -703,7 +703,8 @@ VideoPushClient::GetTrackEncoderAdaptation()
 
 - `client/webrtc_qos_plain_client/push/RealtimeH264Source.{h,cpp}`
 - `client/webrtc_qos_plain_client/push/Mp4DecodeH264Source.{h,cpp}`
-- `client/webrtc_qos_plain_client/push/V4L2H264Source.{h,cpp}`
+- `client/webrtc_qos_plain_client/push/V4L2RawFrameCaptureWorker.{h,cpp}`
+- `client/webrtc_qos_plain_client/push/RawFrameEncodeWorker.{h,cpp}`
 - `client/webrtc_qos_plain_client/push/WebRtcQosPushRuntime.cpp`
 - `client/webrtc_qos_plain_client/common/ClientArgs.{h,cpp}`
 - `tests/test_webrtc_qos_realtime_source.cpp`

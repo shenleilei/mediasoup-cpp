@@ -9,9 +9,11 @@
 #include "ffmpeg/AvPtr.h"
 #include "ffmpeg/Encoder.h"
 #include "ffmpeg/OutputFormat.h"
+#include "common/BoundedQueue.h"
 #include "push/Mp4DecodeH264Source.h"
+#include "push/RawVideoFrame.h"
 #include "push/RealtimeH264Source.h"
-#include "push/V4L2H264Source.h"
+#include "push/V4L2RawFrameCaptureWorker.h"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -161,18 +163,19 @@ TEST(WebRtcQosRealtimeSourceTest, Mp4DecodeLoopProducesAdaptedAnnexBAccessUnits)
 TEST(WebRtcQosRealtimeSourceTest, V4L2MissingDeviceReportsOpenFailure)
 {
 	std::string error;
-	webrtc_qos_plain::V4L2H264SourceConfig config;
+	auto rawQueue = std::make_shared<webrtc_qos_plain::BoundedQueue<webrtc_qos_plain::RawVideoFrame>>(2);
+	webrtc_qos_plain::V4L2RawFrameCaptureWorkerConfig config;
 	config.device = "/dev/mediasoup-cpp-missing-video-device";
 	config.width = 64;
 	config.height = 48;
 	config.fps = 15;
-	config.bitrateBps = 500000;
-	config.minBitrateBps = 120000;
-	config.maxBitrateBps = 800000;
-	webrtc_qos_plain::V4L2H264Source source(config);
-	EXPECT_FALSE(source.Open(&error));
+	config.openTimeoutMs = 100;
+	config.readTimeoutMs = 100;
+	webrtc_qos_plain::V4L2RawFrameCaptureWorker source(config, rawQueue, nullptr);
+	EXPECT_NE(source.Start(&error), 0);
 	EXPECT_FALSE(error.empty());
-	EXPECT_EQ(source.metrics().accessUnits, 0u);
+	EXPECT_EQ(source.metrics().framesDecoded, 0u);
+	EXPECT_TRUE(rawQueue->closed());
 }
 
 TEST(WebRtcQosRealtimeSourceTest, AppliesEncoderAdaptation)

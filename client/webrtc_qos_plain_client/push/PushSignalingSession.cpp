@@ -1,6 +1,7 @@
 #include "push/PushSignalingSession.h"
 
 #include <stdexcept>
+#include <unordered_map>
 
 namespace webrtc_qos_plain {
 namespace {
@@ -53,8 +54,12 @@ bool PushSignalingSession::ConnectAndPublish(const PushOptions& options, Publish
 		json publishRequest = {
 			{"videoCodec", "h264"},
 			{"videoSsrc", options.videoSsrc},
+			{"videoSsrcs", json::array()},
 			{"enableAudio", options.enableAudio}
 		};
+		for (const auto& track : options.tracks) {
+			publishRequest["videoSsrcs"].push_back(track.videoSsrc);
+		}
 		if (options.enableAudio) publishRequest["audioSsrc"] = options.audioSsrc;
 
 		const auto response = ws_.request("plainPublish", publishRequest);
@@ -62,18 +67,38 @@ bool PushSignalingSession::ConnectAndPublish(const PushOptions& options, Publish
 		if (response.value("videoCodec", "") != "h264")
 			throw std::runtime_error("plainPublish returned non-H264 codec");
 		auto tracks = response.value("videoTracks", json::array());
-		if (!tracks.is_array() || tracks.size() != 1)
-			throw std::runtime_error("plainPublish must return exactly one videoTracks[] item");
-		const auto& track = tracks.at(0);
+		if (!tracks.is_array() || tracks.empty())
+			throw std::runtime_error("plainPublish must return non-empty videoTracks[]");
+
+		std::unordered_map<uint32_t, PushTrackOptions> requestedTracks;
+		for (const auto& track : options.tracks) requestedTracks.emplace(track.videoSsrc, track);
 
 		PublishInfo parsed;
 		parsed.transportId = response.at("transportId").get<std::string>();
 		parsed.announcedIp = response.value("ip", "");
 		parsed.port = JsonU16(response, "port");
-		parsed.payloadType = JsonU8(track, "pt");
-		parsed.ssrc = track.at("ssrc").get<uint32_t>();
-		parsed.producerId = track.at("producerId").get<std::string>();
-		parsed.transportCcExtId = JsonU8(track, "transportCcExtId");
+		parsed.videoTracks.reserve(tracks.size());
+		for (size_t index = 0; index < tracks.size(); ++index) {
+			const auto& track = tracks.at(index);
+			PublishedVideoTrackInfo parsedTrack;
+			parsedTrack.ssrc = track.at("ssrc").get<uint32_t>();
+			parsedTrack.payloadType = JsonU8(track, "pt");
+			parsedTrack.producerId = track.at("producerId").get<std::string>();
+			parsedTrack.transportCcExtId = JsonU8(track, "transportCcExtId");
+			parsedTrack.trackId = "track" + std::to_string(index);
+			if (auto it = requestedTracks.find(parsedTrack.ssrc); it != requestedTracks.end()) {
+				parsedTrack.trackId = it->second.id;
+				parsedTrack.weight = it->second.weight;
+			}
+			if (parsedTrack.ssrc == 0 || parsedTrack.payloadType == 0 || parsedTrack.transportCcExtId == 0)
+				throw std::runtime_error("plainPublish returned invalid SSRC/PT/TWCC ext id");
+			parsed.videoTracks.push_back(parsedTrack);
+		}
+		const auto& firstTrack = parsed.videoTracks.front();
+		parsed.payloadType = firstTrack.payloadType;
+		parsed.ssrc = firstTrack.ssrc;
+		parsed.producerId = firstTrack.producerId;
+		parsed.transportCcExtId = firstTrack.transportCcExtId;
 		if (parsed.ssrc == 0 || parsed.payloadType == 0 || parsed.transportCcExtId == 0)
 			throw std::runtime_error("plainPublish returned invalid SSRC/PT/TWCC ext id");
 
@@ -94,6 +119,7 @@ bool PushSignalingSession::ConnectAndPublish(const PushOptions& options, Publish
 			parsed.transportCcExtId,
 			audioSsrc,
 			audioEnabled);
+		logger_->info("plain_publish_tracks count={} tracks={}", parsed.videoTracks.size(), tracks.dump());
 		return true;
 	} catch (const std::exception& e) {
 		logger_->error("publish_signaling_failed error={}", e.what());

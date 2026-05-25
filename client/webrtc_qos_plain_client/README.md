@@ -2,8 +2,8 @@
 
 This directory contains the mediasoup push/play clients backed by `webrtc_qos_sdk`.
 
-- `push/` publishes one H264 video track through `webrtc_qos::VideoPushClient`.
-- `play/` subscribes one H264 video consumer through `webrtc_qos::VideoPlayClient`.
+- `push/` publishes one or more H264 video tracks through `webrtc_qos::VideoPushClient`.
+- `play/` subscribes one or more selected H264 video consumers through `webrtc_qos::VideoPlayClient`.
 - `common/` contains only CLI, ID, UDP, packet classification, and spdlog file
   logging glue.
 

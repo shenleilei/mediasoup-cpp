@@ -245,6 +245,23 @@ TEST(InputFormatSharedTest, MovedFromOperationalMethodsThrow)
 	EXPECT_EQ(original.StreamAt(0), nullptr);
 }
 
+TEST(InputFormatSharedTest, MoveKeepsInterruptCallbackOwnedByDestination)
+{
+	auto* context = avformat_alloc_context();
+	ASSERT_NE(context, nullptr);
+	bool interrupt = false;
+	ffmpeg::InputFormat original =
+		ffmpeg::InputFormat::CreateForTesting(context, [&] { return interrupt; });
+	ASSERT_NE(original.get(), nullptr);
+	ASSERT_NE(original.get()->interrupt_callback.callback, nullptr);
+	ASSERT_EQ(original.get()->interrupt_callback.callback(original.get()->interrupt_callback.opaque), 0);
+
+	ffmpeg::InputFormat moved(std::move(original));
+	ASSERT_NE(moved.get(), nullptr);
+	interrupt = true;
+	EXPECT_EQ(moved.get()->interrupt_callback.callback(moved.get()->interrupt_callback.opaque), 1);
+}
+
 TEST(OutputFormatSharedTest, EmptyOperationalMethodsThrow)
 {
 	ffmpeg::OutputFormat output;

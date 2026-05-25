@@ -50,7 +50,7 @@ mediasoup 得到了广泛应用，但其默认的控制平面是 Node.js。本�
 
 ### 2. SDK 化推拉流客户端
 - **外围最小化：** push/play 客户端只保留 WebSocket 信令和 UDP Socket I/O。
-- **媒体 QoS 下沉：** add track、编码、packetize、pacer、GoogCC、NACK/PLI/FEC、统计和 QoE 观测交给 `webrtc_qos_sdk`。
+- **媒体 QoS 下沉：** add track、编码、packetize、pacer、GoogCC、NACK/PLI、统计和 QoE 观测交给 `webrtc_qos_sdk`；FEC/RTX 不计入当前推拉流客户端验收范围。
 - **PlainTransport 对接：** 客户端复用 `plainPublish` / `plainSubscribe`，用于验证 mediasoup PlainTransport 和 SDK 推拉流闭环。
 
 ### 3. 可复现 QoS 验证
@@ -111,13 +111,14 @@ RTP / SRTP / ICE / DTLS
 
 - WebSocket 信令：`join`、`plainPublish`、`plainSubscribe`
 - UDP Socket：连接 mediasoup RTP/RTCP 收发口
-- WebRTC 接口：通过 SDK 完成 add track、编码、packetize、pacer、GoogCC、NACK/PLI/FEC、统计和 QoE 观测
+- WebRTC 接口：通过 SDK 完成 add track、编码、packetize、pacer、GoogCC、NACK/PLI、统计和 QoE 观测；FEC/RTX 不计入当前验收范围
 
 当前实现和验收文档：
 
 - [docs/dependencies_cn.md](./docs/dependencies_cn.md)
 - [docs/webrtc-qos-push-play-client-design_cn.md](./docs/webrtc-qos-push-play-client-design_cn.md)
 - [docs/webrtc-qos-push-play-client-p2-design_cn.md](./docs/webrtc-qos-push-play-client-p2-design_cn.md)
+- [docs/webrtc-qos-push-play-client-thread-model-design_cn.md](./docs/webrtc-qos-push-play-client-thread-model-design_cn.md)
 - [docs/webrtc-qos-push-play-client-implementation-checklist_cn.md](./docs/webrtc-qos-push-play-client-implementation-checklist_cn.md)
 - [docs/architecture_cn.md](./docs/architecture_cn.md)
 
@@ -188,12 +189,14 @@ SignalingServer
 - WebRTC QoS P2 browser receiver smoke：push 发布链路 `PASS`；当前 headless Chromium 只暴露 VP8/VP9、不暴露 H264 packetization-mode=1，浏览器收流 case 按环境能力记为 `SKIP`，overall 为 `PARTIAL`
 - WebRTC QoS P2 V4L2 source：V4L2 CLI/source/smoke SKIP gate 已落地；当前机器无 `/dev/video0`，baseline 按环境能力 `SKIP`，overall 为 `PARTIAL`
 - WebRTC QoS P2 聚合验收：`scripts/run_qos_tests.sh p2-acceptance` 会执行构建、plain client 单测、ORTC/TWCC targeted test、PlainPublish 集成测试、边界检查和报告复核；正式刷新报告用 `scripts/run_webrtc_qos_plain_p2_acceptance.sh --run-smoke --enable-netem`，会重跑主弱网、恢复首帧、MP4 decode-loop 和 V4L2 报告；`scripts/run_qos_tests.sh p2-report` 只做离线边界/报告复核
+- WebRTC QoS P3 线程模型自动化验收：`scripts/run_qos_tests.sh p3-thread-model-report` 会执行静态 owner/队列/日志边界检查，并运行两路 synthetic、两路 MP4 decode-loop、慢编码注入、慢 sink 注入、弱网 two-track、per-track play QoE 和 V4L2 capability 的动态 smoke；V4L2 capture/raw/encode split 代码和静态边界已落地。生产签收入口是 `scripts/run_qos_tests.sh p3-thread-model-acceptance`，它要求 netem 弱网和真实双 camera V4L2 全部 PASS，不能用 SKIP/PARTIAL 代替；当前 weak-network strict 已 PASS，V4L2 strict 因缺 `/dev/video0` 和 `/dev/video1` 仍不能签生产。
 
 当前范围提示：
 
 - 上行 QoS 主链路在浏览器和 WebRTC QoS P2 客户端上均已闭环
 - 下行目前覆盖接收端控制以及零需求发布端暂停/恢复协调
 - WebRTC QoS P2 已签收 native push/play copy 输入弱网短测和 MP4 decode-loop baseline；browser receiver 与 V4L2 已有自动化入口，但本机浏览器缺 H264 能力、当前机器无 `/dev/video0`，对应真实画面/摄像头运行结果仍只能记录 `SKIP/PARTIAL`
+- 推拉流多线程 runtime 已有 P3 自动化验收入口，覆盖 two-track synthetic/decode-loop、慢编码/慢 sink 注入、弱网 two-track、per-track play QoE、per-track V4L2 device capability；生产签收必须另跑 `p3-thread-model-acceptance`，当前开发机仍缺真实双 camera 硬件 PASS。
 - `dynacast` 和房间级全局比特率预算划分是后续工作
 
 事实来源链接 (Source-of-truth links)：
@@ -204,13 +207,22 @@ SignalingServer
 - 逐 Case 最终结果：[docs/uplink-qos-case-results.md](./docs/uplink-qos-case-results.md)
 - WebRTC QoS P2 smoke 报告：[docs/generated/webrtc-qos-plain-p2-smoke-report.md](./docs/generated/webrtc-qos-plain-p2-smoke-report.md)
 - WebRTC QoS P2 设计和验收门禁：[docs/webrtc-qos-push-play-client-p2-design_cn.md](./docs/webrtc-qos-push-play-client-p2-design_cn.md)
+- WebRTC QoS 推拉流线程模型升级设计：[docs/webrtc-qos-push-play-client-thread-model-design_cn.md](./docs/webrtc-qos-push-play-client-thread-model-design_cn.md)
 - WebRTC QoS P2 恢复首帧专项报告：[docs/generated/webrtc-qos-plain-p2-recovery-first-frame-report.md](./docs/generated/webrtc-qos-plain-p2-recovery-first-frame-report.md)
 - WebRTC QoS P2 MP4 decode-loop baseline 报告：[docs/generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md](./docs/generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md)
 - WebRTC QoS P2 browser receiver 报告：[docs/generated/webrtc-qos-plain-p2-browser-receiver-report.md](./docs/generated/webrtc-qos-plain-p2-browser-receiver-report.md)
 - WebRTC QoS P2 V4L2 source 报告：[docs/generated/webrtc-qos-plain-p2-v4l2-report.md](./docs/generated/webrtc-qos-plain-p2-v4l2-report.md)
+- WebRTC QoS P3 线程模型边界报告：[docs/generated/webrtc-qos-plain-thread-model-boundary-report.md](./docs/generated/webrtc-qos-plain-thread-model-boundary-report.md)
+- WebRTC QoS P3 two-track synthetic smoke 报告：[docs/generated/webrtc-qos-plain-p3-thread-model-smoke-report.md](./docs/generated/webrtc-qos-plain-p3-thread-model-smoke-report.md)
+- WebRTC QoS P3 two-track MP4 decode-loop 报告：[docs/generated/webrtc-qos-plain-p3-thread-model-decode-loop-report.md](./docs/generated/webrtc-qos-plain-p3-thread-model-decode-loop-report.md)
+- WebRTC QoS P3 slow encoder 注入报告：[docs/generated/webrtc-qos-plain-p3-thread-model-slow-encoder-report.md](./docs/generated/webrtc-qos-plain-p3-thread-model-slow-encoder-report.md)
+- WebRTC QoS P3 slow sink 注入报告：[docs/generated/webrtc-qos-plain-p3-thread-model-slow-sink-report.md](./docs/generated/webrtc-qos-plain-p3-thread-model-slow-sink-report.md)
+- WebRTC QoS P3 weak-network two-track 报告：[docs/generated/webrtc-qos-plain-p3-thread-model-weak-network-report.md](./docs/generated/webrtc-qos-plain-p3-thread-model-weak-network-report.md)
+- WebRTC QoS P3 V4L2 capability 报告：[docs/generated/webrtc-qos-plain-p3-thread-model-v4l2-report.md](./docs/generated/webrtc-qos-plain-p3-thread-model-v4l2-report.md)
 - WebRTC QoS P2 聚合验收脚本：[scripts/run_webrtc_qos_plain_p2_acceptance.sh](./scripts/run_webrtc_qos_plain_p2_acceptance.sh)
 - WebRTC QoS P2 报告验收脚本：[scripts/verify_webrtc_qos_plain_p2_reports.py](./scripts/verify_webrtc_qos_plain_p2_reports.py)
 - WebRTC QoS plain client 边界验收脚本：[scripts/verify_webrtc_qos_plain_client_boundaries.py](./scripts/verify_webrtc_qos_plain_client_boundaries.py)
+- WebRTC QoS P3 线程模型 smoke 脚本：[scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh](./scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh)
 - 下行当前状态：[docs/downlink-qos-status.md](./docs/downlink-qos-status.md)
 - 测试覆盖地图：[docs/qos-test-coverage_cn.md](./docs/qos-test-coverage_cn.md)
 - 生成的矩阵制品：[docs/generated/uplink-qos-matrix-report.json](./docs/generated/uplink-qos-matrix-report.json)
@@ -360,7 +372,7 @@ webrtc-qos-plain-push-client / webrtc-qos-plain-play-client
       -> WebSocket join / plainPublish / plainSubscribe
       -> 绑定 mediasoup UDP RTP/RTCP
       -> 通过 webrtc_qos_sdk add track / receive track
-      -> SDK 负责 GoogCC / pacer / NACK / PLI / FEC
+      -> SDK 负责 GoogCC / pacer / NACK / PLI / stats / QoE
       -> 导出 SDK stats / QoE / clientStats snapshots
 ```
 
@@ -746,10 +758,10 @@ node tests/qos_harness/browser_capacity_rooms.mjs --workers=1 --step=5 --max-roo
 
 行为表现：
 
-- 默认模式会运行所有的 QoS 组，包括 browser/downlink 矩阵和 WebRTC QoS P2 聚合验收；即使某个组失败也会继续执行
+- 默认模式会运行所有默认 QoS 组，包括 browser/downlink 矩阵、WebRTC QoS P2 聚合验收和 P3 线程模型自动化报告；即使某个组失败也会继续执行
 - 失败会记录到 `tests/qos_harness/artifacts/last-failures.txt`
 - `--resume` 仅会重新运行上一次失败的精确任务
-- 只想复核 WebRTC QoS P2 时使用 `./scripts/run_qos_tests.sh p2-report` 或 `./scripts/run_qos_tests.sh p2-acceptance`；这两个入口不会刷新 downlink summary
+- 只想复核 WebRTC QoS P2/P3 时使用 `./scripts/run_qos_tests.sh p2-report`、`./scripts/run_qos_tests.sh p2-acceptance`、`./scripts/run_qos_tests.sh p3-thread-model-report` 或显式生产签收入口 `./scripts/run_qos_tests.sh p3-thread-model-acceptance`；这些入口不会刷新 downlink summary，且 P3 生产签收不包含在默认或 `all` 中
 - 如果执行了 `matrix`，脚本还会重新生成逐 Case 的报告：
   [docs/uplink-qos-case-results.md](./docs/uplink-qos-case-results.md)
 - 默认矩阵现在包含盲点过渡用例 `T9/T10/T11`；剩余的 `extended` 集合是目前更高带宽的基线校准用例，可以通过 `--include-extended` 追加，或者通过 `--cases=...` 明确指定运行

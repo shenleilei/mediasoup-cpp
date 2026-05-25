@@ -280,7 +280,7 @@ webrtc-qos-plain-push-client
   -> plainPublish(videoSsrcs, audioSsrc)
   -> 服务端返回 {ip, port, videoTracks[], audioPt}
   -> 本地 UDP socket 绑定 PlainTransport RTP/RTCP
-  -> webrtc_qos_sdk add track / encode / packetize / send
+  -> webrtc_qos_sdk add track / encode / packetize / pacer / send
 
 webrtc-qos-plain-play-client
   -> WsClient.connect()
@@ -309,6 +309,8 @@ notification:
 - 外围客户端只保留 WebSocket 信令和 UDP Socket，媒体 QoS 由 SDK 接管。
 - 服务端继续使用同一套 `plainPublish` / `plainSubscribe` / `clientStats` / `qosOverride` 协议。
 - P2 smoke 通过 copy 输入弱网主报告、恢复首帧、MP4 decode-loop、browser receiver、V4L2 环境能力门禁验证链路；copy 输入不计入实时 encoder runtime，encoder runtime 以 x264 输入源报告为准。
+- P3 线程模型已把 SDK 调用收敛到 transport owner 线程，把多 track source/sink 重活拆到独立 worker 和有界队列；生产签收必须另跑 `p3-thread-model-acceptance`，当前真实双 camera V4L2 仍因设备缺失不能签 PASS。
+- FEC/RTX 不计入当前 native push/play 客户端验收范围；当前只验证 SDK 的 GoogCC、pacer、NACK/PLI 反馈、统计和 QoE 观测链路。
 
 ## 9. QoS 控制链路
 

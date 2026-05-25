@@ -9,7 +9,7 @@
 - 仓库内 WebRTC QoS 推拉流客户端如何接入同一套 PlainTransport 信令和 QoS 体系
 
 如果只需要构建、测试和常规开发入口，先读 [DEVELOPMENT.md](./DEVELOPMENT.md)。如果需要理解运行时控制流、所有权和时序，再读本文。
-如果需要专门看 WebRTC QoS 推拉流客户端，请继续看 [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md)。
+如果需要专门看 WebRTC QoS 推拉流客户端，请继续看 [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md)、[webrtc-qos-push-play-client-p2-design_cn.md](./webrtc-qos-push-play-client-p2-design_cn.md) 和 [webrtc-qos-push-play-client-thread-model-design_cn.md](./webrtc-qos-push-play-client-thread-model-design_cn.md)。
 
 ## 1. 设计结论
 
@@ -209,10 +209,10 @@ flowchart TB
    - 外围只负责 socket I/O 和 packet 交给 SDK
 3. WebRTC QoS SDK runtime
    - add/receive track
-   - 编码、packetize、pacer、GoogCC、NACK/PLI/FEC
+   - 编码、packetize、pacer、GoogCC、NACK/PLI、stats/QoE
    - SDK stats / QoE / `clientStats` snapshot 上报
 
-当前主架构文档只保留这一层摘要；完整细节见 [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md)。
+当前主架构文档只保留这一层摘要；完整细节见 [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md)、[webrtc-qos-push-play-client-p2-design_cn.md](./webrtc-qos-push-play-client-p2-design_cn.md) 和 [webrtc-qos-push-play-client-thread-model-design_cn.md](./webrtc-qos-push-play-client-thread-model-design_cn.md)。
 
 ## 5. 跨线程与跨进程通信机制
 
@@ -584,7 +584,7 @@ webrtc-qos-plain-push-client
   -> Transport::produce() for N video tracks + 1 audio track
   -> 返回 {ip, port, videoTracks[], audioPt}
   -> push client 建立 UDP RTP/RTCP socket
-  -> webrtc_qos_sdk 负责 track、编码、packetize、pacer、GoogCC、NACK/PLI/FEC
+  -> webrtc_qos_sdk 负责 track、编码、packetize、pacer、GoogCC、NACK/PLI、stats/QoE
 ```
 
 这条链路的几个关键差异：

@@ -15,7 +15,7 @@ GENERATE_DOWNLINK_SUMMARY=1
 MATRIX_INCLUDE_EXTENDED=0
 MATRIX_CASES=""
 
-ALL_GROUPS=(
+DEFAULT_GROUPS=(
   client-js
   cpp-unit
   cpp-integration
@@ -23,11 +23,16 @@ ALL_GROUPS=(
   cpp-recording
   p2-report
   p2-acceptance
+  p3-thread-model-report
   node-harness
   browser-harness
   matrix
   downlink-matrix
 )
+OPTIONAL_GROUPS=(
+  p3-thread-model-acceptance
+)
+ALL_GROUPS=("${DEFAULT_GROUPS[@]}" "${OPTIONAL_GROUPS[@]}")
 
 SELECTED_GROUPS=()
 SKIP_BROWSER=0
@@ -66,6 +71,10 @@ Available groups:
   cpp-recording     QoS recording accuracy 测试
   p2-report         WebRTC QoS P2 generated reports 离线验收
   p2-acceptance     WebRTC QoS P2 构建/单测/边界/报告聚合验收
+  p3-thread-model-report
+                    WebRTC QoS P3 thread-model 静态边界 + two-track synthetic/decode-loop/弱网/V4L2 smoke 报告
+  p3-thread-model-acceptance
+                    WebRTC QoS P3 生产签收；显式运行，要求 netem 弱网和真实 V4L2 双 camera 全部 PASS
   node-harness      Node QoS harness 场景
   browser-harness   browser_server_signal + browser_loopback + downlink browser harnesses
   matrix            browser loopback full matrix（run_matrix.mjs）
@@ -77,6 +86,7 @@ Notes:
   - 可用环境变量 QOS_MATRIX_SPEED 调整 matrix 用时。
   - 默认 matrix 已包含 `T9/T10/T11`；`--matrix-include-extended` 会额外加入剩余 extended 场景。
   - `--matrix-cases=...` 会把 matrix 切为 targeted 运行，并产出 targeted 报告。
+  - p3-thread-model-acceptance 不包含在默认或 all 中，必须显式指定。
   - 失败任务会记录到 tests/qos_harness/artifacts/last-failures.txt
   - full matrix 当前主报告写入 docs/generated/ 和 docs/；每次新结果都会按生成时间归档到 docs/archive/uplink-qos-runs/
 EOF
@@ -527,14 +537,14 @@ normalize_groups() {
     mapfile -t requested < <(grep -v '^\s*#' "$FAILURES_FILE" | sed '/^\s*$/d')
     ((${#requested[@]} > 0)) || fail "resume requested but failure file is empty: $FAILURES_FILE"
   elif ((${#SELECTED_GROUPS[@]} == 0)); then
-    requested=("${ALL_GROUPS[@]}")
+    requested=("${DEFAULT_GROUPS[@]}")
   else
     for group in "${SELECTED_GROUPS[@]}"; do
       if [[ "$group" == "all" ]]; then
-        requested=("${ALL_GROUPS[@]}")
+        requested=("${DEFAULT_GROUPS[@]}")
         break
       fi
-      if [[ "$group" == node-harness:* || "$group" == browser-harness:* || "$group" == p2-report:* ]]; then
+      if [[ "$group" == node-harness:* || "$group" == browser-harness:* || "$group" == p2-report:* || "$group" == p3-thread-model-report:* || "$group" == p3-thread-model-acceptance:* ]]; then
         requested+=("$group")
         continue
       fi
@@ -690,6 +700,172 @@ run_p2_acceptance() {
       --worker-bin "$ROOT_DIR/mediasoup-worker"
 }
 
+run_p3_thread_model_report() {
+  require_file "$ROOT_DIR/scripts/verify_webrtc_qos_plain_thread_model_boundaries.py"
+  require_file "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh"
+  require_file "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_v4l2_report.sh"
+  local failed=0
+  local p3_weak_network_args=()
+  if [[ "${WEBRTC_QOS_P3_ENABLE_NETEM:-0}" == "1" ]]; then
+    p3_weak_network_args+=(--enable-netem)
+  fi
+  run_cmd \
+    "p3-thread-model-report:boundaries" \
+    --cwd "$ROOT_DIR" \
+    python3 "$ROOT_DIR/scripts/verify_webrtc_qos_plain_thread_model_boundaries.py" || failed=1
+  run_cmd \
+    "p3-thread-model-report:two-track-synthetic" \
+    --cwd "$ROOT_DIR" \
+    "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh" \
+      --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+      --worker-bin "$ROOT_DIR/mediasoup-worker" \
+      --source synthetic \
+      --report-name webrtc-qos-plain-p3-thread-model-smoke-report \
+      --strict || failed=1
+  run_cmd \
+    "p3-thread-model-report:two-track-decode-loop" \
+    --cwd "$ROOT_DIR" \
+    "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh" \
+      --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+      --worker-bin "$ROOT_DIR/mediasoup-worker" \
+      --source mp4-decode-loop \
+      --input "$ROOT_DIR/tests/fixtures/media/test_sweep.mp4" \
+      --base-port 34141 \
+      --play-port 44141 \
+      --report-name webrtc-qos-plain-p3-thread-model-decode-loop-report \
+      --strict || failed=1
+  run_cmd \
+    "p3-thread-model-report:slow-encoder-injection" \
+    --cwd "$ROOT_DIR" \
+    "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh" \
+      --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+      --worker-bin "$ROOT_DIR/mediasoup-worker" \
+      --source synthetic \
+      --injection slow-encoder \
+      --base-port 34151 \
+      --play-port 44151 \
+      --report-name webrtc-qos-plain-p3-thread-model-slow-encoder-report \
+      --strict || failed=1
+  run_cmd \
+    "p3-thread-model-report:slow-sink-injection" \
+    --cwd "$ROOT_DIR" \
+    "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh" \
+      --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+      --worker-bin "$ROOT_DIR/mediasoup-worker" \
+      --source synthetic \
+      --injection slow-sink \
+      --base-port 34161 \
+      --play-port 44161 \
+      --report-name webrtc-qos-plain-p3-thread-model-slow-sink-report \
+      --strict || failed=1
+  run_cmd \
+    "p3-thread-model-report:weak-network-two-track" \
+    --cwd "$ROOT_DIR" \
+    "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh" \
+      --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+      --worker-bin "$ROOT_DIR/mediasoup-worker" \
+      --source synthetic \
+      --network weak \
+      --duration-seconds 18 \
+      --base-port 34171 \
+      --play-port 44171 \
+      --report-name webrtc-qos-plain-p3-thread-model-weak-network-report \
+      "${p3_weak_network_args[@]}" || failed=1
+  run_cmd \
+    "p3-thread-model-report:v4l2" \
+    --cwd "$ROOT_DIR" \
+    "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_v4l2_report.sh" \
+      --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+      --worker-bin "$ROOT_DIR/mediasoup-worker" \
+      --duration-seconds 8 \
+      --base-port 34181 \
+      --play-port 44181 \
+      --report-name webrtc-qos-plain-p3-thread-model-v4l2-report || failed=1
+  return "$failed"
+}
+
+run_p3_thread_model_acceptance() {
+  require_file "$ROOT_DIR/scripts/verify_webrtc_qos_plain_thread_model_boundaries.py"
+  require_file "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh"
+  require_file "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_v4l2_report.sh"
+  local failed=0
+  run_cmd \
+    "p3-thread-model-acceptance:boundaries" \
+    --cwd "$ROOT_DIR" \
+    python3 "$ROOT_DIR/scripts/verify_webrtc_qos_plain_thread_model_boundaries.py" || failed=1
+  run_cmd \
+    "p3-thread-model-acceptance:two-track-synthetic" \
+    --cwd "$ROOT_DIR" \
+    "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh" \
+      --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+      --worker-bin "$ROOT_DIR/mediasoup-worker" \
+      --source synthetic \
+      --report-name webrtc-qos-plain-p3-thread-model-smoke-report \
+      --strict || failed=1
+  run_cmd \
+    "p3-thread-model-acceptance:two-track-decode-loop" \
+    --cwd "$ROOT_DIR" \
+    "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh" \
+      --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+      --worker-bin "$ROOT_DIR/mediasoup-worker" \
+      --source mp4-decode-loop \
+      --input "$ROOT_DIR/tests/fixtures/media/test_sweep.mp4" \
+      --base-port 34241 \
+      --play-port 44241 \
+      --report-name webrtc-qos-plain-p3-thread-model-decode-loop-report \
+      --strict || failed=1
+  run_cmd \
+    "p3-thread-model-acceptance:slow-encoder-injection" \
+    --cwd "$ROOT_DIR" \
+    "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh" \
+      --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+      --worker-bin "$ROOT_DIR/mediasoup-worker" \
+      --source synthetic \
+      --injection slow-encoder \
+      --base-port 34251 \
+      --play-port 44251 \
+      --report-name webrtc-qos-plain-p3-thread-model-slow-encoder-report \
+      --strict || failed=1
+  run_cmd \
+    "p3-thread-model-acceptance:slow-sink-injection" \
+    --cwd "$ROOT_DIR" \
+    "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh" \
+      --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+      --worker-bin "$ROOT_DIR/mediasoup-worker" \
+      --source synthetic \
+      --injection slow-sink \
+      --base-port 34261 \
+      --play-port 44261 \
+      --report-name webrtc-qos-plain-p3-thread-model-slow-sink-report \
+      --strict || failed=1
+  run_cmd \
+    "p3-thread-model-acceptance:weak-network-two-track" \
+    --cwd "$ROOT_DIR" \
+    "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh" \
+      --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+      --worker-bin "$ROOT_DIR/mediasoup-worker" \
+      --source synthetic \
+      --network weak \
+      --enable-netem \
+      --duration-seconds 18 \
+      --base-port 34271 \
+      --play-port 44271 \
+      --report-name webrtc-qos-plain-p3-thread-model-weak-network-report \
+      --strict || failed=1
+  run_cmd \
+    "p3-thread-model-acceptance:v4l2" \
+    --cwd "$ROOT_DIR" \
+    "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_v4l2_report.sh" \
+      --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+      --worker-bin "$ROOT_DIR/mediasoup-worker" \
+      --duration-seconds 8 \
+      --base-port 34281 \
+      --play-port 44281 \
+      --report-name webrtc-qos-plain-p3-thread-model-v4l2-report \
+      --strict || failed=1
+  return "$failed"
+}
+
 run_node_harness() {
   prepare_test_port 14011 "QoS node harness SFU port 14011"
   local failed=0
@@ -834,6 +1010,8 @@ run_group() {
     cpp-recording) run_cpp_recording ;;
     p2-report) run_p2_report ;;
     p2-acceptance) run_p2_acceptance ;;
+    p3-thread-model-report) run_p3_thread_model_report ;;
+    p3-thread-model-acceptance) run_p3_thread_model_acceptance ;;
     node-harness) run_node_harness ;;
     browser-harness) run_browser_harness ;;
     matrix) run_matrix ;;
@@ -845,7 +1023,7 @@ run_group() {
 run_target() {
   local target="$1"
   case "$target" in
-    client-js|cpp-unit|cpp-integration|cpp-accuracy|cpp-recording|p2-report|p2-acceptance|node-harness|browser-harness|matrix|downlink-matrix)
+    client-js|cpp-unit|cpp-integration|cpp-accuracy|cpp-recording|p2-report|p2-acceptance|p3-thread-model-report|p3-thread-model-acceptance|node-harness|browser-harness|matrix|downlink-matrix)
       run_group "$target"
       ;;
     p2-report:boundaries)
@@ -861,6 +1039,200 @@ run_target() {
         "$target" \
         --cwd "$ROOT_DIR" \
         python3 "$ROOT_DIR/scripts/verify_webrtc_qos_plain_p2_reports.py"
+      ;;
+    p3-thread-model-report:boundaries)
+      require_file "$ROOT_DIR/scripts/verify_webrtc_qos_plain_thread_model_boundaries.py"
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        python3 "$ROOT_DIR/scripts/verify_webrtc_qos_plain_thread_model_boundaries.py"
+      ;;
+    p3-thread-model-report:two-track-synthetic)
+      require_file "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh"
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh" \
+          --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+          --worker-bin "$ROOT_DIR/mediasoup-worker" \
+          --source synthetic \
+          --report-name webrtc-qos-plain-p3-thread-model-smoke-report \
+          --strict
+      ;;
+    p3-thread-model-report:two-track-decode-loop)
+      require_file "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh"
+      require_file "$ROOT_DIR/tests/fixtures/media/test_sweep.mp4"
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh" \
+          --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+          --worker-bin "$ROOT_DIR/mediasoup-worker" \
+          --source mp4-decode-loop \
+          --input "$ROOT_DIR/tests/fixtures/media/test_sweep.mp4" \
+          --base-port 34141 \
+          --play-port 44141 \
+          --report-name webrtc-qos-plain-p3-thread-model-decode-loop-report \
+          --strict
+      ;;
+    p3-thread-model-report:slow-encoder-injection)
+      require_file "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh"
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh" \
+          --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+          --worker-bin "$ROOT_DIR/mediasoup-worker" \
+          --source synthetic \
+          --injection slow-encoder \
+          --base-port 34151 \
+          --play-port 44151 \
+          --report-name webrtc-qos-plain-p3-thread-model-slow-encoder-report \
+          --strict
+      ;;
+    p3-thread-model-report:slow-sink-injection)
+      require_file "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh"
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh" \
+          --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+          --worker-bin "$ROOT_DIR/mediasoup-worker" \
+          --source synthetic \
+          --injection slow-sink \
+          --base-port 34161 \
+          --play-port 44161 \
+          --report-name webrtc-qos-plain-p3-thread-model-slow-sink-report \
+          --strict
+      ;;
+    p3-thread-model-report:weak-network-two-track)
+      require_file "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh"
+      local p3_weak_network_args=()
+      if [[ "${WEBRTC_QOS_P3_ENABLE_NETEM:-0}" == "1" ]]; then
+        p3_weak_network_args+=(--enable-netem)
+      fi
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh" \
+          --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+          --worker-bin "$ROOT_DIR/mediasoup-worker" \
+          --source synthetic \
+          --network weak \
+          --duration-seconds 18 \
+          --base-port 34171 \
+          --play-port 44171 \
+          --report-name webrtc-qos-plain-p3-thread-model-weak-network-report \
+          "${p3_weak_network_args[@]}"
+      ;;
+    p3-thread-model-report:v4l2)
+      require_file "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_v4l2_report.sh"
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_v4l2_report.sh" \
+          --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+          --worker-bin "$ROOT_DIR/mediasoup-worker" \
+          --duration-seconds 8 \
+          --base-port 34181 \
+          --play-port 44181 \
+          --report-name webrtc-qos-plain-p3-thread-model-v4l2-report
+      ;;
+    p3-thread-model-acceptance:boundaries)
+      require_file "$ROOT_DIR/scripts/verify_webrtc_qos_plain_thread_model_boundaries.py"
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        python3 "$ROOT_DIR/scripts/verify_webrtc_qos_plain_thread_model_boundaries.py"
+      ;;
+    p3-thread-model-acceptance:two-track-synthetic)
+      require_file "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh"
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh" \
+          --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+          --worker-bin "$ROOT_DIR/mediasoup-worker" \
+          --source synthetic \
+          --report-name webrtc-qos-plain-p3-thread-model-smoke-report \
+          --strict
+      ;;
+    p3-thread-model-acceptance:two-track-decode-loop)
+      require_file "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh"
+      require_file "$ROOT_DIR/tests/fixtures/media/test_sweep.mp4"
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh" \
+          --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+          --worker-bin "$ROOT_DIR/mediasoup-worker" \
+          --source mp4-decode-loop \
+          --input "$ROOT_DIR/tests/fixtures/media/test_sweep.mp4" \
+          --base-port 34241 \
+          --play-port 44241 \
+          --report-name webrtc-qos-plain-p3-thread-model-decode-loop-report \
+          --strict
+      ;;
+    p3-thread-model-acceptance:slow-encoder-injection)
+      require_file "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh"
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh" \
+          --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+          --worker-bin "$ROOT_DIR/mediasoup-worker" \
+          --source synthetic \
+          --injection slow-encoder \
+          --base-port 34251 \
+          --play-port 44251 \
+          --report-name webrtc-qos-plain-p3-thread-model-slow-encoder-report \
+          --strict
+      ;;
+    p3-thread-model-acceptance:slow-sink-injection)
+      require_file "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh"
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh" \
+          --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+          --worker-bin "$ROOT_DIR/mediasoup-worker" \
+          --source synthetic \
+          --injection slow-sink \
+          --base-port 34261 \
+          --play-port 44261 \
+          --report-name webrtc-qos-plain-p3-thread-model-slow-sink-report \
+          --strict
+      ;;
+    p3-thread-model-acceptance:weak-network-two-track)
+      require_file "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh"
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh" \
+          --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+          --worker-bin "$ROOT_DIR/mediasoup-worker" \
+          --source synthetic \
+          --network weak \
+          --enable-netem \
+          --duration-seconds 18 \
+          --base-port 34271 \
+          --play-port 44271 \
+          --report-name webrtc-qos-plain-p3-thread-model-weak-network-report \
+          --strict
+      ;;
+    p3-thread-model-acceptance:v4l2)
+      require_file "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_v4l2_report.sh"
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        "$ROOT_DIR/scripts/run_webrtc_qos_plain_p3_v4l2_report.sh" \
+          --build-dir "$ROOT_DIR/build-webrtc-qos-plain" \
+          --worker-bin "$ROOT_DIR/mediasoup-worker" \
+          --duration-seconds 8 \
+          --base-port 34281 \
+          --play-port 44281 \
+          --report-name webrtc-qos-plain-p3-thread-model-v4l2-report \
+          --strict
       ;;
     node-harness:*)
       prepare_test_port 14011 "QoS node harness SFU port 14011"
@@ -980,14 +1352,14 @@ done
 mapfile -t GROUPS_TO_RUN < <(normalize_groups)
 ((${#GROUPS_TO_RUN[@]} > 0)) || fail "no groups selected after applying options"
 if ((${#GROUPS_TO_RUN[@]} > 0)); then
-  ONLY_P2_GROUPS=1
+  ONLY_GENERATED_QOS_REPORT_GROUPS=1
   for group in "${GROUPS_TO_RUN[@]}"; do
-    if [[ "$group" != "p2-report" && "$group" != "p2-acceptance" && "$group" != p2-report:* ]]; then
-      ONLY_P2_GROUPS=0
+    if [[ "$group" != "p2-report" && "$group" != "p2-acceptance" && "$group" != "p3-thread-model-report" && "$group" != "p3-thread-model-acceptance" && "$group" != p2-report:* && "$group" != p3-thread-model-report:* && "$group" != p3-thread-model-acceptance:* ]]; then
+      ONLY_GENERATED_QOS_REPORT_GROUPS=0
       break
     fi
   done
-  if ((ONLY_P2_GROUPS)); then
+  if ((ONLY_GENERATED_QOS_REPORT_GROUPS)); then
     GENERATE_DOWNLINK_SUMMARY=0
   fi
 fi

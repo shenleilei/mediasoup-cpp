@@ -9,7 +9,7 @@
 - 浏览器 / WebRTC 路径
 - WebRTC QoS 推拉流客户端路径
 
-如果要理解 push/play 客户端本身怎么工作，请继续看 [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md) 和 [webrtc-qos-push-play-client-p2-design_cn.md](./webrtc-qos-push-play-client-p2-design_cn.md)。
+如果要理解 push/play 客户端本身怎么工作，请继续看 [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md)、[webrtc-qos-push-play-client-p2-design_cn.md](./webrtc-qos-push-play-client-p2-design_cn.md) 和 [webrtc-qos-push-play-client-thread-model-design_cn.md](./webrtc-qos-push-play-client-thread-model-design_cn.md)。
 
 ## 线程模型
 
@@ -131,7 +131,7 @@ WorkerThread 检测到 worker 死亡（channel fd EOF）→ `onWorkerDied()` →
 
 - 通过 `join`、`plainPublish`、`plainSubscribe` 接入服务端 PlainTransport 信令。
 - 绑定 mediasoup PlainTransport 的 UDP RTP/RTCP 收发端口。
-- 把 add track、编码、packetize、pacer、GoogCC、NACK/PLI/FEC、QoE 观测交给 `webrtc_qos_sdk`。
+- 把 add track、编码、packetize、pacer、GoogCC、NACK/PLI、QoE 观测交给 `webrtc_qos_sdk`；FEC/RTX 不计入当前推拉流客户端验收范围。
 
 主路径：
 

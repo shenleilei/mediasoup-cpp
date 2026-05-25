@@ -31,7 +31,9 @@ FORBIDDEN_CLIENT_PATTERNS = [
 
 REQUIRED_FILES = [
     CLIENT_DIR / "push" / "WebRtcQosPushRuntime.cpp",
+    CLIENT_DIR / "push" / "PushSdkTransportThread.cpp",
     CLIENT_DIR / "play" / "WebRtcQosPlayRuntime.cpp",
+    CLIENT_DIR / "play" / "PlaySdkTransportThread.cpp",
     CLIENT_DIR / "common" / "RtpRtcpClassifier.cpp",
     CLIENT_DIR / "common" / "SdkRuntimeConfig.h",
     CLIENT_DIR / "common" / "RuntimeLogHelpers.cpp",
@@ -122,10 +124,14 @@ def verify_no_forbidden_client_symbols(errors: List[str]) -> None:
 
 def verify_runtime_facades(errors: List[str]) -> None:
     push_path = CLIENT_DIR / "push" / "WebRtcQosPushRuntime.cpp"
+    push_owner_path = CLIENT_DIR / "push" / "PushSdkTransportThread.cpp"
     play_path = CLIENT_DIR / "play" / "WebRtcQosPlayRuntime.cpp"
+    play_owner_path = CLIENT_DIR / "play" / "PlaySdkTransportThread.cpp"
     log_helper_path = CLIENT_DIR / "common" / "RuntimeLogHelpers.cpp"
-    check_patterns(errors, rel(push_path), read_text(push_path), PUSH_REQUIRED_PATTERNS)
-    check_patterns(errors, rel(play_path), read_text(play_path), PLAY_REQUIRED_PATTERNS)
+    push_text = read_text(push_path) + "\n" + read_text(push_owner_path)
+    play_text = read_text(play_path) + "\n" + read_text(play_owner_path)
+    check_patterns(errors, f"{rel(push_path)} + {rel(push_owner_path)}", push_text, PUSH_REQUIRED_PATTERNS)
+    check_patterns(errors, f"{rel(play_path)} + {rel(play_owner_path)}", play_text, PLAY_REQUIRED_PATTERNS)
     check_patterns(errors, rel(log_helper_path), read_text(log_helper_path), LOG_HELPER_REQUIRED_PATTERNS)
 
 

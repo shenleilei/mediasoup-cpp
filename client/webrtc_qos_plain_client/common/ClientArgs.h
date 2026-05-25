@@ -2,8 +2,21 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace webrtc_qos_plain {
+
+struct PushTrackOptions {
+	std::string id;
+	uint32_t videoSsrc = 0;
+	uint32_t weight = 100;
+	std::string source;
+	std::string v4l2Device;
+	int v4l2Width = 0;
+	int v4l2Height = 0;
+	int v4l2Fps = 0;
+	std::string v4l2InputFormat;
+};
 
 struct PushOptions {
 	std::string serverIp = "127.0.0.1";
@@ -14,6 +27,7 @@ struct PushOptions {
 	std::string logDir = "logs/webrtc_qos_plain_client/push";
 	std::string mediaRemoteIp;
 	uint32_t videoSsrc = 11111111u;
+	std::vector<PushTrackOptions> tracks;
 	uint32_t audioSsrc = 0;
 	bool enableAudio = false;
 	uint32_t startBitrateBps = 1200000u;
@@ -29,6 +43,7 @@ struct PushOptions {
 	int syntheticHeight = 180;
 	int syntheticFps = 15;
 	std::string syntheticPattern = "testsrc";
+	int injectEncoderDelayMs = 0;
 	int v4l2Width = 640;
 	int v4l2Height = 360;
 	int v4l2Fps = 30;
@@ -56,6 +71,8 @@ struct PlayOptions {
 	std::string mediaRemoteIp;
 	int waitConsumerTimeoutMs = 30000;
 	bool decodeQoe = false;
+	int videoConsumerCount = 1;
+	int injectSinkDelayMs = 0;
 };
 
 bool ParsePushOptions(int argc, char* argv[], PushOptions* options, std::string* error);

@@ -7,11 +7,7 @@
 #include <spdlog/logger.h>
 
 #include "common/ClientArgs.h"
-#include "common/PlainUdpTransport.h"
-#include "push/H264AnnexBSource.h"
 #include "push/PushSignalingSession.h"
-#include "push/RealtimeH264Source.h"
-#include "webrtc_qos/video_push_client.h"
 
 namespace webrtc_qos_plain {
 
@@ -25,18 +21,6 @@ public:
 	int Run(std::atomic<bool>& running, PushSignalingSession* signaling);
 
 private:
-	struct FeedbackCounters {
-		uint64_t rtcpPacketsIn{ 0 };
-		uint64_t rtcpBytesIn{ 0 };
-		uint64_t rtcpFailures{ 0 };
-	};
-
-	bool DrainUdpFeedback(
-		PlainUdpTransport& udp,
-		webrtc_qos::VideoPushClient& push,
-		int64_t nowUs,
-		FeedbackCounters& counters);
-
 	PushOptions options_;
 	PublishInfo publishInfo_;
 	std::shared_ptr<spdlog::logger> logger_;

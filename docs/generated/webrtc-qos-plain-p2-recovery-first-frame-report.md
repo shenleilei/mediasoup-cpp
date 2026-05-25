@@ -27,7 +27,7 @@
 
 ## Cases
 
-| Case | Status | Network | pushedAu | outputAu | decodedFrames/errors | RTP in | push RTCP in | play RTCP out | TWCC ext | Encoder AU/keyframes | RTT min/avg/max | Loss min/avg/max | targetBps min/avg/max | droppedFrames | NACK/PLI/RTX | Notes |
+| Case | Status | Network | pushedAu | outputAu | decodedFrames/errors | RTP in | push RTCP in | play RTCP out | TWCC ext | Encoder AU/keyframes | RTT min/avg/max | Loss min/avg/max | targetBps min/avg/max | droppedFrames | NACK/PLI/retransmission | Notes |
 |---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | `drop_recover` | `PASS` | 5% loss + 600kbps, then recovery | 650 | 506 | 506/0 | 4159 | 322 | 1866 | 5 | 625/38 | 0/1577.80/7240 | 0/0/0 | 300000/1470280.70/2500000 | 5 | 1335/0/0 | - |
 
