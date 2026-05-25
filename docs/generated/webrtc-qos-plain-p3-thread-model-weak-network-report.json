@@ -1,0 +1,781 @@
+{
+  "overall": "PASS",
+  "generatedAt": "2026-05-25T05:41:49.191609+00:00",
+  "scope": "P3 thread-model dynamic smoke: weak_network_two_track push/play",
+  "sourceMode": "synthetic",
+  "trackCount": 2,
+  "environment": {
+    "cpuCount": 2,
+    "platform": "Linux-5.10.134-18.al8.x86_64-x86_64-with-alinux-3-OpenAnolis_Edition",
+    "hasNetem": true,
+    "netemDev": "lo",
+    "hasV4L2Devices": false,
+    "v4l2Devices": [],
+    "browserH264Supported": null,
+    "skipReasons": []
+  },
+  "cases": [
+    {
+      "name": "weak_network_two_track",
+      "status": "PASS",
+      "sourceMode": "synthetic",
+      "trackCount": 2,
+      "durationSeconds": 18,
+      "checks": [
+        {
+          "name": "sfu-readyz-ok",
+          "status": "PASS",
+          "evidence": "{\"availableWorkerThreads\": 1, \"ok\": true, \"redisReady\": true, \"redisRequired\": false, \"registryEnabled\": true, \"shutdownRequested\": false, \"startupSucceeded\": true, \"workerThreads\": 1, \"workers\": 1}"
+        },
+        {
+          "name": "no-harness-failure",
+          "status": "PASS",
+          "evidence": "ok"
+        },
+        {
+          "name": "selected-consumers",
+          "status": "PASS",
+          "evidence": "selectedConsumers=2 expected=2"
+        },
+        {
+          "name": "selected-consumers-have-twcc",
+          "status": "PASS",
+          "evidence": "[('731b9468-3295-4ec7-92ad-b5a21c38396e', '369321992', '5'), ('b9a429fb-8647-4fc8-ad73-92052af9d825', '393168665', '5')]"
+        },
+        {
+          "name": "push-track-count",
+          "status": "PASS",
+          "evidence": "trackCount=2 expected=2"
+        },
+        {
+          "name": "play-track-count",
+          "status": "PASS",
+          "evidence": "trackCount=2 expected=2"
+        },
+        {
+          "name": "push-per-track-final",
+          "status": "PASS",
+          "evidence": "tracks=2 expected=2"
+        },
+        {
+          "name": "play-per-track-final",
+          "status": "PASS",
+          "evidence": "tracks=2 expected=2"
+        },
+        {
+          "name": "encoder-per-track-metrics",
+          "status": "PASS",
+          "evidence": "tracks=2 expected=2"
+        },
+        {
+          "name": "encoder-source-mode",
+          "status": "PASS",
+          "evidence": "[{\"accessUnits\": 295, \"bitrateChanges\": 59, \"currentBitrateBps\": 348046, \"currentFps\": 10, \"encoder\": \"x264\", \"encoderRecreates\": 6, \"forcedKeyframeRequests\": 48, \"forcedKeyframes\": 9, \"fpsChanges\": 5, \"framesEncoded\": 295, \"framesGenerated\": 295, \"height\": 180, \"injectedEncoderDelayCount\": 0, \"injectedEncoderDelayTotalMs\": 0, \"keyframes\": 27, \"lastKeyframe\": false, \"maxForcedKeyframeDelayUs\": 90769, \"mode\": \"synthetic\", \"queuedAu\": 295, \"senderSsrc\": 11111111, \"trackId\": 1, \"width\": 320, \"workerLoopGapMaxUs\": 28292}, {\"accessUnits\": 296, \"bitrateChanges\": 38, \"currentBitrateBps\": 300000, \"currentFps\": 10, \"encoder\": \"x264\", \"encoderRecreates\": 4, \"forcedKeyframeRequests\": 48, \"forcedKeyframes\": 9, \"fpsChanges\": 3, \"framesEncoded\": 296, \"framesGenerated\": 296, \"height\": 180, \"injectedEncoderDelayCount\": 0, \"injectedEncoderDelayTotalMs\": 0, \"keyframes\": 26, \"lastKeyframe\": false, \"maxForcedKeyframeDelayUs\": 90746, \"mode\": \"synthetic\", \"queuedAu\": 296, \"senderSsrc\": 22222222, \"trackId\": 2, \"width\": 320, \"workerLoopGapMaxUs\": 24068}]"
+        },
+        {
+          "name": "push-each-track-pushed",
+          "status": "PASS",
+          "evidence": "[{\"adaptationAvailable\": true, \"droppedAu\": 0, \"pushFailures\": 0, \"pushedAu\": 304, \"queueMaxDepth\": 1, \"queuedAu\": 304, \"senderSsrc\": 11111111, \"snapshotAvailable\": true, \"trackId\": 1}, {\"adaptationAvailable\": true, \"droppedAu\": 0, \"pushFailures\": 0, \"pushedAu\": 305, \"queueMaxDepth\": 1, \"queuedAu\": 305, \"senderSsrc\": 22222222, \"snapshotAvailable\": true, \"trackId\": 2}]"
+        },
+        {
+          "name": "push-each-track-no-failures",
+          "status": "PASS",
+          "evidence": "[{\"adaptationAvailable\": true, \"droppedAu\": 0, \"pushFailures\": 0, \"pushedAu\": 304, \"queueMaxDepth\": 1, \"queuedAu\": 304, \"senderSsrc\": 11111111, \"snapshotAvailable\": true, \"trackId\": 1}, {\"adaptationAvailable\": true, \"droppedAu\": 0, \"pushFailures\": 0, \"pushedAu\": 305, \"queueMaxDepth\": 1, \"queuedAu\": 305, \"senderSsrc\": 22222222, \"snapshotAvailable\": true, \"trackId\": 2}]"
+        },
+        {
+          "name": "encoder-each-track-au-keyframe",
+          "status": "PASS",
+          "evidence": "[{\"accessUnits\": 295, \"bitrateChanges\": 59, \"currentBitrateBps\": 348046, \"currentFps\": 10, \"encoder\": \"x264\", \"encoderRecreates\": 6, \"forcedKeyframeRequests\": 48, \"forcedKeyframes\": 9, \"fpsChanges\": 5, \"framesEncoded\": 295, \"framesGenerated\": 295, \"height\": 180, \"injectedEncoderDelayCount\": 0, \"injectedEncoderDelayTotalMs\": 0, \"keyframes\": 27, \"lastKeyframe\": false, \"maxForcedKeyframeDelayUs\": 90769, \"mode\": \"synthetic\", \"queuedAu\": 295, \"senderSsrc\": 11111111, \"trackId\": 1, \"width\": 320, \"workerLoopGapMaxUs\": 28292}, {\"accessUnits\": 296, \"bitrateChanges\": 38, \"currentBitrateBps\": 300000, \"currentFps\": 10, \"encoder\": \"x264\", \"encoderRecreates\": 4, \"forcedKeyframeRequests\": 48, \"forcedKeyframes\": 9, \"fpsChanges\": 3, \"framesEncoded\": 296, \"framesGenerated\": 296, \"height\": 180, \"injectedEncoderDelayCount\": 0, \"injectedEncoderDelayTotalMs\": 0, \"keyframes\": 26, \"lastKeyframe\": false, \"maxForcedKeyframeDelayUs\": 90746, \"mode\": \"synthetic\", \"queuedAu\": 296, \"senderSsrc\": 22222222, \"trackId\": 2, \"width\": 320, \"workerLoopGapMaxUs\": 24068}]"
+        },
+        {
+          "name": "slow-encoder-injection",
+          "status": "PASS",
+          "evidence": "{\"delayMs\": 0, \"mode\": \"none\", \"tracks\": [{\"accessUnits\": 295, \"bitrateChanges\": 59, \"currentBitrateBps\": 348046, \"currentFps\": 10, \"encoder\": \"x264\", \"encoderRecreates\": 6, \"forcedKeyframeRequests\": 48, \"forcedKeyframes\": 9, \"fpsChanges\": 5, \"framesEncoded\": 295, \"framesGenerated\": 295, \"height\": 180, \"injectedEncoderDelayCount\": 0, \"injectedEncoderDelayTotalMs\": 0, \"keyframes\": 27, \"lastKeyframe\": false, \"maxForcedKeyframeDelayUs\": 90769, \"mode\": \"synthetic\", \"queuedAu\": 295, \"senderSsrc\": 11111111, \"trackId\": 1, \"width\": 320, \"workerLoopGapMaxUs\": 28292}, {\"accessUnits\": 296, \"bitrateChanges\": 38, \"currentBitrateBps\": 300000, \"currentFps\": 10, \"encoder\": \"x264\", \"encoderRecreates\": 4, \"forcedKeyframeRequests\": 48, \"forcedKeyframes\": 9, \"fpsChanges\": 3, \"framesEncoded\": 296, \"framesGenerated\": 296, \"height\": 180, \"injectedEncoderDelayCount\": 0, \"injectedEncoderDelayTotalMs\": 0, \"keyframes\": 26, \"lastKeyframe\": false, \"maxForcedKeyframeDelayUs\": 90746, \"mode\": \"synthetic\", \"queuedAu\": 296, \"senderSsrc\": 22222222, \"trackId\": 2, \"width\": 320, \"workerLoopGapMaxUs\": 24068}]}"
+        },
+        {
+          "name": "play-each-track-output",
+          "status": "PASS",
+          "evidence": "[{\"droppedFrames\": 0, \"enqueuedAu\": 133, \"lossQ8\": 0, \"nack\": 786, \"outputAu\": 133, \"pli\": 0, \"rttMs\": 0, \"senderSsrc\": 369321992, \"snapshotAvailable\": true, \"trackId\": 1}, {\"droppedFrames\": 0, \"enqueuedAu\": 122, \"lossQ8\": 0, \"nack\": 691, \"outputAu\": 122, \"pli\": 0, \"rttMs\": 0, \"senderSsrc\": 393168665, \"snapshotAvailable\": true, \"trackId\": 2}]"
+        },
+        {
+          "name": "per-track-sink-workers",
+          "status": "PASS",
+          "evidence": "[{\"injectedSinkDelayCount\": 0, \"injectedSinkDelayTotalMs\": 0, \"lastHeartbeatUs\": 1543118263399, \"loopGapMaxUs\": 112562, \"loopIterations\": 270, \"outputAu\": 133, \"qoeAccessUnitsIn\": 133, \"qoeDecodeErrors\": 0, \"qoeDecodedFrames\": 133, \"qoeEnabled\": true, \"qoeFirstFrameDelayUs\": 0, \"qoeFreezeCount\": 3, \"qoeHeight\": 180, \"qoeKeyframesIn\": 9, \"qoeMaxFrameGapUs\": 5651272, \"qoeOutputFps\": 10.6, \"qoeWidth\": 320, \"queueDropped\": 0, \"queueMaxDepth\": 1, \"queuePopped\": 133, \"queuePushed\": 133, \"senderSsrc\": 369321992, \"stopReason\": \"queue_closed\", \"trackId\": 1, \"trackName\": \"track1\"}, {\"injectedSinkDelayCount\": 0, \"injectedSinkDelayTotalMs\": 0, \"lastHeartbeatUs\": 1543118263806, \"loopGapMaxUs\": 110253, \"loopIterations\": 263, \"outputAu\": 122, \"qoeAccessUnitsIn\": 122, \"qoeDecodeErrors\": 0, \"qoeDecodedFrames\": 122, \"qoeEnabled\": true, \"qoeFirstFrameDelayUs\": 0, \"qoeFreezeCount\": 3, \"qoeHeight\": 180, \"qoeKeyframesIn\": 6, \"qoeMaxFrameGapUs\": 7856851, \"qoeOutputFps\": 9.2, \"qoeWidth\": 320, \"queueDropped\": 0, \"queueMaxDepth\": 1, \"queuePopped\": 122, \"queuePushed\": 122, \"senderSsrc\": 393168665, \"stopReason\": \"queue_closed\", \"trackId\": 2, \"trackName\": \"track2\"}]"
+        },
+        {
+          "name": "per-track-qoe-workers",
+          "status": "PASS",
+          "evidence": "[{\"accessUnitsIn\": 133, \"decodeErrors\": 0, \"decodedFrames\": 133, \"enabled\": true, \"firstFrameDelayUs\": 0, \"freezeCount\": 3, \"height\": 180, \"keyframesIn\": 9, \"maxFrameGapUs\": 5651272, \"outputFps\": 10.6, \"senderSsrc\": 369321992, \"trackId\": 1, \"width\": 320}, {\"accessUnitsIn\": 122, \"decodeErrors\": 0, \"decodedFrames\": 122, \"enabled\": true, \"firstFrameDelayUs\": 0, \"freezeCount\": 3, \"height\": 180, \"keyframesIn\": 6, \"maxFrameGapUs\": 7856851, \"outputFps\": 9.2, \"senderSsrc\": 393168665, \"trackId\": 2, \"width\": 320}]"
+        },
+        {
+          "name": "slow-sink-injection",
+          "status": "PASS",
+          "evidence": "{\"count\": 0, \"delayMs\": 0, \"mode\": \"none\", \"totalMs\": 0}"
+        },
+        {
+          "name": "rtcp-feedback-loop",
+          "status": "PASS",
+          "evidence": "pushRtcpIn=186 playRtcpOut=1938"
+        },
+        {
+          "name": "feedback-gap",
+          "status": "PASS",
+          "evidence": "feedbackGapMaxMs=1010 limitMs=2000 source=push_metrics.rtcpFeedbackPacketsIn"
+        },
+        {
+          "name": "rtcp-no-failures",
+          "status": "PASS",
+          "evidence": "pushRtcpFailures=0 playRtcpFailures=0 playPacketFailures=0"
+        },
+        {
+          "name": "sdk-loop-gap",
+          "status": "PASS",
+          "evidence": "pushSdkGapUs=31284 playSdkGapUs=28506 limitUs=100000"
+        },
+        {
+          "name": "sink-loop-gap",
+          "status": "PASS",
+          "evidence": "sinkGapUs=112562"
+        },
+        {
+          "name": "runtime-no-unexpected-alerts",
+          "status": "PASS",
+          "evidence": "alerts=0"
+        },
+        {
+          "name": "weak-network-target-down-and-recover",
+          "status": "PASS",
+          "evidence": "{\"netemApplied\": true, \"networkCondition\": \"5% loss + 600kbps rate limit on lo, then recovery\", \"networkMode\": \"weak\", \"playRtcpOut\": 1938, \"postClearTargetBps\": {\"avg\": 389181.3333333333, \"count\": 6, \"last\": 396093, \"max\": 396093, \"min\": 360942}, \"pushRtcpIn\": 186, \"samples\": 18, \"targetBps\": {\"avg\": 905091.5555555555, \"count\": 18, \"last\": 396093, \"max\": 2151973, \"min\": 300000}}"
+        }
+      ],
+      "metrics": {
+        "selectedConsumers": [
+          [
+            "731b9468-3295-4ec7-92ad-b5a21c38396e",
+            "369321992",
+            "5"
+          ],
+          [
+            "b9a429fb-8647-4fc8-ad73-92052af9d825",
+            "393168665",
+            "5"
+          ]
+        ],
+        "pushTrackCount": 2,
+        "playTrackCount": 2,
+        "pushRtcpFeedbackPacketsIn": 186,
+        "playRtcpPacketsOut": 1938,
+        "feedbackGapMaxMs": 1010,
+        "pushSdkLoopGapMaxUs": 31284,
+        "playSdkLoopGapMaxUs": 28506,
+        "playSinkLoopGapMaxUs": 112562,
+        "injectionMode": "none",
+        "injectEncoderDelayMs": 0,
+        "injectSinkDelayMs": 0,
+        "playSinkInjectedDelayCount": 0,
+        "playSinkInjectedDelayTotalMs": 0,
+        "networkMode": "weak",
+        "networkCondition": "5% loss + 600kbps rate limit on lo, then recovery",
+        "netemDev": "lo",
+        "enableNetem": true,
+        "decodeQoe": true,
+        "skipReason": null,
+        "pushMetricSamples": 18,
+        "targetBps": {
+          "count": 18,
+          "min": 300000,
+          "avg": 905091.5555555555,
+          "max": 2151973,
+          "last": 396093
+        },
+        "finalTargetBps": {
+          "count": 18,
+          "min": 300000,
+          "avg": 905091.5555555555,
+          "max": 2151973,
+          "last": 396093
+        },
+        "postClearTargetBps": {
+          "count": 6,
+          "min": 360942,
+          "avg": 389181.3333333333,
+          "max": 396093,
+          "last": 396093
+        },
+        "v4l2": {
+          "device": "/dev/video0",
+          "width": 640,
+          "height": 360,
+          "fps": 30,
+          "inputFormat": null
+        },
+        "pushTracks": [
+          {
+            "trackId": 1,
+            "senderSsrc": 11111111,
+            "queuedAu": 304,
+            "pushedAu": 304,
+            "droppedAu": 0,
+            "queueMaxDepth": 1,
+            "pushFailures": 0,
+            "adaptationAvailable": true,
+            "snapshotAvailable": true
+          },
+          {
+            "trackId": 2,
+            "senderSsrc": 22222222,
+            "queuedAu": 305,
+            "pushedAu": 305,
+            "droppedAu": 0,
+            "queueMaxDepth": 1,
+            "pushFailures": 0,
+            "adaptationAvailable": true,
+            "snapshotAvailable": true
+          }
+        ],
+        "encoderTracks": [
+          {
+            "mode": "synthetic",
+            "encoder": "x264",
+            "trackId": 1,
+            "senderSsrc": 11111111,
+            "queuedAu": 295,
+            "currentBitrateBps": 348046,
+            "currentFps": 10,
+            "width": 320,
+            "height": 180,
+            "framesGenerated": 295,
+            "framesEncoded": 295,
+            "accessUnits": 295,
+            "keyframes": 27,
+            "encoderRecreates": 6,
+            "bitrateChanges": 59,
+            "fpsChanges": 5,
+            "forcedKeyframeRequests": 48,
+            "forcedKeyframes": 9,
+            "maxForcedKeyframeDelayUs": 90769,
+            "lastKeyframe": false,
+            "injectedEncoderDelayCount": 0,
+            "injectedEncoderDelayTotalMs": 0,
+            "workerLoopGapMaxUs": 28292
+          },
+          {
+            "mode": "synthetic",
+            "encoder": "x264",
+            "trackId": 2,
+            "senderSsrc": 22222222,
+            "queuedAu": 296,
+            "currentBitrateBps": 300000,
+            "currentFps": 10,
+            "width": 320,
+            "height": 180,
+            "framesGenerated": 296,
+            "framesEncoded": 296,
+            "accessUnits": 296,
+            "keyframes": 26,
+            "encoderRecreates": 4,
+            "bitrateChanges": 38,
+            "fpsChanges": 3,
+            "forcedKeyframeRequests": 48,
+            "forcedKeyframes": 9,
+            "maxForcedKeyframeDelayUs": 90746,
+            "lastKeyframe": false,
+            "injectedEncoderDelayCount": 0,
+            "injectedEncoderDelayTotalMs": 0,
+            "workerLoopGapMaxUs": 24068
+          }
+        ],
+        "sourceWorkerTracks": [
+          {
+            "trackId": 1,
+            "senderSsrc": 11111111,
+            "mode": "synthetic",
+            "queuedAu": 304,
+            "enqueueFailures": 0,
+            "injectedEncoderDelayCount": 0,
+            "injectedEncoderDelayTotalMs": 0,
+            "eof": false,
+            "loopIterations": 1724,
+            "loopGapMaxUs": 28292,
+            "rawQueueDroppedFrames": 0,
+            "rawQueueMaxDepth": 0,
+            "rawQueuePushedFrames": 0,
+            "rawQueuePoppedFrames": 0,
+            "stopReason": "stopped",
+            "fatalError": "\n2026-05-25"
+          },
+          {
+            "trackId": 2,
+            "senderSsrc": 22222222,
+            "mode": "synthetic",
+            "queuedAu": 305,
+            "enqueueFailures": 0,
+            "injectedEncoderDelayCount": 0,
+            "injectedEncoderDelayTotalMs": 0,
+            "eof": false,
+            "loopIterations": 1725,
+            "loopGapMaxUs": 24068,
+            "rawQueueDroppedFrames": 0,
+            "rawQueueMaxDepth": 0,
+            "rawQueuePushedFrames": 0,
+            "rawQueuePoppedFrames": 0,
+            "stopReason": "stopped",
+            "fatalError": "\n2026-05-25"
+          }
+        ],
+        "rawEncodeTracks": [],
+        "v4l2CaptureTracks": [],
+        "playTracks": [
+          {
+            "trackId": 1,
+            "senderSsrc": 369321992,
+            "snapshotAvailable": true,
+            "enqueuedAu": 133,
+            "outputAu": 133,
+            "nack": 786,
+            "pli": 0,
+            "droppedFrames": 0,
+            "rttMs": 0,
+            "lossQ8": 0
+          },
+          {
+            "trackId": 2,
+            "senderSsrc": 393168665,
+            "snapshotAvailable": true,
+            "enqueuedAu": 122,
+            "outputAu": 122,
+            "nack": 691,
+            "pli": 0,
+            "droppedFrames": 0,
+            "rttMs": 0,
+            "lossQ8": 0
+          }
+        ],
+        "decodedSinkTracks": [
+          {
+            "trackId": 1,
+            "senderSsrc": 369321992,
+            "trackName": "track1",
+            "stopReason": "queue_closed",
+            "outputAu": 133,
+            "queuePushed": 133,
+            "queuePopped": 133,
+            "queueDropped": 0,
+            "queueMaxDepth": 1,
+            "injectedSinkDelayCount": 0,
+            "injectedSinkDelayTotalMs": 0,
+            "loopIterations": 270,
+            "loopGapMaxUs": 112562,
+            "lastHeartbeatUs": 1543118263399,
+            "qoeEnabled": true,
+            "qoeAccessUnitsIn": 133,
+            "qoeKeyframesIn": 9,
+            "qoeDecodedFrames": 133,
+            "qoeDecodeErrors": 0,
+            "qoeFreezeCount": 3,
+            "qoeFirstFrameDelayUs": 0,
+            "qoeMaxFrameGapUs": 5651272,
+            "qoeOutputFps": 10.6,
+            "qoeWidth": 320,
+            "qoeHeight": 180
+          },
+          {
+            "trackId": 2,
+            "senderSsrc": 393168665,
+            "trackName": "track2",
+            "stopReason": "queue_closed",
+            "outputAu": 122,
+            "queuePushed": 122,
+            "queuePopped": 122,
+            "queueDropped": 0,
+            "queueMaxDepth": 1,
+            "injectedSinkDelayCount": 0,
+            "injectedSinkDelayTotalMs": 0,
+            "loopIterations": 263,
+            "loopGapMaxUs": 110253,
+            "lastHeartbeatUs": 1543118263806,
+            "qoeEnabled": true,
+            "qoeAccessUnitsIn": 122,
+            "qoeKeyframesIn": 6,
+            "qoeDecodedFrames": 122,
+            "qoeDecodeErrors": 0,
+            "qoeFreezeCount": 3,
+            "qoeFirstFrameDelayUs": 0,
+            "qoeMaxFrameGapUs": 7856851,
+            "qoeOutputFps": 9.2,
+            "qoeWidth": 320,
+            "qoeHeight": 180
+          }
+        ],
+        "playTrackQoe": [
+          {
+            "trackId": 1,
+            "senderSsrc": 369321992,
+            "enabled": true,
+            "accessUnitsIn": 133,
+            "keyframesIn": 9,
+            "decodedFrames": 133,
+            "decodeErrors": 0,
+            "freezeCount": 3,
+            "firstFrameDelayUs": 0,
+            "maxFrameGapUs": 5651272,
+            "outputFps": 10.6,
+            "width": 320,
+            "height": 180
+          },
+          {
+            "trackId": 2,
+            "senderSsrc": 393168665,
+            "enabled": true,
+            "accessUnitsIn": 122,
+            "keyframesIn": 6,
+            "decodedFrames": 122,
+            "decodeErrors": 0,
+            "freezeCount": 3,
+            "firstFrameDelayUs": 0,
+            "maxFrameGapUs": 7856851,
+            "outputFps": 9.2,
+            "width": 320,
+            "height": 180
+          }
+        ],
+        "timing": {
+          "case": "weak_network_two_track",
+          "sourceMode": "synthetic",
+          "inputFile": "/root/mediasoup-cpp/tests/fixtures/media/test_sweep.mp4",
+          "v4l2Device": "/dev/video0",
+          "v4l2Device2": "/dev/video1",
+          "v4l2Width": 640,
+          "v4l2Height": 360,
+          "v4l2Fps": 30,
+          "v4l2InputFormat": "",
+          "trackCount": 2,
+          "injectionMode": "none",
+          "injectEncoderDelayMs": 0,
+          "injectSinkDelayMs": 0,
+          "networkMode": "weak",
+          "networkCondition": "5% loss + 600kbps rate limit on lo, then recovery",
+          "netemDev": "lo",
+          "netemEnabled": true,
+          "netemApplied": true,
+          "decodeQoe": true,
+          "preSeconds": 4,
+          "weakSeconds": 8,
+          "recoverSeconds": 6,
+          "durationSeconds": 18,
+          "startEpochMs": 1779687674650,
+          "applyEpochMs": 1779687679713,
+          "clearEpochMs": 1779687687724,
+          "endEpochMs": 1779687693729
+        },
+        "inputFile": null
+      },
+      "alerts": [],
+      "artifacts": {
+        "caseDir": "/tmp/webrtc-qos-plain-p3-thread-model-smoke/20260525T054114Z/weak_network_two_track",
+        "pushLog": "/tmp/webrtc-qos-plain-p3-thread-model-smoke/20260525T054114Z/weak_network_two_track/push/push.log",
+        "playLog": "/tmp/webrtc-qos-plain-p3-thread-model-smoke/20260525T054114Z/weak_network_two_track/play/play.log",
+        "sfuLog": "/tmp/webrtc-qos-plain-p3-thread-model-smoke/20260525T054114Z/weak_network_two_track/sfu.stdout.log"
+      }
+    }
+  ],
+  "gates": {
+    "multiTrackCoverage": "PASS",
+    "playTrackCoverage": "PASS",
+    "sdkThreadHealth": "PASS",
+    "feedbackLoop": "PASS",
+    "slowEncoderIsolation": "PASS",
+    "slowSinkIsolation": "PASS",
+    "perTrackPlaySinkQoe": "PASS",
+    "cameraRuntime": "PASS",
+    "weakNetworkTwoTrack": "PASS"
+  },
+  "threads": [
+    {
+      "role": "push_sdk_transport",
+      "tid": null,
+      "trackId": null,
+      "senderSsrc": null,
+      "started": true,
+      "stopped": true,
+      "stopReason": "stopped",
+      "heartbeatGapMaxMs": 31.284,
+      "heartbeatLastUs": null,
+      "loopGapMaxMs": 31.284,
+      "loopIterations": 1737,
+      "tidSource": "not logged yet"
+    },
+    {
+      "role": "play_sdk_transport",
+      "tid": null,
+      "trackId": null,
+      "senderSsrc": null,
+      "started": true,
+      "stopped": true,
+      "stopReason": "stopped",
+      "heartbeatGapMaxMs": 28.506,
+      "heartbeatLastUs": null,
+      "loopGapMaxMs": 28.506,
+      "loopIterations": 1755,
+      "tidSource": "not logged yet"
+    },
+    {
+      "role": "push_track_source_worker",
+      "tid": null,
+      "trackId": 1,
+      "senderSsrc": 11111111,
+      "started": true,
+      "stopped": true,
+      "stopReason": "stopped",
+      "heartbeatGapMaxMs": 28.292,
+      "heartbeatLastUs": null,
+      "loopGapMaxMs": 28.292,
+      "loopIterations": 1724,
+      "tidSource": "not logged yet"
+    },
+    {
+      "role": "push_track_source_worker",
+      "tid": null,
+      "trackId": 2,
+      "senderSsrc": 22222222,
+      "started": true,
+      "stopped": true,
+      "stopReason": "stopped",
+      "heartbeatGapMaxMs": 24.068,
+      "heartbeatLastUs": null,
+      "loopGapMaxMs": 24.068,
+      "loopIterations": 1725,
+      "tidSource": "not logged yet"
+    },
+    {
+      "role": "decoded_au_sink_worker",
+      "tid": null,
+      "trackId": 1,
+      "senderSsrc": 369321992,
+      "started": true,
+      "stopped": true,
+      "stopReason": "queue_closed",
+      "heartbeatGapMaxMs": 112.562,
+      "heartbeatLastUs": 1543118263399,
+      "loopGapMaxMs": 112.562,
+      "loopIterations": 270,
+      "tidSource": "not logged yet"
+    },
+    {
+      "role": "decoded_au_sink_worker",
+      "tid": null,
+      "trackId": 2,
+      "senderSsrc": 393168665,
+      "started": true,
+      "stopped": true,
+      "stopReason": "queue_closed",
+      "heartbeatGapMaxMs": 110.253,
+      "heartbeatLastUs": 1543118263806,
+      "loopGapMaxMs": 110.253,
+      "loopIterations": 263,
+      "tidSource": "not logged yet"
+    }
+  ],
+  "tracks": [
+    {
+      "trackId": 1,
+      "source": "synthetic",
+      "ssrc": 11111111,
+      "capture": {
+        "mode": "synthetic",
+        "framesGenerated": 295,
+        "framesDecoded": null,
+        "device": null
+      },
+      "encode": {
+        "encoder": "x264",
+        "framesEncoded": 295,
+        "accessUnits": 295,
+        "keyframes": 27,
+        "bitrateChanges": 59,
+        "forcedKeyframes": 9,
+        "loopGapMaxMs": 28.292
+      },
+      "queue": {
+        "encodedMaxDepth": 1,
+        "encodedDroppedAu": 0,
+        "rawMaxDepth": 0,
+        "rawDroppedFrames": 0,
+        "sinkMaxDepth": 1,
+        "sinkDroppedAu": 0
+      },
+      "sdk": {
+        "queuedAu": 304,
+        "pushedAu": 304,
+        "pushFailures": 0,
+        "adaptationAvailable": true,
+        "snapshotAvailable": true,
+        "playOutputAu": 133,
+        "playEnqueuedAu": 133
+      },
+      "qoe": {
+        "enabled": true,
+        "accessUnitsIn": 133,
+        "decodedFrames": 133,
+        "decodeErrors": 0,
+        "freezeCount": 3,
+        "maxFrameGapMs": 5651.272,
+        "outputFps": 10.6
+      }
+    },
+    {
+      "trackId": 2,
+      "source": "synthetic",
+      "ssrc": 22222222,
+      "capture": {
+        "mode": "synthetic",
+        "framesGenerated": 296,
+        "framesDecoded": null,
+        "device": null
+      },
+      "encode": {
+        "encoder": "x264",
+        "framesEncoded": 296,
+        "accessUnits": 296,
+        "keyframes": 26,
+        "bitrateChanges": 38,
+        "forcedKeyframes": 9,
+        "loopGapMaxMs": 24.068
+      },
+      "queue": {
+        "encodedMaxDepth": 1,
+        "encodedDroppedAu": 0,
+        "rawMaxDepth": 0,
+        "rawDroppedFrames": 0,
+        "sinkMaxDepth": 1,
+        "sinkDroppedAu": 0
+      },
+      "sdk": {
+        "queuedAu": 305,
+        "pushedAu": 305,
+        "pushFailures": 0,
+        "adaptationAvailable": true,
+        "snapshotAvailable": true,
+        "playOutputAu": 122,
+        "playEnqueuedAu": 122
+      },
+      "qoe": {
+        "enabled": true,
+        "accessUnitsIn": 122,
+        "decodedFrames": 122,
+        "decodeErrors": 0,
+        "freezeCount": 3,
+        "maxFrameGapMs": 7856.851,
+        "outputFps": 9.2
+      }
+    }
+  ],
+  "queues": [
+    {
+      "name": "encoded-au-track-1",
+      "trackId": 1,
+      "capacity": 128,
+      "maxDepth": 1,
+      "maxAgeMs": null,
+      "pushCount": 304,
+      "popCount": 304,
+      "dropCount": 0,
+      "closeReason": "stopped"
+    },
+    {
+      "name": "encoded-au-track-2",
+      "trackId": 2,
+      "capacity": 128,
+      "maxDepth": 1,
+      "maxAgeMs": null,
+      "pushCount": 305,
+      "popCount": 305,
+      "dropCount": 0,
+      "closeReason": "stopped"
+    },
+    {
+      "name": "decoded-au-sink-track-1",
+      "trackId": 1,
+      "capacity": 64,
+      "maxDepth": 1,
+      "maxAgeMs": null,
+      "pushCount": 133,
+      "popCount": 133,
+      "dropCount": 0,
+      "closeReason": "queue_closed"
+    },
+    {
+      "name": "decoded-au-sink-track-2",
+      "trackId": 2,
+      "capacity": 64,
+      "maxDepth": 1,
+      "maxAgeMs": null,
+      "pushCount": 122,
+      "popCount": 122,
+      "dropCount": 0,
+      "closeReason": "queue_closed"
+    }
+  ],
+  "sdk": {
+    "processGapMaxMs": 31.284,
+    "pushProcessGapMaxMs": 31.284,
+    "playProcessGapMaxMs": 28.506,
+    "feedbackGapMaxMs": 1010,
+    "feedbackGapSource": "push_metrics.rtcpFeedbackPacketsIn",
+    "rtpCounters": {
+      "playRtpPacketsIn": 1289
+    },
+    "rtcpCounters": {
+      "pushFeedbackPacketsIn": 186,
+      "pushFeedbackBytesIn": 7680,
+      "pushFeedbackFailures": 0,
+      "playRtcpPacketsIn": 9,
+      "playRtcpPacketsOut": 1938,
+      "playRtcpBytesOut": 51252,
+      "playRtcpSendFailures": 0
+    },
+    "targetBitrateBps": {
+      "count": 18,
+      "min": 300000,
+      "avg": 905091.5555555555,
+      "max": 2151973,
+      "last": 396093
+    },
+    "finalTargetBitrateBps": {
+      "count": 18,
+      "min": 300000,
+      "avg": 905091.5555555555,
+      "max": 2151973,
+      "last": 396093
+    },
+    "postClearTargetBitrateBps": {
+      "count": 6,
+      "min": 360942,
+      "avg": 389181.3333333333,
+      "max": 396093,
+      "last": 396093
+    }
+  },
+  "threadSafety": {
+    "ownerViolations": null,
+    "lockViolations": null,
+    "lifetimeViolations": null,
+    "dataViolations": null,
+    "status": "covered-by-static-boundary-report",
+    "requiredReport": "webrtc-qos-plain-thread-model-boundary-report"
+  },
+  "skipReasons": [],
+  "artifacts": {
+    "runDir": "/tmp/webrtc-qos-plain-p3-thread-model-smoke/20260525T054114Z",
+    "reportJson": "/root/mediasoup-cpp/docs/generated/webrtc-qos-plain-p3-thread-model-weak-network-report.json",
+    "reportMarkdown": "/root/mediasoup-cpp/docs/generated/webrtc-qos-plain-p3-thread-model-weak-network-report.md"
+  },
+  "remainingP3Acceptance": [
+    "two_track_synthetic",
+    "two_track_decode_loop",
+    "slow_encoder_injection",
+    "slow_play_sink_injection",
+    "v4l2_single_camera",
+    "v4l2_two_camera"
+  ]
+}

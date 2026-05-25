@@ -5,6 +5,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <spdlog/logger.h>
 
@@ -32,6 +33,7 @@ public:
 
 	bool ConnectJoinAndSubscribe(const PlayOptions& options);
 	std::optional<ConsumerInfo> TakeSelectedConsumer(const PlayOptions& options);
+	std::vector<ConsumerInfo> TakeSelectedConsumers(const PlayOptions& options, size_t maxConsumers);
 	void DispatchNotifications();
 	bool RequestConsumerKeyFrame(const std::string& consumerId);
 	void Close();

@@ -137,7 +137,18 @@ bool PlaySignalingSession::ConnectJoinAndSubscribe(const PlayOptions& options)
 
 std::optional<ConsumerInfo> PlaySignalingSession::TakeSelectedConsumer(const PlayOptions& options)
 {
-	for (auto it = pendingConsumers_.begin(); it != pendingConsumers_.end(); ++it) {
+	auto selected = TakeSelectedConsumers(options, 1);
+	if (selected.empty()) return std::nullopt;
+	return selected.front();
+}
+
+std::vector<ConsumerInfo> PlaySignalingSession::TakeSelectedConsumers(
+	const PlayOptions& options,
+	size_t maxConsumers)
+{
+	std::vector<ConsumerInfo> selected;
+	if (maxConsumers == 0) return selected;
+	for (auto it = pendingConsumers_.begin(); it != pendingConsumers_.end() && selected.size() < maxConsumers;) {
 		auto parsed = TryParseConsumer(
 			*it,
 			options,
@@ -146,10 +157,13 @@ std::optional<ConsumerInfo> PlaySignalingSession::TakeSelectedConsumer(const Pla
 			announcedIp_);
 		if (parsed) {
 			pendingConsumers_.erase(it);
-			return parsed;
+			selected.push_back(std::move(*parsed));
+			it = pendingConsumers_.begin();
+			continue;
 		}
+		++it;
 	}
-	return std::nullopt;
+	return selected;
 }
 
 void PlaySignalingSession::DispatchNotifications()

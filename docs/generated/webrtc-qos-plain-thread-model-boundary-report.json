@@ -1,0 +1,188 @@
+{
+  "overall": "PASS",
+  "generatedAt": "2026-05-25T05:54:25.720656+00:00",
+  "scope": "static boundary report for the first WebRTC QoS plain thread-model slice",
+  "sourceMode": "static",
+  "trackCount": 0,
+  "environment": {
+    "cpuCount": 2,
+    "platform": "Linux-5.10.134-18.al8.x86_64-x86_64-with-alinux-3-OpenAnolis_Edition",
+    "hasNetem": null,
+    "hasV4L2Devices": false,
+    "v4l2Devices": [],
+    "browserH264Supported": null,
+    "skipReasons": []
+  },
+  "note": "This static boundary report is paired with two-track synthetic, MP4 decode-loop, slow worker injection, weak-network and V4L2 capability smoke by p3-thread-model-report; V4L2 capture/raw/encode split is statically verified, while production signoff still requires true two-camera V4L2 runtime on hardware.",
+  "gates": [
+    {
+      "name": "boundedQueue",
+      "description": "Cross-thread queues have bounded capacity, close/wakeup semantics and drop counters.",
+      "status": "PASS",
+      "evidence": [
+        "client/webrtc_qos_plain_client/common/BoundedQueue.h"
+      ],
+      "failures": []
+    },
+    {
+      "name": "threadPrimitives",
+      "description": "Control mailbox and latest-value snapshot primitives exist for owner-loop message passing.",
+      "status": "PASS",
+      "evidence": [
+        "client/webrtc_qos_plain_client/common/ControlMailbox.h",
+        "client/webrtc_qos_plain_client/common/LatestValue.h"
+      ],
+      "failures": []
+    },
+    {
+      "name": "multiTrackConfigBoundary",
+      "description": "Push CLI/signaling/session plumbing can represent multiple video tracks.",
+      "status": "PASS",
+      "evidence": [
+        "client/webrtc_qos_plain_client/common/ClientArgs.h",
+        "client/webrtc_qos_plain_client/common/ClientArgs.cpp",
+        "client/webrtc_qos_plain_client/common/ClientIds.h",
+        "client/webrtc_qos_plain_client/common/ClientIds.cpp",
+        "client/webrtc_qos_plain_client/push/PushSignalingSession.cpp",
+        "client/webrtc_qos_plain_client/push/WebRtcQosPushRuntime.cpp"
+      ],
+      "failures": []
+    },
+    {
+      "name": "playMultiTrackConfigBoundary",
+      "description": "Play CLI/signaling/runtime can select multiple video consumers and build a multi-track session.",
+      "status": "PASS",
+      "evidence": [
+        "client/webrtc_qos_plain_client/common/ClientArgs.h",
+        "client/webrtc_qos_plain_client/common/ClientArgs.cpp",
+        "client/webrtc_qos_plain_client/play/PlaySignalingSession.h",
+        "client/webrtc_qos_plain_client/play/PlaySignalingSession.cpp",
+        "client/webrtc_qos_plain_client/play/main.cpp",
+        "client/webrtc_qos_plain_client/play/WebRtcQosPlayRuntime.h",
+        "client/webrtc_qos_plain_client/play/WebRtcQosPlayRuntime.cpp"
+      ],
+      "failures": []
+    },
+    {
+      "name": "encodedAuBoundary",
+      "description": "Push-side cross-thread encoded AU items own bytes before being viewed by the SDK.",
+      "status": "PASS",
+      "evidence": [
+        "client/webrtc_qos_plain_client/push/EncodedAccessUnit.h"
+      ],
+      "failures": []
+    },
+    {
+      "name": "pushSdkTransportOwnerThread",
+      "description": "Push-side VideoPushClient and UDP socket are owned by PushSdkTransportThread.",
+      "status": "PASS",
+      "evidence": [
+        "client/webrtc_qos_plain_client/push/PushSdkTransportThread.h",
+        "client/webrtc_qos_plain_client/push/PushSdkTransportThread.cpp",
+        "client/webrtc_qos_plain_client/push/PushTrackSourceWorker.h",
+        "client/webrtc_qos_plain_client/push/PushTrackSourceWorker.cpp",
+        "client/webrtc_qos_plain_client/push/RawVideoFrame.h",
+        "client/webrtc_qos_plain_client/push/V4L2RawFrameCaptureWorker.h",
+        "client/webrtc_qos_plain_client/push/V4L2RawFrameCaptureWorker.cpp",
+        "client/webrtc_qos_plain_client/push/RawFrameEncodeWorker.h",
+        "client/webrtc_qos_plain_client/push/RawFrameEncodeWorker.cpp",
+        "client/webrtc_qos_plain_client/push/WebRtcQosPushRuntime.cpp"
+      ],
+      "failures": []
+    },
+    {
+      "name": "playSdkTransportOwnerThread",
+      "description": "Play-side VideoPlayClient and UDP socket are owned by PlaySdkTransportThread.",
+      "status": "PASS",
+      "evidence": [
+        "client/webrtc_qos_plain_client/play/PlaySdkTransportThread.h",
+        "client/webrtc_qos_plain_client/play/PlaySdkTransportThread.cpp",
+        "client/webrtc_qos_plain_client/play/WebRtcQosPlayRuntime.cpp"
+      ],
+      "failures": []
+    },
+    {
+      "name": "decodedSinkWorkerOwnership",
+      "description": "Play sink and decode work run in a dedicated worker and own copied AU memory.",
+      "status": "PASS",
+      "evidence": [
+        "client/webrtc_qos_plain_client/play/DecodedAuSinkWorker.h",
+        "client/webrtc_qos_plain_client/play/DecodedAuSinkWorker.cpp"
+      ],
+      "failures": []
+    },
+    {
+      "name": "playCallbackIsolation",
+      "description": "SDK decoded callback does not perform file IO, FFmpeg decode or QoE work inline.",
+      "status": "PASS",
+      "evidence": [
+        "client/webrtc_qos_plain_client/play/WebRtcQosPlayRuntime.cpp",
+        "client/webrtc_qos_plain_client/play/WebRtcQosPlayRuntime.h",
+        "client/webrtc_qos_plain_client/play/PlaySdkTransportThread.cpp"
+      ],
+      "failures": []
+    },
+    {
+      "name": "workerFacadeBoundary",
+      "description": "Worker files do not own SDK facade, UDP transport or signaling objects.",
+      "status": "PASS",
+      "evidence": [
+        "client/webrtc_qos_plain_client/common/BoundedQueue.h",
+        "client/webrtc_qos_plain_client/common/ControlMailbox.h",
+        "client/webrtc_qos_plain_client/common/LatestValue.h",
+        "client/webrtc_qos_plain_client/push/EncodedAccessUnit.h",
+        "client/webrtc_qos_plain_client/play/DecodedAuSinkWorker.h",
+        "client/webrtc_qos_plain_client/play/DecodedAuSinkWorker.cpp"
+      ],
+      "failures": []
+    },
+    {
+      "name": "loggingAndLegacyBoundaries",
+      "description": "Thread-model client paths keep legacy QoS/packetizer code and stdout logging out.",
+      "status": "PASS",
+      "evidence": [
+        "client/webrtc_qos_plain_client"
+      ],
+      "failures": []
+    },
+    {
+      "name": "buildAndUnitCoverage",
+      "description": "The first thread-model slice is registered in build targets and unit tests.",
+      "status": "PASS",
+      "evidence": [
+        "CMakeLists.txt",
+        "tests/test_webrtc_qos_decode_sink.cpp"
+      ],
+      "failures": []
+    },
+    {
+      "name": "designDocTraceability",
+      "description": "The design document exposes executable acceptance and milestone criteria.",
+      "status": "PASS",
+      "evidence": [
+        "docs/webrtc-qos-push-play-client-thread-model-design_cn.md",
+        "scripts/run_qos_tests.sh",
+        "scripts/run_webrtc_qos_plain_p3_thread_model_smoke.sh",
+        "scripts/run_webrtc_qos_plain_p3_v4l2_report.sh"
+      ],
+      "failures": []
+    }
+  ],
+  "cases": [],
+  "threads": [],
+  "tracks": [],
+  "queues": [],
+  "sdk": {},
+  "threadSafety": {
+    "ownerViolations": 0,
+    "lockViolations": 0,
+    "lifetimeViolations": 0,
+    "dataViolations": 0,
+    "status": "PASS"
+  },
+  "artifacts": {
+    "reportJson": "/root/mediasoup-cpp/docs/generated/webrtc-qos-plain-thread-model-boundary-report.json",
+    "reportMarkdown": "/root/mediasoup-cpp/docs/generated/webrtc-qos-plain-thread-model-boundary-report.md"
+  },
+  "skipReasons": []
+}

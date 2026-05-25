@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <stdexcept>
+#include <utility>
 
 namespace mediasoup::ffmpeg {
 namespace {
@@ -14,15 +15,30 @@ AVFormatContext* RequireInputContext(AVFormatContext* ctx, const char* method)
 	throw std::runtime_error(std::string("InputFormat::") + method + " on empty format");
 }
 
-#ifdef MEDIASOUP_TEST_HOOKS
-std::atomic<int> gReadFailureCountdown{-1};
-#endif
+int InterruptCallback(void* opaque)
+{
+	auto* callback = static_cast<InputInterruptCallback*>(opaque);
+	return callback && *callback && (*callback)() ? 1 : 0;
+}
+
+	#ifdef MEDIASOUP_TEST_HOOKS
+	std::atomic<int> gReadFailureCountdown{-1};
+	#endif
 
 } // namespace
 
 InputFormat::InputFormat(AVFormatContext* ctx)
 	: ctx_(ctx)
 {
+}
+
+InputFormat::InputFormat(AVFormatContext* ctx, InputInterruptCallback interrupt)
+	: ctx_(ctx), interrupt_(std::move(interrupt))
+{
+	if (ctx_ && interrupt_) {
+		ctx_->interrupt_callback.callback = InterruptCallback;
+		ctx_->interrupt_callback.opaque = &interrupt_;
+	}
 }
 
 InputFormat InputFormat::Open(const std::string& path)
@@ -46,12 +62,42 @@ InputFormat InputFormat::OpenWithFormat(const std::string& path,
 	return InputFormat(ctx);
 }
 
-#ifdef MEDIASOUP_TEST_HOOKS
+InputFormat InputFormat::OpenWithFormatInterruptible(const std::string& path,
+	const AVInputFormat* fmt, AVDictionary** opts, InputInterruptCallback interrupt)
+{
+	AVFormatContext* ctx = avformat_alloc_context();
+	if (!ctx) {
+		CheckError(AVERROR(ENOMEM), "avformat_alloc_context");
+	}
+	InputInterruptCallback callback = std::move(interrupt);
+	if (callback) {
+		ctx->interrupt_callback.callback = InterruptCallback;
+		ctx->interrupt_callback.opaque = &callback;
+	}
+	AVFormatContext* openCtx = ctx;
+	const int err = avformat_open_input(
+		&openCtx,
+		path.c_str(),
+		const_cast<AVInputFormat*>(fmt),
+		opts);
+	if (err < 0) {
+		if (openCtx) avformat_close_input(&openCtx);
+		CheckError(err, "avformat_open_input(" + path + ")");
+	}
+	return InputFormat(openCtx, std::move(callback));
+}
+
+	#ifdef MEDIASOUP_TEST_HOOKS
 int InputFormat::SetReadFailureCountdown(int readsBeforeFailure)
 {
 	return gReadFailureCountdown.exchange(readsBeforeFailure, std::memory_order_acq_rel);
 }
-#endif
+
+InputFormat InputFormat::CreateForTesting(AVFormatContext* ctx, InputInterruptCallback interrupt)
+{
+	return InputFormat(ctx, std::move(interrupt));
+}
+	#endif
 
 InputFormat::~InputFormat()
 {
@@ -59,8 +105,9 @@ InputFormat::~InputFormat()
 }
 
 InputFormat::InputFormat(InputFormat&& other) noexcept
-	: ctx_(other.ctx_)
+	: ctx_(other.ctx_), interrupt_(std::move(other.interrupt_))
 {
+	if (ctx_ && interrupt_) ctx_->interrupt_callback.opaque = &interrupt_;
 	other.ctx_ = nullptr;
 }
 
@@ -69,8 +116,18 @@ InputFormat& InputFormat::operator=(InputFormat&& other) noexcept
 	if (this == &other) return *this;
 	Close();
 	ctx_ = other.ctx_;
+	interrupt_ = std::move(other.interrupt_);
+	if (ctx_ && interrupt_) ctx_->interrupt_callback.opaque = &interrupt_;
 	other.ctx_ = nullptr;
 	return *this;
+}
+
+void InputFormat::Close()
+{
+	if (!ctx_) return;
+	ctx_->interrupt_callback.callback = nullptr;
+	ctx_->interrupt_callback.opaque = nullptr;
+	avformat_close_input(&ctx_);
 }
 
 void InputFormat::FindStreamInfo()
@@ -121,10 +178,4 @@ bool InputFormat::ReadPacket(AVPacket* packet)
 	return false;
 }
 
-void InputFormat::Close()
-{
-	if (!ctx_) return;
-	avformat_close_input(&ctx_);
-}
-
-} // namespace mediasoup::ffmpeg
+	} // namespace mediasoup::ffmpeg

@@ -4,6 +4,7 @@
 #include <iostream>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include "common/ClientArgs.h"
 #include "common/PlainUdpTransport.h"
@@ -64,26 +65,36 @@ int main(int argc, char* argv[])
 	const int64_t deadlineUs =
 		webrtc_qos_plain::MonotonicNowUs() +
 		static_cast<int64_t>(options.waitConsumerTimeoutMs) * 1000;
-	std::optional<webrtc_qos_plain::ConsumerInfo> consumer;
+	std::vector<webrtc_qos_plain::ConsumerInfo> consumers;
+	const size_t requestedConsumers = static_cast<size_t>(options.videoConsumerCount);
 	while (gRunning.load() && webrtc_qos_plain::MonotonicNowUs() < deadlineUs) {
 		signaling.DispatchNotifications();
-		consumer = signaling.TakeSelectedConsumer(options);
-		if (consumer) break;
+		auto selected = signaling.TakeSelectedConsumers(options, requestedConsumers - consumers.size());
+		consumers.insert(consumers.end(), selected.begin(), selected.end());
+		if (consumers.size() >= requestedConsumers) break;
 		std::this_thread::sleep_for(std::chrono::milliseconds(options.processTickMs));
 	}
-	if (!consumer) {
-		logger->error("wait_consumer_timeout timeoutMs={}", options.waitConsumerTimeoutMs);
+	if (consumers.size() < requestedConsumers) {
+		logger->error("wait_consumer_timeout timeoutMs={} requestedConsumers={} selectedConsumers={}",
+			options.waitConsumerTimeoutMs,
+			requestedConsumers,
+			consumers.size());
 		signaling.Close();
 		return 3;
 	}
 
-	signaling.RequestConsumerKeyFrame(consumer->consumerId);
-	std::thread delayedKeyframe([&signaling, consumerId = consumer->consumerId]() {
+	std::vector<std::string> consumerIds;
+	consumerIds.reserve(consumers.size());
+	for (const auto& consumer : consumers) {
+		consumerIds.push_back(consumer.consumerId);
+		signaling.RequestConsumerKeyFrame(consumer.consumerId);
+	}
+	std::thread delayedKeyframe([&signaling, consumerIds = std::move(consumerIds)]() {
 		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-		signaling.RequestConsumerKeyFrame(consumerId);
+		for (const auto& consumerId : consumerIds) signaling.RequestConsumerKeyFrame(consumerId);
 	});
 
-	webrtc_qos_plain::WebRtcQosPlayRuntime runtime(options, *consumer, logger, std::move(udp));
+	webrtc_qos_plain::WebRtcQosPlayRuntime runtime(options, std::move(consumers), logger, std::move(udp));
 	const int rc = runtime.Run(gRunning, &signaling);
 	if (delayedKeyframe.joinable()) delayedKeyframe.join();
 	signaling.Close();

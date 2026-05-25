@@ -181,8 +181,11 @@ if(WebRtcQosSdk_FOUND)
                 client/webrtc_qos_plain_client/push/PushSignalingSession.cpp
                 client/webrtc_qos_plain_client/push/H264AnnexBSource.cpp
                 client/webrtc_qos_plain_client/push/Mp4DecodeH264Source.cpp
+                client/webrtc_qos_plain_client/push/PushSdkTransportThread.cpp
+                client/webrtc_qos_plain_client/push/PushTrackSourceWorker.cpp
+                client/webrtc_qos_plain_client/push/RawFrameEncodeWorker.cpp
                 client/webrtc_qos_plain_client/push/RealtimeH264Source.cpp
-                client/webrtc_qos_plain_client/push/V4L2H264Source.cpp
+                client/webrtc_qos_plain_client/push/V4L2RawFrameCaptureWorker.cpp
                 client/webrtc_qos_plain_client/push/WebRtcQosPushRuntime.cpp
                 ${WEBRTC_QOS_PLAIN_CLIENT_COMMON_SOURCES}
             INCLUDE_DIRS
@@ -203,7 +206,9 @@ if(WebRtcQosSdk_FOUND)
                 client/webrtc_qos_plain_client/play/main.cpp
                 client/webrtc_qos_plain_client/play/PlaySignalingSession.cpp
                 client/webrtc_qos_plain_client/play/AnnexBSink.cpp
+                client/webrtc_qos_plain_client/play/DecodedAuSinkWorker.cpp
                 client/webrtc_qos_plain_client/play/FfmpegDecodeSink.cpp
+                client/webrtc_qos_plain_client/play/PlaySdkTransportThread.cpp
                 client/webrtc_qos_plain_client/play/WebRtcQosPlayRuntime.cpp
                 ${WEBRTC_QOS_PLAIN_CLIENT_COMMON_SOURCES}
             INCLUDE_DIRS
@@ -273,21 +278,36 @@ if(BUILD_TESTS)
             ip2region
     )
 
-    if(WEBRTC_QOS_PUSH_TARGET)
+    if(WEBRTC_QOS_PUSH_TARGET AND WEBRTC_QOS_PLAY_TARGET)
         mediasoup_add_gtest_target(mediasoup_webrtc_qos_plain_unit_tests
             SOURCES
                 client/webrtc_qos_plain_client/push/RealtimeH264Source.cpp
+                client/webrtc_qos_plain_client/push/H264AnnexBSource.cpp
                 client/webrtc_qos_plain_client/push/Mp4DecodeH264Source.cpp
-                client/webrtc_qos_plain_client/push/V4L2H264Source.cpp
+                client/webrtc_qos_plain_client/push/PushSdkTransportThread.cpp
+                client/webrtc_qos_plain_client/push/PushTrackSourceWorker.cpp
+                client/webrtc_qos_plain_client/push/RawFrameEncodeWorker.cpp
+                client/webrtc_qos_plain_client/push/V4L2RawFrameCaptureWorker.cpp
+                client/webrtc_qos_plain_client/common/ClientArgs.cpp
+                client/webrtc_qos_plain_client/common/ClientIds.cpp
+                client/webrtc_qos_plain_client/common/PlainUdpTransport.cpp
+                client/webrtc_qos_plain_client/common/RtpRtcpClassifier.cpp
+                client/webrtc_qos_plain_client/common/RuntimeLogHelpers.cpp
+                client/webrtc_qos_plain_client/play/AnnexBSink.cpp
+                client/webrtc_qos_plain_client/play/DecodedAuSinkWorker.cpp
                 client/webrtc_qos_plain_client/play/FfmpegDecodeSink.cpp
+                client/webrtc_qos_plain_client/play/PlaySdkTransportThread.cpp
                 tests/test_webrtc_qos_decode_sink.cpp
                 tests/test_webrtc_qos_realtime_source.cpp
+                tests/test_webrtc_qos_thread_model_primitives.cpp
             INCLUDE_DIRS
                 ${CMAKE_SOURCE_DIR}/client/webrtc_qos_plain_client
             LINK_LIBRARIES
                 mediasoup_build_test_support
                 mediasoup_common_ffmpeg
+                spdlog::spdlog
                 ${WEBRTC_QOS_PUSH_TARGET}
+                ${WEBRTC_QOS_PLAY_TARGET}
         )
     endif()
 

@@ -2,13 +2,12 @@
 
 #include <atomic>
 #include <memory>
+#include <vector>
 
 #include <spdlog/logger.h>
 
 #include "common/ClientArgs.h"
 #include "common/PlainUdpTransport.h"
-#include "play/AnnexBSink.h"
-#include "play/FfmpegDecodeSink.h"
 #include "play/PlaySignalingSession.h"
 
 namespace webrtc_qos_plain {
@@ -20,12 +19,17 @@ public:
 		ConsumerInfo consumerInfo,
 		std::shared_ptr<spdlog::logger> logger,
 		PlainUdpTransport udp);
+	WebRtcQosPlayRuntime(
+		PlayOptions options,
+		std::vector<ConsumerInfo> consumerInfos,
+		std::shared_ptr<spdlog::logger> logger,
+		PlainUdpTransport udp);
 
 	int Run(std::atomic<bool>& running, PlaySignalingSession* signaling);
 
 private:
 	PlayOptions options_;
-	ConsumerInfo consumerInfo_;
+	std::vector<ConsumerInfo> consumerInfos_;
 	std::shared_ptr<spdlog::logger> logger_;
 	PlainUdpTransport udp_;
 };

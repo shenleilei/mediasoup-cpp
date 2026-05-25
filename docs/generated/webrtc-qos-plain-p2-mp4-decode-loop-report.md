@@ -27,7 +27,7 @@
 
 ## Cases
 
-| Case | Status | Network | pushedAu | outputAu | decodedFrames/errors | RTP in | push RTCP in | play RTCP out | TWCC ext | Encoder AU/keyframes | RTT min/avg/max | Loss min/avg/max | targetBps min/avg/max | droppedFrames | NACK/PLI/RTX | Notes |
+| Case | Status | Network | pushedAu | outputAu | decodedFrames/errors | RTP in | push RTCP in | play RTCP out | TWCC ext | Encoder AU/keyframes | RTT min/avg/max | Loss min/avg/max | targetBps min/avg/max | droppedFrames | NACK/PLI/retransmission | Notes |
 |---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | `baseline` | `PASS` | none | 359 | 359 | 359/0 | 1645 | 130 | 243 | 5 | 333/12 | 0/6.75/14 | 0/0/0 | 1200000/1651125.75/1861454 | 0 | 0/0/0 | - |
 
