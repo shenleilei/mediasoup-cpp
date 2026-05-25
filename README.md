@@ -187,6 +187,7 @@ SignalingServer
 - WebRTC QoS P2 MP4 decode-loop baseline：`qosMainline=PASS`，`sdkRuntimeObservability=PASS`，`encoderRuntime=PASS`，`nativeDecodeQoe=PASS`；baseline `pushedAu=359`、`decodedFrames=359`、`decodeErrors=0`
 - WebRTC QoS P2 browser receiver smoke：push 发布链路 `PASS`；当前 headless Chromium 只暴露 VP8/VP9、不暴露 H264 packetization-mode=1，浏览器收流 case 按环境能力记为 `SKIP`，overall 为 `PARTIAL`
 - WebRTC QoS P2 V4L2 source：V4L2 CLI/source/smoke SKIP gate 已落地；当前机器无 `/dev/video0`，baseline 按环境能力 `SKIP`，overall 为 `PARTIAL`
+- WebRTC QoS P2 聚合验收：`scripts/run_qos_tests.sh p2-acceptance` 会执行构建、plain client 单测、ORTC/TWCC targeted test、PlainPublish 集成测试、边界检查和报告复核；正式刷新报告用 `scripts/run_webrtc_qos_plain_p2_acceptance.sh --run-smoke --enable-netem`，会重跑主弱网、恢复首帧、MP4 decode-loop 和 V4L2 报告；`scripts/run_qos_tests.sh p2-report` 只做离线边界/报告复核
 
 当前范围提示：
 
@@ -207,6 +208,9 @@ SignalingServer
 - WebRTC QoS P2 MP4 decode-loop baseline 报告：[docs/generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md](./docs/generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md)
 - WebRTC QoS P2 browser receiver 报告：[docs/generated/webrtc-qos-plain-p2-browser-receiver-report.md](./docs/generated/webrtc-qos-plain-p2-browser-receiver-report.md)
 - WebRTC QoS P2 V4L2 source 报告：[docs/generated/webrtc-qos-plain-p2-v4l2-report.md](./docs/generated/webrtc-qos-plain-p2-v4l2-report.md)
+- WebRTC QoS P2 聚合验收脚本：[scripts/run_webrtc_qos_plain_p2_acceptance.sh](./scripts/run_webrtc_qos_plain_p2_acceptance.sh)
+- WebRTC QoS P2 报告验收脚本：[scripts/verify_webrtc_qos_plain_p2_reports.py](./scripts/verify_webrtc_qos_plain_p2_reports.py)
+- WebRTC QoS plain client 边界验收脚本：[scripts/verify_webrtc_qos_plain_client_boundaries.py](./scripts/verify_webrtc_qos_plain_client_boundaries.py)
 - 下行当前状态：[docs/downlink-qos-status.md](./docs/downlink-qos-status.md)
 - 测试覆盖地图：[docs/qos-test-coverage_cn.md](./docs/qos-test-coverage_cn.md)
 - 生成的矩阵制品：[docs/generated/uplink-qos-matrix-report.json](./docs/generated/uplink-qos-matrix-report.json)
@@ -742,9 +746,10 @@ node tests/qos_harness/browser_capacity_rooms.mjs --workers=1 --step=5 --max-roo
 
 行为表现：
 
-- 默认模式会运行所有的 QoS 组，即使某个组失败也会继续执行
+- 默认模式会运行所有的 QoS 组，包括 browser/downlink 矩阵和 WebRTC QoS P2 聚合验收；即使某个组失败也会继续执行
 - 失败会记录到 `tests/qos_harness/artifacts/last-failures.txt`
 - `--resume` 仅会重新运行上一次失败的精确任务
+- 只想复核 WebRTC QoS P2 时使用 `./scripts/run_qos_tests.sh p2-report` 或 `./scripts/run_qos_tests.sh p2-acceptance`；这两个入口不会刷新 downlink summary
 - 如果执行了 `matrix`，脚本还会重新生成逐 Case 的报告：
   [docs/uplink-qos-case-results.md](./docs/uplink-qos-case-results.md)
 - 默认矩阵现在包含盲点过渡用例 `T9/T10/T11`；剩余的 `extended` 集合是目前更高带宽的基线校准用例，可以通过 `--include-extended` 追加，或者通过 `--cases=...` 明确指定运行
