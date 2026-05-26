@@ -114,6 +114,110 @@ cmake -S . -B build-slim -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF
 cmake --build build-slim --target mediasoup-sfu -j$(nproc)
 ```
 
+## 基础操作：编译、运行和 demo 测试
+
+下面是本地验证浏览器互通的最短路径。命令默认在仓库根目录执行。
+
+### 1. 准备依赖并编译
+
+首次拉取仓库后先执行：
+
+```bash
+git submodule update --init --recursive
+./setup.sh
+```
+
+`setup.sh` 会检查系统依赖、生成 FlatBuffers 头文件、准备 `mediasoup-worker`，并构建默认 `build/` 目录。若只想构建简化版 SFU 服务，可以使用：
+
+```bash
+cmake -S . -B build-slim -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF
+cmake --build build-slim --target mediasoup-sfu -j$(nproc)
+```
+
+### 2. 本机启动 SFU
+
+本机浏览器测试推荐显式使用 `127.0.0.1` 作为 ICE 公告地址，避免服务自动探测公网 IP 后导致本机连接失败：
+
+```bash
+./build/mediasoup-sfu \
+  --nodaemon \
+  --port=3000 \
+  --workers=1 \
+  --workerBin=./mediasoup-worker \
+  --listenIp=127.0.0.1 \
+  --announcedIp=127.0.0.1 \
+  --redisHost=0.0.0.0 \
+  --redisPort=1 \
+  --noRedisRequired
+```
+
+如果使用 `build-slim`，把命令中的 `./build/mediasoup-sfu` 换成 `./build-slim/mediasoup-sfu`。
+
+局域网或公网访问时，`listenIp` 通常使用 `0.0.0.0`，`announcedIp` 必须填写浏览器可访问到的服务器 IP：
+
+```bash
+./build/mediasoup-sfu \
+  --nodaemon \
+  --port=3000 \
+  --workers=1 \
+  --workerBin=./mediasoup-worker \
+  --listenIp=0.0.0.0 \
+  --announcedIp=<server-ip> \
+  --noRedisRequired
+```
+
+需要放通 TCP `3000` 以及 mediasoup worker 的 UDP RTC 端口范围，默认是 `10000-59999/udp`。
+
+### 3. 浏览器 demo 互通测试
+
+启动服务后打开：
+
+```text
+http://127.0.0.1:3000/
+```
+
+基本验收步骤：
+
+1. 打开两个浏览器标签页，或者两台设备分别打开同一个地址。
+2. 两边填写同一个房间名，例如 `test-room`。
+3. 浏览器 A 点击加入房间，再点击发布媒体。
+4. 浏览器 B 点击加入同一房间，应能看到 A 的远端视频。
+5. 浏览器 B 再点击发布媒体，浏览器 A 应能看到 B 的远端视频。
+6. 关闭其中一个标签页，另一个标签页不应断开或导致服务崩溃。
+
+录制回放页面：
+
+```text
+http://127.0.0.1:3000/playback.html
+```
+
+### 4. 基础自检命令
+
+```bash
+curl http://127.0.0.1:3000/healthz
+curl http://127.0.0.1:3000/readyz
+curl http://127.0.0.1:3000/metrics
+```
+
+运行主要 C++ 测试：
+
+```bash
+cmake -S . -B build-test -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON
+cmake --build build-test -j$(nproc)
+./build-test/mediasoup_tests
+./build-test/mediasoup_qos_unit_tests
+./build-test/mediasoup_qos_integration_tests --gtest_filter='*PlainPublish*'
+```
+
+运行 QoS 聚合测试入口：
+
+```bash
+./scripts/run_qos_tests.sh --list
+./scripts/run_qos_tests.sh node-harness
+```
+
+浏览器弱网 harness 依赖 Chrome / Chromium、Node 依赖和 `tc`/netem 权限；缺少这些环境时应记录为环境不足，而不是服务端构建失败。
+
 ## 多节点路由架构 (Multi-Node Routing Architecture)
 
 ```text
