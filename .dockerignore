@@ -4,7 +4,6 @@ build/
 build_dbg/
 build-*/
 generated/
-mediasoup-worker
 node_modules/
 src/client/.cache/
 artifacts/

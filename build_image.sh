@@ -132,9 +132,14 @@ ensure_build_context_deps
 
 local_tag="${image_name}:${image_variant}"
 version_tag="${repository}:${image_tag}"
+docker_build_cmd=(docker build)
+
+if docker buildx version >/dev/null 2>&1; then
+  docker_build_cmd+=(--progress=plain)
+fi
 
 info "building Docker image ${local_tag}"
-docker build --progress=plain \
+${docker_build_cmd[@]} \
   -f "$dockerfile" \
   --build-arg "APT_MIRROR=${apt_mirror}" \
   -t "$local_tag" \

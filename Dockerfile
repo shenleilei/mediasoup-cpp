@@ -52,9 +52,14 @@ RUN if [ -d .git ]; then \
     else \
       worker_url="https://github.com/versatica/mediasoup/releases/download/3.14.6/mediasoup-worker-3.14.6-linux-x64-kernel5.tgz"; \
     fi; \
+    rm -rf /tmp/mediasoup-worker-extract; \
+    mkdir -p /tmp/mediasoup-worker-extract; \
     curl -L -o /tmp/mediasoup-worker.tgz "$worker_url"; \
-    tar xzf /tmp/mediasoup-worker.tgz; \
-    chmod +x mediasoup-worker; \
+    tar xzf /tmp/mediasoup-worker.tgz -C /tmp/mediasoup-worker-extract; \
+    worker_path="$(find /tmp/mediasoup-worker-extract -type f -name mediasoup-worker | head -n 1)"; \
+    test -n "$worker_path"; \
+    install -Dm755 "$worker_path" /src/mediasoup-worker; \
+    rm -rf /tmp/mediasoup-worker-extract; \
     rm -f /tmp/mediasoup-worker.tgz; \
   fi \
   && cmake -S . -B build-docker \

@@ -1,22 +1,41 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+rtc_min_port="${MEDIASOUP_RTC_MIN_PORT:-8000}"
+rtc_max_port="${MEDIASOUP_RTC_MAX_PORT:-8002}"
+
 args=(
   --nodaemon
   "--port=${MEDIASOUP_PORT:-1770}"
   "--workerBin=${MEDIASOUP_WORKER_BIN:-./mediasoup-worker}"
   "--listenIp=${MEDIASOUP_LISTEN_IP:-0.0.0.0}"
-  "--rtcMinPort=${MEDIASOUP_RTC_MIN_PORT:-8000}"
-  "--rtcMaxPort=${MEDIASOUP_RTC_MAX_PORT:-8002}"
+  "--rtcMinPort=${rtc_min_port}"
+  "--rtcMaxPort=${rtc_max_port}"
   "--recordDir=${MEDIASOUP_RECORD_DIR:-/var/lib/mediasoup/recordings}"
 )
 
+auto_workers=""
+auto_worker_threads=""
+if [[ -z "${MEDIASOUP_WORKERS:-}" || -z "${MEDIASOUP_WORKER_THREADS:-}" ]]; then
+  if [[ "$rtc_min_port" =~ ^[0-9]+$ && "$rtc_max_port" =~ ^[0-9]+$ && "$rtc_max_port" -ge "$rtc_min_port" ]]; then
+    rtc_port_span=$((rtc_max_port - rtc_min_port + 1))
+    if (( rtc_port_span <= 8 )); then
+      auto_workers=1
+      auto_worker_threads=1
+    fi
+  fi
+fi
+
 if [[ -n "${MEDIASOUP_WORKERS:-}" ]]; then
   args+=("--workers=${MEDIASOUP_WORKERS}")
+elif [[ -n "$auto_workers" ]]; then
+  args+=("--workers=${auto_workers}")
 fi
 
 if [[ -n "${MEDIASOUP_WORKER_THREADS:-}" ]]; then
   args+=("--workerThreads=${MEDIASOUP_WORKER_THREADS}")
+elif [[ -n "$auto_worker_threads" ]]; then
+  args+=("--workerThreads=${auto_worker_threads}")
 fi
 
 if [[ -n "${MEDIASOUP_ANNOUNCED_IP:-}" ]]; then

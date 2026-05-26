@@ -260,8 +260,8 @@ docker run --rm \
 | 变量 | 默认值 | 说明 |
 |---|---:|---|
 | `MEDIASOUP_PORT` | `1770` | HTTP / WebSocket 监听端口 |
-| `MEDIASOUP_WORKERS` | 空 | mediasoup worker 子进程数量；为空时按容器可见 CPU 自动计算为 `max(1, hardware_concurrency - 2)` |
-| `MEDIASOUP_WORKER_THREADS` | 空 | C++ WorkerThread 数量；为空时按 `ceil(workers / 2)` 自动计算，且不超过 workers |
+| `MEDIASOUP_WORKERS` | 空 | mediasoup worker 子进程数量；默认按容器可见 CPU 自动计算为 `max(1, hardware_concurrency - 2)`，但当 `MEDIASOUP_RTC_MAX_PORT - MEDIASOUP_RTC_MIN_PORT + 1 <= 8` 时会自动收敛到 `1` |
+| `MEDIASOUP_WORKER_THREADS` | 空 | C++ WorkerThread 数量；默认按 `ceil(workers / 2)` 自动计算，且不超过 workers；当默认 RTC 端口范围较窄时会自动收敛到 `1` |
 | `MEDIASOUP_LISTEN_IP` | `0.0.0.0` | 容器内监听地址 |
 | `MEDIASOUP_ANNOUNCED_IP` | 空 | 对浏览器公告的 ICE 地址；为空时启动时自动探测公网 IP，本机 demo 建议显式设为 `127.0.0.1` |
 | `MEDIASOUP_RTC_MIN_PORT` | `8000` | mediasoup worker UDP RTC 起始端口 |
@@ -271,6 +271,8 @@ docker run --rm \
 | `MEDIASOUP_REDIS_PORT` | `1` | Redis 端口 |
 | `MEDIASOUP_RECORD_DIR` | `/var/lib/mediasoup/recordings` | 录制输出目录 |
 | `MEDIASOUP_LOG_DIR` | 空 | 非空时写守护日志目录 |
+
+默认镜像把 RTC 端口范围收窄到了 `8000-8002`，因此如果不显式放大端口范围，建议保持 `MEDIASOUP_WORKERS=1`、`MEDIASOUP_WORKER_THREADS=1`。当前 entrypoint 也会在窄端口范围下自动收敛到这组安全值。
 
 ### 3. 浏览器 demo 互通测试
 
