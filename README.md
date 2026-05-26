@@ -4,7 +4,7 @@
 
 这是一个围绕上游 `mediasoup-worker` 构建的 C++17 SFU 控制平面。
 
-本项目使用原生的 C++ 服务器取代了 mediasoup 通常的 Node.js 控制层，同时仍然依赖经过实战检验的 `mediasoup-worker` 进程进行媒体处理。最终呈现的是一个原生的 C++ 信令技术栈，具备房间/会话管理、多节点房间路由、录制以及 QoS 聚合等功能。
+本项目使用原生的 C++ 服务器取代了 mediasoup 通常的 Node.js 控制层，同时仍然依赖经过实战检验的 `mediasoup-worker` 进程进行媒体处理。最终呈现的是一个原生的 C++ 信令技术栈，具备房间/会话管理、多节点房间路由以及 QoS 聚合等功能。
 
 ## 在线体验 (Live Demo)
 
@@ -50,12 +50,12 @@ mediasoup 得到了广泛应用，但其默认的控制平面是 Node.js。本�
 
 ### 2. 浏览器互通和服务端 PlainTransport
 - **浏览器优先：** 浏览器 demo 保留 WebSocket 信令、房间加入、推流、拉流和实时 QoS 展示。
-- **服务端能力保留：** `plainPublish` / `plainSubscribe` 仍属于服务端 PlainTransport 协议能力，用于录制、测试和后续服务端媒体接入。
+- **服务端能力保留：** `plainPublish` / `plainSubscribe` 仍属于服务端 PlainTransport 协议能力，用于测试和后续服务端媒体接入。
 - **原生客户端移除：** 根目录 `client/` 下的 WebRTC QoS plain push/play client 已移除，默认构建不再依赖外部 WebRTC QoS SDK 包。
 
 ### 3. 可复现 QoS 验证
 - **浏览器 uplink 矩阵：** 保留浏览器/Node harness，用于验证上行 QoS 状态机和服务端聚合链路。
-- **服务端 QoS 回归：** 保留 C++ QoS 单测、集成测试、录制精度测试、browser harness 和上下行矩阵。
+- **服务端 QoS 回归：** 保留 C++ QoS 单测、集成测试、browser harness 和上下行矩阵。
 - **环境 SKIP 规则：** 浏览器、netem 权限等环境前置不足时只允许记录 `SKIP/PARTIAL`，不能计入 PASS。
 
 ## 高层架构 (High-Level Architecture)
@@ -105,7 +105,7 @@ RTP / SRTP / ICE / DTLS
 
 ## 简化版服务边界
 
-当前仓库保留 `mediasoup-sfu`、浏览器 demo、WebSocket 信令、房间互通、录制和服务端 QoS/PlainTransport 能力。根目录 `client/` 下的原生 WebRTC QoS plain push/play client、对应脚本、harness、单测和生成报告已经移除。
+当前仓库保留 `mediasoup-sfu`、浏览器 demo、WebSocket 信令、房间互通以及服务端 QoS/PlainTransport 能力。根目录 `client/` 下的原生 WebRTC QoS plain push/play client、对应脚本、harness、单测和生成报告已经移除。
 
 默认构建只需要服务端和测试依赖，不再查找或要求外部 WebRTC QoS SDK 包：
 
@@ -192,6 +192,8 @@ DOCKER_USERNAME=<user> DOCKER_PASSWORD=<password-or-token> ./build_image.sh --pu
   --repository harbor-volc.zelostech.com.cn:5443/arch/mediasoup-cpp
 ```
 
+如果要严格避免在线下载并尽量复用本地缓存，优先使用 `./scripts/package_image.sh`。它会要求仓库根目录已经有可执行的 `./mediasoup-worker`，并且本机 Docker 已经加载了 `ubuntu:20.04` 基础镜像。
+
 本机浏览器 demo 推荐使用 host network，避免 WebRTC UDP 端口映射不完整：
 
 ```bash
@@ -211,7 +213,6 @@ docker run -d \
   --restart unless-stopped \
   --network host \
   -e MEDIASOUP_PORT=1770 \
-  -v mediasoup-recordings:/var/lib/mediasoup/recordings \
   mediasoup-cpp:sfu
 ```
 
@@ -224,7 +225,6 @@ docker run -d \
   --network host \
   -e MEDIASOUP_PORT=1770 \
   -e MEDIASOUP_ANNOUNCED_IP=<server-ip> \
-  -v mediasoup-recordings:/var/lib/mediasoup/recordings \
   mediasoup-cpp:sfu
 ```
 
@@ -238,7 +238,6 @@ docker run -d \
   -p 8000-8002:8000-8002/udp \
   -e MEDIASOUP_PORT=1770 \
   -e MEDIASOUP_ANNOUNCED_IP=<server-ip> \
-  -v mediasoup-recordings:/var/lib/mediasoup/recordings \
   mediasoup-cpp:sfu
 ```
 
@@ -266,13 +265,15 @@ docker run --rm \
 | `MEDIASOUP_ANNOUNCED_IP` | 空 | 对浏览器公告的 ICE 地址；为空时启动时自动探测公网 IP，本机 demo 建议显式设为 `127.0.0.1` |
 | `MEDIASOUP_RTC_MIN_PORT` | `8000` | mediasoup worker UDP RTC 起始端口 |
 | `MEDIASOUP_RTC_MAX_PORT` | `8002` | mediasoup worker UDP RTC 结束端口 |
+| `MEDIASOUP_WEBRTC_SERVER_ENABLED` | `1` | 启用 `WebRtcServer` 共享监听端口；多个浏览器 `WebRtcTransport` 复用每个 worker 的固定 UDP 端口 |
+| `MEDIASOUP_WEBRTC_SERVER_MIN_PORT` | 同 `MEDIASOUP_RTC_MIN_PORT` | `WebRtcServer` 起始端口；多 worker 时每个 worker 使用一个端口 |
+| `MEDIASOUP_WEBRTC_SERVER_MAX_PORT` | 空 | `WebRtcServer` 结束端口；为空时服务按 worker 数自动计算 |
 | `MEDIASOUP_REDIS_REQUIRED` | `0` | 默认不需要 Redis；`1` 表示 Redis 不可用时 readiness 失败 |
 | `MEDIASOUP_REDIS_HOST` | `0.0.0.0` | Redis 地址；默认配合 `MEDIASOUP_REDIS_REQUIRED=0` 走 local-only |
 | `MEDIASOUP_REDIS_PORT` | `1` | Redis 端口 |
-| `MEDIASOUP_RECORD_DIR` | `/var/lib/mediasoup/recordings` | 录制输出目录 |
 | `MEDIASOUP_LOG_DIR` | 空 | 非空时写守护日志目录 |
 
-默认镜像把 RTC 端口范围收窄到了 `8000-8002`，因此如果不显式放大端口范围，建议保持 `MEDIASOUP_WORKERS=1`、`MEDIASOUP_WORKER_THREADS=1`。当前 entrypoint 也会在窄端口范围下自动收敛到这组安全值。
+默认镜像启用 `WebRtcServer`，浏览器 WebRTC transport 会复用 `8000/udp` 这个共享监听端口。`8000-8002` 中剩余端口仍供 PlainTransport 等非 WebRTC-server 链路使用；如果开启多 worker 或大量 PlainTransport，仍应放大 `MEDIASOUP_RTC_MIN_PORT/MEDIASOUP_RTC_MAX_PORT` 和 `MEDIASOUP_WEBRTC_SERVER_*` 范围。
 
 ### 3. 浏览器 demo 互通测试
 
@@ -765,7 +766,6 @@ cat > config.json <<'EOF'
   "announcedIp": "<public-ip>",
   "redisHost": "127.0.0.1",
   "redisPort": 6379,
-  "recordDir": "./recordings",
   "logDir": "/var/log/mediasoup",
   "logPrefix": "mediasoup-sfu",
   "logRotateHours": 3
@@ -788,8 +788,10 @@ EOF
 | `--announcedIp` | 自动检测 | 用于 ICE 候选者 (candidates) 的公网 IP |
 | `--rtcMinPort` | `10000` | mediasoup worker UDP RTC 起始端口 |
 | `--rtcMaxPort` | `59999` | mediasoup worker UDP RTC 结束端口 |
+| `--webRtcServer` / `--noWebRtcServer` | 关闭 | 是否启用每 worker 一个 `WebRtcServer` 共享监听端口 |
+| `--webRtcServerMinPort` | `rtcMinPort` | `WebRtcServer` 起始端口 |
+| `--webRtcServerMaxPort` | 自动按 worker 数计算 | `WebRtcServer` 结束端口 |
 | `--workerBin` | `./mediasoup-worker` | worker 可执行文件路径 |
-| `--recordDir` | `./recordings` | 录制文件输出目录 |
 | `--logDir` | `/var/log/mediasoup` | 守护进程日志目录 |
 | `--logPrefix` | `mediasoup-sfu` | 守护进程日志文件前缀 |
 | `--logLevel` | `info` | 日志详细级别 |

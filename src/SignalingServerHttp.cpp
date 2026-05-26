@@ -8,9 +8,7 @@
 #include <App.h>
 #include <atomic>
 #include <chrono>
-#include <dirent.h>
 #include <sstream>
-#include <sys/stat.h>
 
 extern std::atomic<bool> g_shutdown;
 
@@ -202,62 +200,6 @@ void SignalingServerHttp::RegisterHttpRoutes(uWS::App& app, SignalingServer& ser
 		auto snapshot = server.collectRuntimeSnapshot();
 		res->writeHeader("Content-Type", "text/plain; version=0.0.4")
 			->end(server.buildPrometheusMetrics(snapshot));
-	});
-
-	app.get("/api/recordings", [&server](auto* res, auto*) {
-		if (server.recordDir_.empty()) {
-			res->writeHeader("Content-Type", "application/json")->end("[]");
-			return;
-		}
-		json result = json::array();
-		DIR* dir = opendir(server.recordDir_.c_str());
-		if (!dir) { res->writeHeader("Content-Type", "application/json")->end("[]"); return; }
-		struct dirent* ent;
-		while ((ent = readdir(dir))) {
-			if (ent->d_name[0] == '.') continue;
-			std::string roomPath = server.recordDir_ + "/" + ent->d_name;
-			struct stat st;
-			if (stat(roomPath.c_str(), &st) != 0 || !S_ISDIR(st.st_mode)) continue;
-			std::string roomId(ent->d_name);
-			DIR* rdir = opendir(roomPath.c_str());
-			if (!rdir) continue;
-			struct dirent* rent;
-			while ((rent = readdir(rdir))) {
-				std::string fname(rent->d_name);
-				if (fname.size() < 6 || fname.substr(fname.size()-5) != ".webm") continue;
-				std::string base = fname.substr(0, fname.size()-5);
-				auto pos = base.rfind('_');
-				std::string peerId = (pos != std::string::npos) ? base.substr(0, pos) : base;
-				int64_t ts = 0;
-				if (pos != std::string::npos) try { ts = std::stoll(base.substr(pos+1)); } catch(...) {}
-				std::string fullPath = roomPath + "/" + fname;
-				struct stat fst;
-				int64_t fileSize = 0;
-				if (stat(fullPath.c_str(), &fst) == 0) fileSize = fst.st_size;
-				bool hasQos = (stat((roomPath + "/" + base + ".qos.json").c_str(), &fst) == 0);
-				result.push_back({
-					{"roomId", roomId}, {"peerId", peerId}, {"timestamp", ts},
-					{"file", fname}, {"size", fileSize}, {"hasQos", hasQos}
-				});
-			}
-			closedir(rdir);
-		}
-		closedir(dir);
-		res->writeHeader("Content-Type", "application/json")->end(result.dump());
-	});
-
-	app.get("/recordings/*", [&server](auto* res, auto* req) {
-		if (server.recordDir_.empty()) { res->writeStatus("404 Not Found")->end("Not Found"); return; }
-		std::string url(req->getUrl());
-		std::string relPath = url.substr(12);
-		bool forbidden = false;
-		auto resolved = ResolveFileUnderBase(server.recordDir_, relPath, forbidden);
-		if (!resolved) {
-			if (forbidden) res->writeStatus("403 Forbidden")->end("Forbidden");
-			else res->writeStatus("404 Not Found")->end("Not Found");
-			return;
-		}
-		ServeResolvedFile(res, *resolved, ContentTypeForPath(relPath));
 	});
 
 	app.get("/*", [](auto* res, auto* req) {

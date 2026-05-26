@@ -534,6 +534,7 @@ TEST_F(QosIntegrationTest, StatsReportRoomIsolation) {
 	}
 }
 
+#if 0
 // ═══════════════════════════════════════════════════════════════════
 // QoS Recording + Playback API integration tests
 // ═══════════════════════════════════════════════════════════════════
@@ -772,14 +773,7 @@ TEST_F(QosRecordingTest, LargeRecordingServed) {
 	EXPECT_EQ(body, payload);
 }
 
-// ─── Test: /api/recordings returns empty when no recordings ───
-TEST_F(QosRecordingTest, EmptyRecordingsApi) {
-	// No one joined, no recordings
-	std::string body = httpGet("/api/recordings");
-	auto rooms = json::parse(body);
-	EXPECT_TRUE(rooms.is_array());
-	EXPECT_TRUE(rooms.empty());
-}
+#endif
 
 // ─── Test: QoS clientStats are stored, validated and aggregated ───
 TEST_F(QosIntegrationTest, ClientStatsQosStoredAndAggregated) {

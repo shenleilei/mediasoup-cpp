@@ -60,7 +60,8 @@ public:
 		const std::vector<nlohmann::json>& mediaCodecs,
 		const std::vector<nlohmann::json>& listenInfos,
 		RoomRegistry* registry,
-		const std::string& recordDir,
+		bool webRtcServerEnabled = false,
+		int webRtcServerPortBase = 0,
 		size_t maxRoutersPerWorker = 0);
 	~WorkerThread();
 
@@ -116,13 +117,18 @@ private:
 	void onHealthCheck();
 	void onGcTimer();
 	void onWorkerDied(std::shared_ptr<Worker> worker);
+	void initializeWorkerWebRtcServer(
+		const std::shared_ptr<Worker>& worker,
+		uint16_t port);
+	std::vector<nlohmann::json> buildWebRtcServerListenInfos(uint16_t port) const;
 
 	int id_;
 	WorkerSettings workerSettings_;
 	std::vector<nlohmann::json> mediaCodecs_;
 	std::vector<nlohmann::json> listenInfos_;
 	RoomRegistry* registry_;
-	std::string recordDir_;
+	bool webRtcServerEnabled_;
+	int webRtcServerPortBase_;
 	size_t maxRoutersPerWorker_;
 	int numWorkersTarget_;
 
@@ -146,6 +152,7 @@ private:
 	std::vector<std::shared_ptr<Worker>> workers_;
 	std::deque<std::chrono::steady_clock::time_point> respawnTimes_;
 	std::unordered_map<int, std::shared_ptr<Worker>> fdToWorker_;
+	std::unordered_map<Worker*, uint16_t> workerWebRtcServerPorts_;
 	std::unique_ptr<WorkerManager> workerManager_;
 	std::unique_ptr<RoomManager> roomManager_;
 	std::unique_ptr<RoomService> roomService_;

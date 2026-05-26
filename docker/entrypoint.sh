@@ -3,6 +3,7 @@ set -euo pipefail
 
 rtc_min_port="${MEDIASOUP_RTC_MIN_PORT:-8000}"
 rtc_max_port="${MEDIASOUP_RTC_MAX_PORT:-8002}"
+web_rtc_server_enabled="${MEDIASOUP_WEBRTC_SERVER_ENABLED:-1}"
 
 args=(
   --nodaemon
@@ -11,7 +12,6 @@ args=(
   "--listenIp=${MEDIASOUP_LISTEN_IP:-0.0.0.0}"
   "--rtcMinPort=${rtc_min_port}"
   "--rtcMaxPort=${rtc_max_port}"
-  "--recordDir=${MEDIASOUP_RECORD_DIR:-/var/lib/mediasoup/recordings}"
 )
 
 auto_workers=""
@@ -37,6 +37,23 @@ if [[ -n "${MEDIASOUP_WORKER_THREADS:-}" ]]; then
 elif [[ -n "$auto_worker_threads" ]]; then
   args+=("--workerThreads=${auto_worker_threads}")
 fi
+
+case "$web_rtc_server_enabled" in
+  1|true|TRUE|yes|YES|on|ON)
+    args+=(--webRtcServer)
+    args+=("--webRtcServerMinPort=${MEDIASOUP_WEBRTC_SERVER_MIN_PORT:-${rtc_min_port}}")
+    if [[ -n "${MEDIASOUP_WEBRTC_SERVER_MAX_PORT:-}" ]]; then
+      args+=("--webRtcServerMaxPort=${MEDIASOUP_WEBRTC_SERVER_MAX_PORT}")
+    fi
+    ;;
+  0|false|FALSE|no|NO|off|OFF)
+    args+=(--noWebRtcServer)
+    ;;
+  *)
+    echo "Invalid MEDIASOUP_WEBRTC_SERVER_ENABLED=${web_rtc_server_enabled}" >&2
+    exit 1
+    ;;
+esac
 
 if [[ -n "${MEDIASOUP_ANNOUNCED_IP:-}" ]]; then
   args+=("--announcedIp=${MEDIASOUP_ANNOUNCED_IP}")

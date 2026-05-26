@@ -24,9 +24,11 @@ struct RuntimeOptions {
 	bool redisRequired{ true };
 	int rtcMinPort{ 10000 };
 	int rtcMaxPort{ 59999 };
+	bool webRtcServerEnabled{ false };
+	int webRtcServerMinPort{ 0 };
+	int webRtcServerMaxPort{ 0 };
 	std::string nodeId;
 	std::string nodeAddress;
-	std::string recordDir{ "./recordings" };
 	int maxRoutersPerWorker{ 0 };
 	double nodeLat{ 0.0 };
 	double nodeLng{ 0.0 };

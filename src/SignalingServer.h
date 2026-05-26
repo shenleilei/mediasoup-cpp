@@ -27,11 +27,9 @@ public:
 	/// @param port           WebSocket listening port
 	/// @param workerThreads  Pool of WorkerThreads (each owns Workers + Rooms)
 	/// @param registry       Shared RoomRegistry (nullable)
-	/// @param recordDir      Recording directory
 	SignalingServer(int port,
 		std::vector<std::unique_ptr<WorkerThread>>& workerThreads,
 		RoomRegistry* registry,
-		const std::string& recordDir = "",
 		bool redisRequired = true);
 	~SignalingServer();
 	bool run(const std::function<void(bool)>& startupResult = {});
@@ -82,7 +80,6 @@ private:
 	int port_;
 	std::vector<std::unique_ptr<WorkerThread>>& workerThreads_;
 	RoomRegistry* registry_;
-	std::string recordDir_;
 	bool redisRequired_ = true;
 	std::atomic<bool> running_{false};
 

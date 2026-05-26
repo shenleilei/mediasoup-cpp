@@ -133,15 +133,6 @@ void RoomService::broadcastStatsForRoom(const std::string& roomId) {
 			{"data", {{"roomId", roomId}, {"peers", allStats}}}
 		});
 	}
-
-	for (auto& peerStats : allStats) {
-		std::string key = roomstatsqos::MakePeerKey(
-			roomId,
-			peerStats.value("peerId", ""));
-		auto it = recorders_.find(key);
-		if (it != recorders_.end() && it->second)
-			it->second->appendQosSnapshot(peerStats);
-	}
 }
 
 } // namespace mediasoup

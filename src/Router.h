@@ -25,6 +25,7 @@ struct PlainTransportOptions {
 
 struct WebRtcTransportOptions {
 	std::vector<json> listenInfos;
+	std::string webRtcServerId;
 	bool enableUdp = true;
 	bool enableTcp = false;
 	bool preferUdp = true;
@@ -37,7 +38,8 @@ struct WebRtcTransportOptions {
 class Router : public std::enable_shared_from_this<Router> {
 public:
 	Router(const std::string& id, Channel* channel,
-		const std::vector<json>& mediaCodecs = {});
+		const std::vector<json>& mediaCodecs = {},
+		const std::string& defaultWebRtcServerId = "");
 
 	const std::string& id() const { return id_; }
 	bool closed() const { return closed_; }
@@ -63,6 +65,7 @@ private:
 	std::string id_;
 	Channel* channel_;
 	bool closed_ = false;
+	std::string defaultWebRtcServerId_;
 	RtpCapabilities rtpCapabilities_;
 	std::unordered_map<std::string, std::shared_ptr<Transport>> transports_;
 	std::unordered_map<std::string, std::shared_ptr<Producer>> producers_;

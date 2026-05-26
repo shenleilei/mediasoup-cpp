@@ -73,7 +73,6 @@ int main(int argc, char* argv[]) {
 		options.signalingPort,
 		workerThreads,
 		runtimeServices.registry.get(),
-		options.recordDir,
 		options.redisRequired);
 
 	spdlog::info("mediasoup-cpp SFU ready - {} WorkerThreads, {} total workers, signaling on port {}, nodeId={}",

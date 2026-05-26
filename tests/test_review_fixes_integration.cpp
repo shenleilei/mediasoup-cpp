@@ -383,8 +383,7 @@ TEST_F(ReviewFixIntegration, StatsDoNotBlockJoin) {
 // ═══════════════════════════════════════════════════════════════
 // Fix 5: PlainTransport connect timeout (indirect)
 //   We can't easily trigger a PlainTransport timeout in black-box,
-//   but we verify recording setup works (which uses PlainTransport::connect).
-//   If the fix broke something, autoRecord would fail.
+//   so we verify the produce path stays responsive.
 // ═══════════════════════════════════════════════════════════════
 
 TEST_F(ReviewFixIntegration, ProduceTriggersRecordingWithoutHang) {
@@ -404,8 +403,7 @@ TEST_F(ReviewFixIntegration, ProduceTriggersRecordingWithoutHang) {
 		{"mid", "0"}
 	};
 
-	// produce triggers autoRecord which calls PlainTransport::connect()
-	// With the old code this could hang indefinitely; with the fix it has a timeout
+	// This used to hang in the old path when follow-up setup blocked too long.
 	auto start = std::chrono::steady_clock::now();
 	auto resp = alice.ws->request("produce", {
 		{"transportId", sendResp["data"]["id"]}, {"kind", "audio"},
@@ -415,7 +413,7 @@ TEST_F(ReviewFixIntegration, ProduceTriggersRecordingWithoutHang) {
 		std::chrono::steady_clock::now() - start).count();
 
 	EXPECT_TRUE(resp.value("ok", false)) << "produce failed: " << resp.dump();
-	EXPECT_LT(elapsed, 7000) << "produce+autoRecord took too long, possible PlainTransport hang";
+	EXPECT_LT(elapsed, 7000) << "produce took too long, possible PlainTransport hang";
 }
 
 // ═══════════════════════════════════════════════════════════════

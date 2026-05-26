@@ -17,8 +17,6 @@
 #include <random>
 #include <sstream>
 #include <chrono>
-#include <dirent.h>
-#include <sys/stat.h>
 
 extern std::atomic<bool> g_shutdown;
 
@@ -27,12 +25,10 @@ namespace mediasoup {
 SignalingServer::SignalingServer(int port,
 	std::vector<std::unique_ptr<WorkerThread>>& workerThreads,
 	RoomRegistry* registry,
-	const std::string& recordDir,
 	bool redisRequired)
 	: port_(port)
 	, workerThreads_(workerThreads)
 	, registry_(registry)
-	, recordDir_(recordDir)
 	, redisRequired_(redisRequired)
 {}
 

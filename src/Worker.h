@@ -14,6 +14,7 @@
 namespace mediasoup {
 
 class Router;
+class WebRtcServer;
 
 struct WorkerSettings {
 	std::string logLevel = "warn";
@@ -45,6 +46,10 @@ public:
 
 	std::shared_ptr<Router> createRouter(
 		const std::vector<nlohmann::json>& mediaCodecs = {});
+	std::shared_ptr<WebRtcServer> createWebRtcServer(
+		const std::vector<nlohmann::json>& listenInfos);
+	std::string defaultWebRtcServerId() const;
+	uint16_t defaultWebRtcServerPort() const;
 
 	void close();
 
@@ -71,6 +76,9 @@ private:
 	std::unique_ptr<Channel> channel_;
 	mutable std::mutex routersMutex_;
 	std::set<std::shared_ptr<Router>> routers_;
+	mutable std::mutex webRtcServersMutex_;
+	std::set<std::shared_ptr<WebRtcServer>> webRtcServers_;
+	std::shared_ptr<WebRtcServer> defaultWebRtcServer_;
 	EventEmitter emitter_;
 	std::thread waitThread_;
 	std::shared_ptr<spdlog::logger> logger_;

@@ -1,6 +1,8 @@
 #include "Worker.h"
+#include "FbsTransportListenInfo.h"
 #include "Router.h"
 #include "Utils.h"
+#include "WebRtcServer.h"
 #include "worker_generated.h"
 #include <fcntl.h>
 #include <unistd.h>
@@ -307,6 +309,17 @@ void Worker::close() {
 
 	MS_DEBUG(logger_, "close() [pid:{}]", pid_);
 
+	std::vector<std::shared_ptr<WebRtcServer>> webRtcServersToClose;
+	{
+		std::lock_guard<std::mutex> lock(webRtcServersMutex_);
+		webRtcServersToClose.assign(webRtcServers_.begin(), webRtcServers_.end());
+		webRtcServers_.clear();
+		defaultWebRtcServer_.reset();
+	}
+	for (auto& webRtcServer : webRtcServersToClose) {
+		webRtcServer->workerClosed();
+	}
+
 	// Close all routers
 	std::vector<std::shared_ptr<Router>> routersToClose;
 	{
@@ -358,6 +371,17 @@ void Worker::workerDied(const std::string& reason) {
 	if (closed_.exchange(true, std::memory_order_acq_rel)) return;
 
 	MS_ERROR(logger_, "worker died [pid:{}]: {}", pid_, reason);
+
+	std::vector<std::shared_ptr<WebRtcServer>> webRtcServersToClose;
+	{
+		std::lock_guard<std::mutex> lock(webRtcServersMutex_);
+		webRtcServersToClose.assign(webRtcServers_.begin(), webRtcServers_.end());
+		webRtcServers_.clear();
+		defaultWebRtcServer_.reset();
+	}
+	for (auto& webRtcServer : webRtcServersToClose) {
+		webRtcServer->workerClosed();
+	}
 
 	std::vector<std::shared_ptr<Router>> routersToClose;
 	{
@@ -423,7 +447,11 @@ std::shared_ptr<Router> Worker::createRouter(
 			return reqOff.Union();
 		}, ""); // wait for response
 
-	auto router = std::make_shared<Router>(routerId, channel_.get(), mediaCodecs);
+	auto router = std::make_shared<Router>(
+		routerId,
+		channel_.get(),
+		mediaCodecs,
+		defaultWebRtcServerId());
 	{
 		std::lock_guard<std::mutex> lock(routersMutex_);
 		if (closed_.load(std::memory_order_acquire)) {
@@ -442,6 +470,64 @@ std::shared_ptr<Router> Worker::createRouter(
 
 	MS_DEBUG(logger_, "Router created [id:{}]", routerId);
 	return router;
+}
+
+std::shared_ptr<WebRtcServer> Worker::createWebRtcServer(
+	const std::vector<nlohmann::json>& listenInfos)
+{
+	if (closed_.load(std::memory_order_acquire)) throw std::runtime_error("Worker closed");
+	if (listenInfos.empty()) throw std::invalid_argument("invalid 'listenInfos': cannot be empty");
+
+	std::string webRtcServerId = utils::generateUUIDv4();
+	channel_->requestBuildWait(
+		FBS::Request::Method::WORKER_CREATE_WEBRTCSERVER,
+		FBS::Request::Body::Worker_CreateWebRtcServerRequest,
+		[webRtcServerId, listenInfos](flatbuffers::FlatBufferBuilder& builder) {
+			auto fbListenInfos = fbsutils::BuildListenInfos(builder, listenInfos);
+			auto webRtcServerIdOff = builder.CreateString(webRtcServerId);
+			auto reqOff = FBS::Worker::CreateCreateWebRtcServerRequest(
+				builder, webRtcServerIdOff, builder.CreateVector(fbListenInfos));
+			return reqOff.Union();
+		}, "");
+
+	auto webRtcServer = std::make_shared<WebRtcServer>(
+		webRtcServerId, channel_.get(), listenInfos);
+	{
+		std::lock_guard<std::mutex> lock(webRtcServersMutex_);
+		if (closed_.load(std::memory_order_acquire)) {
+			webRtcServer->workerClosed();
+			throw std::runtime_error("Worker closed");
+		}
+		webRtcServers_.insert(webRtcServer);
+		if (!defaultWebRtcServer_) {
+			defaultWebRtcServer_ = webRtcServer;
+		}
+	}
+
+	webRtcServer->emitter().on("@close", [this, weak = std::weak_ptr<WebRtcServer>(webRtcServer)](auto&) {
+		if (auto server = weak.lock()) {
+			std::lock_guard<std::mutex> lock(webRtcServersMutex_);
+			webRtcServers_.erase(server);
+			if (defaultWebRtcServer_ == server) {
+				defaultWebRtcServer_.reset();
+			}
+		}
+	});
+
+	MS_DEBUG(logger_, "WebRtcServer created [id:{}]", webRtcServerId);
+	return webRtcServer;
+}
+
+std::string Worker::defaultWebRtcServerId() const
+{
+	std::lock_guard<std::mutex> lock(webRtcServersMutex_);
+	return defaultWebRtcServer_ ? defaultWebRtcServer_->id() : std::string();
+}
+
+uint16_t Worker::defaultWebRtcServerPort() const
+{
+	std::lock_guard<std::mutex> lock(webRtcServersMutex_);
+	return defaultWebRtcServer_ ? defaultWebRtcServer_->firstListenPort() : uint16_t(0);
 }
 
 } // namespace mediasoup

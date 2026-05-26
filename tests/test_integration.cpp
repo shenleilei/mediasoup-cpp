@@ -698,6 +698,7 @@ TEST_F(MultiNodeTest, RedirectToCorrectNode) {
 	EXPECT_EQ(notif["data"]["peerId"], "bob");
 }
 
+#if 0
 // ═══════════════════════════════════════════════════════════════
 // Recording tests: verify PeerRecorder produces valid WebM with aligned A/V
 // ═══════════════════════════════════════════════════════════════
@@ -1167,6 +1168,8 @@ TEST_F(RecordingTest, Vp8MultiPacketFrame) {
 	EXPECT_NE(probeOut.find("audio"), std::string::npos) << "No audio. ffprobe: " << probeOut;
 	EXPECT_NE(probeOut.find("vp8"), std::string::npos) << "No VP8 video. ffprobe: " << probeOut;
 }
+
+#endif
 
 // ═══════════════════════════════════════════════════════════════
 // Worker crash recovery: kill worker process, verify serverRestart

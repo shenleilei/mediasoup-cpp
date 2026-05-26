@@ -14,12 +14,13 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(IceParameters, usernameFragment,
 struct IceCandidate {
 	std::string foundation;
 	uint32_t priority = 0;
+	std::string ip;
 	std::string address;
 	std::string protocol = "udp";
 	uint16_t port = 0;
 	std::string type = "host";
 };
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(IceCandidate, foundation, priority, address, protocol, port, type)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(IceCandidate, foundation, priority, ip, address, protocol, port, type)
 
 struct DtlsFingerprint {
 	std::string algorithm;

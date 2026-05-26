@@ -6257,7 +6257,7 @@ var mediasoupClient = (() => {
               const candidateObject = {};
               candidateObject.component = 1;
               candidateObject.foundation = candidate.foundation;
-              candidateObject.ip = candidate.address ?? candidate.ip;
+              candidateObject.ip = candidate.ip ?? candidate.address;
               candidateObject.port = candidate.port;
               candidateObject.priority = candidate.priority;
               candidateObject.transport = candidate.protocol;

@@ -45,23 +45,7 @@ RUN if [ -d .git ]; then \
   && cd fbs \
   && ../third_party/flatbuffers/build/flatc --cpp -o ../generated/ --gen-object-api --scoped-enums *.fbs \
   && cd .. \
-  && if [ ! -x mediasoup-worker ]; then \
-    kernel_major="$(uname -r | cut -d. -f1)"; \
-    if [ "$kernel_major" -ge 6 ]; then \
-      worker_url="https://github.com/versatica/mediasoup/releases/download/3.14.6/mediasoup-worker-3.14.6-linux-x64-kernel6.tgz"; \
-    else \
-      worker_url="https://github.com/versatica/mediasoup/releases/download/3.14.6/mediasoup-worker-3.14.6-linux-x64-kernel5.tgz"; \
-    fi; \
-    rm -rf /tmp/mediasoup-worker-extract; \
-    mkdir -p /tmp/mediasoup-worker-extract; \
-    curl -L -o /tmp/mediasoup-worker.tgz "$worker_url"; \
-    tar xzf /tmp/mediasoup-worker.tgz -C /tmp/mediasoup-worker-extract; \
-    worker_path="$(find /tmp/mediasoup-worker-extract -type f -name mediasoup-worker | head -n 1)"; \
-    test -n "$worker_path"; \
-    install -Dm755 "$worker_path" /src/mediasoup-worker; \
-    rm -rf /tmp/mediasoup-worker-extract; \
-    rm -f /tmp/mediasoup-worker.tgz; \
-  fi \
+  && test -x mediasoup-worker \
   && cmake -S . -B build-docker \
     -DCMAKE_BUILD_TYPE=Release \
     -DBUILD_TESTS=OFF \
@@ -96,7 +80,7 @@ COPY --from=builder /opt/mediasoup-cpp/ ./
 COPY docker/entrypoint.sh /usr/local/bin/mediasoup-sfu-entrypoint
 
 RUN chmod +x /usr/local/bin/mediasoup-sfu-entrypoint \
-  && mkdir -p /var/log/mediasoup /var/lib/mediasoup/recordings
+  && mkdir -p /var/log/mediasoup
 
 EXPOSE 1770/tcp
 EXPOSE 8000-8002/udp
@@ -109,7 +93,6 @@ ENV MEDIASOUP_PORT=1770 \
     MEDIASOUP_RTC_MIN_PORT=8000 \
     MEDIASOUP_RTC_MAX_PORT=8002 \
     MEDIASOUP_REDIS_REQUIRED=0 \
-    MEDIASOUP_RECORD_DIR=/var/lib/mediasoup/recordings \
     MEDIASOUP_LOG_DIR=
 
 ENTRYPOINT ["mediasoup-sfu-entrypoint"]

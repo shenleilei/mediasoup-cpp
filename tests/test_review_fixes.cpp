@@ -9,6 +9,7 @@
 #include "Consumer.h"
 #include "message_generated.h"
 #include "MainBootstrap.h"
+#include "PublicIpResolver.h"
 #include "notification_generated.h"
 #include "pipeTransport_generated.h"
 #include "plainTransport_generated.h"
@@ -795,6 +796,22 @@ TEST(RuntimeOptionParsersTest, FinalizeRuntimeOptionsRejectsRecordedLoadError) {
 	EXPECT_TRUE(options.hasLoadError());
 }
 
+TEST(PublicIpResolverTest, AcceptsPublicIpv4Literal) {
+	EXPECT_TRUE(IsPublicIpv4Address("8.8.8.8"));
+	auto resolved = ResolvePublicIpv4Address("8.8.8.8");
+	ASSERT_TRUE(resolved.has_value());
+	EXPECT_EQ(*resolved, "8.8.8.8");
+}
+
+TEST(PublicIpResolverTest, RejectsPrivateIpv4Literal) {
+	EXPECT_FALSE(IsPublicIpv4Address("127.0.0.1"));
+	EXPECT_FALSE(ResolvePublicIpv4Address("127.0.0.1").has_value());
+}
+
+TEST(PublicIpResolverTest, RejectsUnresolvableAnnouncedDomain) {
+	EXPECT_FALSE(ResolvePublicIpv4Address("does-not-exist.invalid").has_value());
+}
+
 TEST(RoomRegistryReplyUtilsTest, RejectsMissingOrWronglyTypedTextElements) {
 	redisReply malformed{};
 	malformed.type = REDIS_REPLY_ARRAY;
@@ -852,6 +869,23 @@ TEST(RoomStatsQosHelpersTest, BuildStatsStoreResponseDataIncludesReasonOnlyWhenP
 	const auto rejected = roomstatsqos::BuildStatsStoreResponseData(false, "stale-seq");
 	EXPECT_FALSE(rejected.value("stored", true));
 	EXPECT_EQ(rejected.value("reason", ""), "stale-seq");
+}
+
+TEST(WebRtcTransportJsonTest, SerializesCandidateIpSeparatelyFromAddress) {
+	IceCandidate candidate;
+	candidate.foundation = "foundation";
+	candidate.priority = 123u;
+	candidate.ip = "203.0.113.10";
+	candidate.address = "volcvideo3.zelostech.com.cn";
+	candidate.protocol = "udp";
+	candidate.port = 8000;
+	candidate.type = "host";
+
+	const json payload = candidate;
+	EXPECT_EQ(payload.value("ip", ""), "203.0.113.10");
+	EXPECT_EQ(payload.value("address", ""), "volcvideo3.zelostech.com.cn");
+	EXPECT_EQ(payload.value("protocol", ""), "udp");
+	EXPECT_EQ(payload.value("port", 0), 8000);
 }
 
 TEST(StaticFileResponderTest, MatchesOnlyRealSuffixes) {

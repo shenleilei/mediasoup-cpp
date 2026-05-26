@@ -1,4 +1,5 @@
 #include "Router.h"
+#include "FbsTransportListenInfo.h"
 #include "Transport.h"
 #include "WebRtcTransport.h"
 #include "PipeTransport.h"
@@ -6,6 +7,7 @@
 #include "Producer.h"
 #include "Consumer.h"
 #include "Utils.h"
+#include "PublicIpResolver.h"
 #include "router_generated.h"
 #include "worker_generated.h"
 #include "request_generated.h"
@@ -34,8 +36,12 @@ static void validateNotificationArgs(const std::vector<std::any>& args,
 }
 
 Router::Router(const std::string& id, Channel* channel,
-	const std::vector<json>& mediaCodecs)
-	: id_(id), channel_(channel), logger_(Logger::Get("Router"))
+	const std::vector<json>& mediaCodecs,
+	const std::string& defaultWebRtcServerId)
+	: id_(id)
+	, channel_(channel)
+	, defaultWebRtcServerId_(defaultWebRtcServerId)
+	, logger_(Logger::Get("Router"))
 {
 	if (!mediaCodecs.empty()) {
 		std::vector<RtpCodecCapability> codecs;
@@ -53,30 +59,35 @@ std::shared_ptr<WebRtcTransport> Router::createWebRtcTransport(
 	if (closed_) throw std::runtime_error("Router closed");
 
 	std::string transportId = utils::generateUUIDv4();
+	std::string webRtcServerId = options.webRtcServerId.empty()
+		? defaultWebRtcServerId_
+		: options.webRtcServerId;
+	const bool useWebRtcServer = !webRtcServerId.empty();
+	if (!useWebRtcServer && options.listenInfos.empty()) {
+		MS_WARN(logger_, "createWebRtcTransport failed: listenInfos is empty [routerId:{}]", id_);
+		throw std::invalid_argument("invalid 'listenInfos': cannot be empty");
+	}
+
 	auto owned = channel_->requestBuildWait(
-		FBS::Request::Method::ROUTER_CREATE_WEBRTCTRANSPORT,
+		useWebRtcServer
+			? FBS::Request::Method::ROUTER_CREATE_WEBRTCTRANSPORT_WITH_SERVER
+			: FBS::Request::Method::ROUTER_CREATE_WEBRTCTRANSPORT,
 		FBS::Request::Body::Router_CreateWebRtcTransportRequest,
-		[transportId, options](flatbuffers::FlatBufferBuilder& builder) {
-			std::vector<flatbuffers::Offset<FBS::Transport::ListenInfo>> fbListenInfos;
-			for (auto& li : options.listenInfos) {
-				std::string ip = li.value("ip", "0.0.0.0");
-				std::string announcedAddress = li.value("announcedAddress", "");
-				std::string protocol = li.value("protocol", "udp");
-				uint16_t port = li.value("port", 0);
-
-				auto portRange = FBS::Transport::CreatePortRange(builder, uint16_t(0), uint16_t(0));
-				auto flags = FBS::Transport::CreateSocketFlags(builder, false, false);
-
-				fbListenInfos.push_back(FBS::Transport::CreateListenInfo(
-					builder,
-					protocol == "tcp" ? FBS::Transport::Protocol::TCP : FBS::Transport::Protocol::UDP,
-					builder.CreateString(ip),
-					announcedAddress.empty() ? 0 : builder.CreateString(announcedAddress),
-					port, portRange, flags, 0, 0));
+		[transportId, options, webRtcServerId, useWebRtcServer](flatbuffers::FlatBufferBuilder& builder) {
+			flatbuffers::Offset<void> listenOff;
+			FBS::WebRtcTransport::Listen listenType;
+			if (useWebRtcServer) {
+				auto listenServerOff = FBS::WebRtcTransport::CreateListenServer(
+					builder, builder.CreateString(webRtcServerId));
+				listenType = FBS::WebRtcTransport::Listen::ListenServer;
+				listenOff = listenServerOff.Union();
+			} else {
+				auto fbListenInfos = fbsutils::BuildListenInfos(builder, options.listenInfos);
+				auto listenIndividualOff = FBS::WebRtcTransport::CreateListenIndividual(
+					builder, builder.CreateVector(fbListenInfos));
+				listenType = FBS::WebRtcTransport::Listen::ListenIndividual;
+				listenOff = listenIndividualOff.Union();
 			}
-
-			auto listenIndividualOff = FBS::WebRtcTransport::CreateListenIndividual(
-				builder, builder.CreateVector(fbListenInfos));
 
 			auto numSctpStreams = FBS::SctpParameters::CreateNumSctpStreams(builder, 1024, 1024);
 			auto baseOptions = FBS::Transport::CreateOptions(
@@ -86,7 +97,7 @@ std::shared_ptr<WebRtcTransport> Router::createWebRtcTransport(
 
 			auto webRtcOptions = FBS::WebRtcTransport::CreateWebRtcTransportOptions(
 				builder, baseOptions,
-				FBS::WebRtcTransport::Listen::ListenIndividual, listenIndividualOff.Union(),
+				listenType, listenOff,
 				options.enableUdp, options.enableTcp,
 				options.preferUdp, options.preferTcp,
 				options.iceConsentTimeout);
@@ -116,6 +127,13 @@ std::shared_ptr<WebRtcTransport> Router::createWebRtcTransport(
 					IceCandidate cand;
 					cand.foundation = ic->foundation()->str();
 					cand.priority = ic->priority();
+					auto resolvedIp = ResolvePublicIpv4Address(ic->address()->str());
+					if (!resolvedIp) {
+						MS_ERROR(logger_, "WebRtcTransport ICE candidate address is not a public IPv4 [address:{} transportId:{}]",
+							ic->address()->str(), transportId);
+						throw std::runtime_error("invalid ICE candidate public IP");
+					}
+					cand.ip = *resolvedIp;
 					cand.address = ic->address()->str();
 					cand.protocol = (ic->protocol() == FBS::Transport::Protocol::UDP) ? "udp" : "tcp";
 					cand.port = ic->port();
@@ -184,18 +202,7 @@ std::shared_ptr<PlainTransport> Router::createPlainTransport(
 		FBS::Request::Method::ROUTER_CREATE_PLAINTRANSPORT,
 		FBS::Request::Body::Router_CreatePlainTransportRequest,
 		[transportId, options](flatbuffers::FlatBufferBuilder& builder) {
-			auto& li = options.listenInfos[0];
-			std::string ip = li.value("ip", "127.0.0.1");
-			std::string announcedAddress = li.value("announcedAddress", "");
-			uint16_t port = li.value("port", 0);
-
-			auto portRange = FBS::Transport::CreatePortRange(builder, uint16_t(0), uint16_t(0));
-			auto flags = FBS::Transport::CreateSocketFlags(builder, false, false);
-			auto listenInfo = FBS::Transport::CreateListenInfo(
-				builder, FBS::Transport::Protocol::UDP,
-				builder.CreateString(ip),
-				announcedAddress.empty() ? 0 : builder.CreateString(announcedAddress),
-				port, portRange, flags, 0, 0);
+			auto listenInfo = fbsutils::BuildListenInfo(builder, options.listenInfos[0], "127.0.0.1");
 
 			auto numSctpStreams = FBS::SctpParameters::CreateNumSctpStreams(builder, 1024, 1024);
 			auto baseOptions = FBS::Transport::CreateOptions(

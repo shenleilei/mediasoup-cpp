@@ -1,4 +1,5 @@
 #include "WorkerThread.h"
+#include "WebRtcServer.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -19,14 +20,16 @@ WorkerThread::WorkerThread(int id,
 	const std::vector<nlohmann::json>& mediaCodecs,
 	const std::vector<nlohmann::json>& listenInfos,
 	RoomRegistry* registry,
-	const std::string& recordDir,
+	bool webRtcServerEnabled,
+	int webRtcServerPortBase,
 	size_t maxRoutersPerWorker)
 	: id_(id)
 	, workerSettings_(workerSettings)
 	, mediaCodecs_(mediaCodecs)
 	, listenInfos_(listenInfos)
 	, registry_(registry)
-	, recordDir_(recordDir)
+	, webRtcServerEnabled_(webRtcServerEnabled)
+	, webRtcServerPortBase_(webRtcServerPortBase)
 	, maxRoutersPerWorker_(maxRoutersPerWorker)
 	, numWorkersTarget_(numWorkers)
 	, logger_(Logger::Get("WorkerThread"))
@@ -140,6 +143,7 @@ void WorkerThread::stop()
 		worker->close();
 	}
 	fdToWorker_.clear();
+	workerWebRtcServerPorts_.clear();
 	workers_.clear();
 
 	if (roomService_) {
@@ -219,6 +223,13 @@ void WorkerThread::createWorkers()
 	for (int i = 0; i < numWorkersTarget_; i++) {
 		try {
 			auto worker = std::make_shared<Worker>(workerSettings_, /*threaded=*/false);
+			uint16_t webRtcServerPort = 0;
+			if (webRtcServerEnabled_) {
+				webRtcServerPort = static_cast<uint16_t>(webRtcServerPortBase_ + i);
+				initializeWorkerWebRtcServer(
+					worker,
+					webRtcServerPort);
+			}
 
 			int fd = worker->channelConsumerFd();
 			if (fd < 0) {
@@ -242,6 +253,9 @@ void WorkerThread::createWorkers()
 
 			workers_.push_back(worker);
 			fdToWorker_[fd] = worker;
+			if (webRtcServerPort != 0) {
+				workerWebRtcServerPorts_[worker.get()] = webRtcServerPort;
+			}
 			workerManager_->addExistingWorker(worker);
 			MS_DEBUG(logger_, "WorkerThread {} created worker {} [pid:{}]", id_, i, worker->pid());
 		} catch (const std::exception& e) {
@@ -257,7 +271,7 @@ void WorkerThread::createWorkers()
 	}
 
 	roomManager_ = std::make_unique<RoomManager>(*workerManager_, mediaCodecs_, listenInfos_);
-	roomService_ = std::make_unique<RoomService>(*roomManager_, registry_, recordDir_);
+	roomService_ = std::make_unique<RoomService>(*roomManager_, registry_);
 
 	if (notifyFn_) roomService_->setNotify(notifyFn_);
 	if (broadcastFn_) roomService_->setBroadcast(broadcastFn_);
@@ -443,6 +457,13 @@ void WorkerThread::onWorkerDied(std::shared_ptr<Worker> worker)
 {
 	MS_ERROR(logger_, "WorkerThread {} worker died [pid:{}], attempting respawn", id_, worker->pid());
 
+	uint16_t webRtcServerPort = 0;
+	auto portIt = workerWebRtcServerPorts_.find(worker.get());
+	if (portIt != workerWebRtcServerPorts_.end()) {
+		webRtcServerPort = portIt->second;
+		workerWebRtcServerPorts_.erase(portIt);
+	}
+
 	workerManager_->removeWorker(worker);
 	workers_.erase(std::remove(workers_.begin(), workers_.end(), worker), workers_.end());
 
@@ -461,6 +482,9 @@ void WorkerThread::onWorkerDied(std::shared_ptr<Worker> worker)
 
 	try {
 		auto newWorker = std::make_shared<Worker>(workerSettings_, /*threaded=*/false);
+		if (webRtcServerEnabled_) {
+			initializeWorkerWebRtcServer(newWorker, webRtcServerPort);
+		}
 
 		int fd = newWorker->channelConsumerFd();
 		if (fd < 0) {
@@ -486,6 +510,9 @@ void WorkerThread::onWorkerDied(std::shared_ptr<Worker> worker)
 
 		workers_.push_back(newWorker);
 		fdToWorker_[fd] = newWorker;
+		if (webRtcServerPort != 0) {
+			workerWebRtcServerPorts_[newWorker.get()] = webRtcServerPort;
+		}
 		workerManager_->addExistingWorker(newWorker);
 		MS_WARN(logger_, "WorkerThread {} respawned worker [pid:{}]", id_, newWorker->pid());
 	} catch (const std::exception& e) {
@@ -493,6 +520,37 @@ void WorkerThread::onWorkerDied(std::shared_ptr<Worker> worker)
 	}
 
 	workerCount_.store(workers_.size(), std::memory_order_relaxed);
+}
+
+void WorkerThread::initializeWorkerWebRtcServer(
+	const std::shared_ptr<Worker>& worker,
+	uint16_t port)
+{
+	if (!worker) return;
+	if (port == 0) {
+		throw std::runtime_error("invalid WebRtcServer port 0");
+	}
+
+	auto listenInfos = buildWebRtcServerListenInfos(port);
+	auto webRtcServer = worker->createWebRtcServer(listenInfos);
+	MS_DEBUG(logger_,
+		"WorkerThread {} created WebRtcServer [workerPid:{} id:{} port:{}]",
+		id_,
+		worker->pid(),
+		webRtcServer->id(),
+		port);
+}
+
+std::vector<nlohmann::json> WorkerThread::buildWebRtcServerListenInfos(uint16_t port) const
+{
+	std::vector<nlohmann::json> result = listenInfos_;
+	if (result.empty()) {
+		result.push_back({{"ip", "0.0.0.0"}, {"protocol", "udp"}});
+	}
+	for (auto& listenInfo : result) {
+		listenInfo["port"] = port;
+	}
+	return result;
 }
 
 } // namespace mediasoup

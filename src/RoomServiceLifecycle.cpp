@@ -1,7 +1,6 @@
 #include "RoomService.h"
 
 #include "RoomCleanupHelpers.h"
-#include "RoomRecordingHelpers.h"
 #include "RoomRegistry.h"
 #include "RoomStatsQosHelpers.h"
 
@@ -65,16 +64,14 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 		cleanupPeerProducerDemandCache(roomId, oldPeerProducers);
 		oldPeer->close();
 
-		std::string key = roomstatsqos::MakePeerKey(roomId, peerId);
-		roomrecording::RemovePeerRecorder(key, recorders_, recorderTransports_, logger_);
 		qosRegistry_.ErasePeer(roomId, peerId);
 		roomstatsqos::ClearPeerAutomaticOverrideRecords(
 			autoQosOverrideRecords_,
 			roomId,
 			peerId);
-		lastConnectionQualitySignatures_.erase(key);
+		lastConnectionQualitySignatures_.erase(roomstatsqos::MakePeerKey(roomId, peerId));
 		downlinkQosRegistry_.ErasePeer(roomId, peerId);
-		subscriberControllers_.erase(key);
+		subscriberControllers_.erase(roomstatsqos::MakePeerKey(roomId, peerId));
 		cleanupPeerTrackQosOverrides(roomId, peerId);
 		markDownlinkRoomDirty(roomId);
 	}
@@ -114,9 +111,6 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 RoomService::Result RoomService::leave(const std::string& roomId, const std::string& peerId) {
 	auto room = roomManager_.getRoom(roomId);
 	if (!room) return {true, {}};
-
-	std::string key = roomstatsqos::MakePeerKey(roomId, peerId);
-	roomrecording::RemovePeerRecorder(key, recorders_, recorderTransports_, logger_);
 
 	qosRegistry_.ErasePeer(roomId, peerId);
 	roomstatsqos::ClearPeerAutomaticOverrideRecords(
@@ -207,7 +201,6 @@ void RoomService::cleanIdleRooms(int idleSeconds) {
 		MS_DEBUG(logger_, "GC idle room: {}", id);
 		destroyRoom(id);
 	}
-	cleanOldRecordings();
 }
 
 void RoomService::closeAllRooms() {
@@ -218,7 +211,6 @@ void RoomService::closeAllRooms() {
 }
 
 void RoomService::cleanupRoomResources(const std::string& roomId) {
-	roomrecording::CleanupRoomRecorders(roomId, recorders_, recorderTransports_, logger_);
 	roomcleanup::CleanupRoomServiceState(
 		roomId,
 		qosRegistry_,
@@ -244,10 +236,6 @@ void RoomService::destroyRoom(const std::string& roomId) {
 	}
 	roomManager_.removeRoom(roomId);
 	if (roomLifecycle_) roomLifecycle_(roomId, false);
-}
-
-void RoomService::cleanOldRecordings(uint64_t maxBytes) {
-	roomrecording::CleanOldRecordingDirs(recordDir_, maxBytes, recorders_, logger_);
 }
 
 } // namespace mediasoup

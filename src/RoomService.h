@@ -5,7 +5,6 @@
 #include "PlainTransport.h"
 #include "Consumer.h"
 #include "Producer.h"
-#include "Recorder.h"
 #include "Constants.h"
 #include "Logger.h"
 #include "qos/QosAggregator.h"
@@ -48,8 +47,7 @@ public:
 	using DownlinkSnapshotAppliedFn = std::function<void(
 		const std::string&, const std::string&, uint64_t)>;
 
-	RoomService(RoomManager& roomManager, RoomRegistry* registry,
-		const std::string& recordDir = "");
+	RoomService(RoomManager& roomManager, RoomRegistry* registry);
 
 	void setNotify(NotifyFn fn) { notify_ = std::move(fn); }
 	void setBroadcast(BroadcastFn fn) { broadcast_ = std::move(fn); }
@@ -131,7 +129,6 @@ public:
 	void closeAllRooms();
 	bool hasRoom(const std::string& roomId) { return roomManager_.getRoom(roomId) != nullptr; }
 	std::shared_ptr<Room> getRoom(const std::string& roomId) { return roomManager_.getRoom(roomId); }
-	void cleanOldRecordings(uint64_t maxBytes = kMaxRecordingDirBytes);
 	// Expects a snapshot already validated on the signaling thread.
 	Result setClientStats(
 		const std::string& roomId,
@@ -157,8 +154,6 @@ private:
 		uint32_t ttlMs{ 0u };
 	};
 
-	void autoRecord(const std::string& roomId, const std::string& peerId,
-		std::shared_ptr<Room> room, std::shared_ptr<Producer> producer);
 	void cleanupRoomResources(const std::string& roomId);
 	void destroyRoom(const std::string& roomId);
 	void broadcastStatsForRoom(const std::string& roomId);
@@ -198,7 +193,6 @@ private:
 
 	RoomManager& roomManager_;
 	RoomRegistry* registry_;
-	std::string recordDir_;
 	NotifyFn notify_;
 	BroadcastFn broadcast_;
 	RoomLifecycleFn roomLifecycle_;
@@ -208,8 +202,6 @@ private:
 	DownlinkSnapshotAppliedFn downlinkSnapshotApplied_;
 	std::shared_ptr<spdlog::logger> logger_;
 
-	std::unordered_map<std::string, std::shared_ptr<PeerRecorder>> recorders_;
-	std::unordered_map<std::string, std::shared_ptr<PlainTransport>> recorderTransports_;
 	qos::QosRegistry qosRegistry_;
 	qos::DownlinkQosRegistry downlinkQosRegistry_;
 	std::unordered_map<std::string, qos::SubscriberQosController> subscriberControllers_; // key: roomId/peerId

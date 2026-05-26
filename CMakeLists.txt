@@ -67,10 +67,12 @@ target_link_libraries(uSockets PUBLIC mediasoup_build_ssl_crypto)
 set(MEDIASOUP_LIBRARY_SOURCES
     src/Channel.cpp
     src/GeoDbResolver.cpp
+    src/PublicIpResolver.cpp
     src/Recorder.cpp
     src/Worker.cpp
     src/Transport.cpp
     src/WebRtcTransport.cpp
+    src/WebRtcServer.cpp
     src/PipeTransport.cpp
     src/Router.cpp
     src/Producer.cpp
@@ -139,7 +141,6 @@ mediasoup_add_configured_executable(mediasoup-sfu
         src/RoomServiceQos.cpp
         src/RoomServiceRegistryView.cpp
         src/RoomServiceStats.cpp
-        src/RoomRecordingHelpers.cpp
         src/WorkerThread.cpp
     LINK_LIBRARIES
         mediasoup_lib

@@ -1,7 +1,6 @@
 #include "RoomService.h"
 
 #include "RoomMediaHelpers.h"
-#include "RoomRecordingHelpers.h"
 #include "RoomStatsQosHelpers.h"
 
 #include <algorithm>
@@ -481,7 +480,6 @@ RoomService::Result RoomService::produce(const std::string& roomId,
 	roommedia::AutoSubscribeProducerToOtherPeers(
 		roomId, peerId, room, producer, logger_, notify_, false);
 
-	autoRecord(roomId, peerId, room, producer);
 	return {true, {{"id", producer->id()}}};
 }
 
@@ -685,20 +683,6 @@ RoomService::Result RoomService::requestConsumerKeyFrame(const std::string& room
 		return {false, {}, "", "consumer not found"};
 	it->second->requestKeyFrame();
 	return {true, it->second->toJson()};
-}
-
-void RoomService::autoRecord(const std::string& roomId, const std::string& peerId,
-	std::shared_ptr<Room> room, std::shared_ptr<Producer> producer)
-{
-	roomrecording::AutoRecordProducer(
-		roomId,
-		peerId,
-		room,
-		producer,
-		recordDir_,
-		recorders_,
-		recorderTransports_,
-		logger_);
 }
 
 } // namespace mediasoup

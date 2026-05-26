@@ -41,9 +41,9 @@ class MediaSection {
                 // RTP (1).
                 candidateObject.component = 1;
                 candidateObject.foundation = candidate.foundation;
-                // Be ready for new candidate.address field in mediasoup server side
-                // field and keep backward compatibility with deprecated candidate.ip.
-                candidateObject.ip = candidate.address ?? candidate.ip;
+                // Prefer the resolved public IP when the server provides it,
+                // and fall back to the announced address for compatibility.
+                candidateObject.ip = candidate.ip ?? candidate.address;
                 candidateObject.port = candidate.port;
                 candidateObject.priority = candidate.priority;
                 candidateObject.transport = candidate.protocol;

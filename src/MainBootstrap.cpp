@@ -2,6 +2,7 @@
 
 #include "GeoDbResolver.h"
 #include "Logger.h"
+#include "PublicIpResolver.h"
 #include "RuntimeOptionParsers.h"
 #include "WorkerThread.h"
 
@@ -144,9 +145,11 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 					if (cfg.contains("redisRequired")) options.redisRequired = cfg["redisRequired"].get<bool>();
 					if (cfg.contains("rtcMinPort")) { int v = cfg["rtcMinPort"].get<int>(); if (v > 0) options.rtcMinPort = v; }
 					if (cfg.contains("rtcMaxPort")) { int v = cfg["rtcMaxPort"].get<int>(); if (v > 0) options.rtcMaxPort = v; }
+					if (cfg.contains("webRtcServerEnabled")) options.webRtcServerEnabled = cfg["webRtcServerEnabled"].get<bool>();
+					if (cfg.contains("webRtcServerMinPort")) { int v = cfg["webRtcServerMinPort"].get<int>(); if (v > 0) options.webRtcServerMinPort = v; }
+					if (cfg.contains("webRtcServerMaxPort")) { int v = cfg["webRtcServerMaxPort"].get<int>(); if (v > 0) options.webRtcServerMaxPort = v; }
 					if (cfg.contains("nodeId")) options.nodeId = cfg["nodeId"].get<std::string>();
 				if (cfg.contains("nodeAddress")) options.nodeAddress = cfg["nodeAddress"].get<std::string>();
-				if (cfg.contains("recordDir")) options.recordDir = cfg["recordDir"].get<std::string>();
 				if (cfg.contains("maxRoutersPerWorker")) options.maxRoutersPerWorker = cfg["maxRoutersPerWorker"].get<int>();
 				if (cfg.contains("lat")) options.nodeLat = cfg["lat"].get<double>();
 				if (cfg.contains("lng")) options.nodeLng = cfg["lng"].get<double>();
@@ -203,9 +206,12 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 			else if (arg == "--noRedisRequired") options.redisRequired = false;
 			else if (trySetInt("--rtcMinPort=", options.rtcMinPort)) {}
 			else if (trySetInt("--rtcMaxPort=", options.rtcMaxPort)) {}
+			else if (arg == "--webRtcServer") options.webRtcServerEnabled = true;
+			else if (arg == "--noWebRtcServer") options.webRtcServerEnabled = false;
+			else if (trySetInt("--webRtcServerMinPort=", options.webRtcServerMinPort)) {}
+			else if (trySetInt("--webRtcServerMaxPort=", options.webRtcServerMaxPort)) {}
 			else if (arg.find("--nodeId=") == 0) options.nodeId = arg.substr(9);
 		else if (arg.find("--nodeAddress=") == 0) options.nodeAddress = arg.substr(14);
-		else if (arg.find("--recordDir=") == 0) options.recordDir = arg.substr(12);
 		else if (trySetInt("--maxRoutersPerWorker=", options.maxRoutersPerWorker)) {}
 		else if (trySetDouble("--lat=", options.nodeLat)) {}
 		else if (trySetDouble("--lng=", options.nodeLng)) {}
@@ -241,6 +247,17 @@ bool FinalizeRuntimeOptions(RuntimeOptions& options)
 			spdlog::warn("Could not detect public IP, announcedIp is empty. WebRTC may fail for remote clients.");
 		}
 	}
+	if (!options.announcedIp.empty()) {
+		auto announcedPublicIp = mediasoup::ResolvePublicIpv4Address(options.announcedIp);
+		if (!announcedPublicIp) {
+			spdlog::error("announcedIp must resolve to a public IPv4 address: {}", options.announcedIp);
+			return false;
+		}
+		if (*announcedPublicIp != options.announcedIp) {
+			spdlog::info("Resolved announcedIp {} to public IPv4 {}", options.announcedIp, *announcedPublicIp);
+			options.announcedIp = *announcedPublicIp;
+		}
+	}
 
 	if (options.nodeId.empty()) {
 		char hostname[256]{};
@@ -259,6 +276,33 @@ bool FinalizeRuntimeOptions(RuntimeOptions& options)
 		options.rtcMinPort > options.rtcMaxPort) {
 		spdlog::error("Invalid RTC port range: {}-{}", options.rtcMinPort, options.rtcMaxPort);
 		return false;
+	}
+	if (options.webRtcServerEnabled) {
+		if (options.webRtcServerMinPort <= 0) {
+			options.webRtcServerMinPort = options.rtcMinPort;
+		}
+		if (options.webRtcServerMaxPort <= 0) {
+			options.webRtcServerMaxPort = options.webRtcServerMinPort + options.numWorkers - 1;
+		}
+		if (options.webRtcServerMinPort <= 0 || options.webRtcServerMaxPort <= 0 ||
+			options.webRtcServerMinPort > 65535 || options.webRtcServerMaxPort > 65535 ||
+			options.webRtcServerMinPort > options.webRtcServerMaxPort) {
+			spdlog::error("Invalid WebRtcServer port range: {}-{}",
+				options.webRtcServerMinPort,
+				options.webRtcServerMaxPort);
+			return false;
+		}
+		const int webRtcServerPortCount =
+			options.webRtcServerMaxPort - options.webRtcServerMinPort + 1;
+		if (webRtcServerPortCount < options.numWorkers) {
+			spdlog::error(
+				"WebRtcServer port range {}-{} has {} ports but {} workers were requested",
+				options.webRtcServerMinPort,
+				options.webRtcServerMaxPort,
+				webRtcServerPortCount,
+				options.numWorkers);
+			return false;
+		}
 	}
 
 	if (options.nodeAddress.empty()) {
@@ -411,8 +455,12 @@ std::vector<std::unique_ptr<WorkerThread>> CreateWorkerThreadPool(
 	auto workersPerThread = ComputeWorkersPerThread(options.numWorkers, options.numWorkerThreads);
 
 	std::vector<std::unique_ptr<WorkerThread>> workerThreads;
+	int nextWebRtcServerPort = options.webRtcServerMinPort;
 	for (size_t i = 0; i < workersPerThread.size(); ++i) {
 		try {
+			const int webRtcServerPortBase = options.webRtcServerEnabled
+				? nextWebRtcServerPort
+				: 0;
 			auto workerThread = std::make_unique<WorkerThread>(
 				static_cast<int>(i),
 				workerSettings,
@@ -420,9 +468,13 @@ std::vector<std::unique_ptr<WorkerThread>> CreateWorkerThreadPool(
 				mediaCodecs,
 				listenInfos,
 				registry,
-				options.recordDir,
+				options.webRtcServerEnabled,
+				webRtcServerPortBase,
 				options.maxRoutersPerWorker > 0 ? static_cast<size_t>(options.maxRoutersPerWorker) : 0);
 			workerThreads.push_back(std::move(workerThread));
+			if (options.webRtcServerEnabled) {
+				nextWebRtcServerPort += workersPerThread[i];
+			}
 			spdlog::info("WorkerThread {} created ({} workers)", i, workersPerThread[i]);
 		} catch (const std::exception& e) {
 			spdlog::error("Failed to create WorkerThread {}: {}", i, e.what());

@@ -49,14 +49,13 @@ export type IceCandidate = {
      */
     priority: number;
     /**
-     * The IP address or hostname of the candidate.
+     * The public IP address or hostname advertised by the server.
      */
     address: string;
     /**
-     * The IP address  or hostname of the candidate.
-     * @deprecated Use |address| instead.
+     * The resolved public IP address to use for ICE.
      */
-    ip: string;
+    ip?: string;
     /**
      * The protocol of the candidate.
      */
