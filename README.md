@@ -153,7 +153,7 @@ cmake --build build-slim --target mediasoup-sfu -j$(nproc)
 
 如果使用 `build-slim`，把命令中的 `./build/mediasoup-sfu` 换成 `./build-slim/mediasoup-sfu`。
 
-局域网或公网访问时，`listenIp` 通常使用 `0.0.0.0`，`announcedIp` 必须填写浏览器可访问到的服务器 IP：
+局域网或公网访问时，`listenIp` 通常使用 `0.0.0.0`。直连公网主机可以省略 `announcedIp`，服务会在启动时自动探测；如果是内网、NAT、云负载均衡、多网卡，或自动探测结果不是浏览器可达地址，则显式填写浏览器可访问到的服务器 IP：
 
 ```bash
 ./build/mediasoup-sfu \
@@ -168,12 +168,122 @@ cmake --build build-slim --target mediasoup-sfu -j$(nproc)
 
 需要放通 TCP `3000` 以及 mediasoup worker 的 UDP RTC 端口范围，默认是 `10000-59999/udp`。
 
+### 2.1 使用 Docker 镜像运行
+
+仓库提供一个多阶段 `Dockerfile`，镜像默认以 `mediasoup-sfu` 作为主运行程序：
+
+```bash
+git submodule update --init --recursive
+docker build -t mediasoup-cpp:sfu .
+```
+
+也可以使用仓库脚本完成构建和推送：
+
+```bash
+# 仅本地构建
+./build_image.sh
+
+# 构建并推送到默认仓库 harbor-volc.zelostech.com.cn:5443/arch/mediasoup-cpp
+DOCKER_USERNAME=<user> DOCKER_PASSWORD=<password-or-token> ./build_image.sh --push
+
+# 指定 tag / repository，并额外推送 latest
+./build_image.sh --push --latest \
+  --tag 2026_05_26_1030 \
+  --repository harbor-volc.zelostech.com.cn:5443/arch/mediasoup-cpp
+```
+
+本机浏览器 demo 推荐使用 host network，避免 WebRTC UDP 端口映射不完整：
+
+```bash
+docker run --rm \
+  --name mediasoup-cpp \
+  --network host \
+  -e MEDIASOUP_PORT=1770 \
+  -e MEDIASOUP_ANNOUNCED_IP=127.0.0.1 \
+  mediasoup-cpp:sfu
+```
+
+公网部署时默认不需要设置 `MEDIASOUP_ANNOUNCED_IP`，服务启动时会自动探测公网 IP。推荐继续使用 host network，并在宿主机防火墙放通 TCP `1770` 和 UDP `8000-8002`：
+
+```bash
+docker run -d \
+  --name mediasoup-cpp \
+  --restart unless-stopped \
+  --network host \
+  -e MEDIASOUP_PORT=1770 \
+  -v mediasoup-recordings:/var/lib/mediasoup/recordings \
+  mediasoup-cpp:sfu
+```
+
+内网、NAT、云负载均衡或自动探测结果不是浏览器可达地址时，再显式覆盖：
+
+```bash
+docker run -d \
+  --name mediasoup-cpp \
+  --restart unless-stopped \
+  --network host \
+  -e MEDIASOUP_PORT=1770 \
+  -e MEDIASOUP_ANNOUNCED_IP=<server-ip> \
+  -v mediasoup-recordings:/var/lib/mediasoup/recordings \
+  mediasoup-cpp:sfu
+```
+
+如果必须使用 bridge network，需要映射当前默认 RTC 端口范围：
+
+```bash
+docker run -d \
+  --name mediasoup-cpp \
+  --restart unless-stopped \
+  -p 1770:1770/tcp \
+  -p 8000-8002:8000-8002/udp \
+  -e MEDIASOUP_PORT=1770 \
+  -e MEDIASOUP_ANNOUNCED_IP=<server-ip> \
+  -v mediasoup-recordings:/var/lib/mediasoup/recordings \
+  mediasoup-cpp:sfu
+```
+
+这些只是镜像默认值，启动容器时可以通过环境变量覆盖。也可以在镜像名后追加 `mediasoup-sfu` 命令行参数；追加参数会排在默认参数之后，同名参数以追加参数为准：
+
+```bash
+docker run --rm \
+  --network host \
+  -e MEDIASOUP_PORT=18080 \
+  -e MEDIASOUP_WORKERS=2 \
+  mediasoup-cpp:sfu \
+  --rtcMinPort=9000 \
+  --rtcMaxPort=9010 \
+  --announcedIp=<server-ip>
+```
+
+可用环境变量：
+
+| 变量 | 默认值 | 说明 |
+|---|---:|---|
+| `MEDIASOUP_PORT` | `1770` | HTTP / WebSocket 监听端口 |
+| `MEDIASOUP_WORKERS` | 空 | mediasoup worker 子进程数量；为空时按容器可见 CPU 自动计算为 `max(1, hardware_concurrency - 2)` |
+| `MEDIASOUP_WORKER_THREADS` | 空 | C++ WorkerThread 数量；为空时按 `ceil(workers / 2)` 自动计算，且不超过 workers |
+| `MEDIASOUP_LISTEN_IP` | `0.0.0.0` | 容器内监听地址 |
+| `MEDIASOUP_ANNOUNCED_IP` | 空 | 对浏览器公告的 ICE 地址；为空时启动时自动探测公网 IP，本机 demo 建议显式设为 `127.0.0.1` |
+| `MEDIASOUP_RTC_MIN_PORT` | `8000` | mediasoup worker UDP RTC 起始端口 |
+| `MEDIASOUP_RTC_MAX_PORT` | `8002` | mediasoup worker UDP RTC 结束端口 |
+| `MEDIASOUP_REDIS_REQUIRED` | `0` | 默认不需要 Redis；`1` 表示 Redis 不可用时 readiness 失败 |
+| `MEDIASOUP_REDIS_HOST` | `0.0.0.0` | Redis 地址；默认配合 `MEDIASOUP_REDIS_REQUIRED=0` 走 local-only |
+| `MEDIASOUP_REDIS_PORT` | `1` | Redis 端口 |
+| `MEDIASOUP_RECORD_DIR` | `/var/lib/mediasoup/recordings` | 录制输出目录 |
+| `MEDIASOUP_LOG_DIR` | 空 | 非空时写守护日志目录 |
+
 ### 3. 浏览器 demo 互通测试
 
 启动服务后打开：
 
 ```text
 http://127.0.0.1:3000/
+```
+
+如果使用 Docker 默认端口，打开：
+
+```text
+http://127.0.0.1:1770/
 ```
 
 基本验收步骤：
@@ -674,6 +784,8 @@ EOF
 | `--workerThreads` | 自动计算 | WorkerThread 事件循环数量 |
 | `--listenIp` | `0.0.0.0` | 传输层 (transport) 监听 IP |
 | `--announcedIp` | 自动检测 | 用于 ICE 候选者 (candidates) 的公网 IP |
+| `--rtcMinPort` | `10000` | mediasoup worker UDP RTC 起始端口 |
+| `--rtcMaxPort` | `59999` | mediasoup worker UDP RTC 结束端口 |
 | `--workerBin` | `./mediasoup-worker` | worker 可执行文件路径 |
 | `--recordDir` | `./recordings` | 录制文件输出目录 |
 | `--logDir` | `/var/log/mediasoup` | 守护进程日志目录 |
@@ -697,13 +809,19 @@ EOF
 
 ## 重要的部署注意事项 (Important Deployment Notes)
 
-### 1. 生产环境中明确设置 `announcedIp`
+### 1. `announcedIp` 自动探测与显式覆盖
 
-代码具备尽力而为的自动检测能力，但生产环境部署不应依赖于此。
+直连公网主机可以不传 `--announcedIp`，服务会在启动时自动探测公网 IP。Docker 镜像默认也保持 `MEDIASOUP_ANNOUNCED_IP` 为空，以使用这条自动探测路径。
 
-请明确设置：
+以下场景请明确设置：
 
 - `--announcedIp`
+- Docker 环境变量 `MEDIASOUP_ANNOUNCED_IP`
+
+适用场景包括本机 demo、内网、NAT、云负载均衡、多网卡，或自动探测结果不是浏览器可达地址。
+
+生产多节点场景还应明确：
+
 - 可选设置 `--nodeId`
 - 如果你的环境具有特殊的路由或代理拓扑，可选设置 `--nodeAddress`
 

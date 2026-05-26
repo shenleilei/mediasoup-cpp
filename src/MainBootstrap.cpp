@@ -142,6 +142,8 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 					if (cfg.contains("redisHost")) options.redisHost = cfg["redisHost"].get<std::string>();
 					if (cfg.contains("redisPort")) options.redisPort = cfg["redisPort"].get<int>();
 					if (cfg.contains("redisRequired")) options.redisRequired = cfg["redisRequired"].get<bool>();
+					if (cfg.contains("rtcMinPort")) { int v = cfg["rtcMinPort"].get<int>(); if (v > 0) options.rtcMinPort = v; }
+					if (cfg.contains("rtcMaxPort")) { int v = cfg["rtcMaxPort"].get<int>(); if (v > 0) options.rtcMaxPort = v; }
 					if (cfg.contains("nodeId")) options.nodeId = cfg["nodeId"].get<std::string>();
 				if (cfg.contains("nodeAddress")) options.nodeAddress = cfg["nodeAddress"].get<std::string>();
 				if (cfg.contains("recordDir")) options.recordDir = cfg["recordDir"].get<std::string>();
@@ -199,6 +201,8 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 			else if (trySetInt("--redisPort=", options.redisPort)) {}
 			else if (arg == "--redisRequired") options.redisRequired = true;
 			else if (arg == "--noRedisRequired") options.redisRequired = false;
+			else if (trySetInt("--rtcMinPort=", options.rtcMinPort)) {}
+			else if (trySetInt("--rtcMaxPort=", options.rtcMaxPort)) {}
 			else if (arg.find("--nodeId=") == 0) options.nodeId = arg.substr(9);
 		else if (arg.find("--nodeAddress=") == 0) options.nodeAddress = arg.substr(14);
 		else if (arg.find("--recordDir=") == 0) options.recordDir = arg.substr(12);
@@ -248,6 +252,12 @@ bool FinalizeRuntimeOptions(RuntimeOptions& options)
 	}
 	if (!IsValidNodeId(options.nodeId)) {
 		spdlog::error("Invalid nodeId '{}' (allowed: [A-Za-z0-9_-.:]{{1,128}})", options.nodeId);
+		return false;
+	}
+	if (options.rtcMinPort <= 0 || options.rtcMaxPort <= 0 ||
+		options.rtcMinPort > 65535 || options.rtcMaxPort > 65535 ||
+		options.rtcMinPort > options.rtcMaxPort) {
+		spdlog::error("Invalid RTC port range: {}-{}", options.rtcMinPort, options.rtcMaxPort);
 		return false;
 	}
 
@@ -385,8 +395,8 @@ WorkerSettings BuildWorkerSettings(const RuntimeOptions& options)
 			}
 		}
 	}
-	workerSettings.rtcMinPort = 10000;
-	workerSettings.rtcMaxPort = 59999;
+	workerSettings.rtcMinPort = static_cast<uint16_t>(options.rtcMinPort);
+	workerSettings.rtcMaxPort = static_cast<uint16_t>(options.rtcMaxPort);
 	if (!options.workerBin.empty()) workerSettings.workerBin = options.workerBin;
 	return workerSettings;
 }
