@@ -26,11 +26,6 @@ DEFAULT_ATTACHMENTS = [
     "docs/uplink-qos-case-results.md",
     "docs/downlink-qos-test-results-summary.md",
     "docs/downlink-qos-case-results.md",
-    "docs/generated/webrtc-qos-plain-p2-smoke-report.md",
-    "docs/generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md",
-    "docs/generated/webrtc-qos-plain-p2-browser-receiver-report.md",
-    "docs/generated/webrtc-qos-plain-p2-v4l2-report.md",
-    "docs/generated/webrtc-qos-plain-p2-recovery-first-frame-report.md",
 ]
 DEFAULT_SUBJECT_PREFIX = "[mediasoup-cpp nightly]"
 MAX_FAILED_CASES_IN_EMAIL = 20

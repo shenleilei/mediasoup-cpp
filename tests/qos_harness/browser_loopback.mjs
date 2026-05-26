@@ -19,11 +19,17 @@ const puppeteer = require('puppeteer-core');
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..', '..');
-const chromiumPath = '/usr/lib64/chromium-browser/headless_shell';
 const tcPath = '/usr/sbin/tc';
 const RECOVERY_SETTLE_MS = 2000;
 const PUPPETEER_PROTOCOL_TIMEOUT_MS = 10 * 60 * 1000;
 const forceClearLiveNetemGuards = process.env.QOS_FORCE_CLEAR_NETEM_GUARDS === '1';
+const chromiumCandidates = [
+  process.env.CHROME_BIN,
+  '/usr/lib64/chromium-browser/headless_shell',
+  '/usr/bin/chromium-browser',
+  '/usr/bin/chromium',
+  '/usr/bin/google-chrome',
+].filter(Boolean);
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -203,8 +209,12 @@ function applyUdpNetem({ delayMs = 120, lossPct = 10 }) {
 }
 
 async function launchBrowser() {
+  const executablePath = chromiumCandidates.find(candidate => fs.existsSync(candidate));
+  if (!executablePath) {
+    throw new Error(`Browser was not found. Checked: ${chromiumCandidates.join(', ')}`);
+  }
   return puppeteer.launch({
-    executablePath: chromiumPath,
+    executablePath,
     headless: true,
     protocolTimeout: PUPPETEER_PROTOCOL_TIMEOUT_MS,
     args: [

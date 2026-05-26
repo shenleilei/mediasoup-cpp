@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 
 const require = createRequire(import.meta.url);
-const { qos } = require('../../src/client/lib');
+const qos = require('../../src/client/lib/qos');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

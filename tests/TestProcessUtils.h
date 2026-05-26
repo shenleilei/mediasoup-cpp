@@ -34,8 +34,6 @@ inline std::string testSfuBinaryPath() {
 	}
 	return firstExecutablePath({
 		"./build/mediasoup-sfu",
-		"./build-webrtc-qos-p2/mediasoup-sfu",
-		"./build-webrtc-qos-plain/mediasoup-sfu",
 		"./build_dbg/mediasoup-sfu",
 	}, "./build/mediasoup-sfu");
 }
@@ -50,8 +48,6 @@ inline std::string testWorkerBinaryPath() {
 	return firstExecutablePath({
 		"./mediasoup-worker",
 		"./build/mediasoup-worker",
-		"./build-webrtc-qos-p2/mediasoup-worker",
-		"./build-webrtc-qos-plain/mediasoup-worker",
 	}, "./mediasoup-worker");
 }
 

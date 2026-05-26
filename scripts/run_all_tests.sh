@@ -313,11 +313,6 @@ write_report() {
     append_report_link_row "$ROOT_DIR/docs/downlink-qos-case-results.md" "Downlink Cases" "Downlink per-case report"
     append_report_link_row "$ROOT_DIR/docs/generated/uplink-qos-matrix-report.json" "Uplink Matrix JSON" "Latest browser uplink matrix artifact"
     append_report_link_row "$ROOT_DIR/docs/generated/downlink-qos-matrix-report.json" "Downlink Matrix JSON" "Latest downlink matrix artifact"
-    append_report_link_row "$ROOT_DIR/docs/generated/webrtc-qos-plain-p2-smoke-report.md" "WebRTC QoS P2 Smoke" "Native push/play weak-network report"
-    append_report_link_row "$ROOT_DIR/docs/generated/webrtc-qos-plain-p2-mp4-decode-loop-report.md" "WebRTC QoS P2 MP4" "MP4 decode-loop encoder runtime report"
-    append_report_link_row "$ROOT_DIR/docs/generated/webrtc-qos-plain-p2-browser-receiver-report.md" "WebRTC QoS P2 Browser" "Browser receiver compatibility report"
-    append_report_link_row "$ROOT_DIR/docs/generated/webrtc-qos-plain-p2-v4l2-report.md" "WebRTC QoS P2 V4L2" "V4L2 source capability report"
-    append_report_link_row "$ROOT_DIR/docs/generated/webrtc-qos-plain-p2-recovery-first-frame-report.md" "WebRTC QoS P2 Recovery" "Recovery first-frame gate report"
   } > "$REPORT_FILE"
 }
 

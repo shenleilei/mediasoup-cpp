@@ -4,12 +4,7 @@
 
 基于 mediasoup C++ worker 的 SFU 服务端，Room-first 设计。控制面用 C++17 实现，媒体面复用 mediasoup-worker 预编译二进制（v3.14.6）。
 
-仓库内同时维护两条客户端相关路径：
-
-- 浏览器 / WebRTC 路径
-- WebRTC QoS 推拉流客户端路径
-
-如果要理解 push/play 客户端本身怎么工作，请继续看 [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md)、[webrtc-qos-push-play-client-p2-design_cn.md](./webrtc-qos-push-play-client-p2-design_cn.md) 和 [webrtc-qos-push-play-client-thread-model-design_cn.md](./webrtc-qos-push-play-client-thread-model-design_cn.md)。
+仓库当前保留浏览器 / WebRTC demo 路径。根目录 `client/` 下的 WebRTC QoS plain push/play 原生客户端已经移除；不要把它和仍在使用的浏览器端 `src/client/lib/` 混淆。
 
 ## 线程模型
 
@@ -123,15 +118,9 @@ WorkerThread 检测到 worker 死亡（channel fd EOF）→ `onWorkerDied()` →
 4. UDP connect trick（`connect(8.8.8.8:53)` + `getsockname`，零网络开销）
 5. 最后才回退到 127.0.0.1（带 warn 日志）
 
-## WebRTC QoS 推拉流客户端
+## 服务端 PlainTransport
 
-推拉流客户端的核心入口在 `client/webrtc_qos_plain_client/`，共用 `client/WsClient.*` 完成 WebSocket 信令，并通过 mediasoup `PlainTransport` 做 RTP/RTCP UDP 对接。
-
-它的职责是提供最小外围集成：
-
-- 通过 `join`、`plainPublish`、`plainSubscribe` 接入服务端 PlainTransport 信令。
-- 绑定 mediasoup PlainTransport 的 UDP RTP/RTCP 收发端口。
-- 把 add track、编码、packetize、pacer、GoogCC、NACK/PLI、QoE 观测交给 `webrtc_qos_sdk`；FEC/RTX 不计入当前推拉流客户端验收范围。
+服务端仍保留 `plainPublish` / `plainSubscribe` 协议能力，它们属于 `RoomService` 的媒体接入路径，不依赖已移除的根目录原生客户端。
 
 主路径：
 
@@ -139,8 +128,8 @@ WorkerThread 检测到 worker 死亡（channel fd EOF）→ `onWorkerDied()` →
 join
   -> plainPublish / plainSubscribe
   -> UDP PlainTransport RTP/RTCP
-  -> webrtc_qos_sdk media engine
-  -> SDK stats / QoE / clientStats snapshots
+  -> RoomService / Router / Transport
+  -> Producer / Consumer / recording / QoS aggregation
 ```
 
 ## 数据流
@@ -307,9 +296,6 @@ src/
 ├── Recorder.cpp              # RTP→WebM 录制 + QoS 时间线实现（依赖 common/media + common/ffmpeg）
 ├── EventEmitter.h            # 轻量事件系统
 └── Logger.h                  # spdlog 封装
-client/
-├── WsClient.{h,cpp}          # WS request/response/notification client, reused by push/play
-└── webrtc_qos_plain_client/  # WebRTC QoS SDK PlainTransport push/play clients
 tests/
 ├── test_ortc.cpp                      # ORTC 协商
 ├── test_room.cpp                      # Room/Peer 管理

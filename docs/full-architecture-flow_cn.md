@@ -271,46 +271,37 @@ Redis Key 设计:
 - 默认运行契约下，Redis 是 readiness 强依赖：Redis 不可用时启动失败，运行中 `/readyz` 变为 `503`
 - 只有显式配置 `redisRequired=false` 时才允许 `registry_ == nullptr` 的 local-only 模式；该模式不属于默认多节点路由契约
 
-## 8. WebRTC QoS Push/Play 与 PlainTransport 路径
+## 8. 服务端 PlainTransport 路径
 
 ```text
-webrtc-qos-plain-push-client
-  -> WsClient.connect()
+external media ingress
   -> join(roomId, peerId)
   -> plainPublish(videoSsrcs, audioSsrc)
   -> 服务端返回 {ip, port, videoTracks[], audioPt}
   -> 本地 UDP socket 绑定 PlainTransport RTP/RTCP
-  -> webrtc_qos_sdk add track / encode / packetize / pacer / send
 
-webrtc-qos-plain-play-client
-  -> WsClient.connect()
+external media egress
   -> join(roomId, peerId)
   -> plainSubscribe(producerId / room media)
   -> 服务端返回 {ip, port, ...}
   -> 本地 UDP socket 绑定 PlainTransport RTP/RTCP
-  -> webrtc_qos_sdk receive / decode / QoE sampling
 ```
 
 QoS 侧链路：
 
 ```text
-webrtc_qos_sdk stats / QoE + local counters
-  -> runtime snapshot
+browser RTCPeerConnection.getStats()
   -> clientStats
 
 notification:
   qosPolicy / qosOverride
-    -> push/play runtime
-    -> SDK encoding / pacing / pause-resume control
+    -> browser client QoS runtime
 ```
 
 关键点：
 
-- 外围客户端只保留 WebSocket 信令和 UDP Socket，媒体 QoS 由 SDK 接管。
 - 服务端继续使用同一套 `plainPublish` / `plainSubscribe` / `clientStats` / `qosOverride` 协议。
-- P2 smoke 通过 copy 输入弱网主报告、恢复首帧、MP4 decode-loop、browser receiver、V4L2 环境能力门禁验证链路；copy 输入不计入实时 encoder runtime，encoder runtime 以 x264 输入源报告为准。
-- P3 线程模型已把 SDK 调用收敛到 transport owner 线程，把多 track source/sink 重活拆到独立 worker 和有界队列；生产签收必须另跑 `p3-thread-model-acceptance`，当前真实双 camera V4L2 仍因设备缺失不能签 PASS。
-- FEC/RTX 不计入当前 native push/play 客户端验收范围；当前只验证 SDK 的 GoogCC、pacer、NACK/PLI 反馈、统计和 QoE 观测链路。
+- 根目录原生 WebRTC QoS plain push/play client 已移除；当前仓库只保留服务端 PlainTransport 协议能力。
 
 ## 9. QoS 控制链路
 

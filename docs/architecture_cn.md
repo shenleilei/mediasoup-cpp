@@ -6,10 +6,9 @@
 - `uWS` 主线程、`WorkerThread`、`mediasoup-worker` 分别负责什么
 - 一个请求从 WebSocket 进入后，在哪些地方发生线程切换、进程 IPC、Redis 访问
 - 房间、多节点、QoS、录制、故障恢复分别挂在哪条链路上
-- 仓库内 WebRTC QoS 推拉流客户端如何接入同一套 PlainTransport 信令和 QoS 体系
+- 服务端 PlainTransport 信令如何接入同一套房间、录制和 QoS 体系
 
 如果只需要构建、测试和常规开发入口，先读 [DEVELOPMENT.md](./DEVELOPMENT.md)。如果需要理解运行时控制流、所有权和时序，再读本文。
-如果需要专门看 WebRTC QoS 推拉流客户端，请继续看 [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md)、[webrtc-qos-push-play-client-p2-design_cn.md](./webrtc-qos-push-play-client-p2-design_cn.md) 和 [webrtc-qos-push-play-client-thread-model-design_cn.md](./webrtc-qos-push-play-client-thread-model-design_cn.md)。
 
 ## 1. 设计结论
 
@@ -186,33 +185,23 @@ flowchart TB
 - 在 `RoomRegistry` 之外新增随手 Redis 访问
 - 在 `WorkerThread` 之外做 non-threaded `Channel` IPC
 
-### 4.5 仓库内 WebRTC QoS 推拉流客户端
+### 4.5 服务端 PlainTransport 协议能力
 
-这个仓库除了浏览器信令 / WebRTC 路径，还维护一条基于 WebRTC QoS SDK 的 PlainTransport 推拉流客户端路径：
+这个仓库保留 `plainPublish`、`plainSubscribe`、`clientStats`、`qosPolicy`、`qosOverride` 这些服务端协议能力。它们属于 `RoomService` 和媒体包装层，不依赖已移除的根目录原生 WebRTC QoS plain push/play client。
 
-- 共用信令：`client/WsClient.*`
-- 新客户端目录：`client/webrtc_qos_plain_client/`
-- push target：`webrtc-qos-plain-push-client`
-- play target：`webrtc-qos-plain-play-client`
+从职责上看，服务端 PlainTransport 路径可以拆成 3 层：
 
-它不属于服务端进程内部线程模型的一部分，但它复用当前 `plainPublish`、`plainSubscribe`、`clientStats`、`qosPolicy`、`qosOverride` 这些服务端协议能力。
-
-从职责上看，它可以拆成 3 层：
-
-1. `WsClient`
+1. WebSocket 信令
    - `join`
    - `plainPublish` / `plainSubscribe`
    - `clientStats`
-   - 异步 response / notification 分发
+   - response / notification 分发
 2. UDP PlainTransport 数据面
-   - push/play 绑定 PlainTransport RTP/RTCP 端口
-   - 外围只负责 socket I/O 和 packet 交给 SDK
-3. WebRTC QoS SDK runtime
-   - add/receive track
-   - 编码、packetize、pacer、GoogCC、NACK/PLI、stats/QoE
-   - SDK stats / QoE / `clientStats` snapshot 上报
-
-当前主架构文档只保留这一层摘要；完整细节见 [webrtc-qos-push-play-client-design_cn.md](./webrtc-qos-push-play-client-design_cn.md)、[webrtc-qos-push-play-client-p2-design_cn.md](./webrtc-qos-push-play-client-p2-design_cn.md) 和 [webrtc-qos-push-play-client-thread-model-design_cn.md](./webrtc-qos-push-play-client-thread-model-design_cn.md)。
+   - 服务端创建 PlainTransport RTP/RTCP 端口
+   - 外部媒体接入方负责自己的 RTP/RTCP socket
+3. 房间媒体与 QoS
+   - `RoomService` 创建 Producer / Consumer
+   - 录制和 QoS 聚合继续复用同一套房间状态
 
 ## 5. 跨线程与跨进程通信机制
 
@@ -569,32 +558,30 @@ uWS 主线程 timer
 | `clientStats` | 否 | 只更新控制面的 QoS 聚合状态 |
 | `peerJoined` / `newConsumer` / `qosPolicy` 这类通知 | 否 | 只是控制面回主线程发信令 |
 
-### 7.8 `plainPublish` / `plainSubscribe` 与 WebRTC QoS 推拉流补充路径
+### 7.8 `plainPublish` / `plainSubscribe` 补充路径
 
 浏览器路径走的是 `createWebRtcTransport -> connectWebRtcTransport -> produce`。
 
-WebRTC QoS push client 走的是另一条链路：
+PlainTransport 接入方走的是另一条链路：
 
 ```text
-webrtc-qos-plain-push-client
-  -> WebSocket join
+external media ingress
+  -> join
   -> plainPublish(videoSsrcs, audioSsrc)
   -> RoomService::plainPublish()
   -> Router::createPlainTransport()
   -> Transport::produce() for N video tracks + 1 audio track
   -> 返回 {ip, port, videoTracks[], audioPt}
-  -> push client 建立 UDP RTP/RTCP socket
-  -> webrtc_qos_sdk 负责 track、编码、packetize、pacer、GoogCC、NACK/PLI、stats/QoE
+  -> 外部接入方建立 UDP RTP/RTCP socket 并发送媒体
 ```
 
 这条链路的几个关键差异：
 
 - 服务端不做 WebRTC 协商
-- 客户端外围只管理 PlainTransport 信令和 UDP socket
-- 媒体 QoS 状态由 `webrtc_qos_sdk` 维护，并导出 SDK stats / QoE
+- 外部接入方管理 PlainTransport 信令和 UDP socket
 - `qosPolicy` / `qosOverride` 仍然通过同一个 WebSocket 通知通道进入
 
-play client 对称使用 `plainSubscribe` 获取 server PlainTransport 的订阅端口，再把收到的 RTP/RTCP 交给 SDK 解码与 QoE 统计。
+订阅侧对称使用 `plainSubscribe` 获取 server PlainTransport 的订阅端口，再接收 RTP/RTCP。
 
 ## 8. 多节点与 Redis 架构
 
@@ -695,15 +682,7 @@ Client -> 主线程
 
 `downlinkClientStats` 也采用同样的 store-result 语义，但它仍然只把 snapshot 入库变成同步可观测；`downlinkQos` planner 收敛依旧是异步的。
 
-这条路径同时服务于两类 client：
-
-- 浏览器 / JS client
-- WebRTC QoS push/play client
-
-两者 payload schema 相同，但 stats 来源不同：
-
-- 浏览器：`RTCPeerConnection.getStats()`
-- WebRTC QoS client：`webrtc_qos_sdk` stats / QoE / 本地 RTP 计数
+这条路径当前主要服务浏览器 / JS client，stats 来源是 `RTCPeerConnection.getStats()`。
 
 ### 9.2 录制
 
