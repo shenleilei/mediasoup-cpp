@@ -23,8 +23,18 @@ inline flatbuffers::Offset<FBS::Transport::ListenInfo> BuildListenInfo(
 	const uint16_t port = portValue > 0 && portValue <= 65535
 		? static_cast<uint16_t>(portValue)
 		: uint16_t(0);
-
-	auto portRange = FBS::Transport::CreatePortRange(builder, uint16_t(0), uint16_t(0));
+	uint16_t portRangeMin = 0;
+	uint16_t portRangeMax = 0;
+	if (listenInfo.contains("portRange") && listenInfo["portRange"].is_object()) {
+		const auto& portRangeJson = listenInfo["portRange"];
+		const int minValue = portRangeJson.value("min", 0);
+		const int maxValue = portRangeJson.value("max", 0);
+		if (minValue > 0 && minValue <= 65535 && maxValue > 0 && maxValue <= 65535 && minValue <= maxValue) {
+			portRangeMin = static_cast<uint16_t>(minValue);
+			portRangeMax = static_cast<uint16_t>(maxValue);
+		}
+	}
+	auto portRange = FBS::Transport::CreatePortRange(builder, portRangeMin, portRangeMax);
 	auto flags = FBS::Transport::CreateSocketFlags(builder, false, false);
 
 	return FBS::Transport::CreateListenInfo(

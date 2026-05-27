@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
 			return 1;
 	}
 
-	Logger::Init(options.noDaemon ? "" : options.logDir, options.logLevel, options.noDaemon, options.logRotateHours, options.logPrefix, getpid());
+	Logger::Init(options.logDir, options.logLevel, options.noDaemon, options.logRotateHours, options.logPrefix, getpid());
 	spdlog::info("mediasoup-cpp SFU starting (new architecture: WorkerThread pool)...");
 
 	auto failExit = [&options]() {

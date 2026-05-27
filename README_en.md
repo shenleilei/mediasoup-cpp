@@ -550,7 +550,7 @@ cat > config.json <<'EOF'
   "redisHost": "127.0.0.1",
   "redisPort": 6379,
   "recordDir": "./recordings",
-  "logDir": "/var/log/mediasoup",
+  "logDir": "/var/log/mediasoup-cpp",
   "logPrefix": "mediasoup-sfu",
   "logRotateHours": 3
 }
@@ -572,7 +572,7 @@ Open `http://<server-ip>:3000`.
 | `--announcedIp` | auto-detect | public IP for ICE candidates |
 | `--workerBin` | `./mediasoup-worker` | worker binary path |
 | `--recordDir` | `./recordings` | recording output directory |
-| `--logDir` | `/var/log/mediasoup` | daemon log directory |
+| `--logDir` | `/var/log/mediasoup-cpp` | daemon log directory; container stdout/stderr are also appended to `container.stdout.log` and `container.stderr.log` in the same directory |
 | `--logPrefix` | `mediasoup-sfu` | daemon log file prefix |
 | `--logLevel` | `info` | log verbosity |
 | `--logRotateHours` | `3` | rotate daemon log every N hours into files like `mediasoup-sfu_2026041306_<pid>.log` (`0` disables rotation) |

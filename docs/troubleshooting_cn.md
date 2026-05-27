@@ -506,8 +506,8 @@ pgrep -af mediasoup-worker
 ### 11.3 日志
 
 ```bash
-tail -f /var/log/mediasoup/*.log
-grep -R \"worker died\\|serverRestart\\|Channel request timeout\\|remote login\" /var/log/mediasoup
+tail -f /var/log/mediasoup-cpp/*.log
+grep -R \"worker died\\|serverRestart\\|Channel request timeout\\|remote login\" /var/log/mediasoup-cpp
 ```
 
 ### 11.4 Redis

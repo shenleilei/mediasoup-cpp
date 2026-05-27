@@ -9,6 +9,7 @@
 #include "Consumer.h"
 #include "message_generated.h"
 #include "MainBootstrap.h"
+#include "FbsTransportListenInfo.h"
 #include "PublicIpResolver.h"
 #include "notification_generated.h"
 #include "pipeTransport_generated.h"
@@ -965,4 +966,23 @@ TEST(UnwrapTimestamp, MonotonicSequenceNoWrap)
 	EXPECT_LT(t1, t2);
 	EXPECT_LT(t2, t3);
 	EXPECT_EQ(wrapCount, 0u);
+}
+
+TEST(FbsTransportListenInfoTest, BuildListenInfoCarriesExplicitPortRange)
+{
+	flatbuffers::FlatBufferBuilder builder;
+	nlohmann::json listenInfo = {
+		{"ip", "0.0.0.0"},
+		{"protocol", "udp"},
+		{"portRange", {{"min", 1}, {"max", 65535}}}
+	};
+
+	auto listenInfoOff = fbsutils::BuildListenInfo(builder, listenInfo);
+	builder.Finish(listenInfoOff);
+
+	auto* parsed = flatbuffers::GetRoot<FBS::Transport::ListenInfo>(builder.GetBufferPointer());
+	ASSERT_NE(parsed, nullptr);
+	ASSERT_NE(parsed->port_range(), nullptr);
+	EXPECT_EQ(parsed->port_range()->min(), 1);
+	EXPECT_EQ(parsed->port_range()->max(), 65535);
 }

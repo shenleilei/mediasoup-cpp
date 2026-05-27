@@ -21,6 +21,7 @@ const RTP_CAPS = {
 
 const DEFAULT_CONFIG = {
   roomPrefix: 'capacity_room',
+  subscriberCount: 2,
   width: 1920,
   height: 1080,
   fps: 30,
@@ -455,40 +456,45 @@ function summarizeConsumerStats(report, video) {
 async function captureRoomSnapshot(room) {
   const [producerReport, consumerReport] = await Promise.all([
     room.publisher.producer.getStats(),
-    room.subscriber.consumer.getStats(),
+    Promise.all(room.subscribers.map(subscriber => subscriber.consumer.getStats())),
   ]);
 
   return {
     sendTransportState: room.publisher.transport.connectionState,
-    recvTransportState: room.subscriber.transport.connectionState,
+    recvTransportState: room.subscribers.map(subscriber => subscriber.transport.connectionState),
     producer: summarizeProducerStats(producerReport, room.source),
-    consumer: summarizeConsumerStats(consumerReport, room.subscriber.videoElement),
-    videoWidth: room.subscriber.videoElement?.videoWidth ?? 0,
-    videoHeight: room.subscriber.videoElement?.videoHeight ?? 0,
+    consumers: consumerReport.map((report, index) => summarizeConsumerStats(report, room.subscribers[index].videoElement)),
+    videoWidth: Math.max(...room.subscribers.map(subscriber => subscriber.videoElement?.videoWidth ?? 0), 0),
+    videoHeight: Math.max(...room.subscribers.map(subscriber => subscriber.videoElement?.videoHeight ?? 0), 0),
   };
 }
 
-async function closeRoomPair(room) {
+async function closePeer(peer) {
   try {
-    room.subscriber.videoElement?.pause?.();
+    peer.videoElement?.pause?.();
   } catch {}
   try {
-    room.subscriber.videoElement?.remove?.();
+    peer.videoElement?.remove?.();
   } catch {}
   try {
-    room.subscriber.consumer?.close?.();
+    peer.consumer?.close?.();
   } catch {}
+  try {
+    peer.transport?.close?.();
+  } catch {}
+  try {
+    peer.ws?.close?.();
+  } catch {}
+}
+
+async function closeRoom(room) {
+  for (const subscriber of room.subscribers || []) {
+    await closePeer(subscriber);
+  }
   try {
     room.publisher.producer?.close?.();
   } catch {}
-  try {
-    room.subscriber.transport?.close?.();
-  } catch {}
-  try {
-    room.publisher.transport?.close?.();
-  } catch {}
-  room.subscriber.ws?.close?.();
-  room.publisher.ws?.close?.();
+  await closePeer(room.publisher);
   try {
     room.source?.stop?.();
   } catch {}
@@ -500,16 +506,20 @@ async function createRoomPair(wsUrl, index, config) {
     index,
     roomId,
     publisher: {},
-    subscriber: {},
+    subscribers: [],
     source: null,
   };
 
   try {
     room.publisher = await joinPeer(wsUrl, roomId, 'pub');
-    room.subscriber = await joinPeer(wsUrl, roomId, 'sub');
+    for (let i = 0; i < config.subscriberCount; i += 1) {
+      room.subscribers.push(await joinPeer(wsUrl, roomId, `sub${i + 1}`));
+    }
 
-    room.subscriber.transport = await createRecvTransport(room.subscriber);
     room.publisher.transport = await createSendTransport(room.publisher);
+    for (const subscriber of room.subscribers) {
+      subscriber.transport = await createRecvTransport(subscriber);
+    }
 
     room.source = createCanvasSource(`room-${index}`, config);
     room.publisher.producer = await room.publisher.transport.produce({
@@ -527,27 +537,29 @@ async function createRoomPair(wsUrl, index, config) {
       },
     });
 
-    const notification = await room.subscriber.ws.waitNotification('newConsumer', config.connectTimeoutMs);
-    if (!notification) {
-      throw new Error(`[${roomId}] newConsumer timeout`);
-    }
+    for (const subscriber of room.subscribers) {
+      const notification = await subscriber.ws.waitNotification('newConsumer', config.connectTimeoutMs);
+      if (!notification) {
+        throw new Error(`[${roomId}] newConsumer timeout for ${subscriber.peerId}`);
+      }
 
-    room.subscriber.consumer = await consumeSingleVideo(
-      room.subscriber,
-      room.subscriber.transport,
-      notification.data
-    );
-    room.subscriber.videoElement = createHiddenVideo(room.subscriber.consumer.track);
+      subscriber.consumer = await consumeSingleVideo(
+        subscriber,
+        subscriber.transport,
+        notification.data
+      );
+      subscriber.videoElement = createHiddenVideo(subscriber.consumer.track);
+    }
 
     await Promise.all([
       waitForTransportConnected(room.publisher.transport, config.connectTimeoutMs),
-      waitForTransportConnected(room.subscriber.transport, config.connectTimeoutMs),
-      waitForVideoReady(room.subscriber.videoElement, config.videoTimeoutMs),
+      ...room.subscribers.map(subscriber => waitForTransportConnected(subscriber.transport, config.connectTimeoutMs)),
+      ...room.subscribers.map(subscriber => waitForVideoReady(subscriber.videoElement, config.videoTimeoutMs)),
     ]);
 
     return room;
   } catch (error) {
-    await closeRoomPair(room);
+    await closeRoom(room);
     throw error;
   }
 }
@@ -607,6 +619,18 @@ window.__capacityRoomsHarness = {
     };
   },
 
+  async removeRooms(count) {
+    const removed = this.rooms.splice(0, Math.min(count, this.rooms.length));
+    for (const room of removed) {
+      await closeRoom(room);
+    }
+
+    return {
+      removed: removed.map(room => room.roomId),
+      totalRooms: this.rooms.length,
+    };
+  },
+
   async sample(sampleMs = 8000) {
     const before = await Promise.all(this.rooms.map(room => captureRoomSnapshot(room)));
     await sleep(sampleMs);
@@ -617,51 +641,74 @@ window.__capacityRoomsHarness = {
         after[index].producer.bytesSent,
         before[index].producer.bytesSent
       );
-      const recvBytesDelta = positiveDelta(
-        after[index].consumer.bytesReceived,
-        before[index].consumer.bytesReceived
-      );
       const framesSentDelta = positiveDelta(
         after[index].producer.framesSent,
         before[index].producer.framesSent
       );
-      const framesDecodedDelta = positiveDelta(
-        after[index].consumer.framesDecoded,
-        before[index].consumer.framesDecoded
-      );
 
       const sendBitrateBps = bitrateFromDelta(sendBytesDelta, sampleMs);
-      const recvBitrateBps = bitrateFromDelta(recvBytesDelta, sampleMs);
-      const recvWidth = Math.max(
-        after[index].consumer.frameWidth || 0,
-        after[index].videoWidth || 0
-      );
-      const recvHeight = Math.max(
-        after[index].consumer.frameHeight || 0,
-        after[index].videoHeight || 0
-      );
 
       const reasons = [];
       if (after[index].sendTransportState !== 'connected' && after[index].sendTransportState !== 'completed') {
         reasons.push(`sendTransport=${after[index].sendTransportState}`);
       }
-      if (after[index].recvTransportState !== 'connected' && after[index].recvTransportState !== 'completed') {
-        reasons.push(`recvTransport=${after[index].recvTransportState}`);
-      }
       if (sendBitrateBps < this.config.minSendBitrateBps) {
         reasons.push(`sendBitrate=${sendBitrateBps}`);
-      }
-      if (recvBitrateBps < this.config.minRecvBitrateBps) {
-        reasons.push(`recvBitrate=${recvBitrateBps}`);
-      }
-      if (recvWidth < this.config.minWidth || recvHeight < this.config.minHeight) {
-        reasons.push(`recvResolution=${recvWidth}x${recvHeight}`);
       }
       if (framesSentDelta <= 0) {
         reasons.push('framesSent=0');
       }
-      if (framesDecodedDelta <= 0) {
-        reasons.push('framesDecoded=0');
+
+      const consumerSummaries = after[index].consumers.map((consumer, consumerIndex) => {
+        const beforeConsumer = before[index].consumers[consumerIndex];
+        const recvBytesDelta = positiveDelta(
+          consumer.bytesReceived,
+          beforeConsumer.bytesReceived
+        );
+        const framesDecodedDelta = positiveDelta(
+          consumer.framesDecoded,
+          beforeConsumer.framesDecoded
+        );
+        const recvBitrateBps = bitrateFromDelta(recvBytesDelta, sampleMs);
+        const recvWidth = Math.max(
+          consumer.frameWidth || 0,
+          after[index].videoWidth || 0
+        );
+        const recvHeight = Math.max(
+          consumer.frameHeight || 0,
+          after[index].videoHeight || 0
+        );
+        const consumerReasons = [];
+        const transportState = after[index].recvTransportState[consumerIndex];
+        if (transportState !== 'connected' && transportState !== 'completed') {
+          consumerReasons.push(`recvTransport${consumerIndex + 1}=${transportState}`);
+        }
+        if (recvBitrateBps < this.config.minRecvBitrateBps) {
+          consumerReasons.push(`recvBitrate${consumerIndex + 1}=${recvBitrateBps}`);
+        }
+        if (recvWidth < this.config.minWidth || recvHeight < this.config.minHeight) {
+          consumerReasons.push(`recvResolution${consumerIndex + 1}=${recvWidth}x${recvHeight}`);
+        }
+        if (framesDecodedDelta <= 0) {
+          consumerReasons.push(`framesDecoded${consumerIndex + 1}=0`);
+        }
+        return {
+          recvBitrateBps,
+          framesDecodedDelta,
+          recvWidth,
+          recvHeight,
+          packetsLost: consumer.packetsLost,
+          jitter: consumer.jitter,
+          qualityLimitationReason: consumer.qualityLimitationReason,
+          healthy: consumerReasons.length === 0,
+          reasons: consumerReasons,
+        };
+      });
+
+      for (const consumer of consumerSummaries) {
+        if (!consumer.healthy) {
+          reasons.push(...consumer.reasons);
+        }
       }
 
       return {
@@ -669,14 +716,15 @@ window.__capacityRoomsHarness = {
         sendTransportState: after[index].sendTransportState,
         recvTransportState: after[index].recvTransportState,
         sendBitrateBps,
-        recvBitrateBps,
+        recvBitrateBps: average(consumerSummaries.map(item => item.recvBitrateBps)),
         framesSentDelta,
-        framesDecodedDelta,
-        recvWidth,
-        recvHeight,
-        packetsLost: after[index].consumer.packetsLost,
-        jitter: after[index].consumer.jitter,
+        framesDecodedDelta: consumerSummaries.reduce((sum, item) => sum + item.framesDecodedDelta, 0),
+        recvWidth: minimum(consumerSummaries.map(item => item.recvWidth)),
+        recvHeight: minimum(consumerSummaries.map(item => item.recvHeight)),
+        packetsLost: consumerSummaries.map(item => item.packetsLost),
+        jitter: consumerSummaries.map(item => item.jitter),
         qualityLimitationReason: after[index].producer.qualityLimitationReason,
+        consumers: consumerSummaries,
         healthy: reasons.length === 0,
         reasons,
       };
@@ -700,7 +748,7 @@ window.__capacityRoomsHarness = {
 
   async stop() {
     for (const room of [...this.rooms].reverse()) {
-      await closeRoomPair(room);
+      await closeRoom(room);
     }
     this.rooms = [];
     return true;

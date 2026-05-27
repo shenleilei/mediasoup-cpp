@@ -202,7 +202,9 @@ std::shared_ptr<PlainTransport> Router::createPlainTransport(
 		FBS::Request::Method::ROUTER_CREATE_PLAINTRANSPORT,
 		FBS::Request::Body::Router_CreatePlainTransportRequest,
 		[transportId, options](flatbuffers::FlatBufferBuilder& builder) {
-			auto listenInfo = fbsutils::BuildListenInfo(builder, options.listenInfos[0], "127.0.0.1");
+			auto listenInfoJson = options.listenInfos[0];
+			listenInfoJson["portRange"] = {{"min", 1}, {"max", 65535}};
+			auto listenInfo = fbsutils::BuildListenInfo(builder, listenInfoJson, "127.0.0.1");
 
 			auto numSctpStreams = FBS::SctpParameters::CreateNumSctpStreams(builder, 1024, 1024);
 			auto baseOptions = FBS::Transport::CreateOptions(

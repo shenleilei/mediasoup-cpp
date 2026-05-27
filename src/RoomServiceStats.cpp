@@ -2,9 +2,103 @@
 
 #include "RoomStatsQosHelpers.h"
 
+#include <algorithm>
+#include <cmath>
+#include <unordered_set>
+
 namespace mediasoup {
 
-json RoomService::collectPeerStats(const std::string& roomId, const std::string& peerId) {
+namespace {
+
+uint8_t LatestProducerScore(const std::shared_ptr<Producer>& producer)
+{
+	if (!producer) {
+		return 0;
+	}
+
+	const auto& scores = producer->scores();
+	if (scores.empty()) {
+		return 0;
+	}
+
+	return scores.back().score;
+}
+
+json BuildRoomProducerScoreSnapshot(const std::shared_ptr<Room>& room)
+{
+	json snapshot = json::object();
+	if (!room) {
+		return snapshot;
+	}
+
+	for (const auto& peerId : room->getPeerIds()) {
+		auto peer = room->getPeer(peerId);
+		if (!peer) {
+			continue;
+		}
+
+		json peerScores = json::object();
+		for (const auto& [producerId, producer] : peer->producers) {
+			if (!producer || producer->closed()) {
+				continue;
+			}
+			peerScores[producerId] = LatestProducerScore(producer);
+		}
+		snapshot[peerId] = std::move(peerScores);
+	}
+
+	return snapshot;
+}
+
+constexpr double kProducerScoreBroadcastDelta = 1.0;
+
+bool HasSignificantProducerScoreChange(const json& previous, const json& current)
+{
+	if (previous.is_null() || current.is_null()) {
+		return previous != current;
+	}
+
+	if (previous.type() != current.type()) {
+		return true;
+	}
+
+	if (current.is_object()) {
+		std::unordered_set<std::string> keys;
+		for (const auto& [key, _] : previous.items()) {
+			keys.insert(key);
+		}
+		for (const auto& [key, _] : current.items()) {
+			keys.insert(key);
+		}
+
+		for (const auto& key : keys) {
+			auto prevIt = previous.find(key);
+			auto currIt = current.find(key);
+			if (prevIt == previous.end() || currIt == current.end()) {
+				return true;
+			}
+			if (HasSignificantProducerScoreChange(*prevIt, *currIt)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	if (current.is_number()) {
+		const double prevScore = previous.get<double>();
+		const double currScore = current.get<double>();
+		return std::abs(currScore - prevScore) >= kProducerScoreBroadcastDelta;
+	}
+
+	return previous != current;
+}
+
+} // namespace
+
+json RoomService::collectPeerStats(
+	const std::string& roomId,
+	const std::string& peerId,
+	bool includeConsumers) {
 	auto room = roomManager_.getRoom(roomId);
 	if (!room) return {};
 	auto peer = room->getPeer(peerId);
@@ -48,8 +142,10 @@ json RoomService::collectPeerStats(const std::string& roomId, const std::string&
 
 	result["producers"] = roomstatsqos::BuildProducerStats(
 		roomId, peerId, peer, logger_, budgetLeft, statsTimeout);
-	result["consumers"] = roomstatsqos::BuildConsumerStats(
-		roomId, peerId, room, peer, logger_, budgetLeft, statsTimeout);
+	if (includeConsumers) {
+		result["consumers"] = roomstatsqos::BuildConsumerStats(
+			roomId, peerId, room, peer, logger_, budgetLeft, statsTimeout);
+	}
 	roomstatsqos::AppendPeerQosStats(result, qosRegistry_, roomId, peerId);
 	roomstatsqos::AppendPeerDownlinkStats(
 		result, downlinkQosRegistry_, subscriberControllers_, roomId, peerId);
@@ -88,7 +184,7 @@ void RoomService::continueBroadcastStats() {
 	std::string roomId = std::move(pendingStatsRooms_.front());
 	pendingStatsRooms_.pop_front();
 	try {
-		broadcastStatsForRoom(roomId);
+		broadcastStatsForRoom(roomId, true);
 	} catch (...) {
 		statsBroadcastActive_ = false;
 		pendingStatsRooms_.clear();
@@ -107,14 +203,26 @@ void RoomService::continueBroadcastStats() {
 	}
 }
 
-void RoomService::broadcastStatsForRoom(const std::string& roomId) {
+void RoomService::broadcastStatsForRoom(const std::string& roomId, bool forceBroadcast) {
+	if (statsBroadcastActive_ && !forceBroadcast) {
+		return;
+	}
+
 	auto room = roomManager_.getRoom(roomId);
 	if (!room) return;
+
+	const auto currentProducerScores = BuildRoomProducerScoreSnapshot(room);
+	auto previousScoresIt = lastStatsReportProducerScores_.find(roomId);
+	if (!forceBroadcast &&
+		previousScoresIt != lastStatsReportProducerScores_.end() &&
+		!HasSignificantProducerScoreChange(previousScoresIt->second, currentProducerScores)) {
+		return;
+	}
 
 	json allStats = json::array();
 	for (auto& peerId : room->getPeerIds()) {
 		try {
-			auto stats = collectPeerStats(roomId, peerId);
+			auto stats = collectPeerStats(roomId, peerId, /*includeConsumers=*/false);
 			if (!stats.empty()) allStats.push_back(stats);
 		} catch (const std::exception& e) {
 			MS_WARN(logger_, "broadcastStats collectPeerStats failed [room:{} peer:{}]: {}", roomId, peerId, e.what());
@@ -133,6 +241,21 @@ void RoomService::broadcastStatsForRoom(const std::string& roomId) {
 			{"data", {{"roomId", roomId}, {"peers", allStats}}}
 		});
 	}
+
+	lastStatsReportProducerScores_[roomId] = std::move(currentProducerScores);
+}
+
+void RoomService::watchProducerScore(
+	const std::string& roomId,
+	const std::shared_ptr<Producer>& producer)
+{
+	if (!producer) {
+		return;
+	}
+
+	producer->emitter().on("score", [this, roomId](const std::vector<std::any>&) {
+		broadcastStatsForRoom(roomId, false);
+	});
 }
 
 } // namespace mediasoup

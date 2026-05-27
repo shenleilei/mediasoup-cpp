@@ -331,11 +331,12 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 			{"kind", "video"}, {"rtpParameters", videoRtpParams},
 			{"routerRtpCapabilities", caps}
 		};
-		auto videoProd = transport->produce(videoProdOpts);
-		room->router()->addProducer(videoProd);
-		roommedia::TrackPeerProducer(peer, videoProd);
-		videoProducers.push_back(videoProd);
-	}
+	auto videoProd = transport->produce(videoProdOpts);
+	room->router()->addProducer(videoProd);
+	roommedia::TrackPeerProducer(peer, videoProd);
+	watchProducerScore(roomId, videoProd);
+	videoProducers.push_back(videoProd);
+}
 
 	std::shared_ptr<Producer> audioProd;
 	if (enableAudio) {
@@ -366,6 +367,7 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 		audioProd = transport->produce(audioProdOpts);
 		room->router()->addProducer(audioProd);
 		roommedia::TrackPeerProducer(peer, audioProd);
+		watchProducerScore(roomId, audioProd);
 	}
 
 	indexPeerProducers(roomId, peerId, peer->producers);
@@ -450,7 +452,7 @@ RoomService::Result RoomService::plainSubscribe(const std::string& roomId,
 
 RoomService::Result RoomService::produce(const std::string& roomId,
 	const std::string& peerId, const std::string& transportId,
-	const std::string& kind, const json& rtpParameters)
+	const std::string& kind, const json& rtpParameters, const json& appData)
 {
 	if (kind != "audio" && kind != "video") {
 		MS_WARN(logger_, "[{} {}] produce validation failed: invalid kind '{}'", roomId, peerId, kind);
@@ -459,6 +461,14 @@ RoomService::Result RoomService::produce(const std::string& roomId,
 	if (!rtpParameters.is_object()) {
 		MS_WARN(logger_, "[{} {}] produce validation failed: invalid rtpParameters type", roomId, peerId);
 		return {false, {}, "", "invalid rtpParameters"};
+	}
+	if (!appData.is_object()) {
+		MS_WARN(logger_, "[{} {}] produce validation failed: invalid appData type", roomId, peerId);
+		return {false, {}, "", "invalid appData"};
+	}
+	if (appData.contains("source") && !appData.at("source").is_string()) {
+		MS_WARN(logger_, "[{} {}] produce validation failed: invalid appData.source type", roomId, peerId);
+		return {false, {}, "", "invalid appData.source"};
 	}
 
 	auto room = roomManager_.getRoom(roomId);
@@ -470,11 +480,13 @@ RoomService::Result RoomService::produce(const std::string& roomId,
 
 	json produceOpts = {
 		{"kind", kind}, {"rtpParameters", rtpParameters},
-		{"routerRtpCapabilities", room->router()->rtpCapabilities()}
+		{"routerRtpCapabilities", room->router()->rtpCapabilities()},
+		{"appData", appData}
 	};
 	auto producer = transport->produce(produceOpts);
 	room->router()->addProducer(producer);
 	roommedia::TrackPeerProducer(peer, producer);
+	watchProducerScore(roomId, producer);
 	indexPeerProducers(roomId, peerId, peer->producers);
 
 	roommedia::AutoSubscribeProducerToOtherPeers(

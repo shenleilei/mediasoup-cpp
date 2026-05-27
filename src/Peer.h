@@ -7,6 +7,7 @@
 #include <string>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <nlohmann/json.hpp>
 
 namespace mediasoup {
@@ -24,6 +25,8 @@ struct Peer {
 	std::shared_ptr<PlainTransport> plainRecvTransport;
 	std::unordered_map<std::string, std::shared_ptr<Producer>> producers;
 	std::unordered_map<std::string, std::shared_ptr<Consumer>> consumers;
+	std::unordered_map<std::string, std::unordered_set<uint32_t>> sourceSsrcs;
+	std::unordered_map<uint32_t, std::string> ssrcSource;
 	bool closed = false;
 
 	void close() {
@@ -40,6 +43,8 @@ struct Peer {
 		for (auto& [_, c] : consumers)
 			if (c && !c->closed()) c->close();
 		consumers.clear();
+		sourceSsrcs.clear();
+		ssrcSource.clear();
 	}
 
 	std::shared_ptr<Transport> getTransport(const std::string& tid) {

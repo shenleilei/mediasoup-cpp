@@ -168,6 +168,17 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 						sessionId != kInvalidSessionId &&
 						HasMappedSession(wsMap, ws, roomId, peerId, sessionId);
 					if (hasMappedSession || sd->pendingSessionId != kInvalidSessionId) {
+						const std::string joinRoomId = data.value("roomId", roomId);
+						const std::string joinPeerId = data.value("peerId", peerId);
+						spdlog::warn(
+							"[join-reject] room={} peer={} id={} session={} pending={} mapped={} remote={} reason=already-joined",
+							joinRoomId,
+							joinPeerId,
+							id,
+							sessionId,
+							sd->pendingSessionId,
+							hasMappedSession ? "true" : "false",
+							std::string(ws->getRemoteAddressAsText()));
 						json resp = {{"response", true}, {"id", id}, {"ok", false},
 							{"error", "already joined on this connection"}};
 						ws->send(resp.dump(), uWS::OpCode::TEXT);
@@ -503,7 +514,12 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 							}
 							auto oldWs = RegisterJoinedSocket(wsMap, ws, jRoomId, jPeerId, newSessionId);
 							server.assignRoom(jRoomId, deferredWt);
-							spdlog::info("[{} {}] joined (session:{})", jRoomId, jPeerId, newSessionId);
+							spdlog::info(
+								"[join-ok] room={} peer={} session={} replaced_old={}",
+								jRoomId,
+								jPeerId,
+								newSessionId,
+								oldWs ? "true" : "false");
 							if (oldWs) {
 								spdlog::info("[{} {}] kicking old connection (new session:{})", jRoomId, jPeerId, newSessionId);
 								oldWs->end(4000, "replaced");
@@ -536,10 +552,11 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 				std::string roomId = sd->roomId;
 				std::string peerId = sd->peerId;
 				uint64_t sessionId = sd->sessionId;
+				uint64_t pendingSessionId = sd->pendingSessionId;
 				if (sessionId == kInvalidSessionId && sd->pendingSessionId != kInvalidSessionId) {
 					roomId = sd->pendingRoomId;
 					peerId = sd->pendingPeerId;
-					sessionId = sd->pendingSessionId;
+					sessionId = pendingSessionId;
 				}
 
 				if (!peerId.empty()) {
@@ -555,17 +572,32 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 				if (!roomId.empty() && sessionId != kInvalidSessionId) {
 					auto* wt = server.getWorkerThread(roomId, false);
 					if (wt) {
-						wt->post([wt, roomId, peerId, sessionId] {
+						wt->post([wt, roomId, peerId, sessionId, pendingSessionId] {
+							bool leaveApplied = false;
 							try {
 								if (wt->roomService())
-									wt->roomService()->leaveIfSessionMatches(roomId, peerId, sessionId);
+									leaveApplied = wt->roomService()->leaveIfSessionMatches(roomId, peerId, sessionId);
 							} catch (const std::exception& e) {
 								spdlog::error("[{} {}] leave failed: {}", roomId, peerId, e.what());
 							} catch (...) {
 								spdlog::error("[{} {}] leave failed: unknown error", roomId, peerId);
 							}
+							spdlog::info(
+								"[ws-close] room={} peer={} session={} pending={} leave_applied={}",
+								roomId,
+								peerId,
+								sessionId,
+								pendingSessionId,
+								leaveApplied ? "true" : "false");
 							wt->updateRoomCount();
 						});
+					} else {
+						spdlog::info(
+							"[ws-close] room={} peer={} session={} pending={} leave_applied=false worker_present=false",
+							roomId,
+							peerId,
+							sessionId,
+							pendingSessionId);
 					}
 				}
 

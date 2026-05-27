@@ -113,11 +113,18 @@ inline RoomService::Result DispatchRoomServiceRequest(
 			data.at("dtlsParameters").get<DtlsParameters>());
 	}
 	if (method == "produce") {
+		const json appData = data.contains("appData")
+			? data.at("appData")
+			: json::object();
+		if (!appData.is_object()) {
+			throw std::invalid_argument("invalid appData");
+		}
 		return roomService.produce(
 			roomId, peerId,
 			data.at("transportId").get<std::string>(),
 			data.at("kind").get<std::string>(),
-			data.at("rtpParameters"));
+			data.at("rtpParameters"),
+			appData);
 	}
 	if (method == "consume") {
 		return roomService.consume(

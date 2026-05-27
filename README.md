@@ -200,8 +200,10 @@ DOCKER_USERNAME=<user> DOCKER_PASSWORD=<password-or-token> ./build_image.sh --pu
 docker run --rm \
   --name mediasoup-cpp \
   --network host \
+  -v /var/log/mediasoup-cpp:/var/log/mediasoup-cpp \
   -e MEDIASOUP_PORT=1770 \
   -e MEDIASOUP_ANNOUNCED_IP=127.0.0.1 \
+  -e MEDIASOUP_LOG_DIR=/var/log/mediasoup-cpp \
   mediasoup-cpp:sfu
 ```
 
@@ -212,7 +214,9 @@ docker run -d \
   --name mediasoup-cpp \
   --restart unless-stopped \
   --network host \
+  -v /var/log/mediasoup-cpp:/var/log/mediasoup-cpp \
   -e MEDIASOUP_PORT=1770 \
+  -e MEDIASOUP_LOG_DIR=/var/log/mediasoup-cpp \
   mediasoup-cpp:sfu
 ```
 
@@ -223,8 +227,10 @@ docker run -d \
   --name mediasoup-cpp \
   --restart unless-stopped \
   --network host \
+  -v /var/log/mediasoup-cpp:/var/log/mediasoup-cpp \
   -e MEDIASOUP_PORT=1770 \
   -e MEDIASOUP_ANNOUNCED_IP=<server-ip> \
+  -e MEDIASOUP_LOG_DIR=/var/log/mediasoup-cpp \
   mediasoup-cpp:sfu
 ```
 
@@ -236,8 +242,10 @@ docker run -d \
   --restart unless-stopped \
   -p 1770:1770/tcp \
   -p 8000-8002:8000-8002/udp \
+  -v /var/log/mediasoup-cpp:/var/log/mediasoup-cpp \
   -e MEDIASOUP_PORT=1770 \
   -e MEDIASOUP_ANNOUNCED_IP=<server-ip> \
+  -e MEDIASOUP_LOG_DIR=/var/log/mediasoup-cpp \
   mediasoup-cpp:sfu
 ```
 
@@ -271,7 +279,7 @@ docker run --rm \
 | `MEDIASOUP_REDIS_REQUIRED` | `0` | 默认不需要 Redis；`1` 表示 Redis 不可用时 readiness 失败 |
 | `MEDIASOUP_REDIS_HOST` | `0.0.0.0` | Redis 地址；默认配合 `MEDIASOUP_REDIS_REQUIRED=0` 走 local-only |
 | `MEDIASOUP_REDIS_PORT` | `1` | Redis 端口 |
-| `MEDIASOUP_LOG_DIR` | 空 | 非空时写守护日志目录 |
+| `MEDIASOUP_LOG_DIR` | `/var/log/mediasoup-cpp` | 守护日志目录，建议绑定到宿主机同名目录；容器 stdout/stderr 也会追加到该目录下的 `container.stdout.log` 和 `container.stderr.log` |
 
 默认镜像启用 `WebRtcServer`，浏览器 WebRTC transport 会复用 `8000/udp` 这个共享监听端口。`8000-8002` 中剩余端口仍供 PlainTransport 等非 WebRTC-server 链路使用；如果开启多 worker 或大量 PlainTransport，仍应放大 `MEDIASOUP_RTC_MIN_PORT/MEDIASOUP_RTC_MAX_PORT` 和 `MEDIASOUP_WEBRTC_SERVER_*` 范围。
 
@@ -766,7 +774,7 @@ cat > config.json <<'EOF'
   "announcedIp": "<public-ip>",
   "redisHost": "127.0.0.1",
   "redisPort": 6379,
-  "logDir": "/var/log/mediasoup",
+  "logDir": "/var/log/mediasoup-cpp",
   "logPrefix": "mediasoup-sfu",
   "logRotateHours": 3
 }
@@ -792,7 +800,7 @@ EOF
 | `--webRtcServerMinPort` | `rtcMinPort` | `WebRtcServer` 起始端口 |
 | `--webRtcServerMaxPort` | 自动按 worker 数计算 | `WebRtcServer` 结束端口 |
 | `--workerBin` | `./mediasoup-worker` | worker 可执行文件路径 |
-| `--logDir` | `/var/log/mediasoup` | 守护进程日志目录 |
+| `--logDir` | `/var/log/mediasoup-cpp` | 守护进程日志目录 |
 | `--logPrefix` | `mediasoup-sfu` | 守护进程日志文件前缀 |
 | `--logLevel` | `info` | 日志详细级别 |
 | `--logRotateHours` | `3` | 每 N 小时轮转守护进程日志，生成如 `mediasoup-sfu_2026041306_<pid>.log` 的文件 (`0` 为禁用轮转) |

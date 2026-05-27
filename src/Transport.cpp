@@ -58,12 +58,17 @@ std::shared_ptr<Producer> Transport::produce(const json& options) {
 		MS_WARN(logger_, "produce validation failed [transportId:{}]: invalid routerRtpCapabilities", id_);
 		throw std::invalid_argument("invalid or missing 'routerRtpCapabilities'");
 	}
+	if (options.contains("appData") && !options.at("appData").is_object()) {
+		MS_WARN(logger_, "produce validation failed [transportId:{}]: invalid appData", id_);
+		throw std::invalid_argument("invalid 'appData': expected object");
+	}
 	std::string kind = getRequiredString(options, "kind");
 	if (kind != "audio" && kind != "video") {
 		MS_WARN(logger_, "produce validation failed [transportId:{} kind:{}]", id_, kind);
 		throw std::invalid_argument("invalid 'kind': expected 'audio' or 'video'");
 	}
 	RtpParameters rtpParameters = options.at("rtpParameters").get<RtpParameters>();
+	json appData = options.value("appData", json::object());
 	bool paused = getOptionalBool(options, "paused", false);
 
 	// Get router RTP capabilities from options (must be passed in)
@@ -94,6 +99,7 @@ std::shared_ptr<Producer> Transport::produce(const json& options) {
 
 	auto producer = std::make_shared<Producer>(
 		producerId, kind, rtpParameters, "simple",
+		appData,
 		consumableRtpParams, channel_, id_);
 
 	producers_[producerId] = producer;

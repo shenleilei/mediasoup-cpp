@@ -80,7 +80,7 @@ COPY --from=builder /opt/mediasoup-cpp/ ./
 COPY docker/entrypoint.sh /usr/local/bin/mediasoup-sfu-entrypoint
 
 RUN chmod +x /usr/local/bin/mediasoup-sfu-entrypoint \
-  && mkdir -p /var/log/mediasoup
+  && mkdir -p /var/log/mediasoup-cpp
 
 EXPOSE 1770/tcp
 EXPOSE 8000-8002/udp
@@ -93,6 +93,6 @@ ENV MEDIASOUP_PORT=1770 \
     MEDIASOUP_RTC_MIN_PORT=8000 \
     MEDIASOUP_RTC_MAX_PORT=8002 \
     MEDIASOUP_REDIS_REQUIRED=0 \
-    MEDIASOUP_LOG_DIR=
+    MEDIASOUP_LOG_DIR=/var/log/mediasoup-cpp
 
 ENTRYPOINT ["mediasoup-sfu-entrypoint"]

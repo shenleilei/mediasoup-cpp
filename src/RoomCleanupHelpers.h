@@ -31,6 +31,7 @@ template<typename SubscriberControllerMap,
 	typename AutoOverrideMap,
 	typename LastConnectionQualityMap,
 	typename LastRoomQosStateMap,
+	typename LastStatsReportScoreMap,
 	typename DirtyRoomSet,
 	typename DownlinkRoomPlanStateMap,
 	typename TrackOverrideMap,
@@ -44,6 +45,7 @@ void CleanupRoomServiceState(
 	AutoOverrideMap& autoQosOverrideRecords,
 	LastConnectionQualityMap& lastConnectionQualitySignatures,
 	LastRoomQosStateMap& lastRoomQosStateSignatures,
+	LastStatsReportScoreMap& lastStatsReportProducerScores,
 	DirtyRoomSet& dirtyDownlinkRooms,
 	std::deque<std::string>& pendingDownlinkRooms,
 	DownlinkRoomPlanStateMap& downlinkRoomPlanStates,
@@ -58,6 +60,7 @@ void CleanupRoomServiceState(
 	EraseKeysByPrefix(autoQosOverrideRecords, prefix);
 	EraseKeysByPrefix(lastConnectionQualitySignatures, prefix);
 	lastRoomQosStateSignatures.erase(roomId);
+	lastStatsReportProducerScores.erase(roomId);
 	dirtyDownlinkRooms.erase(roomId);
 	ErasePendingRoom(pendingDownlinkRooms, roomId);
 	downlinkRoomPlanStates.erase(roomId);

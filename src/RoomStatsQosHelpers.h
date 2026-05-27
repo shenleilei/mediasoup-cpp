@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Logger.h"
+#include "RoomMediaHelpers.h"
 #include "RoomManager.h"
 #include "qos/DownlinkQosRegistry.h"
 #include "qos/QosAggregator.h"
@@ -160,6 +161,13 @@ json BuildProducerStats(
 		}
 		producerStats["scores"] = std::move(scores);
 		producerStats["kind"] = producer->kind();
+		if (!producer->source().empty()) {
+			producerStats["source"] = producer->source();
+		}
+		auto ssrcs = roommedia::CollectProducerSsrcs(producer);
+		if (!ssrcs.empty()) {
+			producerStats["ssrcs"] = std::move(ssrcs);
+		}
 		if (!producer->rtpParameters().codecs.empty()) {
 			producerStats["clockRate"] = producer->rtpParameters().codecs.front().clockRate;
 		}

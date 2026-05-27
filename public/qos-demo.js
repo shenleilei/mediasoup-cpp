@@ -301,13 +301,22 @@
     return '已订阅';
   }
 
-  function formatRemoteServerSummary(serverState) {
-    if (!serverState) {
-      return '等待 statsReport';
+  function formatRemoteServerSummary(serverState, serverSubscription) {
+    if (serverState) {
+      const mode = serverState.paused ? '暂停' : '活动';
+      return `${mode} · S${fmtValue(serverState.preferredSpatialLayer, 0)} / T${fmtValue(serverState.preferredTemporalLayer, 0)} / P${fmtValue(serverState.priority, 0)}`;
     }
 
-    const mode = serverState.paused ? '暂停' : '活动';
-    return `${mode} · S${fmtValue(serverState.preferredSpatialLayer, 0)} / T${fmtValue(serverState.preferredTemporalLayer, 0)} / P${fmtValue(serverState.priority, 0)}`;
+    if (serverSubscription) {
+      return [
+        serverSubscription.visible ? '可见' : '隐藏',
+        serverSubscription.pinned ? '置顶' : '非置顶',
+        serverSubscription.activeSpeaker ? '主讲' : '非主讲',
+        serverSubscription.isScreenShare ? '屏幕共享' : '普通视频',
+      ].join(' · ');
+    }
+
+    return '等待 statsReport';
   }
 
   function getCurrentPeerStats() {
@@ -620,7 +629,6 @@
     entry.remoteTrack = remoteTracks.find(track => track.producerId === entry.producerId) || null;
     entry.remoteProducer = entry.remotePeerStats?.producers?.[entry.producerId] || null;
 
-    const serverState = entry.serverState || {};
     const serverSub = entry.serverSubscription || {};
     const recvRttMs = state.localDebugStats?.recv?.currentRoundTripTime;
 
@@ -633,19 +641,12 @@
     if (entry.badgeEl) {
       entry.badgeEl.textContent = remoteTrackBadge(entry);
     }
-    entry.serverSummaryEl.innerHTML = `<strong>远端 QoS</strong> ${escapeHtml(formatRemoteServerSummary(entry.serverState))}`;
+    entry.serverSummaryEl.innerHTML = `<strong>远端 QoS</strong> ${escapeHtml(formatRemoteServerSummary(entry.serverState, serverSub))}`;
     entry.metricsGridEl.innerHTML = [
       qosItem('Consumer', shortId(entry.consumer?.id)),
       qosItem('Producer', shortId(entry.producerId)),
       qosItem('Track', fmtValue(entry.remoteTrack?.localTrackId, '-')),
       qosItem('Source', prettyTrackSource(entry.remoteTrack?.source, entry.consumer?.kind)),
-      qosItem('状态', serverState.paused ? '暂停' : '活动'),
-      qosItem('Producer 暂停', fmtBool(serverState.producerPaused)),
-      qosItem('空间层', fmtValue(serverState.preferredSpatialLayer, 0)),
-      qosItem('时间层', fmtValue(serverState.preferredTemporalLayer, 0)),
-      qosItem('优先级', fmtValue(serverState.priority, 0)),
-      qosItem('Consumer 分数', fmtValue(serverState.score, 0)),
-      qosItem('Producer 分数', fmtValue(serverState.producerScore, 0)),
       qosItem('Publisher QoS', fmtValue(entry.remotePeerStats?.qos?.quality, '-')),
       qosItem('可见', fmtBool(serverSub.visible)),
       qosItem('置顶', fmtBool(serverSub.pinned)),
@@ -693,7 +694,6 @@
       return;
     }
 
-    const consumers = localPeerStats.consumers || {};
     const subscriptions = Array.isArray(localPeerStats.downlinkClientStats?.subscriptions)
       ? localPeerStats.downlinkClientStats.subscriptions
       : [];
@@ -704,7 +704,7 @@
     );
 
     for (const entry of state.remoteVideoConsumers.values()) {
-      entry.serverState = consumers[entry.consumer.id] || null;
+      entry.serverState = null;
       entry.serverSubscription = subscriptionByConsumerId.get(entry.consumer.id) || null;
       updateRemoteCardUI(entry);
     }
@@ -783,6 +783,7 @@
         track: primaryVideoTrack,
         previewStream: new MediaStream([primaryVideoTrack]),
         label: primaryVideoTrack.label || 'Default camera',
+        source: 'camera',
       });
     }
 
@@ -829,6 +830,7 @@
             track,
             previewStream: new MediaStream([track]),
             label: track.label || device.label || `Camera ${cameraEntries.length + 1}`,
+            source: 'camera',
           });
         } catch (error) {
           log(`Skipping camera ${device.label || device.deviceId || 'unknown'}: ${error.message}`);
@@ -1920,12 +1922,13 @@
         errback(error);
       }
     });
-    state.sendTransport.on('produce', async ({ kind, rtpParameters }, callback, errback) => {
+    state.sendTransport.on('produce', async ({ kind, rtpParameters, appData }, callback, errback) => {
       try {
         const response = await wsRequest('produce', {
           transportId: state.sendTransport.id,
           kind,
           rtpParameters,
+          appData,
         });
         callback({ id: response.id });
       } catch (error) {
@@ -1934,7 +1937,10 @@
     });
 
     if (audioTrack) {
-      const audioProducer = await state.sendTransport.produce({ track: audioTrack });
+      const audioProducer = await state.sendTransport.produce({
+        track: audioTrack,
+        appData: { source: 'audio' },
+      });
       state.publishedProducers.set(audioProducer.id, audioProducer);
       log(`Producing audio [${audioProducer.id}]`);
     }
@@ -1948,6 +1954,7 @@
       const producer = await state.sendTransport.produce({
         track: entry.track,
         codec: preferredVideoCodec || undefined,
+        appData: { source: entry.source || 'camera' },
       });
       state.publishedProducers.set(producer.id, producer);
       videoProducers.push(producer);
@@ -2310,7 +2317,6 @@
     const downlinkSnapshot = peer.downlinkClientStats || {};
     const downlinkQos = peer.downlinkQos || {};
     const tracks = snapshot.tracks || [];
-    const consumers = peer.consumers || {};
     const producers = peer.producers || {};
     const subscriptionByConsumerId = new Map(
       (Array.isArray(downlinkSnapshot.subscriptions) ? downlinkSnapshot.subscriptions : [])
@@ -2325,7 +2331,7 @@
       '<div class="peer-row-head">' +
       '<div>' +
       `<div class="peer-row-title">${escapeHtml(peer.peerId || 'peer')}</div>` +
-      `<div class="peer-row-subtitle">tracks ${tracks.length} · producers ${Object.keys(producers).length} · consumers ${Object.keys(consumers).length} · visible ${visibleCount} · pinned ${pinnedCount}</div>` +
+      `<div class="peer-row-subtitle">tracks ${tracks.length} · producers ${Object.keys(producers).length} · visible ${visibleCount} · pinned ${pinnedCount}</div>` +
       '</div>' +
       `<div class="pill quality-${pillClass(stateName)}">${escapeHtml(peer.peerId === state.peerId ? `${stateName} · you` : stateName)}</div>` +
       '</div>' +

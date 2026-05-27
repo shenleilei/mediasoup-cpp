@@ -97,4 +97,11 @@ if [[ -n "${MEDIASOUP_LOG_LEVEL:-}" ]]; then
   args+=("--logLevel=${MEDIASOUP_LOG_LEVEL}")
 fi
 
+if [[ -n "${MEDIASOUP_LOG_DIR:-}" ]]; then
+  mkdir -p "${MEDIASOUP_LOG_DIR}"
+  stdout_log_path="${MEDIASOUP_LOG_DIR}/container.stdout.log"
+  stderr_log_path="${MEDIASOUP_LOG_DIR}/container.stderr.log"
+  exec > >(tee -a "${stdout_log_path}") 2> >(tee -a "${stderr_log_path}" >&2)
+fi
+
 exec ./mediasoup-sfu "${args[@]}" "$@"

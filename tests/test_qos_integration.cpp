@@ -252,6 +252,48 @@ TEST_F(QosIntegrationTest, GetStatsAfterProduce) {
 	}
 }
 
+// ─── Test 1b: produce appData.source is preserved with SSRC mapping ───
+TEST_F(QosIntegrationTest, GetStatsIncludesProduceSourceMapping) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto sendResp = alice.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(sendResp.value("ok", false)) << sendResp.dump();
+	const std::string sendId = sendResp["data"]["id"];
+
+	const uint32_t ssrc = 70000011;
+	json rtpParams = {
+		{"codecs", {{
+			{"mimeType", "video/VP8"}, {"clockRate", 90000},
+			{"payloadType", 101}
+		}}},
+		{"encodings", {{{"ssrc", ssrc}}}},
+		{"mid", "0"}
+	};
+	auto produceResp = alice.ws->request("produce", {
+		{"transportId", sendId},
+		{"kind", "video"},
+		{"rtpParameters", rtpParams},
+		{"appData", {{"source", "bleft"}}}
+	});
+	ASSERT_TRUE(produceResp.value("ok", false)) << produceResp.dump();
+	const std::string producerId = produceResp["data"]["id"];
+
+	auto observer = joinRoom(testRoom_, "observer");
+	usleep(200000);
+
+	auto resp = observer.ws->request("getStats", {{"peerId", "alice"}});
+	ASSERT_TRUE(resp.value("ok", false)) << resp.dump();
+
+	auto& producers = resp["data"]["producers"];
+	ASSERT_TRUE(producers.contains(producerId)) << producers.dump();
+	auto& producerStats = producers[producerId];
+	EXPECT_EQ(producerStats["source"], "bleft");
+	ASSERT_TRUE(producerStats.contains("ssrcs"));
+	ASSERT_EQ(producerStats["ssrcs"].size(), 1u);
+	EXPECT_EQ(producerStats["ssrcs"][0], ssrc);
+}
+
 // ─── Test 2: getStats for another peer (cross-query) ───
 TEST_F(QosIntegrationTest, GetStatsForOtherPeer) {
 	auto alice = joinRoom(testRoom_, "alice");
@@ -316,7 +358,7 @@ TEST_F(QosIntegrationTest, StatsReportBroadcast) {
 
 	// Wait for the stats broadcast timer to fire (kStatsBroadcastIntervalMs=10s)
 	auto notif = alice.ws->waitNotification("statsReport", 15000);
-	ASSERT_FALSE(notif.empty()) << "Did not receive statsReport within 5s";
+	ASSERT_FALSE(notif.empty()) << "Did not receive statsReport within timeout";
 
 	auto& data = notif["data"];
 	EXPECT_TRUE(data.contains("roomId"));
@@ -337,8 +379,8 @@ TEST_F(QosIntegrationTest, StatsReportBroadcast) {
 	EXPECT_TRUE(foundAlice) << "Alice not found in statsReport";
 }
 
-// ─── Test 6: statsReport includes consumer scores after subscribe ───
-TEST_F(QosIntegrationTest, StatsReportWithConsumers) {
+// ─── Test 6: statsReport excludes consumer details but keeps peer stats ───
+TEST_F(QosIntegrationTest, StatsReportWithoutConsumers) {
 	auto alice = joinRoom(testRoom_, "alice");
 	auto bob = joinRoom(testRoom_, "bob");
 
@@ -358,20 +400,13 @@ TEST_F(QosIntegrationTest, StatsReportWithConsumers) {
 	auto stats = bob.ws->waitNotification("statsReport", 15000);
 	ASSERT_FALSE(stats.empty()) << "No statsReport received";
 
-	// Bob should appear in peers with consumers
+	// Bob should appear in peers, but consumer details are no longer included
 	bool foundBob = false;
 	for (auto& peer : stats["data"]["peers"]) {
 		if (peer["peerId"] == "bob") {
 			foundBob = true;
-			EXPECT_TRUE(peer.contains("consumers"));
-			// Bob has at least one consumer (from Alice's producer)
-			if (!peer["consumers"].empty()) {
-				for (auto& [cid, cdata] : peer["consumers"].items()) {
-					EXPECT_TRUE(cdata.contains("kind"));
-					EXPECT_TRUE(cdata.contains("score"));
-					EXPECT_TRUE(cdata.contains("producerScore"));
-				}
-			}
+			EXPECT_FALSE(peer.contains("consumers"));
+			EXPECT_TRUE(peer.contains("producers"));
 			break;
 		}
 	}
@@ -407,16 +442,7 @@ TEST_F(QosIntegrationTest, StatsReportIncludesDownlinkConsumerState) {
 	for (auto& peer : stats["data"]["peers"]) {
 		if (peer["peerId"] != "bob") continue;
 		foundBob = true;
-		ASSERT_TRUE(peer.contains("consumers"));
-		ASSERT_TRUE(peer["consumers"].contains(consumerId)) << peer.dump();
-		const auto& consumer = peer["consumers"][consumerId];
-		EXPECT_EQ(consumer["kind"], "video");
-		EXPECT_EQ(consumer["type"], "simple");
-		EXPECT_FALSE(consumer["paused"].get<bool>());
-		EXPECT_FALSE(consumer["producerPaused"].get<bool>());
-		EXPECT_EQ(consumer["preferredSpatialLayer"].get<uint8_t>(), 2);
-		EXPECT_EQ(consumer["preferredTemporalLayer"].get<uint8_t>(), 2);
-		EXPECT_EQ(consumer["priority"].get<uint8_t>(), 220);
+		EXPECT_FALSE(peer.contains("consumers"));
 		EXPECT_TRUE(peer.contains("downlinkClientStats"));
 		ASSERT_TRUE(peer["downlinkClientStats"].contains("subscriptions"));
 		ASSERT_FALSE(peer["downlinkClientStats"]["subscriptions"].empty());
@@ -503,7 +529,7 @@ TEST_F(QosIntegrationTest, MultipleProducersInStats) {
 TEST_F(QosIntegrationTest, NoStatsReportWithoutProducers) {
 	auto alice = joinRoom(testRoom_, "alice");
 
-	// Wait 3 seconds — should still get statsReport even without producers
+	// Wait for the stats timer — should still get statsReport even without producers
 	// (the timer fires regardless), but peers array should show no producer data
 	auto notif = alice.ws->waitNotification("statsReport", 15000);
 	if (!notif.empty()) {

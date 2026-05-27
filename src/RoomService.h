@@ -83,7 +83,7 @@ public:
 		const std::string& displayName, const json& rtpCapabilities,
 		const std::string& clientIp = "");
 	Result leave(const std::string& roomId, const std::string& peerId);
-	Result leaveIfSessionMatches(const std::string& roomId, const std::string& peerId,
+	bool leaveIfSessionMatches(const std::string& roomId, const std::string& peerId,
 		uint64_t expectedSessionId);
 	Result createTransport(const std::string& roomId, const std::string& peerId,
 		bool producing, bool consuming,
@@ -92,7 +92,7 @@ public:
 		const std::string& transportId, const DtlsParameters& dtlsParams);
 	Result produce(const std::string& roomId, const std::string& peerId,
 		const std::string& transportId, const std::string& kind,
-		const json& rtpParameters);
+		const json& rtpParameters, const json& appData = json::object());
 	Result consume(const std::string& roomId, const std::string& peerId,
 		const std::string& transportId, const std::string& producerId,
 		const json& rtpCapabilities);
@@ -138,7 +138,10 @@ public:
 		const std::string& roomId,
 		const std::string& peerId,
 		qos::DownlinkSnapshot stats);
-	json collectPeerStats(const std::string& roomId, const std::string& peerId);
+	json collectPeerStats(
+		const std::string& roomId,
+		const std::string& peerId,
+		bool includeConsumers = true);
 	void broadcastStats();
 
 	// Multi-node: resolve room location
@@ -156,8 +159,9 @@ private:
 
 	void cleanupRoomResources(const std::string& roomId);
 	void destroyRoom(const std::string& roomId);
-	void broadcastStatsForRoom(const std::string& roomId);
+	void broadcastStatsForRoom(const std::string& roomId, bool forceBroadcast);
 	void continueBroadcastStats();
+	void watchProducerScore(const std::string& roomId, const std::shared_ptr<Producer>& producer);
 	void maybeSendAutomaticQosOverride(const std::string& roomId,
 		const std::string& peerId, const qos::PeerQosAggregate& aggregate);
 	void maybeNotifyConnectionQuality(const std::string& roomId,
@@ -208,6 +212,7 @@ private:
 	std::unordered_map<std::string, AutoQosOverrideRecord> autoQosOverrideRecords_;
 	std::unordered_map<std::string, std::string> lastConnectionQualitySignatures_;
 	std::unordered_map<std::string, std::string> lastRoomQosStateSignatures_;
+	std::unordered_map<std::string, json> lastStatsReportProducerScores_;
 	std::deque<std::string> pendingStatsRooms_;
 	bool statsBroadcastActive_ = false;
 	int64_t lastOverrideCleanupMs_{ 0 };

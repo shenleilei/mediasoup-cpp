@@ -34,7 +34,7 @@
 
 ### 稳定性
 - [ ] 进程守护：systemd service 文件（替代手动启动）
-- [ ] 日志轮转：logrotate 配置（/var/log/mediasoup-sfu.log）
+- [ ] 日志轮转：logrotate 配置（/var/log/mediasoup-cpp/mediasoup-sfu.log）
 - [ ] 录制磁盘监控告警（当前有自动清理，但需要监控）
 - [ ] Worker 崩溃告警（当前只有日志，需要接入监控系统）
 - [ ] OOM 保护：设置 cgroup 内存限制

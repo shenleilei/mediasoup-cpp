@@ -6,10 +6,73 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <unordered_set>
+#include <vector>
 
 namespace mediasoup::roommedia {
 
 using NotifyFn = std::function<void(const std::string&, const std::string&, const json&)>;
+
+inline std::vector<uint32_t> CollectProducerSsrcs(const std::shared_ptr<Producer>& producer)
+{
+	std::vector<uint32_t> ssrcs;
+	if (!producer) {
+		return ssrcs;
+	}
+
+	std::unordered_set<uint32_t> seen;
+	for (const auto& encoding : producer->rtpParameters().encodings) {
+		if (!encoding.ssrc) {
+			continue;
+		}
+		if (seen.insert(*encoding.ssrc).second) {
+			ssrcs.push_back(*encoding.ssrc);
+		}
+	}
+
+	return ssrcs;
+}
+
+inline void RegisterPeerProducerSourceMapping(
+	const std::shared_ptr<Peer>& peer,
+	const std::string& source,
+	const std::vector<uint32_t>& ssrcs)
+{
+	if (!peer || source.empty() || ssrcs.empty()) {
+		return;
+	}
+
+	auto& mappedSsrcs = peer->sourceSsrcs[source];
+	for (uint32_t ssrc : ssrcs) {
+		mappedSsrcs.insert(ssrc);
+		peer->ssrcSource[ssrc] = source;
+	}
+}
+
+inline void RemovePeerProducerSourceMapping(
+	const std::shared_ptr<Peer>& peer,
+	const std::string& source,
+	const std::vector<uint32_t>& ssrcs)
+{
+	if (!peer || source.empty() || ssrcs.empty()) {
+		return;
+	}
+
+	auto sourceIt = peer->sourceSsrcs.find(source);
+	for (uint32_t ssrc : ssrcs) {
+		auto reverseIt = peer->ssrcSource.find(ssrc);
+		if (reverseIt != peer->ssrcSource.end() && reverseIt->second == source) {
+			peer->ssrcSource.erase(reverseIt);
+		}
+		if (sourceIt != peer->sourceSsrcs.end()) {
+			sourceIt->second.erase(ssrc);
+		}
+	}
+
+	if (sourceIt != peer->sourceSsrcs.end() && sourceIt->second.empty()) {
+		peer->sourceSsrcs.erase(sourceIt);
+	}
+}
 
 inline void TrackPeerProducer(
 	const std::shared_ptr<Peer>& peer,
@@ -20,12 +83,16 @@ inline void TrackPeerProducer(
 	}
 
 	peer->producers[producer->id()] = producer;
+	const std::string source = producer->source();
+	const auto ssrcs = CollectProducerSsrcs(producer);
+	RegisterPeerProducerSourceMapping(peer, source, ssrcs);
 
 	std::weak_ptr<Peer> weakPeer = peer;
 	const std::string producerId = producer->id();
-	producer->emitter().once("@close", [weakPeer, producerId](const std::vector<std::any>&) {
+	producer->emitter().once("@close", [weakPeer, producerId, source, ssrcs](const std::vector<std::any>&) {
 		if (auto lockedPeer = weakPeer.lock()) {
 			lockedPeer->producers.erase(producerId);
+			RemovePeerProducerSourceMapping(lockedPeer, source, ssrcs);
 		}
 	});
 }

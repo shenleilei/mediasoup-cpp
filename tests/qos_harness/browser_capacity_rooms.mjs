@@ -12,7 +12,50 @@ const puppeteer = require('puppeteer-core');
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..', '..');
-const chromiumPath = '/usr/lib64/chromium-browser/headless_shell';
+
+function resolveChromiumPath() {
+  if (process.env.CHROMIUM_PATH) {
+    return process.env.CHROMIUM_PATH;
+  }
+
+  try {
+    const cacheRoot = path.join(os.homedir(), '.cache', 'puppeteer', 'chrome');
+    if (fs.existsSync(cacheRoot)) {
+      const stack = [cacheRoot];
+      while (stack.length > 0) {
+        const current = stack.pop();
+        const entries = fs.readdirSync(current, { withFileTypes: true });
+        for (const entry of entries) {
+          const full = path.join(current, entry.name);
+          if (entry.isDirectory()) {
+            stack.push(full);
+          } else if (entry.isFile() && entry.name === 'chrome') {
+            return full;
+          }
+        }
+      }
+    }
+  } catch {}
+
+  const candidates = [
+    '/usr/lib64/chromium-browser/headless_shell',
+    '/usr/bin/headless_shell',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    } catch {}
+  }
+
+  return candidates[0];
+}
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -49,9 +92,12 @@ function parseIntegerArg(value, name) {
 function parseArgs(argv) {
   const defaults = {
     port: 0,
+    wsUrl: '',
     workers: 1,
     step: 5,
     maxRooms: 50,
+    churnCycles: 0,
+    churnBatch: 1,
     settleMs: 3_000,
     sampleMs: 8_000,
     createConcurrency: 4,
@@ -81,6 +127,9 @@ function parseArgs(argv) {
       case 'port':
         defaults.port = parseIntegerArg(rawValue, 'port');
         break;
+      case 'ws-url':
+        defaults.wsUrl = rawValue;
+        break;
       case 'workers':
         defaults.workers = Math.max(1, parseIntegerArg(rawValue, 'workers'));
         break;
@@ -89,6 +138,12 @@ function parseArgs(argv) {
         break;
       case 'max-rooms':
         defaults.maxRooms = Math.max(1, parseIntegerArg(rawValue, 'max-rooms'));
+        break;
+      case 'churn-cycles':
+        defaults.churnCycles = Math.max(0, parseIntegerArg(rawValue, 'churn-cycles'));
+        break;
+      case 'churn-batch':
+        defaults.churnBatch = Math.max(1, parseIntegerArg(rawValue, 'churn-batch'));
         break;
       case 'settle-ms':
         defaults.settleMs = parseIntegerArg(rawValue, 'settle-ms');
@@ -142,6 +197,8 @@ Options:
   --workers=1
   --step=5
   --max-rooms=50
+  --churn-cycles=0
+  --churn-batch=1
   --settle-ms=3000
   --sample-ms=8000
   --create-concurrency=4
@@ -155,6 +212,7 @@ Options:
   --min-height=900
   --room-prefix=capacity_room
   --port=0
+  --ws-url=ws://127.0.0.1:1770/ws
 `);
 }
 
@@ -170,15 +228,26 @@ async function allocatePort() {
   });
 }
 
-function buildBundle(tmpDir) {
+async function buildBundle(tmpDir) {
   const outfile = path.join(tmpDir, 'bundle.js');
-  esbuild.buildSync({
+  await esbuild.build({
     entryPoints: [path.join(__dirname, 'browser', 'capacity-rooms-entry.js')],
     outfile,
     bundle: true,
     platform: 'browser',
     format: 'iife',
     target: ['chrome120'],
+    nodePaths: [path.join(__dirname, 'node_modules')],
+    plugins: [
+      {
+        name: 'npm-events-package-shim',
+        setup(build) {
+          build.onResolve({ filter: /^npm-events-package$/ }, () => ({
+            path: path.join(__dirname, 'shims', 'npm-events-package.js'),
+          }));
+        },
+      },
+    ],
   });
   return outfile;
 }
@@ -250,6 +319,8 @@ async function waitForPort(port, timeoutMs = 7000) {
 
 async function createHarnessPage(browser, bundlePath) {
   const page = await browser.newPage();
+  page.setDefaultTimeout(120_000);
+  page.setDefaultNavigationTimeout(120_000);
   const diagnostics = {
     console: [],
     pageErrors: [],
@@ -310,10 +381,15 @@ async function run() {
   }
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qos-capacity-rooms-'));
-  const bundlePath = buildBundle(tmpDir);
-  const signalingPort = options.port > 0 ? options.port : await allocatePort();
-  options.port = signalingPort;
-  const sfu = startSfu({ port: signalingPort, workers: options.workers });
+  const bundlePath = await buildBundle(tmpDir);
+  let signalingPort = options.port;
+  let sfu = null;
+  const chromiumPath = resolveChromiumPath();
+  if (!options.wsUrl) {
+    signalingPort = options.port > 0 ? options.port : await allocatePort();
+    options.port = signalingPort;
+    sfu = startSfu({ port: signalingPort, workers: options.workers });
+  }
 
   const browser = await puppeteer.launch({
     executablePath: chromiumPath,
@@ -324,19 +400,26 @@ async function run() {
       '--autoplay-policy=no-user-gesture-required',
     ],
   });
+  console.log(`browser launched with ${chromiumPath}`);
 
   const page = await createHarnessPage(browser, bundlePath);
+  console.log('harness page ready');
   const steps = [];
   let lastHealthyRooms = 0;
   let failureStep = null;
 
   try {
-    await waitForPort(signalingPort);
+    if (sfu) {
+      await waitForPort(signalingPort);
+    }
+    const wsUrl = options.wsUrl || `ws://127.0.0.1:${signalingPort}/ws`;
+    console.log(`connecting harness to ${wsUrl}`);
     await page.evaluate(
-      (port, config) => window.__capacityRoomsHarness.init(`ws://127.0.0.1:${port}/ws`, config),
-      signalingPort,
+      (url, config) => window.__capacityRoomsHarness.init(url, config),
+      wsUrl,
       {
         roomPrefix: options.roomPrefix,
+        subscriberCount: 2,
         width: options.width,
         height: options.height,
         fps: options.fps,
@@ -348,10 +431,12 @@ async function run() {
         createConcurrency: options.createConcurrency,
       }
     );
+    console.log('harness init complete');
 
     let activeRooms = 0;
     while (activeRooms < options.maxRooms) {
       const addCount = Math.min(options.step, options.maxRooms - activeRooms);
+      console.log(`adding ${addCount} room(s), active=${activeRooms}`);
       await withTimeout(
         `addRooms(+${addCount})`,
         page.evaluate(count => window.__capacityRoomsHarness.addRooms(count), addCount),
@@ -382,6 +467,55 @@ async function run() {
       }
 
       lastHealthyRooms = activeRooms;
+    }
+
+    if (options.churnCycles > 0) {
+      for (let cycle = 0; cycle < options.churnCycles; cycle += 1) {
+        const churnCount = Math.min(options.churnBatch, activeRooms);
+        if (churnCount > 0) {
+          console.log(`churn cycle ${cycle + 1}: removing ${churnCount} room(s)`);
+          await withTimeout(
+            `removeRooms(${churnCount})`,
+            page.evaluate(count => window.__capacityRoomsHarness.removeRooms(count), churnCount),
+            Math.max(60_000, churnCount * 15_000)
+          );
+          activeRooms -= churnCount;
+        }
+
+        await sleep(options.settleMs);
+
+        console.log(`churn cycle ${cycle + 1}: re-adding ${churnCount} room(s)`);
+        await withTimeout(
+          `reAddRooms(+${churnCount})`,
+          page.evaluate(count => window.__capacityRoomsHarness.addRooms(count), churnCount),
+          Math.max(60_000, churnCount * 20_000)
+        );
+        activeRooms += churnCount;
+
+        if (options.settleMs > 0) {
+          await sleep(options.settleMs);
+        }
+
+        const sample = await withTimeout(
+          `sample(churn:${cycle + 1})`,
+          page.evaluate(sampleMs => window.__capacityRoomsHarness.sample(sampleMs), options.sampleMs),
+          options.sampleMs + 60_000
+        );
+        console.log(`churn cycle ${cycle + 1} sample complete`);
+
+        const step = {
+          totalRooms: activeRooms,
+          sample,
+          churnCycle: cycle + 1,
+        };
+        steps.push(step);
+        printStep(step);
+
+        if (!sample.healthy) {
+          failureStep = step;
+          break;
+        }
+      }
     }
 
     const result = {

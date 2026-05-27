@@ -38,7 +38,7 @@ struct RuntimeOptions {
 	std::string geoDbPath{ "./ip2region.xdb" };
 	bool geoDbPathExplicit{ false };
 	bool noDaemon{ false };
-	std::string logDir{ "/var/log/mediasoup" };
+	std::string logDir{ "/var/log/mediasoup-cpp" };
 	std::string logPrefix{ "mediasoup-sfu" };
 	std::string pidFile{ "/var/run/mediasoup-sfu.pid" };
 	std::string logLevel{ "info" };

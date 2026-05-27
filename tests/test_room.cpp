@@ -103,6 +103,7 @@ TEST_F(RoomTest, RemovePeerDoesNotHoldRoomLockAcrossPeerClose) {
 		"video",
 		RtpParameters{},
 		"simple",
+		json::object(),
 		RtpParameters{},
 		&channel,
 		"transport-1");
