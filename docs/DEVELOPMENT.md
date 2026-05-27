@@ -111,12 +111,13 @@ WorkerThread 检测到 worker 死亡（channel fd EOF）→ `onWorkerDied()` →
 
 ## 公网 IP 探测
 
-优先级：
-1. `--announcedIp` 命令行参数
-2. config.json 的 `announcedIp`
-3. curl 探测（2 个 URL × 2 秒超时 = 最坏 4 秒）
-4. UDP connect trick（`connect(8.8.8.8:53)` + `getsockname`，零网络开销）
-5. 最后才回退到 127.0.0.1（带 warn 日志）
+启动时自动探测公网 IP：
+
+1. 先尝试 curl 探测（2 个 URL × 2 秒超时 = 最坏 4 秒）
+2. 再尝试 UDP connect trick（`connect(8.8.8.8:53)` + `getsockname`，零网络开销）
+3. 仍然失败则直接退出
+
+当前版本不再接受手工传入的 `announcedIp` / `listenIp`。
 
 ## 服务端 PlainTransport
 

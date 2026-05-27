@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <netinet/in.h>
@@ -138,8 +139,6 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 					if (cfg.contains("workers")) { int v = cfg["workers"].get<int>(); if (v > 0) options.numWorkers = v; }
 					if (cfg.contains("workerThreads")) { int v = cfg["workerThreads"].get<int>(); if (v > 0) options.numWorkerThreads = v; }
 					if (cfg.contains("workerBin")) options.workerBin = cfg["workerBin"].get<std::string>();
-					if (cfg.contains("listenIp")) options.listenIp = cfg["listenIp"].get<std::string>();
-					if (cfg.contains("announcedIp")) options.announcedIp = cfg["announcedIp"].get<std::string>();
 					if (cfg.contains("redisHost")) options.redisHost = cfg["redisHost"].get<std::string>();
 					if (cfg.contains("redisPort")) options.redisPort = cfg["redisPort"].get<int>();
 					if (cfg.contains("redisRequired")) options.redisRequired = cfg["redisRequired"].get<bool>();
@@ -148,8 +147,10 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 					if (cfg.contains("webRtcServerEnabled")) options.webRtcServerEnabled = cfg["webRtcServerEnabled"].get<bool>();
 					if (cfg.contains("webRtcServerMinPort")) { int v = cfg["webRtcServerMinPort"].get<int>(); if (v > 0) options.webRtcServerMinPort = v; }
 					if (cfg.contains("webRtcServerMaxPort")) { int v = cfg["webRtcServerMaxPort"].get<int>(); if (v > 0) options.webRtcServerMaxPort = v; }
-					if (cfg.contains("nodeId")) options.nodeId = cfg["nodeId"].get<std::string>();
+				if (cfg.contains("nodeId")) options.nodeId = cfg["nodeId"].get<std::string>();
 				if (cfg.contains("nodeAddress")) options.nodeAddress = cfg["nodeAddress"].get<std::string>();
+				if (cfg.contains("hawkeyeRegisterUrl")) options.hawkeyeRegisterUrl = cfg["hawkeyeRegisterUrl"].get<std::string>();
+				if (cfg.contains("hawkeyeRegisterType")) options.hawkeyeRegisterType = cfg["hawkeyeRegisterType"].get<std::string>();
 				if (cfg.contains("maxRoutersPerWorker")) options.maxRoutersPerWorker = cfg["maxRoutersPerWorker"].get<int>();
 				if (cfg.contains("lat")) options.nodeLat = cfg["lat"].get<double>();
 				if (cfg.contains("lng")) options.nodeLng = cfg["lng"].get<double>();
@@ -197,8 +198,6 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 			if (trySetInt("--port=", options.signalingPort)) {}
 			else if (trySetInt("--workers=", options.numWorkers)) {}
 			else if (trySetInt("--workerThreads=", options.numWorkerThreads)) {}
-			else if (arg.find("--listenIp=") == 0) options.listenIp = arg.substr(11);
-			else if (arg.find("--announcedIp=") == 0) options.announcedIp = arg.substr(14);
 			else if (arg.find("--workerBin=") == 0) options.workerBin = arg.substr(12);
 			else if (arg.find("--redisHost=") == 0) options.redisHost = arg.substr(12);
 			else if (trySetInt("--redisPort=", options.redisPort)) {}
@@ -212,6 +211,8 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 			else if (trySetInt("--webRtcServerMaxPort=", options.webRtcServerMaxPort)) {}
 			else if (arg.find("--nodeId=") == 0) options.nodeId = arg.substr(9);
 		else if (arg.find("--nodeAddress=") == 0) options.nodeAddress = arg.substr(14);
+		else if (arg.find("--hawkeyeRegisterUrl=") == 0) options.hawkeyeRegisterUrl = arg.substr(21);
+		else if (arg.find("--hawkeyeRegisterType=") == 0) options.hawkeyeRegisterType = arg.substr(22);
 		else if (trySetInt("--maxRoutersPerWorker=", options.maxRoutersPerWorker)) {}
 		else if (trySetDouble("--lat=", options.nodeLat)) {}
 		else if (trySetDouble("--lng=", options.nodeLng)) {}
@@ -239,24 +240,32 @@ bool FinalizeRuntimeOptions(RuntimeOptions& options)
 		return false;
 	}
 
-	if (options.announcedIp.empty()) {
-		options.announcedIp = DetectPublicIp();
-		if (!options.announcedIp.empty()) {
-			spdlog::info("Auto-detected public IP: {}", options.announcedIp);
-		} else {
-			spdlog::warn("Could not detect public IP, announcedIp is empty. WebRTC may fail for remote clients.");
+	options.announcedIp = DetectPublicIp();
+	if (!options.announcedIp.empty()) {
+		spdlog::info("Auto-detected public IP: {}", options.announcedIp);
+	} else {
+		spdlog::error("Could not detect public IP, startup failed");
+		return false;
+	}
+	auto announcedPublicIp = mediasoup::ResolvePublicIpv4Address(options.announcedIp);
+	if (!announcedPublicIp) {
+		spdlog::error("Detected public IP must resolve to a public IPv4 address: {}", options.announcedIp);
+		return false;
+	}
+	if (*announcedPublicIp != options.announcedIp) {
+		spdlog::info("Resolved announcedIp {} to public IPv4 {}", options.announcedIp, *announcedPublicIp);
+		options.announcedIp = *announcedPublicIp;
+	}
+
+	if (options.hawkeyeRegisterUrl.empty()) {
+		if (const char* env = std::getenv("HAWKEYE_REGISTER_URL")) {
+			options.hawkeyeRegisterUrl = env;
+		} else if (const char* env = std::getenv("REGISTER_URL")) {
+			options.hawkeyeRegisterUrl = env;
 		}
 	}
-	if (!options.announcedIp.empty()) {
-		auto announcedPublicIp = mediasoup::ResolvePublicIpv4Address(options.announcedIp);
-		if (!announcedPublicIp) {
-			spdlog::error("announcedIp must resolve to a public IPv4 address: {}", options.announcedIp);
-			return false;
-		}
-		if (*announcedPublicIp != options.announcedIp) {
-			spdlog::info("Resolved announcedIp {} to public IPv4 {}", options.announcedIp, *announcedPublicIp);
-			options.announcedIp = *announcedPublicIp;
-		}
+	if (const char* env = std::getenv("HAWKEYE_REGISTER_TYPE")) {
+		options.hawkeyeRegisterType = env;
 	}
 
 	if (options.nodeId.empty()) {

@@ -168,8 +168,6 @@ public:
 			"--port=" + std::to_string(port_),
 			"--workers=1",
 			"--workerBin=" + testWorkerBinaryPath(),
-			"--announcedIp=127.0.0.1",
-			"--listenIp=127.0.0.1",
 			"--redisHost=0.0.0.0",
 			"--redisPort=1",
 			"--noRedisRequired",

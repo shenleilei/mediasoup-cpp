@@ -27,7 +27,12 @@ WORKDIR /src
 COPY . .
 
 RUN if [ -d .git ]; then \
-    git submodule update --init --recursive; \
+    test -f third_party/flatbuffers/CMakeLists.txt; \
+    test -f third_party/uWebSockets/src/App.h; \
+    test -f third_party/nlohmann_json/include/nlohmann/json.hpp; \
+    test -f third_party/spdlog/CMakeLists.txt; \
+    test -f third_party/ip2region/binding/c/xdb_api.h; \
+    test -f third_party/ip2region/ip2region.xdb; \
   else \
     test -f third_party/flatbuffers/CMakeLists.txt; \
     test -f third_party/uWebSockets/src/App.h; \
@@ -80,7 +85,7 @@ COPY --from=builder /opt/mediasoup-cpp/ ./
 COPY docker/entrypoint.sh /usr/local/bin/mediasoup-sfu-entrypoint
 
 RUN chmod +x /usr/local/bin/mediasoup-sfu-entrypoint \
-  && mkdir -p /var/log/mediasoup-cpp
+  && mkdir -p /var/log/mediasoup
 
 EXPOSE 1770/tcp
 EXPOSE 8000-8002/udp
@@ -88,11 +93,9 @@ EXPOSE 8000-8002/udp
 STOPSIGNAL SIGTERM
 
 ENV MEDIASOUP_PORT=1770 \
-    MEDIASOUP_LISTEN_IP=0.0.0.0 \
-    MEDIASOUP_ANNOUNCED_IP= \
     MEDIASOUP_RTC_MIN_PORT=8000 \
     MEDIASOUP_RTC_MAX_PORT=8002 \
     MEDIASOUP_REDIS_REQUIRED=0 \
-    MEDIASOUP_LOG_DIR=/var/log/mediasoup-cpp
+    MEDIASOUP_LOG_DIR=
 
 ENTRYPOINT ["mediasoup-sfu-entrypoint"]

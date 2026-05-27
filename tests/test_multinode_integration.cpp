@@ -62,8 +62,6 @@ protected:
 			" --port=" + std::to_string(port) +
 			" --workers=" + std::to_string(workers) +
 			" --workerBin=./mediasoup-worker"
-			" --announcedIp=127.0.0.1"
-			" --listenIp=127.0.0.1"
 			" --redisHost=127.0.0.1"
 			" --redisPort=" + std::to_string(redisPort);
 		if (maxRoutersPerWorker > 0)
@@ -556,7 +554,6 @@ TEST_F(MultiNodeResolveTest, StartupFailsWithoutRedisWhenRedisIsRequired) {
 	// Start SFU without Redis and without explicit opt-out.
 	std::string cmd = "./build/mediasoup-sfu --nodaemon"
 		" --port=14012 --workers=1 --workerBin=./mediasoup-worker"
-		" --announcedIp=127.0.0.1 --listenIp=127.0.0.1"
 		" --redisHost=192.0.2.1 --redisPort=6379"
 		" > /dev/null 2>&1 & echo $!";
 	FILE* fp = popen(cmd.c_str(), "r");

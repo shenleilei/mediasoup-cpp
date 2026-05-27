@@ -78,7 +78,7 @@ function startSfu() {
   const child = spawn(
     path.join(repoRoot, 'build', 'mediasoup-sfu'),
     ['--nodaemon', `--port=${signalingPort}`, '--workers=1', '--workerBin=./mediasoup-worker',
-     '--announcedIp=127.0.0.1', '--listenIp=127.0.0.1', '--redisHost=0.0.0.0', '--redisPort=1', '--noRedisRequired'],
+     '--redisHost=0.0.0.0', '--redisPort=1', '--noRedisRequired'],
     { cwd: repoRoot, stdio: ['ignore', 'pipe', 'pipe'] },
   );
   child.stdout.on('data', () => {});

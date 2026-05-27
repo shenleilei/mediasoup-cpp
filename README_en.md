@@ -435,7 +435,6 @@ Disable with `--noCountryIsolation` or `"countryIsolation": false`.
 ./build/mediasoup-sfu \
   --nodaemon \
   --port=3000 \
-  --announcedIp=<public-ip> \
   --lat=30.27 \
   --lng=120.15 \
   --isp=电信 \
@@ -445,7 +444,6 @@ Disable with `--noCountryIsolation` or `"countryIsolation": false`.
 ./build/mediasoup-sfu \
   --nodaemon \
   --port=3001 \
-  --announcedIp=<public-ip> \
   --lat=37.39 \
   --lng=-122.08 \
   --isp=Amazon \
@@ -501,8 +499,10 @@ Notes:
 ### Build
 
 ```bash
-git clone --recursive https://github.com/user/mediasoup-cpp.git
+git clone https://github.com/user/mediasoup-cpp.git
 cd mediasoup-cpp
+# For this local-only test branch, do not run remote submodule update.
+# Fill in third_party/*, src/mediasoup-worker-src, and ./mediasoup-worker from the local full source tree.
 ./setup.sh
 mkdir -p build
 cd build
@@ -517,7 +517,7 @@ Always run from the project root.
 Minimal:
 
 ```bash
-./build/mediasoup-sfu --nodaemon --port=3000 --listenIp=0.0.0.0
+./build/mediasoup-sfu --nodaemon --port=3000
 ```
 
 Recommended production-style invocation:
@@ -528,11 +528,10 @@ Recommended production-style invocation:
   --port=3000 \
   --workers=1 \
   --workerThreads=1 \
-  --listenIp=0.0.0.0 \
-  --announcedIp=<public-ip> \
   --workerBin=./mediasoup-worker \
   --redisHost=127.0.0.1 \
   --redisPort=6379 \
+  --hawkeyeRegisterUrl=ws://127.0.0.1:8080/register_ws \
   --nodeId=<unique-node-id>
 ```
 
@@ -545,12 +544,12 @@ cat > config.json <<'EOF'
   "workers": 1,
   "workerThreads": 1,
   "workerBin": "./mediasoup-worker",
-  "listenIp": "0.0.0.0",
-  "announcedIp": "<public-ip>",
   "redisHost": "127.0.0.1",
   "redisPort": 6379,
+  "hawkeyeRegisterUrl": "ws://127.0.0.1:8080/register_ws",
+  "hawkeyeRegisterType": "mediasoup",
   "recordDir": "./recordings",
-  "logDir": "/var/log/mediasoup-cpp",
+  "logDir": "/var/log/mediasoup",
   "logPrefix": "mediasoup-sfu",
   "logRotateHours": 3
 }
@@ -568,17 +567,17 @@ Open `http://<server-ip>:3000`.
 | `--port` | `3000` | signaling + HTTP port |
 | `--workers` | CPU based | mediasoup worker process count |
 | `--workerThreads` | auto | WorkerThread event loop count |
-| `--listenIp` | `0.0.0.0` | transport listen IP |
-| `--announcedIp` | auto-detect | public IP for ICE candidates |
 | `--workerBin` | `./mediasoup-worker` | worker binary path |
 | `--recordDir` | `./recordings` | recording output directory |
-| `--logDir` | `/var/log/mediasoup-cpp` | daemon log directory; container stdout/stderr are also appended to `container.stdout.log` and `container.stderr.log` in the same directory |
+| `--logDir` | `/var/log/mediasoup` | daemon log directory |
 | `--logPrefix` | `mediasoup-sfu` | daemon log file prefix |
 | `--logLevel` | `info` | log verbosity |
 | `--logRotateHours` | `3` | rotate daemon log every N hours into files like `mediasoup-sfu_2026041306_<pid>.log` (`0` disables rotation) |
 | `--nodaemon` | flag | run in foreground |
 | `--redisHost` | `127.0.0.1` | Redis host |
 | `--redisPort` | `6379` | Redis port |
+| `--hawkeyeRegisterUrl` | empty | Hawkeye websocket registration endpoint, e.g. `ws://<hawkeye-host>:<port>/register_ws` |
+| `--hawkeyeRegisterType` | `mediasoup` | Service type reported to Hawkeye |
 | `--nodeId` | auto | node identifier |
 | `--nodeAddress` | auto | externally advertised WS address |
 | `--lat` | auto-detect | node latitude |
@@ -593,15 +592,15 @@ If `./ip2region.xdb` is not present, the server also checks the vendored source 
 
 ## Important Deployment Notes
 
-### 1. Explicitly set `announcedIp` in production
+### 1. Public IP auto-detection
 
-The code has best-effort auto detection, but production deployment should not rely on it.
+The code auto-detects the public IP at startup. If detection fails, startup fails.
 
 Set:
 
-- `--announcedIp`
 - optionally `--nodeId`
 - optionally `--nodeAddress` if your environment has special routing or proxy topology
+- set `--hawkeyeRegisterUrl=ws://<hawkeye-host>:<port>/register_ws` if this node should register itself with Hawkeye
 
 ### 2. Run tests from repo root
 

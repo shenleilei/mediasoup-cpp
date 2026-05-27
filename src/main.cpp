@@ -1,4 +1,5 @@
 #include "Logger.h"
+#include "HawkeyeRegisterClient.h"
 #include "MainBootstrap.h"
 #include "RuntimeDaemon.h"
 #include "SignalingServer.h"
@@ -15,6 +16,14 @@ void signalHandler(int sig) {
 }
 
 namespace {
+
+std::string BuildRegisterServer(const RuntimeOptions& options)
+{
+	if (!options.announcedIp.empty()) {
+		return options.announcedIp + ":" + std::to_string(options.signalingPort);
+	}
+	return {};
+}
 
 bool installSignalHandler(int signalNumber, void (*handler)(int))
 {
@@ -42,7 +51,7 @@ int main(int argc, char* argv[]) {
 			return 1;
 	}
 
-	Logger::Init(options.logDir, options.logLevel, options.noDaemon, options.logRotateHours, options.logPrefix, getpid());
+	Logger::Init(options.noDaemon ? "" : options.logDir, options.logLevel, options.noDaemon, options.logRotateHours, options.logPrefix, getpid());
 	spdlog::info("mediasoup-cpp SFU starting (new architecture: WorkerThread pool)...");
 
 	auto failExit = [&options]() {
@@ -68,6 +77,12 @@ int main(int argc, char* argv[]) {
 		return failExit();
 	}
 
+	auto hawkeyeRegisterClient = std::make_unique<HawkeyeRegisterClient>(
+		options.hawkeyeRegisterUrl,
+		BuildRegisterServer(options),
+		options.hawkeyeRegisterType);
+	hawkeyeRegisterClient->start();
+
 	// Assemble and run
 	SignalingServer server(
 		options.signalingPort,
@@ -87,6 +102,9 @@ int main(int argc, char* argv[]) {
 	// Stop WorkerThreads first — closeAllRooms() enqueues unregisterRoom tasks
 	for (auto& wt : workerThreads) {
 		wt->stop();
+	}
+	if (hawkeyeRegisterClient) {
+		hawkeyeRegisterClient->stop();
 	}
 	// Now stop registry worker — drains remaining unregister tasks
 	server.stopRegistryWorker();

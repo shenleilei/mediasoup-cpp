@@ -53,8 +53,6 @@ protected:
 			" --port=" + std::to_string(port) +
 			" --workers=" + std::to_string(workers) +
 			" --workerBin=./mediasoup-worker"
-			" --announcedIp=127.0.0.1"
-			" --listenIp=127.0.0.1"
 			" --redisHost=127.0.0.1"
 			" --redisPort=" + std::to_string(redisPort) +
 			" > /dev/null 2>&1 & echo $!";

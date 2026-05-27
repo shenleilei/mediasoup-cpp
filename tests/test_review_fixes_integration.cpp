@@ -56,8 +56,6 @@ protected:
 			" --port=" + std::to_string(SFU_PORT) +
 			" --workers=1"
 			" --workerBin=./mediasoup-worker"
-			" --announcedIp=127.0.0.1"
-			" --listenIp=127.0.0.1"
 			" --redisHost=0.0.0.0 --redisPort=1 --noRedisRequired"
 			" > /dev/null 2>&1 & echo $!";
 		FILE* fp = popen(cmd.c_str(), "r");
@@ -510,8 +508,6 @@ protected:
 			" --port=" + std::to_string(port) +
 			" --workers=1"
 			" --workerBin=./mediasoup-worker"
-			" --announcedIp=127.0.0.1"
-			" --listenIp=127.0.0.1"
 			" --lat=" + std::to_string(lat) +
 			" --lng=" + std::to_string(lng) +
 			" --isp=" + isp +
@@ -684,8 +680,6 @@ protected:
 			" --port=" + std::to_string(port) +
 			" --workers=1"
 			" --workerBin=./mediasoup-worker"
-			" --announcedIp=127.0.0.1"
-			" --listenIp=127.0.0.1"
 			" --lat=" + std::to_string(lat) +
 			" --lng=" + std::to_string(lng) +
 			" --isp=" + isp +
@@ -894,8 +888,6 @@ protected:
 			" --port=" + std::to_string(DEGRADE_PORT) +
 			" --workers=1"
 			" --workerBin=./mediasoup-worker"
-			" --announcedIp=127.0.0.1"
-			" --listenIp=127.0.0.1"
 			" --redisHost=127.0.0.1 --redisPort=1"
 			" > /dev/null 2>&1 & echo $!";
 		FILE* fp = popen(cmd.c_str(), "r");
@@ -970,8 +962,6 @@ protected:
 			" --port=" + std::to_string(port) +
 			" --workers=1"
 			" --workerBin=./mediasoup-worker"
-			" --announcedIp=127.0.0.1"
-			" --listenIp=127.0.0.1"
 			" --redisHost=127.0.0.1"
 			" --redisPort=" + std::to_string(redisPort) +
 			" --noCountryIsolation"
@@ -1242,8 +1232,6 @@ protected:
 			" --port=" + std::to_string(port) +
 			" --workers=1"
 			" --workerBin=./mediasoup-worker"
-			" --announcedIp=127.0.0.1"
-			" --listenIp=127.0.0.1"
 			" --redisHost=127.0.0.1"
 			" --redisPort=" + std::to_string(redisPort) +
 			" --noCountryIsolation";

@@ -29,6 +29,8 @@ struct RuntimeOptions {
 	int webRtcServerMaxPort{ 0 };
 	std::string nodeId;
 	std::string nodeAddress;
+	std::string hawkeyeRegisterUrl;
+	std::string hawkeyeRegisterType{ "mediasoup" };
 	int maxRoutersPerWorker{ 0 };
 	double nodeLat{ 0.0 };
 	double nodeLng{ 0.0 };
@@ -38,7 +40,7 @@ struct RuntimeOptions {
 	std::string geoDbPath{ "./ip2region.xdb" };
 	bool geoDbPathExplicit{ false };
 	bool noDaemon{ false };
-	std::string logDir{ "/var/log/mediasoup-cpp" };
+	std::string logDir{ "/var/log/mediasoup" };
 	std::string logPrefix{ "mediasoup-sfu" };
 	std::string pidFile{ "/var/run/mediasoup-sfu.pid" };
 	std::string logLevel{ "info" };

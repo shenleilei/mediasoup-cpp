@@ -298,8 +298,6 @@ function startSfu() {
       `--port=${port}`,
       '--workers=1',
       '--workerBin=./mediasoup-worker',
-      '--announcedIp=127.0.0.1',
-      '--listenIp=127.0.0.1',
       '--redisHost=0.0.0.0',
       '--redisPort=1',
       '--noRedisRequired',

@@ -66,8 +66,9 @@ target_link_libraries(uSockets PUBLIC mediasoup_build_ssl_crypto)
 
 set(MEDIASOUP_LIBRARY_SOURCES
     src/Channel.cpp
-    src/GeoDbResolver.cpp
-    src/PublicIpResolver.cpp
+        src/GeoDbResolver.cpp
+        src/HawkeyeRegisterClient.cpp
+        src/PublicIpResolver.cpp
     src/Recorder.cpp
     src/Worker.cpp
     src/Transport.cpp
@@ -97,6 +98,7 @@ add_library(mediasoup_lib STATIC ${MEDIASOUP_LIBRARY_SOURCES})
 target_link_libraries(mediasoup_lib PUBLIC
     mediasoup_build_common
     mediasoup_build_pthread
+    mediasoup_build_ssl_crypto
     mediasoup_build_ffmpeg_core
     spdlog::spdlog
     uSockets

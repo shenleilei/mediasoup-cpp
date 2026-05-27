@@ -120,10 +120,11 @@ cmake --build build-slim --target mediasoup-sfu -j$(nproc)
 
 ### 1. 准备依赖并编译
 
-首次拉取仓库后先执行：
+本地联调这条分支时，不要再执行远程 `git submodule update`。请直接使用仓库里已经存在的本地目录和本地 `./mediasoup-worker`。
+
+如果 `third_party/*` 或 `src/mediasoup-worker-src` 缺失，先从本地完整源码目录补齐；构建脚本会直接报错，不会自动拉取远程 submodule。
 
 ```bash
-git submodule update --init --recursive
 ./setup.sh
 ```
 
@@ -144,8 +145,6 @@ cmake --build build-slim --target mediasoup-sfu -j$(nproc)
   --port=3000 \
   --workers=1 \
   --workerBin=./mediasoup-worker \
-  --listenIp=127.0.0.1 \
-  --announcedIp=127.0.0.1 \
   --redisHost=0.0.0.0 \
   --redisPort=1 \
   --noRedisRequired
@@ -153,7 +152,7 @@ cmake --build build-slim --target mediasoup-sfu -j$(nproc)
 
 如果使用 `build-slim`，把命令中的 `./build/mediasoup-sfu` 换成 `./build-slim/mediasoup-sfu`。
 
-局域网或公网访问时，`listenIp` 通常使用 `0.0.0.0`。直连公网主机可以省略 `announcedIp`，服务会在启动时自动探测；如果是内网、NAT、云负载均衡、多网卡，或自动探测结果不是浏览器可达地址，则显式填写浏览器可访问到的服务器 IP：
+服务启动时会自动探测公网 IP，探测失败直接退出。
 
 ```bash
 ./build/mediasoup-sfu \
@@ -161,8 +160,6 @@ cmake --build build-slim --target mediasoup-sfu -j$(nproc)
   --port=3000 \
   --workers=1 \
   --workerBin=./mediasoup-worker \
-  --listenIp=0.0.0.0 \
-  --announcedIp=<server-ip> \
   --noRedisRequired
 ```
 
@@ -173,7 +170,7 @@ cmake --build build-slim --target mediasoup-sfu -j$(nproc)
 仓库提供一个多阶段 `Dockerfile`，镜像默认以 `mediasoup-sfu` 作为主运行程序：
 
 ```bash
-git submodule update --init --recursive
+# 本地必须已具备 third_party/*、src/mediasoup-worker-src，以及仓库根目录下的 ./mediasoup-worker
 docker build -t mediasoup-cpp:sfu .
 ```
 
@@ -192,7 +189,7 @@ DOCKER_USERNAME=<user> DOCKER_PASSWORD=<password-or-token> ./build_image.sh --pu
   --repository harbor-volc.zelostech.com.cn:5443/arch/mediasoup-cpp
 ```
 
-如果要严格避免在线下载并尽量复用本地缓存，优先使用 `./scripts/package_image.sh`。它会要求仓库根目录已经有可执行的 `./mediasoup-worker`，并且本机 Docker 已经加载了 `ubuntu:20.04` 基础镜像。
+如果要严格避免在线下载并尽量复用本地缓存，优先使用 `./scripts/package_image.sh`。它会要求仓库根目录已经有可执行的 `./mediasoup-worker`，并且本机 Docker 已经加载了 `ubuntu:20.04` 基础镜像。镜像构建不会自动拉取远程 submodule，缺失目录会直接报错。
 
 本机浏览器 demo 推荐使用 host network，避免 WebRTC UDP 端口映射不完整：
 
@@ -200,23 +197,17 @@ DOCKER_USERNAME=<user> DOCKER_PASSWORD=<password-or-token> ./build_image.sh --pu
 docker run --rm \
   --name mediasoup-cpp \
   --network host \
-  -v /var/log/mediasoup-cpp:/var/log/mediasoup-cpp \
   -e MEDIASOUP_PORT=1770 \
-  -e MEDIASOUP_ANNOUNCED_IP=127.0.0.1 \
-  -e MEDIASOUP_LOG_DIR=/var/log/mediasoup-cpp \
   mediasoup-cpp:sfu
 ```
 
-公网部署时默认不需要设置 `MEDIASOUP_ANNOUNCED_IP`，服务启动时会自动探测公网 IP。推荐继续使用 host network，并在宿主机防火墙放通 TCP `1770` 和 UDP `8000-8002`：
 
 ```bash
 docker run -d \
   --name mediasoup-cpp \
   --restart unless-stopped \
   --network host \
-  -v /var/log/mediasoup-cpp:/var/log/mediasoup-cpp \
   -e MEDIASOUP_PORT=1770 \
-  -e MEDIASOUP_LOG_DIR=/var/log/mediasoup-cpp \
   mediasoup-cpp:sfu
 ```
 
@@ -227,10 +218,7 @@ docker run -d \
   --name mediasoup-cpp \
   --restart unless-stopped \
   --network host \
-  -v /var/log/mediasoup-cpp:/var/log/mediasoup-cpp \
   -e MEDIASOUP_PORT=1770 \
-  -e MEDIASOUP_ANNOUNCED_IP=<server-ip> \
-  -e MEDIASOUP_LOG_DIR=/var/log/mediasoup-cpp \
   mediasoup-cpp:sfu
 ```
 
@@ -242,10 +230,7 @@ docker run -d \
   --restart unless-stopped \
   -p 1770:1770/tcp \
   -p 8000-8002:8000-8002/udp \
-  -v /var/log/mediasoup-cpp:/var/log/mediasoup-cpp \
   -e MEDIASOUP_PORT=1770 \
-  -e MEDIASOUP_ANNOUNCED_IP=<server-ip> \
-  -e MEDIASOUP_LOG_DIR=/var/log/mediasoup-cpp \
   mediasoup-cpp:sfu
 ```
 
@@ -259,7 +244,6 @@ docker run --rm \
   mediasoup-cpp:sfu \
   --rtcMinPort=9000 \
   --rtcMaxPort=9010 \
-  --announcedIp=<server-ip>
 ```
 
 可用环境变量：
@@ -269,8 +253,6 @@ docker run --rm \
 | `MEDIASOUP_PORT` | `1770` | HTTP / WebSocket 监听端口 |
 | `MEDIASOUP_WORKERS` | 空 | mediasoup worker 子进程数量；默认按容器可见 CPU 自动计算为 `max(1, hardware_concurrency - 2)`，但当 `MEDIASOUP_RTC_MAX_PORT - MEDIASOUP_RTC_MIN_PORT + 1 <= 8` 时会自动收敛到 `1` |
 | `MEDIASOUP_WORKER_THREADS` | 空 | C++ WorkerThread 数量；默认按 `ceil(workers / 2)` 自动计算，且不超过 workers；当默认 RTC 端口范围较窄时会自动收敛到 `1` |
-| `MEDIASOUP_LISTEN_IP` | `0.0.0.0` | 容器内监听地址 |
-| `MEDIASOUP_ANNOUNCED_IP` | 空 | 对浏览器公告的 ICE 地址；为空时启动时自动探测公网 IP，本机 demo 建议显式设为 `127.0.0.1` |
 | `MEDIASOUP_RTC_MIN_PORT` | `8000` | mediasoup worker UDP RTC 起始端口 |
 | `MEDIASOUP_RTC_MAX_PORT` | `8002` | mediasoup worker UDP RTC 结束端口 |
 | `MEDIASOUP_WEBRTC_SERVER_ENABLED` | `1` | 启用 `WebRtcServer` 共享监听端口；多个浏览器 `WebRtcTransport` 复用每个 worker 的固定 UDP 端口 |
@@ -279,7 +261,7 @@ docker run --rm \
 | `MEDIASOUP_REDIS_REQUIRED` | `0` | 默认不需要 Redis；`1` 表示 Redis 不可用时 readiness 失败 |
 | `MEDIASOUP_REDIS_HOST` | `0.0.0.0` | Redis 地址；默认配合 `MEDIASOUP_REDIS_REQUIRED=0` 走 local-only |
 | `MEDIASOUP_REDIS_PORT` | `1` | Redis 端口 |
-| `MEDIASOUP_LOG_DIR` | `/var/log/mediasoup-cpp` | 守护日志目录，建议绑定到宿主机同名目录；容器 stdout/stderr 也会追加到该目录下的 `container.stdout.log` 和 `container.stderr.log` |
+| `MEDIASOUP_LOG_DIR` | 空 | 非空时写守护日志目录 |
 
 默认镜像启用 `WebRtcServer`，浏览器 WebRTC transport 会复用 `8000/udp` 这个共享监听端口。`8000-8002` 中剩余端口仍供 PlainTransport 等非 WebRTC-server 链路使用；如果开启多 worker 或大量 PlainTransport，仍应放大 `MEDIASOUP_RTC_MIN_PORT/MEDIASOUP_RTC_MAX_PORT` 和 `MEDIASOUP_WEBRTC_SERVER_*` 范围。
 
@@ -660,7 +642,6 @@ Disable with `--noCountryIsolation` or `"countryIsolation": false`.
 ./build/mediasoup-sfu \
   --nodaemon \
   --port=3000 \
-  --announcedIp=<public-ip> \
   --lat=30.27 \
   --lng=120.15 \
   --isp=电信 \
@@ -670,7 +651,6 @@ Disable with `--noCountryIsolation` or `"countryIsolation": false`.
 ./build/mediasoup-sfu \
   --nodaemon \
   --port=3001 \
-  --announcedIp=<public-ip> \
   --lat=37.39 \
   --lng=-122.08 \
   --isp=Amazon \
@@ -742,7 +722,7 @@ cmake --build . -j$(nproc)
 最简运行：
 
 ```bash
-./build/mediasoup-sfu --nodaemon --port=3000 --listenIp=0.0.0.0
+./build/mediasoup-sfu --nodaemon --port=3000
 ```
 
 推荐的生产环境启动参数：
@@ -753,11 +733,10 @@ cmake --build . -j$(nproc)
   --port=3000 \
   --workers=1 \
   --workerThreads=1 \
-  --listenIp=0.0.0.0 \
-  --announcedIp=<public-ip> \
   --workerBin=./mediasoup-worker \
   --redisHost=127.0.0.1 \
   --redisPort=6379 \
+  --hawkeyeRegisterUrl=ws://127.0.0.1:8080/register_ws \
   --nodeId=<unique-node-id>
 ```
 
@@ -770,11 +749,11 @@ cat > config.json <<'EOF'
   "workers": 1,
   "workerThreads": 1,
   "workerBin": "./mediasoup-worker",
-  "listenIp": "0.0.0.0",
-  "announcedIp": "<public-ip>",
   "redisHost": "127.0.0.1",
   "redisPort": 6379,
-  "logDir": "/var/log/mediasoup-cpp",
+  "hawkeyeRegisterUrl": "ws://127.0.0.1:8080/register_ws",
+  "hawkeyeRegisterType": "mediasoup",
+  "logDir": "/var/log/mediasoup",
   "logPrefix": "mediasoup-sfu",
   "logRotateHours": 3
 }
@@ -792,21 +771,21 @@ EOF
 | `--port` | `3000` | 信令 + HTTP 端口 |
 | `--workers` | 基于 CPU 自动计算 | mediasoup worker 子进程数量 |
 | `--workerThreads` | 自动计算 | WorkerThread 事件循环数量 |
-| `--listenIp` | `0.0.0.0` | 传输层 (transport) 监听 IP |
-| `--announcedIp` | 自动检测 | 用于 ICE 候选者 (candidates) 的公网 IP |
 | `--rtcMinPort` | `10000` | mediasoup worker UDP RTC 起始端口 |
 | `--rtcMaxPort` | `59999` | mediasoup worker UDP RTC 结束端口 |
 | `--webRtcServer` / `--noWebRtcServer` | 关闭 | 是否启用每 worker 一个 `WebRtcServer` 共享监听端口 |
 | `--webRtcServerMinPort` | `rtcMinPort` | `WebRtcServer` 起始端口 |
 | `--webRtcServerMaxPort` | 自动按 worker 数计算 | `WebRtcServer` 结束端口 |
 | `--workerBin` | `./mediasoup-worker` | worker 可执行文件路径 |
-| `--logDir` | `/var/log/mediasoup-cpp` | 守护进程日志目录 |
+| `--logDir` | `/var/log/mediasoup` | 守护进程日志目录 |
 | `--logPrefix` | `mediasoup-sfu` | 守护进程日志文件前缀 |
 | `--logLevel` | `info` | 日志详细级别 |
 | `--logRotateHours` | `3` | 每 N 小时轮转守护进程日志，生成如 `mediasoup-sfu_2026041306_<pid>.log` 的文件 (`0` 为禁用轮转) |
 | `--nodaemon` | flag | 在前台运行 (不作为守护进程) |
 | `--redisHost` | `127.0.0.1` | Redis 主机地址 |
 | `--redisPort` | `6379` | Redis 端口 |
+| `--hawkeyeRegisterUrl` | 空 | Hawkeye websocket 注册地址，建议填 `ws://<hawkeye-host>:<port>/register_ws` |
+| `--hawkeyeRegisterType` | `mediasoup` | 注册到 Hawkeye 的服务类型 |
 | `--nodeId` | 自动生成 | 节点唯一标识 |
 | `--nodeAddress` | 自动生成 | 对外公布的 WS 地址 |
 | `--lat` | 自动检测 | 节点纬度 |
@@ -821,21 +800,15 @@ EOF
 
 ## 重要的部署注意事项 (Important Deployment Notes)
 
-### 1. `announcedIp` 自动探测与显式覆盖
+### 1. 公网 IP 自动探测
 
-直连公网主机可以不传 `--announcedIp`，服务会在启动时自动探测公网 IP。Docker 镜像默认也保持 `MEDIASOUP_ANNOUNCED_IP` 为空，以使用这条自动探测路径。
-
-以下场景请明确设置：
-
-- `--announcedIp`
-- Docker 环境变量 `MEDIASOUP_ANNOUNCED_IP`
-
-适用场景包括本机 demo、内网、NAT、云负载均衡、多网卡，或自动探测结果不是浏览器可达地址。
+服务启动时会自动探测公网 IP，探测失败直接退出。
 
 生产多节点场景还应明确：
 
 - 可选设置 `--nodeId`
 - 如果你的环境具有特殊的路由或代理拓扑，可选设置 `--nodeAddress`
+- 如果需要把节点注册到 Hawkeye，设置 `--hawkeyeRegisterUrl=ws://<hawkeye-host>:<port>/register_ws`
 
 ### 2. 在仓库根目录下运行测试
 

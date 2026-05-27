@@ -48,7 +48,6 @@ require_cmd() {
 }
 
 ensure_build_context_deps() {
-  local missing=0
   local required_files=(
     third_party/flatbuffers/CMakeLists.txt
     third_party/uWebSockets/src/App.h
@@ -60,21 +59,8 @@ ensure_build_context_deps() {
 
   for file in "${required_files[@]}"; do
     if [[ ! -f "$file" ]]; then
-      missing=1
-      break
-    fi
-  done
-
-  if [[ "$missing" -eq 0 ]]; then
-    return
-  fi
-
-  info "initializing git submodules required by Docker build context"
-  git submodule update --init --recursive
-
-  for file in "${required_files[@]}"; do
-    if [[ ! -f "$file" ]]; then
-      >&2 printf "ERROR: required build context file is missing after submodule update: %s\n" "$file"
+      >&2 printf "ERROR: required local build file is missing: %s\n" "$file"
+      >&2 printf "ERROR: this build path is local-only; do not fetch submodules from remote.\n"
       exit 1
     fi
   done

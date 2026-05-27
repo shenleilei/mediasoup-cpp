@@ -9,7 +9,6 @@ args=(
   --nodaemon
   "--port=${MEDIASOUP_PORT:-1770}"
   "--workerBin=${MEDIASOUP_WORKER_BIN:-./mediasoup-worker}"
-  "--listenIp=${MEDIASOUP_LISTEN_IP:-0.0.0.0}"
   "--rtcMinPort=${rtc_min_port}"
   "--rtcMaxPort=${rtc_max_port}"
 )
@@ -55,10 +54,6 @@ case "$web_rtc_server_enabled" in
     ;;
 esac
 
-if [[ -n "${MEDIASOUP_ANNOUNCED_IP:-}" ]]; then
-  args+=("--announcedIp=${MEDIASOUP_ANNOUNCED_IP}")
-fi
-
 if [[ -n "${MEDIASOUP_REDIS_HOST:-}" ]]; then
   args+=("--redisHost=${MEDIASOUP_REDIS_HOST}")
 else
@@ -95,13 +90,6 @@ fi
 
 if [[ -n "${MEDIASOUP_LOG_LEVEL:-}" ]]; then
   args+=("--logLevel=${MEDIASOUP_LOG_LEVEL}")
-fi
-
-if [[ -n "${MEDIASOUP_LOG_DIR:-}" ]]; then
-  mkdir -p "${MEDIASOUP_LOG_DIR}"
-  stdout_log_path="${MEDIASOUP_LOG_DIR}/container.stdout.log"
-  stderr_log_path="${MEDIASOUP_LOG_DIR}/container.stderr.log"
-  exec > >(tee -a "${stdout_log_path}") 2> >(tee -a "${stderr_log_path}" >&2)
 fi
 
 exec ./mediasoup-sfu "${args[@]}" "$@"

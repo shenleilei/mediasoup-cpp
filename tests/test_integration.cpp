@@ -40,8 +40,6 @@ protected:
 			" --port=" + std::to_string(SFU_PORT) +
 			" --workers=1"
 			" --workerBin=./mediasoup-worker"
-			" --announcedIp=127.0.0.1"
-			" --listenIp=127.0.0.1"
 			" --redisHost=0.0.0.0 --redisPort=1 --noRedisRequired"
 			" > /dev/null 2>&1 & echo $!";
 		FILE* fp = popen(cmd.c_str(), "r");
@@ -596,8 +594,6 @@ protected:
 			" --port=" + std::to_string(port) +
 			" --workers=1"
 			" --workerBin=./mediasoup-worker"
-			" --announcedIp=127.0.0.1"
-			" --listenIp=127.0.0.1"
 			" > /dev/null 2>&1 & echo $!";
 		FILE* fp = popen(cmd.c_str(), "r");
 		if (!fp) return -1;
@@ -875,7 +871,6 @@ protected:
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(SFU_PORT) +
 			" --workers=1 --workerBin=./mediasoup-worker"
-			" --announcedIp=127.0.0.1 --listenIp=127.0.0.1"
 			" --redisHost=0.0.0.0 --redisPort=1 --noRedisRequired"
 			" --recordDir=" + recordDir_ +
 			" > /dev/null 2>&1 & echo $!";
