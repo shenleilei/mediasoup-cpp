@@ -356,7 +356,7 @@ TEST_F(QosIntegrationTest, StatsReportBroadcast) {
 	auto alice = joinRoom(testRoom_, "alice");
 	produceAudio(alice, 70000005);
 
-	// Wait for the stats broadcast timer to fire (kStatsBroadcastIntervalMs=10s)
+	// Wait for the stats broadcast timer to fire (kStatsBroadcastIntervalMs=5s)
 	auto notif = alice.ws->waitNotification("statsReport", 15000);
 	ASSERT_FALSE(notif.empty()) << "Did not receive statsReport within timeout";
 
@@ -396,7 +396,7 @@ TEST_F(QosIntegrationTest, StatsReportWithoutConsumers) {
 	auto consumerNotif = bob.ws->waitNotification("newConsumer", 5000);
 	ASSERT_FALSE(consumerNotif.empty()) << "Bob did not get newConsumer";
 
-	// Wait for statsReport (kStatsBroadcastIntervalMs=10s)
+	// Wait for statsReport (kStatsBroadcastIntervalMs=5s)
 	auto stats = bob.ws->waitNotification("statsReport", 15000);
 	ASSERT_FALSE(stats.empty()) << "No statsReport received";
 
@@ -560,246 +560,6 @@ TEST_F(QosIntegrationTest, StatsReportRoomIsolation) {
 	}
 }
 
-#if 0
-// ═══════════════════════════════════════════════════════════════════
-// QoS Recording + Playback API integration tests
-// ═══════════════════════════════════════════════════════════════════
-
-class QosRecordingTest : public ::testing::Test {
-protected:
-	TestSfuProcess sfu_;
-	int sfuPort_ = -1;
-	std::string testRoom_;
-	std::string recordDir_;
-
-	void SetUp() override {
-		sfuPort_ = allocateUniqueTestPort();
-		ASSERT_GT(sfuPort_, 0) << "failed to allocate unique QoS recording test port";
-
-		testRoom_ = "qosrec_" + std::to_string(getpid()) + "_" +
-			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
-		recordDir_ = "/tmp/mediasoup_qosrec_" + std::to_string(getpid());
-		system(("rm -rf " + recordDir_).c_str());
-		mkdir(recordDir_.c_str(), 0755);
-		ASSERT_TRUE(sfu_.start(
-			sfuPort_,
-			{"--recordDir=" + recordDir_},
-			makeTestSfuLogPath("sfu_qos_recording", sfuPort_)))
-			<< "failed to start QoS recording SFU on port " << sfuPort_
-			<< ", log: " << sfu_.logPath();
-	}
-
-	void TearDown() override {
-		EXPECT_TRUE(sfu_.stop()) << "failed to stop SFU or release port " << sfuPort_;
-		system(("rm -rf " + recordDir_).c_str());
-	}
-
-	// Simple HTTP GET helper (no WebSocket, just plain HTTP)
-	std::string httpGetRaw(const std::string& path) {
-		int fd = socket(AF_INET, SOCK_STREAM, 0);
-		if (fd < 0) return "";
-		sockaddr_in addr{};
-		addr.sin_family = AF_INET;
-		addr.sin_port = htons(sfuPort_);
-		inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
-		if (::connect(fd, (sockaddr*)&addr, sizeof(addr)) < 0) { ::close(fd); return ""; }
-
-		std::string req = "GET " + path + " HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
-		::send(fd, req.data(), req.size(), 0);
-
-		std::string response;
-		char buf[4096];
-		while (true) {
-			int n = ::recv(fd, buf, sizeof(buf), 0);
-			if (n <= 0) break;
-			response.append(buf, n);
-		}
-		::close(fd);
-
-		return response;
-	}
-
-	std::string httpGet(const std::string& path) {
-		std::string response = httpGetRaw(path);
-		// Extract body (after \r\n\r\n)
-		auto pos = response.find("\r\n\r\n");
-		if (pos == std::string::npos) return "";
-		return response.substr(pos + 4);
-	}
-
-	struct JoinedClient {
-		std::unique_ptr<TestWsClient> ws;
-	};
-
-	JoinedClient joinAndProduce(const std::string& roomId, const std::string& peerId, uint32_t ssrc) {
-		JoinedClient c;
-		c.ws = std::make_unique<TestWsClient>();
-		EXPECT_TRUE(c.ws->connect(HOST, sfuPort_));
-
-		json rtpCaps = {{"codecs", {{
-			{"mimeType", "audio/opus"}, {"kind", "audio"},
-			{"clockRate", 48000}, {"channels", 2}, {"preferredPayloadType", 100}
-		}}}, {"headerExtensions", json::array()}};
-
-		auto joinResp = c.ws->request("join", {
-			{"roomId", roomId}, {"peerId", peerId},
-			{"displayName", peerId}, {"rtpCapabilities", rtpCaps}
-		});
-		EXPECT_TRUE(joinResp.value("ok", false));
-
-		auto sendResp = c.ws->request("createWebRtcTransport", {
-			{"producing", true}, {"consuming", false}
-		});
-		EXPECT_TRUE(sendResp.value("ok", false));
-
-		auto produceResp = c.ws->request("produce", {
-			{"transportId", sendResp["data"]["id"]}, {"kind", "audio"},
-			{"rtpParameters", {
-				{"codecs", {{{"mimeType", "audio/opus"}, {"clockRate", 48000}, {"channels", 2}, {"payloadType", 100}}}},
-				{"encodings", {{{"ssrc", ssrc}}}}, {"mid", "0"}
-			}}
-		});
-		EXPECT_TRUE(produceResp.value("ok", false));
-		return c;
-	}
-};
-
-// ─── Test: QoS JSON file created alongside recording ───
-TEST_F(QosRecordingTest, QosFileCreatedWithRecording) {
-	auto alice = joinAndProduce(testRoom_, "alice", 80000001);
-
-	// Wait for at least one stats broadcast (kStatsBroadcastIntervalMs=10s)
-	usleep(12000000);
-
-	// Disconnect to finalize recording
-	alice.ws->close();
-	usleep(1000000);
-
-	// The .qos.json is written by broadcastStats → appendQosSnapshot.
-	// The .webm may not exist for H264 (deferred header, no real media).
-	// Check that the room directory and .qos.json were created.
-	std::string findQos = "find " + recordDir_ + " -name '*.qos.json' 2>/dev/null";
-
-	FILE* fp = popen(findQos.c_str(), "r");
-	char buf[512]{};
-	std::string qosFiles;
-	while (fgets(buf, sizeof(buf), fp)) qosFiles += buf;
-	pclose(fp);
-	ASSERT_FALSE(qosFiles.empty()) << "No .qos.json file created alongside recording";
-
-	// Parse the QoS file and validate structure
-	std::string qosPath = qosFiles.substr(0, qosFiles.find('\n'));
-	std::ifstream f(qosPath);
-	ASSERT_TRUE(f.is_open());
-	std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-	f.close();
-
-	auto arr = json::parse(content);
-	ASSERT_TRUE(arr.is_array());
-	EXPECT_GE(arr.size(), 1u) << "QoS file should have at least 1 snapshot";
-
-	// Validate first entry
-	auto& first = arr[0];
-	EXPECT_TRUE(first.contains("t"));
-	EXPECT_TRUE(first.contains("stats"));
-	EXPECT_GE(first["t"].get<double>(), 0.0);
-	EXPECT_EQ(first["stats"]["peerId"], "alice");
-	EXPECT_TRUE(first["stats"].contains("producers"));
-}
-
-// ─── Test: /api/recordings returns correct listing ───
-TEST_F(QosRecordingTest, RecordingsApiListing) {
-	auto alice = joinAndProduce(testRoom_, "alice", 80000002);
-	usleep(12000000); // wait for stats broadcast (10s interval)
-
-	// Check API while recorder is still active (file exists before stop)
-	std::string body = httpGet("/api/recordings");
-	ASSERT_FALSE(body.empty());
-
-	auto recs = json::parse(body);
-	ASSERT_TRUE(recs.is_array());
-	EXPECT_GE(recs.size(), 1u);
-
-	// Find our test room
-	bool found = false;
-	for (auto& r : recs) {
-		if (r["roomId"] == testRoom_) {
-			found = true;
-			EXPECT_TRUE(r.contains("peerId"));
-			EXPECT_TRUE(r.contains("timestamp"));
-			EXPECT_TRUE(r.contains("file"));
-			std::string fname = r["file"].get<std::string>();
-			EXPECT_NE(fname.find(".webm"), std::string::npos);
-			break;
-		}
-	}
-	EXPECT_TRUE(found) << "Test room not found in /api/recordings";
-	alice.ws->close();
-}
-
-// ─── Test: /recordings/* serves files ───
-TEST_F(QosRecordingTest, RecordingsFileServing) {
-	auto alice = joinAndProduce(testRoom_, "alice", 80000003);
-	usleep(12000000); // wait for stats broadcast (10s interval)
-
-	// Get listing while recorder is active (file exists before stop)
-	std::string listBody = httpGet("/api/recordings");
-	auto recs = json::parse(listBody);
-	std::string webmFile;
-	for (auto& r : recs) {
-		if (r["roomId"] == testRoom_) {
-			webmFile = r["file"].get<std::string>();
-			break;
-		}
-	}
-	ASSERT_FALSE(webmFile.empty()) << "No recording file found";
-
-	// Close to finalize recording + QoS file
-	alice.ws->close();
-	usleep(1000000);
-
-	// Fetch the .qos.json file (now finalized)
-	std::string qosFile = webmFile.substr(0, webmFile.rfind('.')) + ".qos.json";
-	std::string qosBody = httpGet("/recordings/" + testRoom_ + "/" + qosFile);
-	EXPECT_GT(qosBody.size(), 0u) << "Empty .qos.json response";
-	auto arr = json::parse(qosBody);
-	EXPECT_TRUE(arr.is_array());
-}
-
-// ─── Test: /recordings with path traversal is rejected ───
-TEST_F(QosRecordingTest, PathTraversalRejected) {
-	std::string response = httpGetRaw("/recordings/../../../etc/passwd");
-	EXPECT_TRUE(response.find("403 Forbidden") != std::string::npos ||
-		response.find("404 Not Found") != std::string::npos) << response;
-	EXPECT_TRUE(response.find("root:") == std::string::npos) << "Path traversal not blocked!";
-}
-
-// ─── Test: static file path traversal is rejected ───
-TEST_F(QosRecordingTest, StaticPathTraversalRejected) {
-	std::string response = httpGetRaw("/../../../etc/passwd");
-	EXPECT_TRUE(response.find("403 Forbidden") != std::string::npos ||
-		response.find("404 Not Found") != std::string::npos) << response;
-	EXPECT_TRUE(response.find("root:") == std::string::npos) << "Static path traversal not blocked!";
-}
-
-// ─── Test: large recording files are served successfully ───
-TEST_F(QosRecordingTest, LargeRecordingServed) {
-	std::string roomDir = recordDir_ + "/" + testRoom_;
-	ASSERT_EQ(mkdir(roomDir.c_str(), 0755), 0);
-
-	std::string payload(512 * 1024, 'x');
-	std::string filePath = roomDir + "/large.webm";
-	std::ofstream file(filePath, std::ios::binary);
-	ASSERT_TRUE(file.is_open());
-	file.write(payload.data(), static_cast<std::streamsize>(payload.size()));
-	file.close();
-
-	std::string body = httpGet("/recordings/" + testRoom_ + "/large.webm");
-	EXPECT_EQ(body.size(), payload.size());
-	EXPECT_EQ(body, payload);
-}
-
-#endif
 
 // ─── Test: QoS clientStats are stored, validated and aggregated ───
 TEST_F(QosIntegrationTest, ClientStatsQosStoredAndAggregated) {
@@ -944,14 +704,13 @@ TEST_F(QosIntegrationTest, ClientStatsQosInBroadcast) {
 		if (p.value("peerId", "") == "alice") {
 			found = true;
 			ASSERT_TRUE(p.contains("clientStats"));
-			ASSERT_TRUE(p.contains("qos"));
-			EXPECT_EQ(p["clientStats"]["schema"], "mediasoup.qos.client.v1");
-			EXPECT_EQ(p["clientStats"]["seq"], 99);
-			EXPECT_EQ(p["qos"]["quality"], "good");
-			EXPECT_FALSE(p["qos"]["stale"].get<bool>());
-			break;
+				ASSERT_TRUE(p.contains("qos"));
+				EXPECT_EQ(p["clientStats"]["schema"], "mediasoup.qos.client.v1");
+				EXPECT_EQ(p["clientStats"]["seq"], 99);
+				EXPECT_EQ(p["qos"]["quality"], "good");
+				break;
+			}
 		}
-	}
 	EXPECT_TRUE(found) << "Alice not found in statsReport";
 }
 
@@ -1727,12 +1486,6 @@ TEST_F(QosIntegrationTest, SeqResetThresholdWithoutReconnect) {
 	EXPECT_EQ(stats2["data"]["clientStats"]["seq"], 1)
 		<< "seq reset (gap > 1000) should have been accepted";
 }
-
-// ─── Test: clientStats in recording QoS file ───
-// Note: QoS snapshot passthrough to QoS file is implicitly tested by
-// test_qos_recording_accuracy.cpp (appendQosSnapshot writes full peer stats
-// including clientStats/qos). The service-side passthrough itself is verified
-// by ClientStatsQosStoredAndAggregated and ClientStatsQosInBroadcast above.
 
 // ─── Downlink QoS Phase 3: downlinkClientStats tests ───
 

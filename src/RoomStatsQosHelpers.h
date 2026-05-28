@@ -10,6 +10,8 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <cmath>
+#include <unordered_set>
 #include <unordered_map>
 #include <utility>
 
@@ -89,6 +91,50 @@ inline json BuildConnectionQualityPayload(const qos::PeerQosAggregate& aggregate
 		{"lost", aggregate.lost},
 		{"lastUpdatedMs", aggregate.lastUpdatedMs}
 	};
+}
+
+inline bool HasSignificantStatsReportScoreChange(
+	const json& previous,
+	const json& current,
+	double deltaThreshold = 1.0)
+{
+	if (previous.is_null() || current.is_null()) {
+		return previous != current;
+	}
+
+	if (previous.is_number() && current.is_number()) {
+		const double prevScore = previous.get<double>();
+		const double currScore = current.get<double>();
+		return std::abs(currScore - prevScore) >= deltaThreshold;
+	}
+
+	if (previous.type() != current.type()) {
+		return true;
+	}
+
+	if (current.is_object()) {
+		std::unordered_set<std::string> keys;
+		for (const auto& [key, _] : previous.items()) {
+			keys.insert(key);
+		}
+		for (const auto& [key, _] : current.items()) {
+			keys.insert(key);
+		}
+
+		for (const auto& key : keys) {
+			auto prevIt = previous.find(key);
+			auto currIt = current.find(key);
+			if (prevIt == previous.end() || currIt == current.end()) {
+				return true;
+			}
+			if (HasSignificantStatsReportScoreChange(*prevIt, *currIt, deltaThreshold)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	return previous != current;
 }
 
 inline bool ParseRoomPeerKey(

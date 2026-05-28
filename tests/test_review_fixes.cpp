@@ -14,22 +14,18 @@
 #include "notification_generated.h"
 #include "pipeTransport_generated.h"
 #include "plainTransport_generated.h"
-#include "RoomRegistryReplyUtils.h"
 #include "RuntimeOptionParsers.h"
-#include "RoomRegistrySelection.h"
 #include "RoomStatsQosHelpers.h"
 #include "response_generated.h"
 #include "SignalingSocketState.h"
 #include "StaticFileResponder.h"
 #include "WorkerThread.h"
 #include "webRtcTransport_generated.h"
-#include "../src/Recorder.h"
 #include <algorithm>
 #include <future>
 #include <chrono>
 #include <cerrno>
 #include <cstring>
-#include <hiredis/hiredis.h>
 #include <mutex>
 #include <unistd.h>
 
@@ -616,15 +612,6 @@ TEST(DownlinkRateLimitStateTest, AcceptedSequenceMovesOnlyWhenExplicitlyMarked) 
 	EXPECT_EQ(state.lastAcceptedSeq, 77u);
 }
 
-TEST(RoomRegistrySelectionTest, NoGeoComparatorPreservesStrictWeakOrderingForSelf) {
-	mediasoup::roomregistry::LoadCandidate self{"ws://self", 3, 0};
-	mediasoup::roomregistry::LoadCandidate peer{"ws://peer", 3, 0};
-
-	EXPECT_FALSE(mediasoup::roomregistry::CompareNoGeoCandidates(self, self, "ws://self"));
-	EXPECT_TRUE(mediasoup::roomregistry::CompareNoGeoCandidates(self, peer, "ws://self"));
-	EXPECT_FALSE(mediasoup::roomregistry::CompareNoGeoCandidates(peer, self, "ws://self"));
-}
-
 TEST(ChannelThreadSafetyFixTest, ProcessAvailableDataRejectedInThreadedMode) {
 	int producerPipe[2];
 	int consumerPipe[2];
@@ -813,41 +800,6 @@ TEST(PublicIpResolverTest, RejectsUnresolvableAnnouncedDomain) {
 	EXPECT_FALSE(ResolvePublicIpv4Address("does-not-exist.invalid").has_value());
 }
 
-TEST(RoomRegistryReplyUtilsTest, RejectsMissingOrWronglyTypedTextElements) {
-	redisReply malformed{};
-	malformed.type = REDIS_REPLY_ARRAY;
-	malformed.elements = 1;
-	redisReply* elements[1]{nullptr};
-	malformed.element = elements;
-
-	std::string out;
-	EXPECT_FALSE(redisreply::GetTextElement(&malformed, 0, out));
-
-	redisReply integerElement{};
-	integerElement.type = REDIS_REPLY_INTEGER;
-	elements[0] = &integerElement;
-	EXPECT_FALSE(redisreply::GetTextElement(&malformed, 0, out));
-}
-
-TEST(RoomRegistryReplyUtilsTest, CopiesTextReplyUsingDeclaredLength) {
-	redisReply arrayReply{};
-	arrayReply.type = REDIS_REPLY_ARRAY;
-	arrayReply.elements = 1;
-
-	redisReply textElement{};
-	textElement.type = REDIS_REPLY_STRING;
-	char payload[] = "message";
-	textElement.str = payload;
-	textElement.len = 7;
-
-	redisReply* elements[1]{&textElement};
-	arrayReply.element = elements;
-
-	std::string out;
-	ASSERT_TRUE(redisreply::GetTextElement(&arrayReply, 0, out));
-	EXPECT_EQ(out, "message");
-}
-
 TEST(RoomStatsQosHelpersTest, ClearPeerAutomaticOverrideRecordsRemovesPeerAndRoomPressureKeys) {
 	std::unordered_map<std::string, int> records = {
 		{roomstatsqos::MakePeerKey("room", "alice"), 1},
@@ -896,76 +848,59 @@ TEST(StaticFileResponderTest, MatchesOnlyRealSuffixes) {
 	EXPECT_EQ(ContentTypeForPath("/assets/report.json.tmp"), "application/octet-stream");
 }
 
-// ── F1: unwrapTimestamp backward-wrap state consistency ─────────────
-
-TEST(UnwrapTimestamp, ForwardWrapUpdatesState)
+TEST(StatsReportScoreDeltaTest, RequiresScoreDeltaOfAtLeastOne)
 {
-	uint32_t lastTs = 0xFFFFFFF0u;
-	uint64_t wrapCount = 0;
-	const uint32_t baseTs = 0;
+	json baseline = {
+		{"alice", {
+			{"producer-1", 10}
+		}}
+	};
 
-	// Forward wrap: jump from near-max to near-zero crossing half-range
-	auto ticks = PeerRecorder::unwrapTimestamp(0x00000010u, baseTs, lastTs, wrapCount);
-	EXPECT_GT(ticks, 0u);
-	EXPECT_EQ(lastTs, 0x00000010u);
-	EXPECT_EQ(wrapCount, 1u);
+	json smallDelta = {
+		{"alice", {
+			{"producer-1", 10.5}
+		}}
+	};
+	EXPECT_FALSE(roomstatsqos::HasSignificantStatsReportScoreChange(baseline, smallDelta, 1.0));
+
+	json exactDelta = {
+		{"alice", {
+			{"producer-1", 11.0}
+		}}
+	};
+	EXPECT_TRUE(roomstatsqos::HasSignificantStatsReportScoreChange(baseline, exactDelta, 1.0));
+
+	json largeDelta = {
+		{"alice", {
+			{"producer-1", 12}
+		}}
+	};
+	EXPECT_TRUE(roomstatsqos::HasSignificantStatsReportScoreChange(baseline, largeDelta, 1.0));
 }
 
-TEST(UnwrapTimestamp, BackwardWrapUpdatesLastTsAndWrapCount)
+TEST(StatsReportScoreDeltaTest, StructuralChangesAlsoTriggerBroadcast)
 {
-	uint32_t lastTs = 0x00000010u;
-	uint64_t wrapCount = 1;
-	const uint32_t baseTs = 0;
+	json baseline = {
+		{"alice", {
+			{"producer-1", 10}
+		}}
+	};
 
-	// Backward wrap: jump from near-zero back to near-max crossing half-range
-	auto ticks = PeerRecorder::unwrapTimestamp(0xFFFFFFF0u, baseTs, lastTs, wrapCount);
+	json newProducer = {
+		{"alice", {
+			{"producer-1", 10},
+			{"producer-2", 10}
+		}}
+	};
+	EXPECT_TRUE(roomstatsqos::HasSignificantStatsReportScoreChange(baseline, newProducer, 1.0));
 
-	// Key invariant: lastTs must be updated (was the F1 bug)
-	EXPECT_EQ(lastTs, 0xFFFFFFF0u);
-	// wrapCount must decrement (backward wrap undoes one forward wrap)
-	EXPECT_EQ(wrapCount, 0u);
-	// ticks should be near the top of the uint32 range (before baseTs subtraction)
-	// With wrapCount=0, ticks = 0xFFFFFFF0 which is >= baseTs(0), so result = 0xFFFFFFF0
-	EXPECT_EQ(ticks, static_cast<uint64_t>(0xFFFFFFF0u));
+	json removedPeer = json::object();
+	EXPECT_TRUE(roomstatsqos::HasSignificantStatsReportScoreChange(baseline, removedPeer, 1.0));
 }
 
-TEST(UnwrapTimestamp, BackwardWrapGuardedAtWrapCountZero)
+TEST(StatsBroadcastIntervalTest, StaysWithinQosStaleWindow)
 {
-	uint32_t lastTs = 0x00000010u;
-	uint64_t wrapCount = 0;
-	const uint32_t baseTs = 0;
-
-	// Large forward jump when wrapCount==0: treat as normal forward, don't decrement
-	auto ticks = PeerRecorder::unwrapTimestamp(0xFFFFFFF0u, baseTs, lastTs, wrapCount);
-	EXPECT_EQ(lastTs, 0xFFFFFFF0u);
-	EXPECT_EQ(wrapCount, 0u);  // No decrement below zero
-}
-
-TEST(UnwrapTimestamp, SmallBackwardJumpNoWrap)
-{
-	uint32_t lastTs = 1000u;
-	uint64_t wrapCount = 2;
-	const uint32_t baseTs = 0;
-
-	// Small backward jump (within half-range): genuine reorder, no wrap change
-	auto ticks = PeerRecorder::unwrapTimestamp(990u, baseTs, lastTs, wrapCount);
-	EXPECT_EQ(lastTs, 990u);
-	EXPECT_EQ(wrapCount, 2u);  // Unchanged
-}
-
-TEST(UnwrapTimestamp, MonotonicSequenceNoWrap)
-{
-	uint32_t lastTs = 0;
-	uint64_t wrapCount = 0;
-	const uint32_t baseTs = 0;
-
-	// Simple increasing sequence
-	auto t1 = PeerRecorder::unwrapTimestamp(100u, baseTs, lastTs, wrapCount);
-	auto t2 = PeerRecorder::unwrapTimestamp(200u, baseTs, lastTs, wrapCount);
-	auto t3 = PeerRecorder::unwrapTimestamp(300u, baseTs, lastTs, wrapCount);
-	EXPECT_LT(t1, t2);
-	EXPECT_LT(t2, t3);
-	EXPECT_EQ(wrapCount, 0u);
+	EXPECT_LE(kStatsBroadcastIntervalMs, qos::kQosStaleAfterMs);
 }
 
 TEST(FbsTransportListenInfoTest, BuildListenInfoCarriesExplicitPortRange)

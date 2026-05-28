@@ -52,47 +52,6 @@ json BuildRoomProducerScoreSnapshot(const std::shared_ptr<Room>& room)
 
 constexpr double kProducerScoreBroadcastDelta = 1.0;
 
-bool HasSignificantProducerScoreChange(const json& previous, const json& current)
-{
-	if (previous.is_null() || current.is_null()) {
-		return previous != current;
-	}
-
-	if (previous.type() != current.type()) {
-		return true;
-	}
-
-	if (current.is_object()) {
-		std::unordered_set<std::string> keys;
-		for (const auto& [key, _] : previous.items()) {
-			keys.insert(key);
-		}
-		for (const auto& [key, _] : current.items()) {
-			keys.insert(key);
-		}
-
-		for (const auto& key : keys) {
-			auto prevIt = previous.find(key);
-			auto currIt = current.find(key);
-			if (prevIt == previous.end() || currIt == current.end()) {
-				return true;
-			}
-			if (HasSignificantProducerScoreChange(*prevIt, *currIt)) {
-				return true;
-			}
-		}
-		return false;
-	}
-
-	if (current.is_number()) {
-		const double prevScore = previous.get<double>();
-		const double currScore = current.get<double>();
-		return std::abs(currScore - prevScore) >= kProducerScoreBroadcastDelta;
-	}
-
-	return previous != current;
-}
-
 } // namespace
 
 json RoomService::collectPeerStats(
@@ -215,7 +174,10 @@ void RoomService::broadcastStatsForRoom(const std::string& roomId, bool forceBro
 	auto previousScoresIt = lastStatsReportProducerScores_.find(roomId);
 	if (!forceBroadcast &&
 		previousScoresIt != lastStatsReportProducerScores_.end() &&
-		!HasSignificantProducerScoreChange(previousScoresIt->second, currentProducerScores)) {
+		!roomstatsqos::HasSignificantStatsReportScoreChange(
+			previousScoresIt->second,
+			currentProducerScores,
+			kProducerScoreBroadcastDelta)) {
 		return;
 	}
 
