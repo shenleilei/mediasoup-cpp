@@ -37,6 +37,7 @@ protected:
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 
 		// Start SFU as a detached background process (avoids fork fd inheritance issues)
+		ASSERT_TRUE(ensureTestSignalingTlsFiles());
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(SFU_PORT) +
 			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(SFU_PORT)) +
@@ -593,6 +594,7 @@ protected:
 	TestRedisServer redisServer_;
 
 	static pid_t startSfu(int port, int redisPort) {
+		if (!ensureTestSignalingTlsFiles()) return -1;
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(port) +
 			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(port)) +
@@ -876,6 +878,7 @@ protected:
 		system(("rm -rf " + recordDir_).c_str());
 		mkdir(recordDir_.c_str(), 0755);
 
+		ASSERT_TRUE(ensureTestSignalingTlsFiles());
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(SFU_PORT) +
 			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(SFU_PORT)) +

@@ -2,43 +2,12 @@
 // Requires a running mediasoup-sfu + mediasoup-worker.
 #include <gtest/gtest.h>
 #include "TestRedisServer.h"
+#include "TestHttpsClient.h"
 #include "TestWsClient.h"
 #include "TestProcessUtils.h"
 #include <signal.h>
 #include <sys/wait.h>
 #include <hiredis/hiredis.h>
-#include <poll.h>
-
-// Recv a full HTTP response (headers + body) with timeout.
-static std::string recvHttp(int fd, int timeoutMs = 3000) {
-	std::string data;
-	char buf[4096];
-	auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
-	while (std::chrono::steady_clock::now() < deadline) {
-		int remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
-			deadline - std::chrono::steady_clock::now()).count();
-		if (remaining <= 0) break;
-		struct pollfd pfd{fd, POLLIN, 0};
-		int pr = poll(&pfd, 1, remaining);
-		if (pr <= 0) break;
-		int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
-		if (n <= 0) break;
-		data.append(buf, n);
-		// Check if we have full HTTP response
-		auto hdrEnd = data.find("\r\n\r\n");
-		if (hdrEnd != std::string::npos) {
-			auto cl = data.find("Content-Length:");
-			if (cl != std::string::npos && cl < hdrEnd) {
-				size_t bodyExpected = std::stoul(data.substr(cl + 15));
-				if (data.size() >= hdrEnd + 4 + bodyExpected) break;
-			} else {
-				// No Content-Length, assume complete after headers + some body
-				break;
-			}
-		}
-	}
-	return data;
-}
 
 static const int SFU_PORT = 14002;
 static const std::string HOST = "127.0.0.1";
@@ -52,6 +21,7 @@ protected:
 		testRoom_ = "fix_" + std::to_string(getpid()) + "_" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 
+		ASSERT_TRUE(ensureTestSignalingTlsFiles());
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(SFU_PORT) +
 			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(SFU_PORT)) +
@@ -469,20 +439,11 @@ TEST_F(ReviewFixIntegration, EmptyPeerIdRejected) {
 TEST_F(ReviewFixIntegration, ResolveAcceptsXForwardedFor) {
 	// Single-node mode: resolve should return this node regardless of IP
 	// but the endpoint should accept the header without error
-	int fd = socket(AF_INET, SOCK_STREAM, 0);
-	sockaddr_in addr{};
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(SFU_PORT);
-	inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
-	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
-
-	std::string req = "GET /api/resolve?roomId=geo_test HTTP/1.1\r\n"
-		"Host: 127.0.0.1\r\n"
-		"X-Forwarded-For: 36.110.147.0\r\n\r\n";
-	::send(fd, req.data(), req.size(), 0);
-
-	std::string response = recvHttp(fd);
-	::close(fd);
+	std::string response = testHttpsGetRaw(
+		HOST,
+		SFU_PORT,
+		"/api/resolve?roomId=geo_test",
+		"X-Forwarded-For: 36.110.147.0\r\n");
 	ASSERT_FALSE(response.empty());
 
 	// Should get 200 with JSON containing wsUrl
@@ -505,6 +466,7 @@ protected:
 	TestRedisServer redisServer_;
 
 	static pid_t startSfu(int port, double lat, double lng, const std::string& isp, int redisPort) {
+		if (!ensureTestSignalingTlsFiles()) return -1;
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(port) +
 			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(port)) +
@@ -612,21 +574,12 @@ protected:
 
 // /api/resolve with Beijing Telecom clientIp should prefer 杭州电信 (Node A)
 TEST_F(GeoJoinTest, ResolvePrefersSameIspNearest) {
-	int fd = socket(AF_INET, SOCK_STREAM, 0);
-	sockaddr_in addr{};
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(GEO_PORT_A); // ask 杭州 node (has geo context)
-	inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
-	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
-
 	// Beijing Telecom IP → should route to 杭州电信 (port A), not 广州联通 (port B)
-	std::string req = "GET /api/resolve?roomId=" + testRoom_ +
-		" HTTP/1.1\r\nHost: 127.0.0.1\r\n"
-		"X-Forwarded-For: 36.110.147.0\r\n\r\n";
-	::send(fd, req.data(), req.size(), 0);
-
-	std::string response = recvHttp(fd);
-	::close(fd);
+	std::string response = testHttpsGetRaw(
+		"127.0.0.1",
+		GEO_PORT_A,
+		"/api/resolve?roomId=" + testRoom_,
+		"X-Forwarded-For: 36.110.147.0\r\n");
 	ASSERT_FALSE(response.empty());
 
 	EXPECT_NE(response.find("200"), std::string::npos) << response;
@@ -678,6 +631,7 @@ protected:
 	static pid_t startSfu(int port, double lat, double lng,
 		const std::string& isp, const std::string& country, bool isolation, int redisPort)
 	{
+		if (!ensureTestSignalingTlsFiles()) return -1;
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(port) +
 			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(port)) +
@@ -779,20 +733,11 @@ protected:
 // Chinese client asking US node should be routed to CN node, not US
 TEST_F(CountryIsolationTest, ChinaClientOnUsNodeRoutedToChinaNode) {
 	// Connect to US node, but with Chinese IP
-	int fd = socket(AF_INET, SOCK_STREAM, 0);
-	sockaddr_in addr{};
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(ISO_PORT_US);  // ask US node
-	inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
-	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
-
-	std::string req = "GET /api/resolve?roomId=" + testRoom_ +
-		" HTTP/1.1\r\nHost: 127.0.0.1\r\n"
-		"X-Forwarded-For: 36.110.147.0\r\n\r\n";
-	::send(fd, req.data(), req.size(), 0);
-
-	std::string response = recvHttp(fd);
-	::close(fd);
+	std::string response = testHttpsGetRaw(
+		"127.0.0.1",
+		ISO_PORT_US,
+		"/api/resolve?roomId=" + testRoom_,
+		"X-Forwarded-For: 36.110.147.0\r\n");
 	ASSERT_FALSE(response.empty());
 
 	bool hasCN = response.find(std::to_string(ISO_PORT_CN)) != std::string::npos;
@@ -803,19 +748,11 @@ TEST_F(CountryIsolationTest, ChinaClientOnUsNodeRoutedToChinaNode) {
 
 // US client asking CN node should be routed to US node, not CN
 TEST_F(CountryIsolationTest, UsClientOnCnNodeRoutedToUsNode) {
-	int fd = socket(AF_INET, SOCK_STREAM, 0);
-	sockaddr_in addr{};
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(ISO_PORT_CN);  // ask CN node
-	inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
-	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
-
-	std::string req = "GET /api/resolve?roomId=" + testRoom_ + "_cn" +
-		" HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Forwarded-For: 8.8.8.8\r\n\r\n";
-	::send(fd, req.data(), req.size(), 0);
-
-	std::string response = recvHttp(fd);
-	::close(fd);
+	std::string response = testHttpsGetRaw(
+		"127.0.0.1",
+		ISO_PORT_CN,
+		"/api/resolve?roomId=" + testRoom_ + "_cn",
+		"X-Forwarded-For: 8.8.8.8\r\n");
 	ASSERT_FALSE(response.empty());
 
 	bool hasUS = response.find(std::to_string(ISO_PORT_US)) != std::string::npos;
@@ -826,20 +763,11 @@ TEST_F(CountryIsolationTest, UsClientOnCnNodeRoutedToUsNode) {
 
 // Chinese client should be routed to CN node when asking CN node (baseline)
 TEST_F(CountryIsolationTest, ChinaClientRoutedToChinaNode) {
-	int fd = socket(AF_INET, SOCK_STREAM, 0);
-	sockaddr_in addr{};
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(ISO_PORT_CN);
-	inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
-	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
-
-	std::string req = "GET /api/resolve?roomId=" + testRoom_ +
-		" HTTP/1.1\r\nHost: 127.0.0.1\r\n"
-		"X-Forwarded-For: 36.110.147.0\r\n\r\n";
-	::send(fd, req.data(), req.size(), 0);
-
-	std::string response = recvHttp(fd);
-	::close(fd);
+	std::string response = testHttpsGetRaw(
+		"127.0.0.1",
+		ISO_PORT_CN,
+		"/api/resolve?roomId=" + testRoom_,
+		"X-Forwarded-For: 36.110.147.0\r\n");
 	ASSERT_FALSE(response.empty());
 
 	bool hasCN = response.find(std::to_string(ISO_PORT_CN)) != std::string::npos;
@@ -850,19 +778,11 @@ TEST_F(CountryIsolationTest, ChinaClientRoutedToChinaNode) {
 
 // US client should only be routed to US node, not CN node
 TEST_F(CountryIsolationTest, UsClientRoutedToUsNode) {
-	int fd = socket(AF_INET, SOCK_STREAM, 0);
-	sockaddr_in addr{};
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(ISO_PORT_US);
-	inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
-	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
-
-	std::string req = "GET /api/resolve?roomId=" + testRoom_ + "_us" +
-		" HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Forwarded-For: 8.8.8.8\r\n\r\n";
-	::send(fd, req.data(), req.size(), 0);
-
-	std::string response = recvHttp(fd);
-	::close(fd);
+	std::string response = testHttpsGetRaw(
+		"127.0.0.1",
+		ISO_PORT_US,
+		"/api/resolve?roomId=" + testRoom_ + "_us",
+		"X-Forwarded-For: 8.8.8.8\r\n");
 	ASSERT_FALSE(response.empty());
 
 	bool hasUS = response.find(std::to_string(ISO_PORT_US)) != std::string::npos;
@@ -887,6 +807,7 @@ protected:
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 
 		// Start SFU pointing to a non-existent Redis (port 1 = unreachable)
+		ASSERT_TRUE(ensureTestSignalingTlsFiles());
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(DEGRADE_PORT) +
 			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(DEGRADE_PORT)) +
@@ -962,6 +883,7 @@ protected:
 	TestRedisServer redisServer_;
 
 	static pid_t startSfu(int port, int redisPort, const std::string& extraArgs = "") {
+		if (!ensureTestSignalingTlsFiles()) return -1;
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(port) +
 			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(port)) +
@@ -1082,19 +1004,10 @@ TEST_F(CacheTest, RoomClaimPropagatesViaCache) {
 	usleep(500000);
 
 	// Node B should know about this room via cache → resolve returns node A
-	int fd = socket(AF_INET, SOCK_STREAM, 0);
-	sockaddr_in addr{};
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(CACHE_PORT_B);
-	inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
-	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
-
-	std::string req = "GET /api/resolve?roomId=" + testRoom_ +
-		" HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
-	::send(fd, req.data(), req.size(), 0);
-
-	std::string response = recvHttp(fd);
-	::close(fd);
+	std::string response = testHttpsGetRaw(
+		"127.0.0.1",
+		CACHE_PORT_B,
+		"/api/resolve?roomId=" + testRoom_);
 	ASSERT_FALSE(response.empty());
 
 	// Should point to node A (where room was claimed)
@@ -1116,18 +1029,7 @@ TEST_F(CacheTest, ResolveUsesCache) {
 
 	// Resolve twice on node A — second should be cache hit
 	auto resolve = [&]() {
-		int fd = socket(AF_INET, SOCK_STREAM, 0);
-		sockaddr_in addr{};
-		addr.sin_family = AF_INET;
-		addr.sin_port = htons(CACHE_PORT_A);
-		inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
-		::connect(fd, (sockaddr*)&addr, sizeof(addr));
-		std::string req = "GET /api/resolve?roomId=" + testRoom_ +
-			" HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
-		::send(fd, req.data(), req.size(), 0);
-		std::string result = recvHttp(fd);
-		::close(fd);
-		return result;
+		return testHttpsGetRaw("127.0.0.1", CACHE_PORT_A, "/api/resolve?roomId=" + testRoom_);
 	};
 
 	auto start = std::chrono::steady_clock::now();
@@ -1233,6 +1135,7 @@ protected:
 	TestRedisServer redisServer_;
 
 	static pid_t startSfu(int port, int redisPort, int maxRouters = 0) {
+		if (!ensureTestSignalingTlsFiles()) return -1;
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(port) +
 			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(port)) +

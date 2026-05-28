@@ -10,7 +10,7 @@ struct us_timer_t;
 namespace mediasoup {
 
 struct SignalingServerHttp {
-	static void RegisterHttpRoutes(uWS::App& app, SignalingServer& server, uWS::Loop* loop);
+	static void RegisterHttpRoutes(uWS::SSLApp& app, SignalingServer& server, uWS::Loop* loop);
 	static void StartBackgroundTimers(
 		SignalingServer& server,
 		uWS::Loop* loop,

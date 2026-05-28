@@ -16,10 +16,20 @@ namespace mediasoup {
 
 using json = nlohmann::json;
 
+inline constexpr const char* kSignalingTlsCertFile = "/opt/mediasoup-cpp/certs/tls.pem";
+inline constexpr const char* kSignalingTlsKeyFile = "/opt/mediasoup-cpp/certs/tls.key";
+
 class RoomRegistry;
 class WorkerThread;
 struct SignalingServerHttp;
 struct SignalingServerWs;
+
+struct SignalingTlsOptions {
+	std::string certFile = kSignalingTlsCertFile;
+	std::string keyFile = kSignalingTlsKeyFile;
+};
+
+bool ValidateSignalingTlsFiles(const SignalingTlsOptions& options, std::string& error);
 
 class SignalingServer {
 public:
@@ -30,7 +40,8 @@ public:
 	SignalingServer(int port,
 		std::vector<std::unique_ptr<WorkerThread>>& workerThreads,
 		RoomRegistry* registry,
-		bool redisRequired = true);
+		bool redisRequired = true,
+		SignalingTlsOptions tlsOptions = {});
 	~SignalingServer();
 	bool run(const std::function<void(bool)>& startupResult = {});
 	void stop();
@@ -81,6 +92,7 @@ private:
 	std::vector<std::unique_ptr<WorkerThread>>& workerThreads_;
 	RoomRegistry* registry_;
 	bool redisRequired_ = true;
+	SignalingTlsOptions tlsOptions_;
 	std::atomic<bool> running_{false};
 
 	WorkerThread* findWorkerThreadById(int workerThreadId) const;

@@ -16,6 +16,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn, execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { ensureSignalingTlsFiles } from './prepare_signaling_tls.mjs';
 import {
   acquireNetemGuard,
   preflightNetemGuard,
@@ -75,6 +76,7 @@ function buildBundle(tmpDir) {
 // ── SFU ──
 
 function startSfu() {
+  ensureSignalingTlsFiles();
   const child = spawn(
     path.join(repoRoot, 'build', 'mediasoup-sfu'),
     ['--nodaemon', `--port=${signalingPort}`, '--workers=1', '--workerBin=./mediasoup-worker',
@@ -167,7 +169,7 @@ function score(s) {
 
 async function initPage(page, roomId) {
   const result = await page.evaluate(
-    (port, room) => window.__priorityHarness.init(`ws://127.0.0.1:${port}/ws`, room),
+    (port, room) => window.__priorityHarness.init(`wss://127.0.0.1:${port}/ws`, room),
     signalingPort, roomId,
   );
   return result.consumers;

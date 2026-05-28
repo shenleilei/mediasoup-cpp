@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+tls_cert=/opt/mediasoup-cpp/certs/tls.pem
+tls_key=/opt/mediasoup-cpp/certs/tls.key
+if [[ ! -r "$tls_cert" ]]; then
+  >&2 printf 'ERROR: signaling TLS certificate is missing or unreadable: %s\n' "$tls_cert"
+  exit 1
+fi
+if [[ ! -r "$tls_key" ]]; then
+  >&2 printf 'ERROR: signaling TLS private key is missing or unreadable: %s\n' "$tls_key"
+  exit 1
+fi
+
 default_web_rtc_server_port=9000
 case "${MEDIASOUP_NODE_ID:-}" in
   mediasoup-h1) default_web_rtc_server_port=8000 ;;

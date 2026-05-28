@@ -21,7 +21,7 @@ struct SignalingServerWs {
 		const std::function<void(bool)>& notifyStartup);
 
 	static void RegisterWebSocketRoutes(
-		uWS::App& app,
+		uWS::SSLApp& app,
 		SignalingServer& server,
 		const std::shared_ptr<WsMap>& wsMap,
 		uWS::Loop* loop,

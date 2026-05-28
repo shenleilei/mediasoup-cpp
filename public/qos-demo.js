@@ -1115,7 +1115,7 @@
 
   function resolveWsUrl(roomId) {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const fallback = `${proto}://${location.hostname}:${location.port || 3000}/ws`;
+    const fallback = `${proto}://${location.host}/ws`;
     return fetch(`/api/resolve?roomId=${encodeURIComponent(roomId)}`)
       .then(resp => (resp.ok ? resp.json() : null))
       .then(data => {
@@ -1123,7 +1123,7 @@
           return fallback;
         }
         const target = new URL(data.wsUrl);
-        return `${proto}://${target.hostname}:${target.port || location.port || 3000}/ws`;
+        return `${proto}://${target.host}/ws`;
       })
       .catch(() => fallback);
   }

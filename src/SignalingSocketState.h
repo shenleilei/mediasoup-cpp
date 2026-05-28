@@ -23,7 +23,7 @@ struct PerSocketData {
 	std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>>(true);
 };
 
-using SignalingWebSocket = uWS::WebSocket<false, true, PerSocketData>;
+using SignalingWebSocket = uWS::WebSocket<true, true, PerSocketData>;
 
 struct WsMap {
 	std::unordered_map<std::string, SignalingWebSocket*> peers;

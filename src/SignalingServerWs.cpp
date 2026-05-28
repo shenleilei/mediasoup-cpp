@@ -124,7 +124,7 @@ bool SignalingServerWs::EnsureWorkersReady(
 }
 
 void SignalingServerWs::RegisterWebSocketRoutes(
-	uWS::App& app,
+	uWS::SSLApp& app,
 	SignalingServer& server,
 	const std::shared_ptr<WsMap>& wsMap,
 	uWS::Loop* loop,

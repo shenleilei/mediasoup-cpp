@@ -1,10 +1,10 @@
 import { createRequire } from 'node:module';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import { createWebSocketConnection, websocketOriginForUrl } from './node_tls_helpers.mjs';
 
 const require = createRequire(import.meta.url);
 const qos = require('../../src/client/lib/qos');
@@ -30,7 +30,8 @@ class WsJsonClient {
   }
 
   async connect() {
-    this.socket = net.createConnection({ host: this.hostname, port: this.port });
+    const url = new URL(`wss://${this.hostname}:${this.port}${this.pathName}`);
+    this.socket = createWebSocketConnection(url);
 
     await new Promise((resolve, reject) => {
       this.socket.once('connect', resolve);
@@ -45,7 +46,7 @@ class WsJsonClient {
       'Connection: Upgrade\r\n' +
       `Sec-WebSocket-Key: ${key}\r\n` +
       'Sec-WebSocket-Version: 13\r\n' +
-      `Origin: http://${this.hostname}\r\n\r\n`;
+      `Origin: ${websocketOriginForUrl(url)}\r\n\r\n`;
 
     this.socket.write(req);
 

@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 #include "TestRedisServer.h"
+#include "TestHttpsClient.h"
 #include "TestWsClient.h"
 #include "TestProcessUtils.h"
 #include <signal.h>
@@ -25,30 +26,9 @@ static json makeRtpCaps() {
 	};
 }
 
-// Simple HTTP GET helper
+// Simple HTTPS GET helper
 static std::string httpGet(const std::string& host, int port, const std::string& path) {
-	int fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (fd < 0) return "";
-	struct timeval tv{5, 0};
-	setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-	sockaddr_in addr{};
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(port);
-	inet_pton(AF_INET, host.c_str(), &addr.sin_addr);
-	if (::connect(fd, (sockaddr*)&addr, sizeof(addr)) < 0) { ::close(fd); return ""; }
-	std::string req = "GET " + path + " HTTP/1.1\r\nHost: " + host + "\r\nConnection: close\r\n\r\n";
-	::send(fd, req.data(), req.size(), 0);
-	std::string response;
-	char buf[4096];
-	while (true) {
-		int n = ::recv(fd, buf, sizeof(buf), 0);
-		if (n <= 0) break;
-		response.append(buf, n);
-	}
-	::close(fd);
-	auto pos = response.find("\r\n\r\n");
-	if (pos == std::string::npos) return "";
-	return response.substr(pos + 4);
+	return testHttpsGetBody(host, port, path);
 }
 
 class MultiNodeResolveTest : public ::testing::Test {
@@ -58,6 +38,7 @@ protected:
 	TestRedisServer redisServer_;
 
 	static pid_t startSfu(int port, int redisPort, int workers = 1, int maxRoutersPerWorker = 0) {
+		if (!ensureTestSignalingTlsFiles()) return -1;
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(port) +
 			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(port)) +
@@ -260,19 +241,8 @@ TEST_F(MultiNodeResolveTest, NodesDiscoverEachOtherAfterStartup) {
 // ═══════════════════════════════════════════════════════════════
 TEST_F(MultiNodeResolveTest, ResolveMissingRoomIdReturns400) {
 	startNodes({{14010, 0}});
-	// Raw HTTP to check status code
-	int fd = socket(AF_INET, SOCK_STREAM, 0);
-	sockaddr_in addr{};
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(14010);
-	inet_pton(AF_INET, HOST.c_str(), &addr.sin_addr);
-	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
-	std::string req = "GET /api/resolve HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
-	::send(fd, req.data(), req.size(), 0);
-	char buf[4096]{};
-	::recv(fd, buf, sizeof(buf), 0);
-	::close(fd);
-	EXPECT_NE(std::string(buf).find("400"), std::string::npos);
+	const std::string response = testHttpsGetRaw(HOST, 14010, "/api/resolve");
+	EXPECT_NE(response.find("400"), std::string::npos);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -309,24 +279,7 @@ TEST_F(MultiNodeResolveTest, NodeLoadEndpoint) {
 TEST_F(MultiNodeResolveTest, HealthEndpointReportsHealthy) {
 	startNodes({{14010, 10}});
 
-	int fd = socket(AF_INET, SOCK_STREAM, 0);
-	ASSERT_GE(fd, 0);
-	sockaddr_in addr{};
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(14010);
-	inet_pton(AF_INET, HOST.c_str(), &addr.sin_addr);
-	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
-	std::string req = "GET /healthz HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
-	::send(fd, req.data(), req.size(), 0);
-	std::string response;
-	char buf[4096];
-	while (true) {
-		int n = ::recv(fd, buf, sizeof(buf), 0);
-		if (n <= 0) break;
-		response.append(buf, n);
-	}
-	::close(fd);
-
+	const std::string response = testHttpsGetRaw(HOST, 14010, "/healthz");
 	ASSERT_NE(response.find("200 OK"), std::string::npos) << response;
 	auto hdrEnd = response.find("\r\n\r\n");
 	ASSERT_NE(hdrEnd, std::string::npos);
@@ -369,24 +322,7 @@ TEST_F(MultiNodeResolveTest, ReadyEndpointFailsWhenRedisBecomesUnavailable) {
 	ASSERT_FALSE(joinResp.value("ok", true));
 	EXPECT_EQ(joinResp.value("error", ""), "room registry unavailable");
 
-	int fd = socket(AF_INET, SOCK_STREAM, 0);
-	ASSERT_GE(fd, 0);
-	sockaddr_in addr{};
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(14010);
-	inet_pton(AF_INET, HOST.c_str(), &addr.sin_addr);
-	ASSERT_EQ(::connect(fd, (sockaddr*)&addr, sizeof(addr)), 0);
-	std::string req = "GET /readyz HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
-	::send(fd, req.data(), req.size(), 0);
-	std::string response;
-	char buf[4096];
-	while (true) {
-		int n = ::recv(fd, buf, sizeof(buf), 0);
-		if (n <= 0) break;
-		response.append(buf, n);
-	}
-	::close(fd);
-
+	const std::string response = testHttpsGetRaw(HOST, 14010, "/readyz");
 	ASSERT_NE(response.find("503 Service Unavailable"), std::string::npos) << response;
 	auto hdrEnd = response.find("\r\n\r\n");
 	ASSERT_NE(hdrEnd, std::string::npos);
@@ -553,7 +489,8 @@ TEST_F(MultiNodeResolveTest, ResolveAndDirectConnect) {
 // ═══════════════════════════════════════════════════════════════
 TEST_F(MultiNodeResolveTest, StartupFailsWithoutRedisWhenRedisIsRequired) {
 	// Start SFU without Redis and without explicit opt-out.
-	std::string cmd = "./build/mediasoup-sfu --nodaemon"
+	ASSERT_TRUE(ensureTestSignalingTlsFiles());
+		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 		" --port=14012"
 		" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(14012)) +
 		" --workers=1 --workerBin=./mediasoup-worker"

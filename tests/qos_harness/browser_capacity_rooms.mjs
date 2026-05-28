@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { ensureSignalingTlsFiles } from './prepare_signaling_tls.mjs';
 
 const require = createRequire(import.meta.url);
 const esbuild = require('esbuild');
@@ -184,6 +185,7 @@ function buildBundle(tmpDir) {
 }
 
 function startSfu({ port, workers }) {
+  ensureSignalingTlsFiles();
   const child = spawn(
     path.join(repoRoot, 'build', 'mediasoup-sfu'),
     [
@@ -331,7 +333,7 @@ async function run() {
   try {
     await waitForPort(signalingPort);
     await page.evaluate(
-      (port, config) => window.__capacityRoomsHarness.init(`ws://127.0.0.1:${port}/ws`, config),
+      (port, config) => window.__capacityRoomsHarness.init(`wss://127.0.0.1:${port}/ws`, config),
       signalingPort,
       {
         roomPrefix: options.roomPrefix,

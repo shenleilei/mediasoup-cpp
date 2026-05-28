@@ -50,7 +50,7 @@ mediasoup_add_interface_target(mediasoup_build_common
 )
 mediasoup_add_interface_target(mediasoup_build_test_support
     INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/tests
-    LINK_LIBRARIES mediasoup_build_common
+    LINK_LIBRARIES mediasoup_build_common mediasoup_build_ssl_crypto
 )
 
 file(GLOB USOCKETS_SRC

@@ -9,6 +9,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { ensureSignalingTlsFiles } from './prepare_signaling_tls.mjs';
 
 const require = createRequire(import.meta.url);
 const esbuild = require('esbuild');
@@ -66,6 +67,7 @@ function getServerUrl(server) {
 }
 
 function startSfu() {
+  ensureSignalingTlsFiles();
   const child = spawn(
     path.join(repoRoot, 'build', 'mediasoup-sfu'),
     [
@@ -124,7 +126,7 @@ async function runScenario() {
     await page.goto(getServerUrl(staticServer), { waitUntil: 'load' });
 
     const initResult = await page.evaluate(
-      (port, room) => window.__downlinkV2Harness.init(`ws://127.0.0.1:${port}/ws`, room),
+      (port, room) => window.__downlinkV2Harness.init(`wss://127.0.0.1:${port}/ws`, room),
       signalingPort, roomId,
     );
     console.log(`[init] producerId=${initResult.producerId} consumerId=${initResult.consumerId} trackId=${initResult.trackId}`);

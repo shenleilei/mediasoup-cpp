@@ -5,6 +5,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { ensureSignalingTlsFiles } from './prepare_signaling_tls.mjs';
 
 const require = createRequire(import.meta.url);
 const esbuild = require('esbuild');
@@ -75,6 +76,7 @@ function getServerUrl(server) {
 }
 
 function startSfu() {
+  ensureSignalingTlsFiles();
   const child = spawn(
     path.join(repoRoot, 'build', 'mediasoup-sfu'),
     [
@@ -162,7 +164,7 @@ async function runScenario() {
     await page.evaluate(
       (port) =>
         window.__qosServerHarness.init(
-          `ws://127.0.0.1:${port}/ws`,
+          `wss://127.0.0.1:${port}/ws`,
           'browser_server_room',
           'alice'
         ),

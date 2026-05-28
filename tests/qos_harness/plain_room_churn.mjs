@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import dgram from 'node:dgram';
-import net from 'node:net';
+import { createWebSocketConnection, websocketOriginForUrl } from './node_tls_helpers.mjs';
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -8,7 +8,7 @@ function sleep(ms) {
 
 function parseArgs(argv) {
   const opts = {
-    wsUrl: 'ws://127.0.0.1:1770/ws',
+    wsUrl: 'wss://127.0.0.1:1770/ws',
     maxRooms: 12,
     step: 3,
     churnCycles: 20,
@@ -62,7 +62,8 @@ class WsJsonClient {
   }
 
   async connect() {
-    this.socket = net.createConnection({ host: this.host, port: this.port });
+    const url = new URL(`wss://${this.host}:${this.port}${this.path}`);
+    this.socket = createWebSocketConnection(url);
     await new Promise((resolve, reject) => {
       this.socket.once('connect', resolve);
       this.socket.once('error', reject);
@@ -76,7 +77,7 @@ class WsJsonClient {
       'Connection: Upgrade\r\n' +
       `Sec-WebSocket-Key: ${key}\r\n` +
       'Sec-WebSocket-Version: 13\r\n' +
-      `Origin: http://${this.host}\r\n\r\n`;
+      `Origin: ${websocketOriginForUrl(url)}\r\n\r\n`;
     this.socket.write(req);
 
     const header = await this._readHttpHeader();

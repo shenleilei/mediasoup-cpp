@@ -64,6 +64,13 @@ int main(int argc, char* argv[]) {
 		return failExit();
 	}
 
+	SignalingTlsOptions tlsOptions;
+	std::string tlsError;
+	if (!ValidateSignalingTlsFiles(tlsOptions, tlsError)) {
+		spdlog::error("Signaling TLS validation failed: {}", tlsError);
+		return failExit();
+	}
+
 	auto mediaCodecs = DefaultMediaCodecs();
 	auto listenInfos = BuildListenInfos(options);
 	auto runtimeServices = CreateRuntimeServices(options);
@@ -88,7 +95,8 @@ int main(int argc, char* argv[]) {
 		options.signalingPort,
 		workerThreads,
 		runtimeServices.registry.get(),
-		options.redisRequired);
+		options.redisRequired,
+		tlsOptions);
 
 	spdlog::info("mediasoup-cpp SFU ready - {} WorkerThreads, {} total workers, signaling on port {}, nodeId={}",
 		workerThreads.size(), options.numWorkers, options.signalingPort, options.nodeId);

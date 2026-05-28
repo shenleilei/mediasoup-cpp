@@ -35,7 +35,7 @@ std::string ResolveClientIp(Response* res, Request* req)
 
 } // namespace
 
-void SignalingServerHttp::RegisterHttpRoutes(uWS::App& app, SignalingServer& server, uWS::Loop* loop)
+void SignalingServerHttp::RegisterHttpRoutes(uWS::SSLApp& app, SignalingServer& server, uWS::Loop* loop)
 {
 	app.get("/api/resolve", [&server, loop](auto* res, auto* req) {
 		const auto requestId = g_nextResolveRequestId.fetch_add(1, std::memory_order_relaxed);

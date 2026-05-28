@@ -49,6 +49,7 @@ protected:
 	TestRedisServer redisServer_;
 
 	static pid_t startSfu(int port, int workers, int redisPort) {
+		if (!ensureTestSignalingTlsFiles()) return -1;
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(port) +
 			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(port)) +

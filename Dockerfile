@@ -82,9 +82,14 @@ RUN sed -i "s|http://archive.ubuntu.com/ubuntu|${APT_MIRROR}|g; s|http://securit
 WORKDIR /opt/mediasoup-cpp
 
 COPY --from=builder /opt/mediasoup-cpp/ ./
+RUN mkdir -p /opt/mediasoup-cpp/certs
+COPY docker/_.zelostech.com.cn.pem /opt/mediasoup-cpp/certs/tls.pem
+COPY docker/_.zelostech.com.cn.key /opt/mediasoup-cpp/certs/tls.key
 COPY docker/entrypoint.sh /usr/local/bin/mediasoup-sfu-entrypoint
 
 RUN chmod +x /usr/local/bin/mediasoup-sfu-entrypoint \
+  && chmod 0644 /opt/mediasoup-cpp/certs/tls.pem \
+  && chmod 0600 /opt/mediasoup-cpp/certs/tls.key \
   && mkdir -p /var/log/mediasoup
 
 EXPOSE 9000/tcp

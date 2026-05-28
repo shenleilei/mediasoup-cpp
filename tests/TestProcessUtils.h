@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <fstream>
 #include <iterator>
+#include <filesystem>
 #include <signal.h>
 #include <string.h>
 #include <string>
@@ -14,6 +15,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/types.h>
+#include <system_error>
 #include <unistd.h>
 #include <vector>
 
@@ -119,6 +121,62 @@ inline int testWebRtcServerPortForSignalingPort(int signalingPort) {
 	return 30000 + (signalingPort % 2000) * 8;
 }
 
+inline bool ensureTestSignalingTlsFiles() {
+	const std::string certPath = "/opt/mediasoup-cpp/certs/tls.pem";
+	const std::string keyPath = "/opt/mediasoup-cpp/certs/tls.key";
+
+	std::error_code ec;
+	std::filesystem::create_directories("/opt/mediasoup-cpp/certs", ec);
+	if (ec) return false;
+
+	const std::string repoCertPath = "docker/_.zelostech.com.cn.pem";
+	const std::string repoKeyPath = "docker/_.zelostech.com.cn.key";
+	if (access(repoCertPath.c_str(), R_OK) == 0 && access(repoKeyPath.c_str(), R_OK) == 0) {
+		std::filesystem::copy_file(
+			repoCertPath,
+			certPath,
+			std::filesystem::copy_options::overwrite_existing,
+			ec);
+		if (ec) return false;
+		std::filesystem::copy_file(
+			repoKeyPath,
+			keyPath,
+			std::filesystem::copy_options::overwrite_existing,
+			ec);
+		if (ec) return false;
+		std::filesystem::permissions(
+			certPath,
+			std::filesystem::perms::owner_read | std::filesystem::perms::group_read |
+				std::filesystem::perms::others_read,
+			std::filesystem::perm_options::replace,
+			ec);
+		if (ec) return false;
+		std::filesystem::permissions(
+			keyPath,
+			std::filesystem::perms::owner_read,
+			std::filesystem::perm_options::replace,
+			ec);
+		return !ec &&
+			access(certPath.c_str(), R_OK) == 0 &&
+			access(keyPath.c_str(), R_OK) == 0;
+	}
+
+	if (access(certPath.c_str(), R_OK) == 0 && access(keyPath.c_str(), R_OK) == 0) {
+		return true;
+	}
+
+	const std::string cmd =
+		"openssl req -x509 -newkey rsa:2048 -sha256 -nodes "
+		"-days 7 "
+		"-subj '/CN=127.0.0.1' "
+		"-addext 'subjectAltName=IP:127.0.0.1,DNS:localhost' "
+		"-keyout " + keyPath + " "
+		"-out " + certPath + " >/dev/null 2>&1";
+	return std::system(cmd.c_str()) == 0 &&
+		access(certPath.c_str(), R_OK) == 0 &&
+		access(keyPath.c_str(), R_OK) == 0;
+}
+
 inline bool waitForDirectChildExit(pid_t pid, int polls, int sleepUs) {
 	for (int i = 0; i < polls; ++i) {
 		int status = 0;
@@ -165,6 +223,7 @@ public:
 		logPath_ = logPath;
 
 		if (!waitForTcpPortFree(port_)) return false;
+		if (!ensureTestSignalingTlsFiles()) return false;
 
 		std::vector<std::string> args = {
 			testSfuBinaryPath(),

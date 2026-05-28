@@ -55,6 +55,8 @@ ensure_build_context_deps() {
     third_party/spdlog/CMakeLists.txt
     third_party/ip2region/binding/c/xdb_api.h
     third_party/ip2region/ip2region.xdb
+    docker/_.zelostech.com.cn.pem
+    docker/_.zelostech.com.cn.key
   )
 
   for file in "${required_files[@]}"; do

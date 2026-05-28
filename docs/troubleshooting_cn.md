@@ -33,10 +33,10 @@
 ### 1.2 `curl` 速查
 
 ```bash
-curl -s http://127.0.0.1:3000/healthz | jq
-curl -s http://127.0.0.1:3000/api/node-load | jq
-curl -s http://127.0.0.1:3000/metrics
-curl -H "X-Forwarded-For: 1.2.3.4" -s "http://127.0.0.1:3000/api/resolve?roomId=test-room" | jq
+curl -sk https://127.0.0.1:3000/healthz | jq
+curl -sk https://127.0.0.1:3000/api/node-load | jq
+curl -sk https://127.0.0.1:3000/metrics
+curl -H "X-Forwarded-For: 1.2.3.4" -sk "https://127.0.0.1:3000/api/resolve?roomId=test-room" | jq
 ```
 
 ### 1.3 最有用的几个观察字段

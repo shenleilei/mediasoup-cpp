@@ -13,9 +13,9 @@ function sleep(ms) {
 }
 
 function parseArgs(argv) {
-  const opts = {
-    wsUrl: 'ws://127.0.0.1:1770/ws',
-    httpUrl: 'http://127.0.0.1:1770',
+const opts = {
+    wsUrl: 'wss://127.0.0.1:1770/ws',
+    httpUrl: 'https://127.0.0.1:1770',
     container: 'mediasoup-cpp',
     sampleHost: '',
     roomsPerProcess: 100,

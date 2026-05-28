@@ -63,6 +63,7 @@ protected:
 		room_ = "e2e_" + std::to_string(getpid()) + "_" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 
+		ASSERT_TRUE(ensureTestSignalingTlsFiles());
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(PORT) +
 			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(PORT)) +

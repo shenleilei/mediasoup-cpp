@@ -1,8 +1,10 @@
 #pragma once
-// Minimal WebSocket client for integration tests (RFC 6455, no TLS)
+// Minimal TLS WebSocket client for integration tests (RFC 6455)
 #include <string>
 #include <functional>
 #include <nlohmann/json.hpp>
+#include <openssl/err.h>
+#include <openssl/ssl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -39,6 +41,19 @@ public:
 		inet_pton(AF_INET, host.c_str(), &addr.sin_addr);
 
 		if (::connect(fd_, (sockaddr*)&addr, sizeof(addr)) < 0) { ::close(fd_); fd_ = -1; return false; }
+		sslCtx_ = SSL_CTX_new(TLS_client_method());
+		if (!sslCtx_) { ::close(fd_); fd_ = -1; return false; }
+		SSL_CTX_set_verify(sslCtx_, SSL_VERIFY_NONE, nullptr);
+		ssl_ = SSL_new(sslCtx_);
+		if (!ssl_) {
+			close();
+			return false;
+		}
+		SSL_set_fd(ssl_, fd_);
+		if (SSL_connect(ssl_) != 1) {
+			close();
+			return false;
+		}
 
 		// WebSocket handshake - key must be 16 bytes base64-encoded (24 chars)
 		std::string key = "dGVzdGtleTEyMzQ1Njc4OQ=="; // base64("testkey123456789")
@@ -48,14 +63,15 @@ public:
 			"Connection: Upgrade\r\n"
 			"Sec-WebSocket-Key: " + key + "\r\n"
 			"Sec-WebSocket-Version: 13\r\n"
-			"Origin: http://" + host + "\r\n\r\n";
-		if (::send(fd_, req.data(), req.size(), 0) <= 0) { ::close(fd_); fd_ = -1; return false; }
+			"Origin: https://" + host + "\r\n\r\n";
+		if (SSL_write(ssl_, req.data(), static_cast<int>(req.size())) <= 0) { close(); return false; }
 
 		// Read handshake response
 		char buf[4096]{};
-		int n = ::recv(fd_, buf, sizeof(buf) - 1, 0);
+		int n = SSL_read(ssl_, buf, sizeof(buf) - 1);
 		if (n <= 0 || std::string(buf, n).find("101") == std::string::npos) {
-			::close(fd_); fd_ = -1; return false;
+			close();
+			return false;
 		}
 
 		connected_ = true;
@@ -66,8 +82,17 @@ public:
 
 	void close() {
 		connected_ = false;
-		if (fd_ >= 0) { ::shutdown(fd_, SHUT_RDWR); ::close(fd_); fd_ = -1; }
+		if (fd_ >= 0) ::shutdown(fd_, SHUT_RDWR);
 		if (reader_.joinable()) reader_.join();
+		if (ssl_) {
+			SSL_free(ssl_);
+			ssl_ = nullptr;
+		}
+		if (sslCtx_) {
+			SSL_CTX_free(sslCtx_);
+			sslCtx_ = nullptr;
+		}
+		if (fd_ >= 0) { ::close(fd_); fd_ = -1; }
 	}
 
 	uint64_t sendRequest(const std::string& method, const json& data = {}) {
@@ -146,7 +171,9 @@ private:
 		}
 		frame.insert(frame.end(), mask, mask + 4);
 		for (size_t i = 0; i < len; ++i) frame.push_back(text[i] ^ mask[i % 4]);
-		auto sent = ::send(fd_, frame.data(), frame.size(), 0);
+		auto sent = ssl_
+			? SSL_write(ssl_, frame.data(), static_cast<int>(frame.size()))
+			: -1;
 		(void)sent;
 	}
 
@@ -154,10 +181,11 @@ private:
 		std::vector<uint8_t> buf(65536);
 		std::vector<uint8_t> pending; // buffer for incomplete frames
 		while (connected_) {
-			int n = ::recv(fd_, buf.data(), buf.size(), 0);
+			int n = ssl_ ? SSL_read(ssl_, buf.data(), static_cast<int>(buf.size())) : -1;
 			if (n < 0) {
-				// Timeout (EAGAIN/EWOULDBLOCK) — just retry
-				if (errno == EAGAIN || errno == EWOULDBLOCK) continue;
+				const int sslError = ssl_ ? SSL_get_error(ssl_, n) : SSL_ERROR_SYSCALL;
+				if (sslError == SSL_ERROR_WANT_READ || sslError == SSL_ERROR_WANT_WRITE ||
+					errno == EAGAIN || errno == EWOULDBLOCK) continue;
 				break; // real error
 			}
 			if (n == 0) break; // connection closed
@@ -201,6 +229,8 @@ private:
 	}
 
 	int fd_ = -1;
+	SSL_CTX* sslCtx_ = nullptr;
+	SSL* ssl_ = nullptr;
 	std::atomic<bool> connected_{false};
 	std::atomic<uint64_t> nextId_{1};
 	std::thread reader_;

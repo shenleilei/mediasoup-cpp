@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { pruneTimestampedArchiveDirs } from './report_artifacts.mjs';
+import { ensureSignalingTlsFiles } from './prepare_signaling_tls.mjs';
 
 const require = createRequire(import.meta.url);
 const esbuild = require('esbuild');
@@ -98,6 +99,7 @@ function startStaticServer(bundlePath) {
 }
 
 function startSfu() {
+  ensureSignalingTlsFiles();
   const child = spawn(
     path.join(repoRoot, 'build', 'mediasoup-sfu'),
     [
@@ -270,14 +272,14 @@ async function runCompetitionCase(page, caseDef) {
   const result = { caseId: caseDef.caseId, group: caseDef.group, priority: caseDef.priority, startTime: new Date().toISOString() };
 
   const initResult = await page.evaluate(
-    (port, room) => window.__downlinkV3Harness.init(`ws://127.0.0.1:${port}/ws`, room),
+    (port, room) => window.__downlinkV3Harness.init(`wss://127.0.0.1:${port}/ws`, room),
     signalingPort, `dl_matrix_${caseDef.caseId}_${Date.now()}`,
   );
   result.producerId = initResult.producerId;
   result.consumerId = initResult.consumerId;
 
   const secondResult = await page.evaluate(
-    (port) => window.__downlinkV3Harness.initSecondPublisher(`ws://127.0.0.1:${port}/ws`),
+    (port) => window.__downlinkV3Harness.initSecondPublisher(`wss://127.0.0.1:${port}/ws`),
     signalingPort,
   );
   result.producerId2 = secondResult.producerId2;
@@ -317,7 +319,7 @@ async function runCase(caseDef, page) {
   const result = { caseId: caseDef.caseId, group: caseDef.group, priority: caseDef.priority, startTime: new Date().toISOString() };
 
   const initResult = await page.evaluate(
-    (port, room) => window.__downlinkV3Harness.init(`ws://127.0.0.1:${port}/ws`, room),
+    (port, room) => window.__downlinkV3Harness.init(`wss://127.0.0.1:${port}/ws`, room),
     signalingPort, roomId,
   );
   result.producerId = initResult.producerId;

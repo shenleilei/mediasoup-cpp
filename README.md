@@ -254,7 +254,7 @@ docker run --rm \
 
 | 变量 | 默认值 | 说明 |
 |---|---:|---|
-| `MEDIASOUP_PORT` | `9000` | HTTP / WebSocket 监听端口 |
+| `MEDIASOUP_PORT` | `9000` | HTTPS / WSS 监听端口 |
 | `MEDIASOUP_WEBRTC_SERVER_PORT` | 自动 | `WebRtcServer` UDP 单端口监听端口；显式设置时优先使用 |
 | `MEDIASOUP_WORKERS` | 空 | mediasoup worker 子进程数量；默认按容器可见 CPU 自动计算为 `max(1, hardware_concurrency - 2)`，测试机单实例场景下建议显式设成 `1` |
 | `MEDIASOUP_WORKER_THREADS` | 空 | C++ WorkerThread 数量；默认按 `ceil(workers / 2)` 自动计算，且不超过 workers；测试机单实例场景下建议显式设成 `1` |
@@ -270,13 +270,13 @@ docker run --rm \
 启动服务后打开：
 
 ```text
-http://127.0.0.1:3000/
+https://127.0.0.1:3000/
 ```
 
 如果使用 Docker 默认端口，打开：
 
 ```text
-http://127.0.0.1:9000/
+https://127.0.0.1:9000/
 ```
 
 基本验收步骤：
@@ -291,15 +291,15 @@ http://127.0.0.1:9000/
 录制回放页面：
 
 ```text
-http://127.0.0.1:3000/playback.html
+https://127.0.0.1:3000/playback.html
 ```
 
 ### 4. 基础自检命令
 
 ```bash
-curl http://127.0.0.1:3000/healthz
-curl http://127.0.0.1:3000/readyz
-curl http://127.0.0.1:3000/metrics
+curl -k https://127.0.0.1:3000/healthz
+curl -k https://127.0.0.1:3000/readyz
+curl -k https://127.0.0.1:3000/metrics
 ```
 
 运行主要 C++ 测试：

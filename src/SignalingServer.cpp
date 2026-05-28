@@ -17,19 +17,74 @@
 #include <random>
 #include <sstream>
 #include <chrono>
+#include <cerrno>
+#include <cstring>
+#include <filesystem>
+#include <system_error>
+#include <utility>
+#include <unistd.h>
 
 extern std::atomic<bool> g_shutdown;
 
 namespace mediasoup {
+namespace {
+
+bool ValidateReadableRegularFile(const std::string& path, const char* label, std::string& error)
+{
+	if (path.empty()) {
+		error = std::string(label) + " path is empty";
+		return false;
+	}
+
+	std::error_code ec;
+	const std::filesystem::path fsPath(path);
+	if (!std::filesystem::exists(fsPath, ec)) {
+		error = std::string(label) + " not found: " + path;
+		return false;
+	}
+	if (ec) {
+		error = std::string(label) + " existence check failed for " + path + ": " + ec.message();
+		return false;
+	}
+	if (!std::filesystem::is_regular_file(fsPath, ec)) {
+		error = std::string(label) + " is not a regular file: " + path;
+		return false;
+	}
+	if (ec) {
+		error = std::string(label) + " type check failed for " + path + ": " + ec.message();
+		return false;
+	}
+	if (access(path.c_str(), R_OK) != 0) {
+		error = std::string(label) + " is not readable: " + path + " (" + std::strerror(errno) + ")";
+		return false;
+	}
+
+	return true;
+}
+
+} // namespace
+
+bool ValidateSignalingTlsFiles(const SignalingTlsOptions& options, std::string& error)
+{
+	if (!ValidateReadableRegularFile(options.certFile, "signaling TLS certificate", error)) {
+		return false;
+	}
+	if (!ValidateReadableRegularFile(options.keyFile, "signaling TLS private key", error)) {
+		return false;
+	}
+	return true;
+}
 
 SignalingServer::SignalingServer(int port,
 	std::vector<std::unique_ptr<WorkerThread>>& workerThreads,
 	RoomRegistry* registry,
-	bool redisRequired)
+	bool redisRequired,
+	SignalingTlsOptions tlsOptions)
 	: port_(port)
 	, workerThreads_(workerThreads)
 	, registry_(registry)
 	, redisRequired_(redisRequired)
+	, tlsOptions_(std::move(tlsOptions))
 {}
 
 SignalingServer::~SignalingServer() {
@@ -70,7 +125,10 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 	struct us_timer_t* shutdownTimer = nullptr;
 
 	bool listenSucceeded = false;
-	uWS::App app;
+	uWS::SocketContextOptions sslOptions;
+	sslOptions.key_file_name = tlsOptions_.keyFile.c_str();
+	sslOptions.cert_file_name = tlsOptions_.certFile.c_str();
+	uWS::SSLApp app(sslOptions);
 	SignalingServerWs::RegisterWebSocketRoutes(app, *this, wsMap, loop, downlinkStatsRateLimit);
 
 	SignalingServerHttp::RegisterHttpRoutes(app, *this, loop);
@@ -79,7 +137,9 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 			if (listenSocket) {
 				listenSucceeded = true;
 				notifyStartup(true);
-				spdlog::info("SignalingServer listening on port {}", port_);
+				spdlog::info(
+					"SignalingServer listening with HTTPS/WSS on port {} cert={} key={}",
+					port_, tlsOptions_.certFile, tlsOptions_.keyFile);
 				auto* loop = uWS::Loop::get();
 				SignalingServerHttp::StartBackgroundTimers(
 					*this,
