@@ -17,6 +17,7 @@ build-*/
 
 # mediasoup-worker binary (download separately)
 mediasoup-worker
+mediasoup-worker.symlink.bak
 
 # IDE / tools
 .vscode/
@@ -54,6 +55,7 @@ config.json
 /docs/archive/*-qos-runs/20*/
 /run_d1_test.sh
 /tests/qos_harness/artifacts/last-failures.txt
+/tests/qos_harness/chrome/
 bwe_diff.patch
 *.tmp
 tmp.*

@@ -1,14 +1,14 @@
 # Full Regression Test Results
 
-Generated at: `2026-05-28 05:19:28 CST`
+Generated at: `2026-05-28 17:53:12 CST`
 
 ## Summary
 
 - Script: `scripts/run_all_tests.sh`
-- Selected groups: `unit`, `integration`
+- Selected groups: `unit`, `integration`, `topology`
 - Overall status: `PASS`
-- Attempted tasks: `5`
-- Passed tasks: `5`
+- Attempted tasks: `7`
+- Passed tasks: `7`
 - Failed tasks: `0`
 - Failed groups: none
 
@@ -21,20 +21,24 @@ Generated at: `2026-05-28 05:19:28 CST`
 | Task | Group | Status | Duration |
 |---|---|---|---|
 | `unit` | `unit` | `PASS` | `2s` |
-| `integration:mediasoup_integration_tests` | `integration` | `PASS` | `25s` |
-| `integration:mediasoup_e2e_tests` | `integration` | `PASS` | `4s` |
-| `integration:mediasoup_stability_integration_tests` | `integration` | `PASS` | `10s` |
-| `integration:mediasoup_review_fix_tests` | `integration` | `PASS` | `61s` |
+| `integration:mediasoup_integration_tests` | `integration` | `PASS` | `20s` |
+| `integration:mediasoup_e2e_tests` | `integration` | `PASS` | `5s` |
+| `integration:mediasoup_stability_integration_tests` | `integration` | `PASS` | `9s` |
+| `integration:mediasoup_review_fix_tests` | `integration` | `PASS` | `62s` |
+| `topology:mediasoup_topology_tests` | `topology` | `PASS` | `15s` |
+| `topology:mediasoup_multinode_tests` | `topology` | `PASS` | `48s` |
 
 ## Task Duration View
 
 | Task | Duration | Visual |
 |---|---:|---|
 | `unit` | `2s` | # |
-| `integration:mediasoup_integration_tests` | `25s` | ######## |
-| `integration:mediasoup_e2e_tests` | `4s` | # |
-| `integration:mediasoup_stability_integration_tests` | `10s` | ### |
-| `integration:mediasoup_review_fix_tests` | `61s` | #################### |
+| `integration:mediasoup_integration_tests` | `20s` | ###### |
+| `integration:mediasoup_e2e_tests` | `5s` | # |
+| `integration:mediasoup_stability_integration_tests` | `9s` | ## |
+| `integration:mediasoup_review_fix_tests` | `62s` | #################### |
+| `topology:mediasoup_topology_tests` | `15s` | #### |
+| `topology:mediasoup_multinode_tests` | `48s` | ############### |
 
 ## Detailed Reports
 
