@@ -33,14 +33,8 @@ constexpr int kChannelRequestTimeoutMs   = 5000;    // worker IPC request timeou
 // ── Stats ──
 constexpr int kStatsTimeoutMs            = 500;     // per-peer getStats IPC timeout
 
-// ── Recorder ──
-constexpr int kMaxPendingAudioPackets    = 500;     // H264 deferred header audio buffer cap
-constexpr int kMaxH264NalDebugLogs       = 5;
-
 // ── Disk ──
-constexpr uint64_t kMaxRecordingDirBytes = 10ULL * 1024 * 1024 * 1024;  // 10 GB
-
-// ── Redis ──
+// ── Redis (legacy implementation files remain out of runtime path) ──
 constexpr int kRedisConnectTimeoutSec    = 2;
 constexpr int kRedisHeartbeatIntervalSec = 10;
 constexpr int kRedisRoomTtlSec           = 300;

@@ -69,7 +69,6 @@ set(MEDIASOUP_LIBRARY_SOURCES
         src/GeoDbResolver.cpp
         src/HawkeyeRegisterClient.cpp
         src/PublicIpResolver.cpp
-    src/Recorder.cpp
     src/Worker.cpp
     src/Transport.cpp
     src/WebRtcTransport.cpp
@@ -115,7 +114,6 @@ target_link_libraries(mediasoup_common_ffmpeg PUBLIC mediasoup_build_common medi
 target_link_libraries(mediasoup_lib PUBLIC mediasoup_common_media mediasoup_common_ffmpeg)
 
 target_link_libraries(mediasoup_build_test_support INTERFACE mediasoup_common_media mediasoup_common_ffmpeg)
-
 add_library(ip2region STATIC ${IP2REGION_DIR}/xdb_searcher.c ${IP2REGION_DIR}/xdb_util.c)
 target_include_directories(ip2region PUBLIC ${IP2REGION_DIR})
 
@@ -127,10 +125,6 @@ mediasoup_add_configured_executable(mediasoup-sfu
     SOURCES
         src/main.cpp
         src/MainBootstrap.cpp
-        src/RoomRegistry.cpp
-        src/RoomRegistryConnection.cpp
-        src/RoomRegistryPubSub.cpp
-        src/RoomRegistrySync.cpp
         src/RuntimeDaemon.cpp
         src/SignalingServer.cpp
         src/SignalingServerHttp.cpp
@@ -150,7 +144,6 @@ mediasoup_add_configured_executable(mediasoup-sfu
         mediasoup_common_ffmpeg
         ip2region
         z
-        hiredis
 )
 
 option(BUILD_TESTS "Build unit tests" ON)
@@ -179,7 +172,6 @@ if(BUILD_TESTS)
         tests/test_geo_router.cpp
         tests/test_common_ffmpeg.cpp
         tests/test_common_media.cpp
-        tests/test_multinode.cpp
         tests/test_ortc.cpp
         tests/test_request_timeout.cpp
         tests/test_review_fixes.cpp
@@ -214,7 +206,6 @@ if(BUILD_TESTS)
             mediasoup_lib
             mediasoup_build_pthread
             mediasoup_build_ffmpeg_core
-            hiredis
             spdlog::spdlog
     )
 
@@ -232,14 +223,6 @@ if(BUILD_TESTS)
             mediasoup_build_pthread
     )
 
-    mediasoup_add_gtest_target(mediasoup_topology_tests
-        SOURCES tests/test_multi_sfu_topology.cpp
-        LINK_LIBRARIES
-            mediasoup_build_test_support
-            mediasoup_build_pthread
-            hiredis
-    )
-
     mediasoup_add_gtest_target(mediasoup_stability_integration_tests
         SOURCES tests/test_stability_integration.cpp
         LINK_LIBRARIES
@@ -247,26 +230,11 @@ if(BUILD_TESTS)
             mediasoup_build_pthread
     )
 
-    mediasoup_add_gtest_target(mediasoup_multinode_tests
-        SOURCES tests/test_multinode_integration.cpp
-        LINK_LIBRARIES
-            mediasoup_build_test_support
-            mediasoup_build_pthread
-            hiredis
-    )
-
     mediasoup_add_gtest_target(mediasoup_review_fix_tests
-        SOURCES
-            tests/test_review_fixes_integration.cpp
-            tests/test_room_registry_sync.cpp
-            src/RoomRegistry.cpp
-            src/RoomRegistryConnection.cpp
-            src/RoomRegistryPubSub.cpp
-            src/RoomRegistrySync.cpp
+        SOURCES tests/test_review_fixes_integration.cpp
         LINK_LIBRARIES
             mediasoup_build_test_support
             mediasoup_build_pthread
-            hiredis
             ip2region
             spdlog::spdlog
     )
@@ -284,15 +252,6 @@ if(BUILD_TESTS)
             mediasoup_build_test_support
             mediasoup_lib
             mediasoup_build_pthread
-    )
-
-    mediasoup_add_gtest_target(mediasoup_qos_recording_accuracy_tests
-        SOURCES tests/test_qos_recording_accuracy.cpp
-        LINK_LIBRARIES
-            mediasoup_build_test_support
-            mediasoup_lib
-            mediasoup_build_pthread
-            mediasoup_build_ffmpeg_core
     )
 
 endif()
