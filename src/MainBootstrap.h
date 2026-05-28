@@ -22,11 +22,7 @@ struct RuntimeOptions {
 	std::string redisHost{ "127.0.0.1" };
 	int redisPort{ 6379 };
 	bool redisRequired{ true };
-	int rtcMinPort{ 10000 };
-	int rtcMaxPort{ 59999 };
-	bool webRtcServerEnabled{ false };
-	int webRtcServerMinPort{ 0 };
-	int webRtcServerMaxPort{ 0 };
+	int webRtcServerPort{ 0 };
 	std::string nodeId;
 	std::string nodeAddress;
 	std::string hawkeyeRegisterUrl;

@@ -142,11 +142,7 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 					if (cfg.contains("redisHost")) options.redisHost = cfg["redisHost"].get<std::string>();
 					if (cfg.contains("redisPort")) options.redisPort = cfg["redisPort"].get<int>();
 					if (cfg.contains("redisRequired")) options.redisRequired = cfg["redisRequired"].get<bool>();
-					if (cfg.contains("rtcMinPort")) { int v = cfg["rtcMinPort"].get<int>(); if (v > 0) options.rtcMinPort = v; }
-					if (cfg.contains("rtcMaxPort")) { int v = cfg["rtcMaxPort"].get<int>(); if (v > 0) options.rtcMaxPort = v; }
-					if (cfg.contains("webRtcServerEnabled")) options.webRtcServerEnabled = cfg["webRtcServerEnabled"].get<bool>();
-					if (cfg.contains("webRtcServerMinPort")) { int v = cfg["webRtcServerMinPort"].get<int>(); if (v > 0) options.webRtcServerMinPort = v; }
-					if (cfg.contains("webRtcServerMaxPort")) { int v = cfg["webRtcServerMaxPort"].get<int>(); if (v > 0) options.webRtcServerMaxPort = v; }
+					if (cfg.contains("webRtcServerPort")) { int v = cfg["webRtcServerPort"].get<int>(); if (v > 0) options.webRtcServerPort = v; }
 				if (cfg.contains("nodeId")) options.nodeId = cfg["nodeId"].get<std::string>();
 				if (cfg.contains("nodeAddress")) options.nodeAddress = cfg["nodeAddress"].get<std::string>();
 				if (cfg.contains("hawkeyeRegisterUrl")) options.hawkeyeRegisterUrl = cfg["hawkeyeRegisterUrl"].get<std::string>();
@@ -203,12 +199,7 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 			else if (trySetInt("--redisPort=", options.redisPort)) {}
 			else if (arg == "--redisRequired") options.redisRequired = true;
 			else if (arg == "--noRedisRequired") options.redisRequired = false;
-			else if (trySetInt("--rtcMinPort=", options.rtcMinPort)) {}
-			else if (trySetInt("--rtcMaxPort=", options.rtcMaxPort)) {}
-			else if (arg == "--webRtcServer") options.webRtcServerEnabled = true;
-			else if (arg == "--noWebRtcServer") options.webRtcServerEnabled = false;
-			else if (trySetInt("--webRtcServerMinPort=", options.webRtcServerMinPort)) {}
-			else if (trySetInt("--webRtcServerMaxPort=", options.webRtcServerMaxPort)) {}
+			else if (trySetInt("--webRtcServerPort=", options.webRtcServerPort)) {}
 			else if (arg.find("--nodeId=") == 0) options.nodeId = arg.substr(9);
 		else if (arg.find("--nodeAddress=") == 0) options.nodeAddress = arg.substr(14);
 		else if (arg.find("--hawkeyeRegisterUrl=") == 0) options.hawkeyeRegisterUrl = arg.substr(21);
@@ -280,38 +271,13 @@ bool FinalizeRuntimeOptions(RuntimeOptions& options)
 		spdlog::error("Invalid nodeId '{}' (allowed: [A-Za-z0-9_-.:]{{1,128}})", options.nodeId);
 		return false;
 	}
-	if (options.rtcMinPort <= 0 || options.rtcMaxPort <= 0 ||
-		options.rtcMinPort > 65535 || options.rtcMaxPort > 65535 ||
-		options.rtcMinPort > options.rtcMaxPort) {
-		spdlog::error("Invalid RTC port range: {}-{}", options.rtcMinPort, options.rtcMaxPort);
-		return false;
+	if (options.webRtcServerPort <= 0) {
+		options.webRtcServerPort = 9000;
+		spdlog::info("webRtcServerPort not provided, defaulting to 9000");
 	}
-	if (options.webRtcServerEnabled) {
-		if (options.webRtcServerMinPort <= 0) {
-			options.webRtcServerMinPort = options.rtcMinPort;
-		}
-		if (options.webRtcServerMaxPort <= 0) {
-			options.webRtcServerMaxPort = options.webRtcServerMinPort + options.numWorkers - 1;
-		}
-		if (options.webRtcServerMinPort <= 0 || options.webRtcServerMaxPort <= 0 ||
-			options.webRtcServerMinPort > 65535 || options.webRtcServerMaxPort > 65535 ||
-			options.webRtcServerMinPort > options.webRtcServerMaxPort) {
-			spdlog::error("Invalid WebRtcServer port range: {}-{}",
-				options.webRtcServerMinPort,
-				options.webRtcServerMaxPort);
-			return false;
-		}
-		const int webRtcServerPortCount =
-			options.webRtcServerMaxPort - options.webRtcServerMinPort + 1;
-		if (webRtcServerPortCount < options.numWorkers) {
-			spdlog::error(
-				"WebRtcServer port range {}-{} has {} ports but {} workers were requested",
-				options.webRtcServerMinPort,
-				options.webRtcServerMaxPort,
-				webRtcServerPortCount,
-				options.numWorkers);
-			return false;
-		}
+	if (options.webRtcServerPort <= 0) {
+		spdlog::error("Invalid WebRtcServer port: {}", options.webRtcServerPort);
+		return false;
 	}
 
 	if (options.nodeAddress.empty()) {
@@ -448,8 +414,8 @@ WorkerSettings BuildWorkerSettings(const RuntimeOptions& options)
 			}
 		}
 	}
-	workerSettings.rtcMinPort = static_cast<uint16_t>(options.rtcMinPort);
-	workerSettings.rtcMaxPort = static_cast<uint16_t>(options.rtcMaxPort);
+	workerSettings.rtcPort = static_cast<uint16_t>(
+		options.webRtcServerPort > 0 ? options.webRtcServerPort : 9000);
 	if (!options.workerBin.empty()) workerSettings.workerBin = options.workerBin;
 	return workerSettings;
 }
@@ -464,12 +430,9 @@ std::vector<std::unique_ptr<WorkerThread>> CreateWorkerThreadPool(
 	auto workersPerThread = ComputeWorkersPerThread(options.numWorkers, options.numWorkerThreads);
 
 	std::vector<std::unique_ptr<WorkerThread>> workerThreads;
-	int nextWebRtcServerPort = options.webRtcServerMinPort;
+	int nextWebRtcServerPort = options.webRtcServerPort;
 	for (size_t i = 0; i < workersPerThread.size(); ++i) {
 		try {
-			const int webRtcServerPortBase = options.webRtcServerEnabled
-				? nextWebRtcServerPort
-				: 0;
 			auto workerThread = std::make_unique<WorkerThread>(
 				static_cast<int>(i),
 				workerSettings,
@@ -477,13 +440,10 @@ std::vector<std::unique_ptr<WorkerThread>> CreateWorkerThreadPool(
 				mediaCodecs,
 				listenInfos,
 				registry,
-				options.webRtcServerEnabled,
-				webRtcServerPortBase,
+				nextWebRtcServerPort,
 				options.maxRoutersPerWorker > 0 ? static_cast<size_t>(options.maxRoutersPerWorker) : 0);
 			workerThreads.push_back(std::move(workerThread));
-			if (options.webRtcServerEnabled) {
-				nextWebRtcServerPort += workersPerThread[i];
-			}
+			nextWebRtcServerPort += workersPerThread[i];
 			spdlog::info("WorkerThread {} created ({} workers)", i, workersPerThread[i]);
 		} catch (const std::exception& e) {
 			spdlog::error("Failed to create WorkerThread {}: {}", i, e.what());

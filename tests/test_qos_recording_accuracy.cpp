@@ -67,8 +67,7 @@ protected:
 	void SetUp() override {
 		WorkerSettings settings;
 		settings.workerBin = "./mediasoup-worker";
-		settings.rtcMinPort = 41000;
-		settings.rtcMaxPort = 41999;
+		settings.rtcPort = 41000;
 		worker = std::make_shared<Worker>(settings);
 
 		tmpDir = "/tmp/qos_rec_accuracy_" + std::to_string(getpid());

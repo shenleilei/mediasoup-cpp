@@ -197,7 +197,8 @@ DOCKER_USERNAME=<user> DOCKER_PASSWORD=<password-or-token> ./build_image.sh --pu
 docker run --rm \
   --name mediasoup-cpp \
   --network host \
-  -e MEDIASOUP_PORT=1770 \
+  -e MEDIASOUP_PORT=9000 \
+  -e MEDIASOUP_WEBRTC_SERVER_PORT=9000 \
   mediasoup-cpp:sfu
 ```
 
@@ -207,7 +208,8 @@ docker run -d \
   --name mediasoup-cpp \
   --restart unless-stopped \
   --network host \
-  -e MEDIASOUP_PORT=1770 \
+  -e MEDIASOUP_PORT=9000 \
+  -e MEDIASOUP_WEBRTC_SERVER_PORT=9000 \
   mediasoup-cpp:sfu
 ```
 
@@ -218,7 +220,8 @@ docker run -d \
   --name mediasoup-cpp \
   --restart unless-stopped \
   --network host \
-  -e MEDIASOUP_PORT=1770 \
+  -e MEDIASOUP_PORT=9000 \
+  -e MEDIASOUP_WEBRTC_SERVER_PORT=9000 \
   mediasoup-cpp:sfu
 ```
 
@@ -228,9 +231,10 @@ docker run -d \
 docker run -d \
   --name mediasoup-cpp \
   --restart unless-stopped \
-  -p 1770:1770/tcp \
-  -p 8000-8002:8000-8002/udp \
-  -e MEDIASOUP_PORT=1770 \
+  -p 9000:9000/tcp \
+  -p 9000:9000/udp \
+  -e MEDIASOUP_PORT=9000 \
+  -e MEDIASOUP_WEBRTC_SERVER_PORT=9000 \
   mediasoup-cpp:sfu
 ```
 
@@ -239,31 +243,27 @@ docker run -d \
 ```bash
 docker run --rm \
   --network host \
-  -e MEDIASOUP_PORT=18080 \
+  -e MEDIASOUP_PORT=9000 \
   -e MEDIASOUP_WORKERS=2 \
+  -e MEDIASOUP_WEBRTC_SERVER_PORT=9000 \
   mediasoup-cpp:sfu \
-  --rtcMinPort=9000 \
-  --rtcMaxPort=9010 \
+  --webRtcServerPort=9000 \
 ```
 
 可用环境变量：
 
 | 变量 | 默认值 | 说明 |
 |---|---:|---|
-| `MEDIASOUP_PORT` | `1770` | HTTP / WebSocket 监听端口 |
-| `MEDIASOUP_WORKERS` | 空 | mediasoup worker 子进程数量；默认按容器可见 CPU 自动计算为 `max(1, hardware_concurrency - 2)`，但当 `MEDIASOUP_RTC_MAX_PORT - MEDIASOUP_RTC_MIN_PORT + 1 <= 8` 时会自动收敛到 `1` |
-| `MEDIASOUP_WORKER_THREADS` | 空 | C++ WorkerThread 数量；默认按 `ceil(workers / 2)` 自动计算，且不超过 workers；当默认 RTC 端口范围较窄时会自动收敛到 `1` |
-| `MEDIASOUP_RTC_MIN_PORT` | `8000` | mediasoup worker UDP RTC 起始端口 |
-| `MEDIASOUP_RTC_MAX_PORT` | `8002` | mediasoup worker UDP RTC 结束端口 |
-| `MEDIASOUP_WEBRTC_SERVER_ENABLED` | `1` | 启用 `WebRtcServer` 共享监听端口；多个浏览器 `WebRtcTransport` 复用每个 worker 的固定 UDP 端口 |
-| `MEDIASOUP_WEBRTC_SERVER_MIN_PORT` | 同 `MEDIASOUP_RTC_MIN_PORT` | `WebRtcServer` 起始端口；多 worker 时每个 worker 使用一个端口 |
-| `MEDIASOUP_WEBRTC_SERVER_MAX_PORT` | 空 | `WebRtcServer` 结束端口；为空时服务按 worker 数自动计算 |
+| `MEDIASOUP_PORT` | `9000` | HTTP / WebSocket 监听端口 |
+| `MEDIASOUP_WEBRTC_SERVER_PORT` | `9000` | `WebRtcServer` UDP 监听端口 |
+| `MEDIASOUP_WORKERS` | 空 | mediasoup worker 子进程数量；默认按容器可见 CPU 自动计算为 `max(1, hardware_concurrency - 2)`，测试机单实例场景下建议显式设成 `1` |
+| `MEDIASOUP_WORKER_THREADS` | 空 | C++ WorkerThread 数量；默认按 `ceil(workers / 2)` 自动计算，且不超过 workers；测试机单实例场景下建议显式设成 `1` |
 | `MEDIASOUP_REDIS_REQUIRED` | `0` | 默认不需要 Redis；`1` 表示 Redis 不可用时 readiness 失败 |
 | `MEDIASOUP_REDIS_HOST` | `0.0.0.0` | Redis 地址；默认配合 `MEDIASOUP_REDIS_REQUIRED=0` 走 local-only |
 | `MEDIASOUP_REDIS_PORT` | `1` | Redis 端口 |
 | `MEDIASOUP_LOG_DIR` | 空 | 非空时写守护日志目录 |
 
-默认镜像启用 `WebRtcServer`，浏览器 WebRTC transport 会复用 `8000/udp` 这个共享监听端口。`8000-8002` 中剩余端口仍供 PlainTransport 等非 WebRTC-server 链路使用；如果开启多 worker 或大量 PlainTransport，仍应放大 `MEDIASOUP_RTC_MIN_PORT/MEDIASOUP_RTC_MAX_PORT` 和 `MEDIASOUP_WEBRTC_SERVER_*` 范围。
+默认镜像启用 `WebRtcServer`，浏览器 WebRTC transport 会复用 `9000/udp` 这个共享监听端口。worker 默认只使用单端口模式，控制面通过 `--webRtcServerPort` 派生并传递 worker 的 `--rtcPort`。
 
 ### 3. 浏览器 demo 互通测试
 
@@ -276,7 +276,7 @@ http://127.0.0.1:3000/
 如果使用 Docker 默认端口，打开：
 
 ```text
-http://127.0.0.1:1770/
+http://127.0.0.1:9000/
 ```
 
 基本验收步骤：
@@ -641,7 +641,7 @@ Disable with `--noCountryIsolation` or `"countryIsolation": false`.
 # Hangzhou node (China Telecom)
 ./build/mediasoup-sfu \
   --nodaemon \
-  --port=3000 \
+  --port=9000 \
   --lat=30.27 \
   --lng=120.15 \
   --isp=电信 \
@@ -745,7 +745,7 @@ cmake --build . -j$(nproc)
 ```bash
 cat > config.json <<'EOF'
 {
-  "port": 3000,
+  "port": 9000,
   "workers": 1,
   "workerThreads": 1,
   "workerBin": "./mediasoup-worker",
@@ -762,7 +762,7 @@ EOF
 ./build/mediasoup-sfu --nodaemon --config=config.json
 ```
 
-打开浏览器访问 `http://<server-ip>:3000`。
+打开浏览器访问 `http://<server-ip>:9000`。
 
 ## 命令行选项 (Command-Line Options)
 
@@ -771,11 +771,7 @@ EOF
 | `--port` | `3000` | 信令 + HTTP 端口 |
 | `--workers` | 基于 CPU 自动计算 | mediasoup worker 子进程数量 |
 | `--workerThreads` | 自动计算 | WorkerThread 事件循环数量 |
-| `--rtcMinPort` | `10000` | mediasoup worker UDP RTC 起始端口 |
-| `--rtcMaxPort` | `59999` | mediasoup worker UDP RTC 结束端口 |
-| `--webRtcServer` / `--noWebRtcServer` | 关闭 | 是否启用每 worker 一个 `WebRtcServer` 共享监听端口 |
-| `--webRtcServerMinPort` | `rtcMinPort` | `WebRtcServer` 起始端口 |
-| `--webRtcServerMaxPort` | 自动按 worker 数计算 | `WebRtcServer` 结束端口 |
+| `--webRtcServerPort` | `9000` | 每个 worker 的 `WebRtcServer` 监听端口起始值 |
 | `--workerBin` | `./mediasoup-worker` | worker 可执行文件路径 |
 | `--logDir` | `/var/log/mediasoup` | 守护进程日志目录 |
 | `--logPrefix` | `mediasoup-sfu` | 守护进程日志文件前缀 |

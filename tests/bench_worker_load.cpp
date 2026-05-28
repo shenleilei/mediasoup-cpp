@@ -385,8 +385,7 @@ int main(int argc, char* argv[]) {
 	WorkerSettings ws;
 	ws.workerBin = "./mediasoup-worker";
 	ws.logLevel = "warn";
-	ws.rtcMinPort = 10000;
-	ws.rtcMaxPort = 59999;
+	ws.rtcPort = 10000;
 
 	std::shared_ptr<Worker> worker;
 	try {

@@ -51,6 +51,7 @@ protected:
 	static pid_t startSfu(int port, int workers, int redisPort) {
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(port) +
+			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(port)) +
 			" --workers=" + std::to_string(workers) +
 			" --workerBin=./mediasoup-worker"
 			" --redisHost=127.0.0.1"

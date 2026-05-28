@@ -126,8 +126,7 @@ protected:
 	void SetUp() override {
 		WorkerSettings settings;
 		settings.workerBin = "./mediasoup-worker";
-		settings.rtcMinPort = 40000;
-		settings.rtcMaxPort = 40999;
+		settings.rtcPort = 40000;
 		worker = std::make_shared<Worker>(settings);
 	}
 

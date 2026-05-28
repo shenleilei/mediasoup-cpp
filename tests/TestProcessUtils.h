@@ -115,6 +115,10 @@ inline int allocateUniqueTestPort(int base = 18000, int span = 2000) {
 	return -1;
 }
 
+inline int testWebRtcServerPortForSignalingPort(int signalingPort) {
+	return 30000 + (signalingPort % 2000) * 8;
+}
+
 inline bool waitForDirectChildExit(pid_t pid, int polls, int sleepUs) {
 	for (int i = 0; i < polls; ++i) {
 		int status = 0;
@@ -166,6 +170,7 @@ public:
 			testSfuBinaryPath(),
 			"--nodaemon",
 			"--port=" + std::to_string(port_),
+			"--webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(port_)),
 			"--workers=1",
 			"--workerBin=" + testWorkerBinaryPath(),
 			"--redisHost=0.0.0.0",

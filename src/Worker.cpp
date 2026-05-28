@@ -65,8 +65,7 @@ std::vector<std::string> buildWorkerArgs(
 		args.push_back("--logLevel=" + settings.logLevel);
 	for (const auto& tag : settings.logTags)
 		args.push_back("--logTag=" + tag);
-	args.push_back("--rtcMinPort=" + std::to_string(settings.rtcMinPort));
-	args.push_back("--rtcMaxPort=" + std::to_string(settings.rtcMaxPort));
+	args.push_back("--rtcPort=" + std::to_string(settings.rtcPort));
 	if (!settings.dtlsCertificateFile.empty())
 		args.push_back("--dtlsCertificateFile=" + settings.dtlsCertificateFile);
 	if (!settings.dtlsPrivateKeyFile.empty())

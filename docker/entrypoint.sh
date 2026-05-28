@@ -1,27 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-rtc_min_port="${MEDIASOUP_RTC_MIN_PORT:-8000}"
-rtc_max_port="${MEDIASOUP_RTC_MAX_PORT:-8002}"
-web_rtc_server_enabled="${MEDIASOUP_WEBRTC_SERVER_ENABLED:-1}"
+web_rtc_server_port="${MEDIASOUP_WEBRTC_SERVER_PORT:-9000}"
 
 args=(
   --nodaemon
-  "--port=${MEDIASOUP_PORT:-1770}"
+  "--port=${MEDIASOUP_PORT:-9000}"
   "--workerBin=${MEDIASOUP_WORKER_BIN:-./mediasoup-worker}"
-  "--rtcMinPort=${rtc_min_port}"
-  "--rtcMaxPort=${rtc_max_port}"
 )
 
 auto_workers=""
 auto_worker_threads=""
 if [[ -z "${MEDIASOUP_WORKERS:-}" || -z "${MEDIASOUP_WORKER_THREADS:-}" ]]; then
-  if [[ "$rtc_min_port" =~ ^[0-9]+$ && "$rtc_max_port" =~ ^[0-9]+$ && "$rtc_max_port" -ge "$rtc_min_port" ]]; then
-    rtc_port_span=$((rtc_max_port - rtc_min_port + 1))
-    if (( rtc_port_span <= 8 )); then
-      auto_workers=1
-      auto_worker_threads=1
-    fi
+  if [[ "$web_rtc_server_port" =~ ^[0-9]+$ ]]; then
+    auto_workers=1
+    auto_worker_threads=1
   fi
 fi
 
@@ -37,22 +30,7 @@ elif [[ -n "$auto_worker_threads" ]]; then
   args+=("--workerThreads=${auto_worker_threads}")
 fi
 
-case "$web_rtc_server_enabled" in
-  1|true|TRUE|yes|YES|on|ON)
-    args+=(--webRtcServer)
-    args+=("--webRtcServerMinPort=${MEDIASOUP_WEBRTC_SERVER_MIN_PORT:-${rtc_min_port}}")
-    if [[ -n "${MEDIASOUP_WEBRTC_SERVER_MAX_PORT:-}" ]]; then
-      args+=("--webRtcServerMaxPort=${MEDIASOUP_WEBRTC_SERVER_MAX_PORT}")
-    fi
-    ;;
-  0|false|FALSE|no|NO|off|OFF)
-    args+=(--noWebRtcServer)
-    ;;
-  *)
-    echo "Invalid MEDIASOUP_WEBRTC_SERVER_ENABLED=${web_rtc_server_enabled}" >&2
-    exit 1
-    ;;
-esac
+args+=("--webRtcServerPort=${web_rtc_server_port}")
 
 if [[ -n "${MEDIASOUP_REDIS_HOST:-}" ]]; then
   args+=("--redisHost=${MEDIASOUP_REDIS_HOST}")

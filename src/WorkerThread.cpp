@@ -20,7 +20,6 @@ WorkerThread::WorkerThread(int id,
 	const std::vector<nlohmann::json>& mediaCodecs,
 	const std::vector<nlohmann::json>& listenInfos,
 	RoomRegistry* registry,
-	bool webRtcServerEnabled,
 	int webRtcServerPortBase,
 	size_t maxRoutersPerWorker)
 	: id_(id)
@@ -28,7 +27,6 @@ WorkerThread::WorkerThread(int id,
 	, mediaCodecs_(mediaCodecs)
 	, listenInfos_(listenInfos)
 	, registry_(registry)
-	, webRtcServerEnabled_(webRtcServerEnabled)
 	, webRtcServerPortBase_(webRtcServerPortBase)
 	, maxRoutersPerWorker_(maxRoutersPerWorker)
 	, numWorkersTarget_(numWorkers)
@@ -222,14 +220,11 @@ void WorkerThread::createWorkers()
 
 	for (int i = 0; i < numWorkersTarget_; i++) {
 		try {
-			auto worker = std::make_shared<Worker>(workerSettings_, /*threaded=*/false);
-			uint16_t webRtcServerPort = 0;
-			if (webRtcServerEnabled_) {
-				webRtcServerPort = static_cast<uint16_t>(webRtcServerPortBase_ + i);
-				initializeWorkerWebRtcServer(
-					worker,
-					webRtcServerPort);
-			}
+			uint16_t webRtcServerPort = static_cast<uint16_t>(webRtcServerPortBase_ + i);
+			WorkerSettings workerSettings = workerSettings_;
+			workerSettings.rtcPort = webRtcServerPort;
+			auto worker = std::make_shared<Worker>(workerSettings, /*threaded=*/false);
+			initializeWorkerWebRtcServer(worker, webRtcServerPort);
 
 			int fd = worker->channelConsumerFd();
 			if (fd < 0) {
@@ -253,9 +248,7 @@ void WorkerThread::createWorkers()
 
 			workers_.push_back(worker);
 			fdToWorker_[fd] = worker;
-			if (webRtcServerPort != 0) {
-				workerWebRtcServerPorts_[worker.get()] = webRtcServerPort;
-			}
+			workerWebRtcServerPorts_[worker.get()] = webRtcServerPort;
 			workerManager_->addExistingWorker(worker);
 			MS_DEBUG(logger_, "WorkerThread {} created worker {} [pid:{}]", id_, i, worker->pid());
 		} catch (const std::exception& e) {
@@ -481,10 +474,10 @@ void WorkerThread::onWorkerDied(std::shared_ptr<Worker> worker)
 	}
 
 	try {
-		auto newWorker = std::make_shared<Worker>(workerSettings_, /*threaded=*/false);
-		if (webRtcServerEnabled_) {
-			initializeWorkerWebRtcServer(newWorker, webRtcServerPort);
-		}
+		WorkerSettings workerSettings = workerSettings_;
+		workerSettings.rtcPort = webRtcServerPort;
+		auto newWorker = std::make_shared<Worker>(workerSettings, /*threaded=*/false);
+		initializeWorkerWebRtcServer(newWorker, webRtcServerPort);
 
 		int fd = newWorker->channelConsumerFd();
 		if (fd < 0) {
@@ -510,9 +503,7 @@ void WorkerThread::onWorkerDied(std::shared_ptr<Worker> worker)
 
 		workers_.push_back(newWorker);
 		fdToWorker_[fd] = newWorker;
-		if (webRtcServerPort != 0) {
-			workerWebRtcServerPorts_[newWorker.get()] = webRtcServerPort;
-		}
+		workerWebRtcServerPorts_[newWorker.get()] = webRtcServerPort;
 		workerManager_->addExistingWorker(newWorker);
 		MS_WARN(logger_, "WorkerThread {} respawned worker [pid:{}]", id_, newWorker->pid());
 	} catch (const std::exception& e) {

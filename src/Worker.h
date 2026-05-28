@@ -19,8 +19,7 @@ class WebRtcServer;
 struct WorkerSettings {
 	std::string logLevel = "warn";
 	std::vector<std::string> logTags;
-	uint16_t rtcMinPort = 10000;
-	uint16_t rtcMaxPort = 59999;
+	uint16_t rtcPort = 0;
 	std::string dtlsCertificateFile;
 	std::string dtlsPrivateKeyFile;
 	std::string workerBin;

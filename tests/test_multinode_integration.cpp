@@ -60,6 +60,7 @@ protected:
 	static pid_t startSfu(int port, int redisPort, int workers = 1, int maxRoutersPerWorker = 0) {
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(port) +
+			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(port)) +
 			" --workers=" + std::to_string(workers) +
 			" --workerBin=./mediasoup-worker"
 			" --redisHost=127.0.0.1"
@@ -553,7 +554,9 @@ TEST_F(MultiNodeResolveTest, ResolveAndDirectConnect) {
 TEST_F(MultiNodeResolveTest, StartupFailsWithoutRedisWhenRedisIsRequired) {
 	// Start SFU without Redis and without explicit opt-out.
 	std::string cmd = "./build/mediasoup-sfu --nodaemon"
-		" --port=14012 --workers=1 --workerBin=./mediasoup-worker"
+		" --port=14012"
+		" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(14012)) +
+		" --workers=1 --workerBin=./mediasoup-worker"
 		" --redisHost=192.0.2.1 --redisPort=6379"
 		" > /dev/null 2>&1 & echo $!";
 	FILE* fp = popen(cmd.c_str(), "r");

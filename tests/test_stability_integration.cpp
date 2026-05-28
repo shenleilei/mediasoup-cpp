@@ -23,6 +23,7 @@ protected:
 
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(SFU_PORT) +
+			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(SFU_PORT)) +
 			" --workers=1"
 			" --workerBin=./mediasoup-worker"
 			" --redisHost=0.0.0.0 --redisPort=1 --noRedisRequired"

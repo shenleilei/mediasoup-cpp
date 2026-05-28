@@ -54,6 +54,7 @@ protected:
 
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(SFU_PORT) +
+			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(SFU_PORT)) +
 			" --workers=1"
 			" --workerBin=./mediasoup-worker"
 			" --redisHost=0.0.0.0 --redisPort=1 --noRedisRequired"
@@ -506,6 +507,7 @@ protected:
 	static pid_t startSfu(int port, double lat, double lng, const std::string& isp, int redisPort) {
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(port) +
+			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(port)) +
 			" --workers=1"
 			" --workerBin=./mediasoup-worker"
 			" --lat=" + std::to_string(lat) +
@@ -678,6 +680,7 @@ protected:
 	{
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(port) +
+			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(port)) +
 			" --workers=1"
 			" --workerBin=./mediasoup-worker"
 			" --lat=" + std::to_string(lat) +
@@ -886,6 +889,7 @@ protected:
 		// Start SFU pointing to a non-existent Redis (port 1 = unreachable)
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(DEGRADE_PORT) +
+			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(DEGRADE_PORT)) +
 			" --workers=1"
 			" --workerBin=./mediasoup-worker"
 			" --redisHost=127.0.0.1 --redisPort=1"
@@ -960,6 +964,7 @@ protected:
 	static pid_t startSfu(int port, int redisPort, const std::string& extraArgs = "") {
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(port) +
+			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(port)) +
 			" --workers=1"
 			" --workerBin=./mediasoup-worker"
 			" --redisHost=127.0.0.1"
@@ -1230,6 +1235,7 @@ protected:
 	static pid_t startSfu(int port, int redisPort, int maxRouters = 0) {
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(port) +
+			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(port)) +
 			" --workers=1"
 			" --workerBin=./mediasoup-worker"
 			" --redisHost=127.0.0.1"

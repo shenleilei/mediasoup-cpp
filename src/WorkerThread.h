@@ -58,11 +58,10 @@ public:
 		const WorkerSettings& workerSettings,
 		int numWorkers,
 		const std::vector<nlohmann::json>& mediaCodecs,
-		const std::vector<nlohmann::json>& listenInfos,
-		RoomRegistry* registry,
-		bool webRtcServerEnabled = false,
-		int webRtcServerPortBase = 0,
-		size_t maxRoutersPerWorker = 0);
+	const std::vector<nlohmann::json>& listenInfos,
+	RoomRegistry* registry,
+	int webRtcServerPortBase = 9000,
+	size_t maxRoutersPerWorker = 0);
 	~WorkerThread();
 
 	void start();
@@ -117,9 +116,7 @@ private:
 	void onHealthCheck();
 	void onGcTimer();
 	void onWorkerDied(std::shared_ptr<Worker> worker);
-	void initializeWorkerWebRtcServer(
-		const std::shared_ptr<Worker>& worker,
-		uint16_t port);
+	void initializeWorkerWebRtcServer(const std::shared_ptr<Worker>& worker, uint16_t port);
 	std::vector<nlohmann::json> buildWebRtcServerListenInfos(uint16_t port) const;
 
 	int id_;
@@ -127,7 +124,6 @@ private:
 	std::vector<nlohmann::json> mediaCodecs_;
 	std::vector<nlohmann::json> listenInfos_;
 	RoomRegistry* registry_;
-	bool webRtcServerEnabled_;
 	int webRtcServerPortBase_;
 	size_t maxRoutersPerWorker_;
 	int numWorkersTarget_;

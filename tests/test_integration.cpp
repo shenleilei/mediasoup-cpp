@@ -1,5 +1,6 @@
 // Integration (black-box) tests: start real SFU, drive via WebSocket signaling.
 #include <gtest/gtest.h>
+#include "TestRedisServer.h"
 #include "TestWsClient.h"
 #include "TestProcessUtils.h"
 #include <signal.h>
@@ -38,6 +39,7 @@ protected:
 		// Start SFU as a detached background process (avoids fork fd inheritance issues)
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(SFU_PORT) +
+			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(SFU_PORT)) +
 			" --workers=1"
 			" --workerBin=./mediasoup-worker"
 			" --redisHost=0.0.0.0 --redisPort=1 --noRedisRequired"
@@ -588,12 +590,16 @@ class MultiNodeTest : public ::testing::Test {
 protected:
 	pid_t pidA_ = -1, pidB_ = -1;
 	std::string testRoom_;
+	TestRedisServer redisServer_;
 
-	static pid_t startSfu(int port) {
+	static pid_t startSfu(int port, int redisPort) {
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(port) +
+			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(port)) +
 			" --workers=1"
 			" --workerBin=./mediasoup-worker"
+			" --redisHost=127.0.0.1"
+			" --redisPort=" + std::to_string(redisPort) +
 			" > /dev/null 2>&1 & echo $!";
 		FILE* fp = popen(cmd.c_str(), "r");
 		if (!fp) return -1;
@@ -643,8 +649,10 @@ protected:
 		testRoom_ = "route_" + std::to_string(getpid()) + "_" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 
-		pidA_ = startSfu(SFU_PORT_A);
-		pidB_ = startSfu(SFU_PORT_B);
+		ASSERT_TRUE(redisServer_.start()) << redisServer_.failureMessage();
+
+		pidA_ = startSfu(SFU_PORT_A, redisServer_.port());
+		pidB_ = startSfu(SFU_PORT_B, redisServer_.port());
 		ASSERT_GT(pidA_, 0);
 		ASSERT_GT(pidB_, 0);
 		ASSERT_TRUE(waitForPort(SFU_PORT_A)) << "SFU-A did not start";
@@ -870,6 +878,7 @@ protected:
 
 		std::string cmd = "./build/mediasoup-sfu --nodaemon"
 			" --port=" + std::to_string(SFU_PORT) +
+			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(SFU_PORT)) +
 			" --workers=1 --workerBin=./mediasoup-worker"
 			" --redisHost=0.0.0.0 --redisPort=1 --noRedisRequired"
 			" --recordDir=" + recordDir_ +
