@@ -235,7 +235,9 @@ RoomService::Result RoomService::connectPlainTransport(const std::string& roomId
 RoomService::Result RoomService::plainPublish(const std::string& roomId,
 	const std::string& peerId, const std::vector<uint32_t>& videoSsrcs, uint32_t audioSsrc,
 	const std::string& videoCodec,
-	bool enableAudio)
+	bool enableAudio,
+	const std::string& senderIp,
+	uint16_t senderPort)
 {
 	auto room = roomManager_.getRoom(roomId);
 	if (!room) return {false, {}, "", "room not found"};
@@ -255,7 +257,8 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 	PlainTransportOptions opts;
 	opts.listenInfos = roomManager_.listenInfos();
 	opts.rtcpMux = true;
-	opts.comedia = true;
+	const bool hasExplicitSender = !senderIp.empty() && senderPort != 0;
+	opts.comedia = !hasExplicitSender;
 
 	if (peer->plainSendTransport) {
 		peer->plainSendTransport->close();
@@ -269,6 +272,23 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 
 	auto transport = room->router()->createPlainTransport(opts);
 	peer->plainSendTransport = transport;
+	if (hasExplicitSender) {
+		try {
+			transport->connect(senderIp, senderPort);
+		} catch (const std::exception& e) {
+			MS_WARN(logger_, "[{} {}] plainPublish explicit connect failed: {}",
+				roomId, peerId, e.what());
+			transport->close();
+			peer->plainSendTransport.reset();
+			return {false, {}, "", std::string("plainPublish connect failed: ") + e.what()};
+		} catch (...) {
+			MS_WARN(logger_, "[{} {}] plainPublish explicit connect failed: unknown error",
+				roomId, peerId);
+			transport->close();
+			peer->plainSendTransport.reset();
+			return {false, {}, "", "plainPublish connect failed: unknown error"};
+		}
+	}
 
 	auto caps = room->router()->rtpCapabilities();
 	const std::string requestedVideoCodec =

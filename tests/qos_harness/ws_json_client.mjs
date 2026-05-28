@@ -94,12 +94,21 @@ export class WsJsonClient {
 
   #sendJson(jsonValue) {
     const payload = Buffer.from(JSON.stringify(jsonValue), 'utf8');
-    const frame = this.#makeClientTextFrame(payload);
+    const frame = this.#makeClientFrame(0x1, payload);
     this.socket.write(frame);
   }
 
-  #makeClientTextFrame(payload) {
-    const header = [0x81];
+  #sendControlFrame(opcode, payload = Buffer.alloc(0)) {
+    if (!this.socket || this.socket.destroyed) return;
+    if (payload.length > 125) {
+      throw new Error('control frame payload too large');
+    }
+    const frame = this.#makeClientFrame(opcode, payload);
+    this.socket.write(frame);
+  }
+
+  #makeClientFrame(opcode, payload) {
+    const header = [0x80 | opcode];
     const mask = crypto.randomBytes(4);
     const length = payload.length;
 
@@ -180,8 +189,16 @@ export class WsJsonClient {
       this.pending = this.pending.slice(offset + payloadLength);
 
       if (opcode === 0x8) {
+        this.#sendControlFrame(0x8, payload);
         this.close();
         return;
+      }
+      if (opcode === 0x9) {
+        this.#sendControlFrame(0xA, payload);
+        continue;
+      }
+      if (opcode === 0xA) {
+        continue;
       }
       if (opcode !== 0x1) {
         continue;

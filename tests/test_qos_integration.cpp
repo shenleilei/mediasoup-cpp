@@ -1117,6 +1117,37 @@ TEST_F(QosIntegrationTest, PlainPublishRejectsDuplicateVideoSsrcs) {
 	EXPECT_FALSE(resp.value("error", "").empty()) << resp.dump();
 }
 
+TEST_F(QosIntegrationTest, PlainPublishSupportsExplicitSenderConnect) {
+	auto alice = joinRoom(testRoom_, "alice");
+
+	int senderFd = ::socket(AF_INET, SOCK_DGRAM, 0);
+	ASSERT_GE(senderFd, 0);
+
+	sockaddr_in senderAddr{};
+	senderAddr.sin_family = AF_INET;
+	senderAddr.sin_port = htons(0);
+	ASSERT_EQ(::inet_pton(AF_INET, "127.0.0.1", &senderAddr.sin_addr), 1);
+	ASSERT_EQ(::bind(senderFd, reinterpret_cast<sockaddr*>(&senderAddr), sizeof(senderAddr)), 0);
+
+	sockaddr_in boundAddr{};
+	socklen_t boundLen = sizeof(boundAddr);
+	ASSERT_EQ(::getsockname(senderFd, reinterpret_cast<sockaddr*>(&boundAddr), &boundLen), 0);
+	const uint16_t senderPort = ntohs(boundAddr.sin_port);
+
+	auto resp = alice.ws->request("plainPublish", {
+		{"videoSsrc", 11111111u},
+		{"audioSsrc", 22222222u},
+		{"senderIp", "127.0.0.1"},
+		{"senderPort", senderPort}
+	});
+
+	EXPECT_TRUE(resp.value("ok", false)) << resp.dump();
+	EXPECT_TRUE(resp["data"].contains("transportId")) << resp.dump();
+	EXPECT_TRUE(resp["data"].contains("videoProdId")) << resp.dump();
+
+	::close(senderFd);
+}
+
 TEST_F(QosIntegrationTest, PlainPublishSupportsVideoOnlyAndKeepsLegacyAudioDefault) {
 	auto alice = joinRoom(testRoom_, "alice");
 

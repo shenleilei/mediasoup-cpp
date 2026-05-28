@@ -18,12 +18,16 @@ function parseArgs(argv) {
     maxRooms: Number.POSITIVE_INFINITY,
     step: 10,
     roundMs: 10000,
+    steadyRoundMs: null,
     holdAfterMax: false,
     steadyRounds: 0,
     roomPrefix: `pressure_room_${Date.now()}`,
     payloadSize: 1200,
     ppsPerRoom: 300,
     recvRatio: 0.9,
+    explicitConnect: true,
+    continueOnFailure: false,
+    freezeOnFailure: true,
   };
 
   for (const arg of argv) {
@@ -39,12 +43,19 @@ function parseArgs(argv) {
       case 'max-rooms': opts.maxRooms = Math.max(1, int(rawValue)); break;
       case 'step': opts.step = Math.max(1, int(rawValue)); break;
       case 'round-ms': opts.roundMs = Math.max(1, int(rawValue)); break;
+      case 'steady-round-ms': opts.steadyRoundMs = Math.max(1, int(rawValue)); break;
       case 'hold-after-max': opts.holdAfterMax = true; break;
       case 'steady-rounds': opts.steadyRounds = Math.max(0, int(rawValue)); break;
       case 'room-prefix': opts.roomPrefix = rawValue || opts.roomPrefix; break;
       case 'payload-size': opts.payloadSize = Math.max(64, int(rawValue)); break;
       case 'pps': opts.ppsPerRoom = Math.max(1, int(rawValue)); break;
       case 'recv-ratio': opts.recvRatio = Math.min(1, Math.max(0, float(rawValue))); break;
+      case 'explicit-connect': opts.explicitConnect = true; break;
+      case 'no-explicit-connect': opts.explicitConnect = false; break;
+      case 'continue-on-failure': opts.continueOnFailure = true; break;
+      case 'stop-on-failure': opts.continueOnFailure = false; break;
+      case 'freeze-on-failure': opts.freezeOnFailure = true; break;
+      case 'no-freeze-on-failure': opts.freezeOnFailure = false; break;
       default:
         throw new Error(`unknown option: --${key}`);
     }
@@ -106,8 +117,20 @@ class WsJsonClient {
 
   _sendJson(value) {
     const payload = Buffer.from(JSON.stringify(value), 'utf8');
+    this._sendFrame(0x1, payload);
+  }
+
+  _sendControlFrame(opcode, payload = Buffer.alloc(0)) {
+    if (payload.length > 125) {
+      throw new Error('control frame payload too large');
+    }
+    this._sendFrame(opcode, payload);
+  }
+
+  _sendFrame(opcode, payload) {
+    if (!this.socket || this.socket.destroyed) return;
     const mask = crypto.randomBytes(4);
-    const header = [0x81];
+    const header = [0x80 | opcode];
     if (payload.length < 126) {
       header.push(0x80 | payload.length);
     } else if (payload.length < 65536) {
@@ -183,9 +206,15 @@ class WsJsonClient {
       const payload = this.pending.slice(offset, offset + payloadLength);
       this.pending = this.pending.slice(offset + payloadLength);
       if (opcode === 0x8) {
+        this._sendControlFrame(0x8, payload);
         this.close();
         return;
       }
+      if (opcode === 0x9) {
+        this._sendControlFrame(0xA, payload);
+        continue;
+      }
+      if (opcode === 0xA) continue;
       if (opcode !== 0x1) continue;
       const msg = JSON.parse(payload.toString('utf8'));
       if (msg.response === true) {
@@ -213,15 +242,23 @@ function createUdpReceiver() {
 
 function createUdpSender() {
   const sock = dgram.createSocket('udp4');
-  return {
-    sock,
-    close() {
-      try { sock.close(); } catch {}
-    },
-    send(buf, port, host) {
-      sock.send(buf, port, host);
-    },
-  };
+  return new Promise((resolve, reject) => {
+    sock.once('error', reject);
+    sock.bind(0, '127.0.0.1', () => {
+      const port = sock.address().port;
+      sock.off('error', reject);
+      resolve({
+        sock,
+        port,
+        close() {
+          try { sock.close(); } catch {}
+        },
+        send(buf, port, host) {
+          sock.send(buf, port, host);
+        },
+      });
+    });
+  });
 }
 
 function buildRtpPacket({ pt, seq, ts, ssrc, payloadSize, marker }) {
@@ -253,6 +290,58 @@ async function joinPeer(ws, roomId, peerId) {
   });
   if (!resp.ok) throw new Error(`${peerId} join failed: ${JSON.stringify(resp)}`);
   return resp;
+}
+
+function sumRtpStatsFields(target, source) {
+  if (!source || typeof source !== 'object') return;
+  for (const field of [
+    'packetsLost',
+    'nackCount',
+    'nackPacketCount',
+    'packetsRetransmitted',
+    'packetsRepaired',
+    'rtpPacketLossReceived',
+    'rtpPacketLossSent',
+  ]) {
+    const value = Number(source[field]);
+    if (Number.isFinite(value)) {
+      target[field] += value;
+    }
+  }
+}
+
+function summarizePeerStats(resp) {
+  const summary = {
+    packetsLost: 0,
+    nackCount: 0,
+    nackPacketCount: 0,
+    packetsRetransmitted: 0,
+    packetsRepaired: 0,
+    rtpPacketLossReceived: 0,
+    rtpPacketLossSent: 0,
+  };
+  const data = resp?.data || {};
+  sumRtpStatsFields(summary, data.sendTransport);
+  sumRtpStatsFields(summary, data.recvTransport);
+  for (const producer of Object.values(data.producers || {})) {
+    for (const stat of producer.stats || []) {
+      sumRtpStatsFields(summary, stat);
+    }
+  }
+  return summary;
+}
+
+async function sampleRtpStats(room) {
+  const [pubStats, sub1Stats, sub2Stats] = await Promise.all([
+    room.pubWs.request('getStats', { peerId: 'pub' }),
+    room.sub1Ws.request('getStats', { peerId: 'sub1' }),
+    room.sub2Ws.request('getStats', { peerId: 'sub2' }),
+  ]);
+  return {
+    pub: summarizePeerStats(pubStats),
+    sub1: summarizePeerStats(sub1Stats),
+    sub2: summarizePeerStats(sub2Stats),
+  };
 }
 
 async function sampleHttpJson(httpUrl, path) {
@@ -300,10 +389,30 @@ function sampleContainerProcesses(container, sampleHost = '') {
           echo "$name|$total|$stat|$rss"
         fi
       }
-      workerPid=$(pgrep -f './mediasoup-worker' | head -n 1)
-      sfuPid=$(pgrep -f './mediasoup-sfu' | head -n 1)
+      find_pid_by_name() {
+        primary="$1"
+        fallback="$2"
+        for status in /proc/[0-9]*/status; do
+          [ -r "$status" ] || continue
+          name=$(awk '/^Name:/ {print $2; exit}' "$status")
+          if [ "$name" = "$primary" ] || { [ -n "$fallback" ] && [ "$name" = "$fallback" ]; }; then
+            pid="\${status%/status}"
+            echo "\${pid##*/}"
+            return
+          fi
+        done
+      }
+      workerPid=$(find_pid_by_name mediasoup-worke mediasoup-worker)
+      sfuPid=$(find_pid_by_name mediasoup-sfu '')
       sample_pid "$workerPid" mediasoup-worker
       sample_pid "$sfuPid" mediasoup-sfu
+      if [ -n "$workerPid" ]; then
+        ps -L -p "$workerPid" -o tid=,pcpu=,comm= 2>/dev/null | while read tid cpu comm rest; do
+          if [ "$comm" = "mediasoup-worke" ] || [ "$comm" = "mediasoup-worker" ]; then
+            echo "thread|$tid|$cpu|$comm"
+          fi
+        done
+      fi
     `;
     const output = execRemoteCommand(
       sampleHost,
@@ -313,6 +422,14 @@ function sampleContainerProcesses(container, sampleHost = '') {
     const result = {};
     for (const row of rows) {
       const parts = row.split('|');
+      if (parts[0] === 'thread') {
+        const tid = Number.parseInt(parts[1], 10);
+        const cpu = Number.parseFloat(parts[2] || '0');
+        if (Number.isFinite(cpu) && cpu >= (result['mediasoup-worker-thread']?.cpu ?? 0)) {
+          result['mediasoup-worker-thread'] = { cpu, tid };
+        }
+        continue;
+      }
       if (parts.length < 4) continue;
       const name = parts[0];
       const total = Number.parseInt(parts[1], 10) || 0;
@@ -325,32 +442,6 @@ function sampleContainerProcesses(container, sampleHost = '') {
         const stime = Number.parseInt(rest[12], 10) || 0;
         result[name] = { total, proc: utime + stime, rssMb: rssKb / 1024 };
       }
-    }
-    const workerPidRaw = execRemoteCommand(
-      sampleHost,
-      `docker exec ${shellQuote(container)} sh -lc ${shellQuote("pgrep -f './mediasoup-worker' | head -n 1")}`
-    ).trim();
-    const workerPid = Number.parseInt(workerPidRaw, 10);
-    if (Number.isFinite(workerPid) && workerPid > 0) {
-      const threadOutput = execRemoteCommand(
-        sampleHost,
-        `docker exec ${shellQuote(container)} sh -lc ${shellQuote(`ps -L -p ${workerPid} -o tid=,pcpu=,comm= | sed 's/^ *//'`)}`
-      ).trim();
-      const threadRows = threadOutput ? threadOutput.split('\n') : [];
-      let maxThreadCpu = 0;
-      let maxThreadTid = 0;
-      for (const row of threadRows) {
-        const match = row.match(/^(\d+)\s+([0-9.]+)\s+(.*)$/);
-        if (!match) continue;
-        const tid = Number.parseInt(match[1], 10);
-        const cpu = Number.parseFloat(match[2] || '0');
-        const comm = match[3] || '';
-        if (comm.includes('mediasoup-worker') && cpu >= maxThreadCpu) {
-          maxThreadCpu = cpu;
-          maxThreadTid = tid;
-        }
-      }
-      result['mediasoup-worker-thread'] = { cpu: maxThreadCpu, tid: maxThreadTid };
     }
     return result;
   } catch (error) {
@@ -438,12 +529,19 @@ async function createRoom(roomIndex, opts, wsHost, wsPort) {
     joinPeer(sub2Ws, roomId, 'sub2'),
   ]);
 
-  const pubResp = await pubWs.request('plainPublish', {
+  const sender = await createUdpSender();
+
+  const plainPublishReq = {
     videoSsrc: 90000001 + roomIndex,
     videoSsrcs: [90000001 + roomIndex],
     videoCodec: 'vp8',
     enableAudio: false,
-  });
+  };
+  if (opts.explicitConnect) {
+    plainPublishReq.senderIp = '127.0.0.1';
+    plainPublishReq.senderPort = sender.port;
+  }
+  const pubResp = await pubWs.request('plainPublish', plainPublishReq);
   if (!pubResp.ok) throw new Error(`plainPublish failed for ${roomId}: ${JSON.stringify(pubResp)}`);
 
   const recv1 = await createUdpReceiver();
@@ -461,7 +559,6 @@ async function createRoom(roomIndex, opts, wsHost, wsPort) {
   });
   if (!sub2Resp.ok) throw new Error(`plainSubscribe sub2 failed for ${roomId}: ${JSON.stringify(sub2Resp)}`);
 
-  const sender = createUdpSender();
   const serverHost = '127.0.0.1';
   const serverPort = pubResp.data.port;
   const videoPt = pubResp.data.videoPt;
@@ -588,7 +685,7 @@ async function main() {
   console.log(`http=${opts.httpUrl}`);
   console.log(`container=${opts.container}`);
   console.log(`sampleHost=${opts.sampleHost || 'local'}`);
-  console.log(`config rooms=unbounded step=${opts.step} roundMs=${opts.roundMs} holdAfterMax=${opts.holdAfterMax} steadyRounds=${opts.steadyRounds}`);
+  console.log(`config rooms=unbounded step=${opts.step} roundMs=${opts.roundMs} steadyRoundMs=${opts.steadyRoundMs ?? opts.roundMs} holdAfterMax=${opts.holdAfterMax} steadyRounds=${opts.steadyRounds}`);
 
   const rooms = [];
   let nextRoomIndex = 1;
@@ -605,7 +702,7 @@ async function main() {
     }
   };
 
-  const logSample = async phaseLabel => {
+  const logSample = async (phaseLabel, allowFailures = false) => {
     const [health, nodeLoad] = await Promise.all([
       sampleHttpJson(opts.httpUrl, '/healthz'),
       sampleHttpJson(opts.httpUrl, '/api/node-load'),
@@ -615,7 +712,10 @@ async function main() {
     const procBefore = sampleContainerProcesses(opts.container, opts.sampleHost);
     const load = sampleLoadAvg();
     const softnet = sampleSoftnet();
+    const statsRoom = rooms[0] || null;
+    const rtpStatsBefore = statsRoom ? await sampleRtpStats(statsRoom) : null;
     const sample = await sampleRooms(rooms, opts.roundMs, opts.recvRatio);
+    const rtpStatsAfter = statsRoom ? await sampleRtpStats(statsRoom) : null;
     const selfAfter = sampleProcCpu(selfPid);
     const procAfter = sampleContainerProcesses(opts.container, opts.sampleHost);
     peakHealthyRooms = Math.max(peakHealthyRooms, sample.healthyRooms);
@@ -637,36 +737,65 @@ async function main() {
       `workerCpu=${workerCpu !== null ? workerCpu.toFixed(1) : 'n/a'} workerRss=${workerAfter ? workerAfter.rssMb.toFixed(1) : 'n/a'}MB ` +
       `selfCpu=${selfCpu.toFixed(1)} selfRss=${(selfRssKb / 1024).toFixed(1)}MB ` +
       `load1=${load.one?.toFixed?.(2) ?? 'n/a'} softnetDrop=${softnet.dropped ?? 'n/a'} softnetSqueeze=${softnet.timeSqueeze ?? 'n/a'} ` +
+      (rtpStatsBefore && rtpStatsAfter
+        ? `rtp(pub nack=${rtpStatsAfter.pub.nackCount - rtpStatsBefore.pub.nackCount} ` +
+          `lost=${rtpStatsAfter.pub.packetsLost - rtpStatsBefore.pub.packetsLost} ` +
+          `reTx=${rtpStatsAfter.pub.packetsRetransmitted - rtpStatsBefore.pub.packetsRetransmitted} ` +
+          `sub1Loss=${rtpStatsAfter.sub1.rtpPacketLossReceived - rtpStatsBefore.sub1.rtpPacketLossReceived} ` +
+          `sub2Loss=${rtpStatsAfter.sub2.rtpPacketLossReceived - rtpStatsBefore.sub2.rtpPacketLossReceived}) `
+        : '') +
       `health=${health.status} ready=${health.json.ready} ` +
       `nodeRooms=${nodeLoad.json.rooms} availThreads=${nodeLoad.json.availableWorkerThreads} ` +
       `queueDepth=${JSON.stringify(nodeLoad.json.workerQueueStats)}`
     );
 
+    const failures = [];
     if (!health.json.ok || !health.json.ready) {
-      throw new Error(`service degraded: /healthz=${health.status} /readyz=${health.json.ready}`);
+      failures.push(`service degraded: /healthz=${health.status} /readyz=${health.json.ready}`);
     }
     if (procBefore.error || procAfter.error) {
-      throw new Error(`process sample failed: ${(procBefore.error || procAfter.error)}`);
+      failures.push(`process sample failed: ${(procBefore.error || procAfter.error)}`);
     }
     if (!sample.healthy) {
       const bad = sample.details.filter(d => !d.healthy).slice(0, 5);
       for (const item of bad) console.log(`  fail ${item.roomId}: ${item.reasons.join(', ')}`);
-      throw new Error('traffic health check failed');
+      failures.push('traffic health check failed');
     }
+    if (failures.length > 0 && !opts.continueOnFailure && !allowFailures) {
+      throw new Error(failures[0]);
+    }
+    return failures;
   };
 
   try {
+    let rampFrozen = false;
     while (rooms.length < opts.maxRooms) {
       const addCount = Math.min(opts.step, opts.maxRooms - rooms.length);
       await addRooms(addCount);
-      await logSample('ramp');
+      const failures = await logSample('ramp', opts.freezeOnFailure);
+      if (failures.length > 0) {
+        console.log(`  continuing after failure: ${failures.join('; ')}`);
+        if (opts.freezeOnFailure) {
+          rampFrozen = true;
+          console.log(`  freezing ramp at ${rooms.length} rooms after first failure`);
+          break;
+        }
+      }
     }
 
-    if (opts.holdAfterMax) {
+    if (opts.holdAfterMax || rampFrozen) {
       let steadyRound = 0;
+      const steadyRoundMs = opts.steadyRoundMs ?? opts.roundMs;
       while (!stopRequested && (opts.steadyRounds === 0 || steadyRound < opts.steadyRounds)) {
         steadyRound += 1;
-        await logSample(`steady#${steadyRound}`);
+        const failures = await logSample(`steady#${steadyRound}`, true);
+        if (failures.length > 0) {
+          console.log(`  continuing after failure: ${failures.join('; ')}`);
+        }
+        if (stopRequested || (opts.steadyRounds !== 0 && steadyRound >= opts.steadyRounds)) {
+          break;
+        }
+        await sleep(steadyRoundMs);
       }
     }
 

@@ -255,7 +255,7 @@ docker run --rm \
 | 变量 | 默认值 | 说明 |
 |---|---:|---|
 | `MEDIASOUP_PORT` | `9000` | HTTP / WebSocket 监听端口 |
-| `MEDIASOUP_WEBRTC_SERVER_PORT` | `9000` | `WebRtcServer` UDP 监听端口 |
+| `MEDIASOUP_WEBRTC_SERVER_PORT` | 自动 | `WebRtcServer` UDP 单端口监听端口；显式设置时优先使用 |
 | `MEDIASOUP_WORKERS` | 空 | mediasoup worker 子进程数量；默认按容器可见 CPU 自动计算为 `max(1, hardware_concurrency - 2)`，测试机单实例场景下建议显式设成 `1` |
 | `MEDIASOUP_WORKER_THREADS` | 空 | C++ WorkerThread 数量；默认按 `ceil(workers / 2)` 自动计算，且不超过 workers；测试机单实例场景下建议显式设成 `1` |
 | `MEDIASOUP_REDIS_REQUIRED` | `0` | 默认不需要 Redis；`1` 表示 Redis 不可用时 readiness 失败 |
@@ -263,7 +263,7 @@ docker run --rm \
 | `MEDIASOUP_REDIS_PORT` | `1` | Redis 端口 |
 | `MEDIASOUP_LOG_DIR` | 空 | 非空时写守护日志目录 |
 
-默认镜像启用 `WebRtcServer`，浏览器 WebRTC transport 会复用 `9000/udp` 这个共享监听端口。worker 默认只使用单端口模式，控制面通过 `--webRtcServerPort` 派生并传递 worker 的 `--rtcPort`。
+默认镜像只走 `WebRtcServer` 单端口路径，浏览器 WebRTC transport 会复用同一个 UDP 监听端口。未显式设置 `MEDIASOUP_WEBRTC_SERVER_PORT` 时，容器入口默认使用 `9000`；测试机节点名有固定映射：`MEDIASOUP_NODE_ID=mediasoup-h1` 使用 `8000`，`mediasoup-h2` 使用 `8001`，`mediasoup-h3` 使用 `8002`。不要再用 `MEDIASOUP_RTC_MIN_PORT` / `MEDIASOUP_RTC_MAX_PORT` 配置测试机 WebRTC 端口。
 
 ### 3. 浏览器 demo 互通测试
 

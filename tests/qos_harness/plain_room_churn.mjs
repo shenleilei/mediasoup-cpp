@@ -19,6 +19,7 @@ function parseArgs(argv) {
     payloadSize: 1200,
     ppsPerRoom: 300,
     recvRatio: 0.9,
+    explicitConnect: true,
   };
 
   for (const arg of argv) {
@@ -38,6 +39,8 @@ function parseArgs(argv) {
       case 'payload-size': opts.payloadSize = Math.max(64, int(rawValue)); break;
       case 'pps': opts.ppsPerRoom = Math.max(1, int(rawValue)); break;
       case 'recv-ratio': opts.recvRatio = Math.min(1, Math.max(0, float(rawValue))); break;
+      case 'explicit-connect': opts.explicitConnect = true; break;
+      case 'no-explicit-connect': opts.explicitConnect = false; break;
       default:
         throw new Error(`unknown option: --${key}`);
     }
@@ -109,8 +112,20 @@ class WsJsonClient {
 
   _sendJson(value) {
     const payload = Buffer.from(JSON.stringify(value), 'utf8');
+    this._sendFrame(0x1, payload);
+  }
+
+  _sendControlFrame(opcode, payload = Buffer.alloc(0)) {
+    if (payload.length > 125) {
+      throw new Error('control frame payload too large');
+    }
+    this._sendFrame(opcode, payload);
+  }
+
+  _sendFrame(opcode, payload) {
+    if (!this.socket || this.socket.destroyed) return;
     const mask = crypto.randomBytes(4);
-    const header = [0x81];
+    const header = [0x80 | opcode];
     if (payload.length < 126) {
       header.push(0x80 | payload.length);
     } else if (payload.length < 65536) {
@@ -186,9 +201,15 @@ class WsJsonClient {
       const payload = this.pending.slice(offset, offset + payloadLength);
       this.pending = this.pending.slice(offset + payloadLength);
       if (opcode === 0x8) {
+        this._sendControlFrame(0x8, payload);
         this.close();
         return;
       }
+      if (opcode === 0x9) {
+        this._sendControlFrame(0xA, payload);
+        continue;
+      }
+      if (opcode === 0xA) continue;
       if (opcode !== 0x1) continue;
       const msg = JSON.parse(payload.toString('utf8'));
       if (msg.response === true) {
@@ -217,15 +238,23 @@ function createUdpReceiver() {
 
 function createUdpSender() {
   const sock = dgram.createSocket('udp4');
-  return {
-    sock,
-    close() {
-      try { sock.close(); } catch {}
-    },
-    send(buf, port, host) {
-      sock.send(buf, port, host);
-    },
-  };
+  return new Promise((resolve, reject) => {
+    sock.once('error', reject);
+    sock.bind(0, '127.0.0.1', () => {
+      const port = sock.address().port;
+      sock.off('error', reject);
+      resolve({
+        sock,
+        port,
+        close() {
+          try { sock.close(); } catch {}
+        },
+        send(buf, port, host) {
+          sock.send(buf, port, host);
+        },
+      });
+    });
+  });
 }
 
 function buildRtpPacket({ pt, seq, ts, ssrc, payloadSize, marker }) {
@@ -261,6 +290,58 @@ async function joinPeer(ws, roomId, peerId) {
   return resp;
 }
 
+function sumRtpStatsFields(target, source) {
+  if (!source || typeof source !== 'object') return;
+  for (const field of [
+    'packetsLost',
+    'nackCount',
+    'nackPacketCount',
+    'packetsRetransmitted',
+    'packetsRepaired',
+    'rtpPacketLossReceived',
+    'rtpPacketLossSent',
+  ]) {
+    const value = Number(source[field]);
+    if (Number.isFinite(value)) {
+      target[field] += value;
+    }
+  }
+}
+
+function summarizePeerStats(resp) {
+  const summary = {
+    packetsLost: 0,
+    nackCount: 0,
+    nackPacketCount: 0,
+    packetsRetransmitted: 0,
+    packetsRepaired: 0,
+    rtpPacketLossReceived: 0,
+    rtpPacketLossSent: 0,
+  };
+  const data = resp?.data || {};
+  sumRtpStatsFields(summary, data.sendTransport);
+  sumRtpStatsFields(summary, data.recvTransport);
+  for (const producer of Object.values(data.producers || {})) {
+    for (const stat of producer.stats || []) {
+      sumRtpStatsFields(summary, stat);
+    }
+  }
+  return summary;
+}
+
+async function sampleRtpStats(room) {
+  const [pubStats, sub1Stats, sub2Stats] = await Promise.all([
+    room.pubWs.request('getStats', { peerId: 'pub' }),
+    room.sub1Ws.request('getStats', { peerId: 'sub1' }),
+    room.sub2Ws.request('getStats', { peerId: 'sub2' }),
+  ]);
+  return {
+    pub: summarizePeerStats(pubStats),
+    sub1: summarizePeerStats(sub1Stats),
+    sub2: summarizePeerStats(sub2Stats),
+  };
+}
+
 async function createRoom(roomIndex, opts, wsHost, wsPort) {
   const roomId = `${opts.roomPrefix}_${roomIndex}`;
   const pubWs = new WsJsonClient(wsHost, wsPort);
@@ -274,12 +355,19 @@ async function createRoom(roomIndex, opts, wsHost, wsPort) {
     joinPeer(sub2Ws, roomId, 'sub2'),
   ]);
 
-  const pubResp = await pubWs.request('plainPublish', {
+  const sender = await createUdpSender();
+
+  const plainPublishReq = {
     videoSsrc: 90000001 + roomIndex,
     videoSsrcs: [90000001 + roomIndex],
     videoCodec: 'vp8',
     enableAudio: false,
-  });
+  };
+  if (opts.explicitConnect) {
+    plainPublishReq.senderIp = '127.0.0.1';
+    plainPublishReq.senderPort = sender.port;
+  }
+  const pubResp = await pubWs.request('plainPublish', plainPublishReq);
   if (!pubResp.ok) throw new Error(`plainPublish failed for ${roomId}: ${JSON.stringify(pubResp)}`);
 
   const recv1 = await createUdpReceiver();
@@ -297,7 +385,6 @@ async function createRoom(roomIndex, opts, wsHost, wsPort) {
   });
   if (!sub2Resp.ok) throw new Error(`plainSubscribe sub2 failed for ${roomId}: ${JSON.stringify(sub2Resp)}`);
 
-  const sender = createUdpSender();
   const serverHost = '127.0.0.1';
   const serverPort = pubResp.data.port;
   const videoPt = pubResp.data.videoPt;
@@ -431,9 +518,19 @@ async function main() {
     while (rooms.length < opts.maxRooms) {
       const addCount = Math.min(opts.step, opts.maxRooms - rooms.length);
       await addRooms(addCount);
+      const statsRoom = rooms[0] || null;
+      const rtpStatsBefore = statsRoom ? await sampleRtpStats(statsRoom) : null;
       const sample = await sampleRooms(rooms, opts.sampleMs, opts.recvRatio);
+      const rtpStatsAfter = statsRoom ? await sampleRtpStats(statsRoom) : null;
       peakHealthyRooms = Math.max(peakHealthyRooms, sample.healthyRooms);
-      console.log(`[ramp rooms=${sample.totalRooms}] healthy=${sample.healthyRooms}/${sample.totalRooms} send=${sample.sendPps.toFixed(0)} recv1=${sample.recv1Pps.toFixed(0)} recv2=${sample.recv2Pps.toFixed(0)} ratio=${sample.recvRatio.toFixed(2)}`);
+      console.log(`[ramp rooms=${sample.totalRooms}] healthy=${sample.healthyRooms}/${sample.totalRooms} send=${sample.sendPps.toFixed(0)} recv1=${sample.recv1Pps.toFixed(0)} recv2=${sample.recv2Pps.toFixed(0)} ratio=${sample.recvRatio.toFixed(2)} ` +
+        (rtpStatsBefore && rtpStatsAfter
+          ? `rtp(pub nack=${rtpStatsAfter.pub.nackCount - rtpStatsBefore.pub.nackCount} ` +
+            `lost=${rtpStatsAfter.pub.packetsLost - rtpStatsBefore.pub.packetsLost} ` +
+            `reTx=${rtpStatsAfter.pub.packetsRetransmitted - rtpStatsBefore.pub.packetsRetransmitted} ` +
+            `sub1Loss=${rtpStatsAfter.sub1.rtpPacketLossReceived - rtpStatsBefore.sub1.rtpPacketLossReceived} ` +
+            `sub2Loss=${rtpStatsAfter.sub2.rtpPacketLossReceived - rtpStatsBefore.sub2.rtpPacketLossReceived})`
+          : ''));
       if (!sample.healthy) {
         const bad = sample.details.filter(d => !d.healthy).slice(0, 5);
         for (const item of bad) console.log(`  fail ${item.roomId}: ${item.reasons.join(', ')}`);
@@ -446,9 +543,19 @@ async function main() {
       await removeRooms(churnCount);
       if (opts.settleMs > 0) await sleep(opts.settleMs);
       await addRooms(churnCount);
+      const statsRoom = rooms[0] || null;
+      const rtpStatsBefore = statsRoom ? await sampleRtpStats(statsRoom) : null;
       const sample = await sampleRooms(rooms, opts.sampleMs, opts.recvRatio);
+      const rtpStatsAfter = statsRoom ? await sampleRtpStats(statsRoom) : null;
       peakHealthyRooms = Math.max(peakHealthyRooms, sample.healthyRooms);
-      console.log(`[churn ${cycle + 1}] rooms=${sample.totalRooms} healthy=${sample.healthyRooms}/${sample.totalRooms} send=${sample.sendPps.toFixed(0)} recv1=${sample.recv1Pps.toFixed(0)} recv2=${sample.recv2Pps.toFixed(0)} ratio=${sample.recvRatio.toFixed(2)}`);
+      console.log(`[churn ${cycle + 1}] rooms=${sample.totalRooms} healthy=${sample.healthyRooms}/${sample.totalRooms} send=${sample.sendPps.toFixed(0)} recv1=${sample.recv1Pps.toFixed(0)} recv2=${sample.recv2Pps.toFixed(0)} ratio=${sample.recvRatio.toFixed(2)} ` +
+        (rtpStatsBefore && rtpStatsAfter
+          ? `rtp(pub nack=${rtpStatsAfter.pub.nackCount - rtpStatsBefore.pub.nackCount} ` +
+            `lost=${rtpStatsAfter.pub.packetsLost - rtpStatsBefore.pub.packetsLost} ` +
+            `reTx=${rtpStatsAfter.pub.packetsRetransmitted - rtpStatsBefore.pub.packetsRetransmitted} ` +
+            `sub1Loss=${rtpStatsAfter.sub1.rtpPacketLossReceived - rtpStatsBefore.sub1.rtpPacketLossReceived} ` +
+            `sub2Loss=${rtpStatsAfter.sub2.rtpPacketLossReceived - rtpStatsBefore.sub2.rtpPacketLossReceived})`
+          : ''));
       if (!sample.healthy) {
         const bad = sample.details.filter(d => !d.healthy).slice(0, 5);
         for (const item of bad) console.log(`  fail ${item.roomId}: ${item.reasons.join(', ')}`);

@@ -6,7 +6,7 @@
 
 当前仓库的问题不是 `mediasoup-worker 3.14.6` 完全没有能力，而是 C++ 封装层还在走 `listenInfos` 独立端口池路径：
 
-- `Worker` 只传 `--rtcMinPort/--rtcMaxPort`，没有创建或持有 `WebRtcServer`。
+- `Worker` 现在已改成单端口参数。
 - `Router::createWebRtcTransport()` 固定构造 `ListenIndividual`。
 - `RoomService` 给 WebRTC 和 PlainTransport 都传同一份 `listenInfos`。
 - FBS/generated 已经有 `WebRtcServer`、`ListenServer` 和 `ROUTER_CREATE_WEBRTCTRANSPORT_WITH_SERVER`，但业务代码没有用。
@@ -52,7 +52,7 @@ changes/webrtcserver-shared-port/README.md
 
 - `3.10.0` 引入 `WebRtcServer`。
 - `3.10.8` 允许 `WebRtcServer` 的 `listenInfos.port` 省略，从 worker RTC 端口范围内自动分配。
-- `3.14.0` 引入 `TransportListenInfo.portRange`，并开始弱化 worker 级 `rtcMinPort/rtcMaxPort` 的推荐地位。
+- `3.14.0` 引入 `TransportListenInfo.portRange`，并开始弱化 worker 级端口范围配置的推荐地位。
 - `3.14.5` 修复过 `WebRtcServer` 相关 TCP 内存泄露和 close crash。
 - `3.17.1` 移除了 `listenInfos` 最多 8 个的限制。
 - `3.19.18` 把 `WORKER_CLOSE` 从 request 改成 notification，并要求 `mediasoup-worker` 用 C++20 构建。
@@ -128,11 +128,10 @@ main
   -> ListenIndividual(listen_infos)
 ```
 
-`Worker::spawn()` 同时给 worker 进程传：
+`Worker::spawn()` 现在给 worker 进程传：
 
 ```text
---rtcMinPort=<min>
---rtcMaxPort=<max>
+--rtcPort=<port>
 ```
 
 所以 WebRTC transport 和 PlainTransport 都会消耗 worker RTC 端口池。
@@ -176,7 +175,7 @@ Worker
 
 ```text
 worker-0 WebRtcServer UDP port 8000
-PlainTransport 仍使用 rtcMinPort/rtcMaxPort 或后续专用范围
+PlainTransport 继续使用显式端口或 `portRange`
 ```
 
 多 worker 环境：
@@ -196,9 +195,6 @@ worker-2 WebRtcServer UDP port 8002
 
 ```json
 {
-  "webRtcServerEnabled": true,
-  "webRtcServerMinPort": 8000,
-  "webRtcServerMaxPort": 8000,
   "webRtcServerEnableUdp": true,
   "webRtcServerEnableTcp": false
 }
@@ -206,38 +202,32 @@ worker-2 WebRtcServer UDP port 8002
 
 语义：
 
-- `webRtcServerEnabled=false` 时保持旧路径。
-- `webRtcServerMinPort/webRtcServerMaxPort` 用于给 worker 分配共享监听端口。
+- 所有 worker 都走 WebRtcServer 单端口路径，不再保留旧路径。
+- 每个 worker 的监听端口由 `webRtcServerPort` 统一配置并按 worker 序号递增。
 - 当 worker 数量大于可用 WebRtcServer 端口数量时，启动失败并输出明确错误。
-- `rtcMinPort/rtcMaxPort` 继续保留给 PlainTransport 和 fallback 路径。
 
 Docker/env 建议对应：
 
 ```text
-MEDIASOUP_WEBRTC_SERVER_ENABLED=true
-MEDIASOUP_WEBRTC_SERVER_MIN_PORT=8000
-MEDIASOUP_WEBRTC_SERVER_MAX_PORT=8000
+MEDIASOUP_WEBRTC_SERVER_PORT=8000
 ```
 
 ## 6. 推荐实施阶段
 
-### Phase 0：短期测试机止血
+### Phase 0：测试机单端口默认值
 
-目的：先让现有 demo 可测，不把架构改造和测试验证卡在 3 个端口上。
-
-建议测试机先放大 RTC 范围，例如：
+当前版本已经切到 WebRtcServer 单端口路径。测试机不再使用 `MEDIASOUP_RTC_MIN_PORT` / `MEDIASOUP_RTC_MAX_PORT` 表达 WebRTC 端口，而是按节点名默认推导：
 
 ```text
-MEDIASOUP_RTC_MIN_PORT=8000
-MEDIASOUP_RTC_MAX_PORT=8100
+mediasoup-h1 -> MEDIASOUP_WEBRTC_SERVER_PORT=8000
+mediasoup-h2 -> MEDIASOUP_WEBRTC_SERVER_PORT=8001
+mediasoup-h3 -> MEDIASOUP_WEBRTC_SERVER_PORT=8002
 ```
-
-这不是最终方案，只是让当前独立端口模型稳定跑通，方便对比改造前后。
 
 验收：
 
 - 双浏览器 join/publish/subscribe 成功。
-- 日志不再出现 `no more available ports`。
+- `ss -lunp` 显示每个 `mediasoup-worker` 只监听一个 WebRtcServer UDP 端口。
 
 ### Phase 1：C++ 封装层接出 WebRtcServer
 
@@ -349,9 +339,7 @@ else:
 
 新增配置解析：
 
-- `RuntimeOptions::webRtcServerEnabled`
-- `RuntimeOptions::webRtcServerMinPort`
-- `RuntimeOptions::webRtcServerMaxPort`
+- `RuntimeOptions::webRtcServerPort`
 - 可选：`webRtcServerEnableTcp`
 
 校验：
@@ -364,7 +352,7 @@ Docker：
 
 - entrypoint 增加 env 到 CLI/config 的映射。
 - README 更新单 worker 和多 worker 端口暴露示例。
-- 如果 `webRtcServerEnabled=true` 且端口范围窄，不再需要把 WebRTC browser transport 数量和 RTC 端口数绑定。
+- WebRtcServer 单端口模式下，不再需要把 WebRTC browser transport 数量和 RTC 端口数绑定。
 
 验收：
 
@@ -432,11 +420,7 @@ ROUTER_CREATE_WEBRTCTRANSPORT_WITH_SERVER
 
 ### 8.4 回滚路径
 
-必须保留 `ListenIndividual` fallback：
-
-- 配置关闭 `WebRtcServer` 时走旧路径。
-- WebRtcServer 初始化失败时建议启动失败，不建议运行中静默降级。
-- 若要临时回滚，配置切回 `webRtcServerEnabled=false`。
+WebRtcServer 初始化失败时建议启动失败，不建议运行中静默降级。
 
 ## 9. 测试计划
 
@@ -446,7 +430,6 @@ ROUTER_CREATE_WEBRTCTRANSPORT_WITH_SERVER
 
 - `Worker` 创建 WebRtcServer 的请求体构造测试。
 - `Router::createWebRtcTransport()` 选择 `ListenServer` 时使用正确 method 和 body。
-- `Router::createWebRtcTransport()` fallback 路径仍使用 `ListenIndividual`。
 - 配置校验：worker 数量超过 WebRtcServer 端口数量时失败。
 
 ### 9.2 集成测试
@@ -456,15 +439,14 @@ ROUTER_CREATE_WEBRTCTRANSPORT_WITH_SERVER
 - 单 worker、单 UDP WebRtcServer 端口、两个浏览器互通。
 - 单 worker、两个 peer，各自 send/recv transport，不出现 `no more available ports`。
 - worker crash/respawn 后新房间仍可创建 WebRtcTransport。
-- `webRtcServerEnabled=false` 回归旧路径。
 
 ### 9.3 运行测试
 
 测试机验证：
 
 ```text
-curl http://127.0.0.1:1770/healthz
-curl "http://127.0.0.1:1770/api/resolve?roomId=test-room"
+curl http://127.0.0.1:9000/healthz
+curl "http://127.0.0.1:9000/api/resolve?roomId=test-room"
 ```
 
 浏览器验证：

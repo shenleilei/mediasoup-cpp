@@ -88,12 +88,14 @@ RUN chmod +x /usr/local/bin/mediasoup-sfu-entrypoint \
   && mkdir -p /var/log/mediasoup
 
 EXPOSE 9000/tcp
+EXPOSE 8000/udp
+EXPOSE 8001/udp
+EXPOSE 8002/udp
 EXPOSE 9000/udp
 
 STOPSIGNAL SIGTERM
 
 ENV MEDIASOUP_PORT=9000 \
-    MEDIASOUP_WEBRTC_SERVER_PORT=9000 \
     MEDIASOUP_REDIS_REQUIRED=0 \
     MEDIASOUP_LOG_DIR=
 

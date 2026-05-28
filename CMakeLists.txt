@@ -214,6 +214,7 @@ if(BUILD_TESTS)
             mediasoup_lib
             mediasoup_build_pthread
             mediasoup_build_ffmpeg_core
+            hiredis
             spdlog::spdlog
     )
 

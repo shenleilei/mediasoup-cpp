@@ -103,6 +103,20 @@ curl -H "X-Forwarded-For: 1.2.3.4" -s "http://127.0.0.1:3000/api/resolve?roomId=
 
 ## 3. 启动失败
 
+### 3.0 WebRTC UDP 单端口约定
+
+当前镜像默认只走 `WebRtcServer` 单端口路径。容器启动时使用 `MEDIASOUP_WEBRTC_SERVER_PORT` 指定唯一 UDP 监听端口；未显式设置时，普通容器默认 `9000`。
+
+测试机的三个 mediasoup 节点通过 `MEDIASOUP_NODE_ID` 自动映射端口：
+
+| 节点 | WebRtcServer UDP 端口 |
+|---|---:|
+| `mediasoup-h1` | `8000` |
+| `mediasoup-h2` | `8001` |
+| `mediasoup-h3` | `8002` |
+
+测试机不要再用 `MEDIASOUP_RTC_MIN_PORT` / `MEDIASOUP_RTC_MAX_PORT` 表达 WebRTC 端口；如果端口不对，优先检查容器环境里的 `MEDIASOUP_NODE_ID` 和 `MEDIASOUP_WEBRTC_SERVER_PORT`。
+
 ### 3.1 现象
 
 - 进程启动后立刻退出

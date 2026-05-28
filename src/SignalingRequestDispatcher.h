@@ -209,7 +209,9 @@ inline RoomService::Result DispatchRoomServiceRequest(
 			ParseVideoSsrcs(data),
 			enableAudio ? data.value("audioSsrc", 2222u) : data.value("audioSsrc", 0u),
 			data.value("videoCodec", std::string("h264")),
-			enableAudio);
+			enableAudio,
+			data.value("senderIp", std::string("")),
+			data.value("senderPort", 0u));
 	}
 	if (method == "plainSubscribe") {
 		return roomService.plainSubscribe(

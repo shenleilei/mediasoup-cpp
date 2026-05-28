@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-web_rtc_server_port="${MEDIASOUP_WEBRTC_SERVER_PORT:-9000}"
+default_web_rtc_server_port=9000
+case "${MEDIASOUP_NODE_ID:-}" in
+  mediasoup-h1) default_web_rtc_server_port=8000 ;;
+  mediasoup-h2) default_web_rtc_server_port=8001 ;;
+  mediasoup-h3) default_web_rtc_server_port=8002 ;;
+esac
+web_rtc_server_port="${MEDIASOUP_WEBRTC_SERVER_PORT:-${default_web_rtc_server_port}}"
 
 args=(
   --nodaemon
