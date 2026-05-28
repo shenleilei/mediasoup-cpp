@@ -4,15 +4,13 @@
 
 这是一个围绕上游 `mediasoup-worker` 构建的 C++17 SFU 控制平面。
 
-本项目使用原生的 C++ 服务器取代了 mediasoup 通常的 Node.js 控制层，同时仍然依赖经过实战检验的 `mediasoup-worker` 进程进行媒体处理。最终呈现的是一个原生的 C++ 信令技术栈，具备房间/会话管理、多节点房间路由以及 QoS 聚合等功能。
+本项目使用原生的 C++ 服务器取代了 mediasoup 通常的 Node.js 控制层，同时仍然依赖经过实战检验的 `mediasoup-worker` 进程进行媒体处理。最终呈现的是一个原生的 C++ 信令技术栈，具备房间/会话管理、本地房间路由以及 QoS 聚合等功能。
 
 ## 在线体验 (Live Demo)
 
 立即体验: **http://47.99.237.234:3000**
 
 在两个浏览器标签页或两台设备中打开，即可开始带有实时 QoS 监控的 1v1 通话。
-
-录制回放: **http://47.99.237.234:3000/playback.html**
 
 ## 为什么这么做 (Why)
 
@@ -31,8 +29,8 @@ mediasoup 得到了广泛应用，但其默认的控制平面是 Node.js。本�
 - 一个 WebSocket/HTTP 信令服务器
 - 一个房间 / 节点 (peer) / 会话 (session) 管理层
 - 一个 Transport / Producer / Consumer 编排层
-- 一个基于 Redis 的多节点房间路由层
-- 一个录制器 / QoS 集成层
+- 一个本地房间路由层
+- 一个 QoS 聚合层
 
 本项目不是：
 
@@ -144,10 +142,7 @@ cmake --build build-slim --target mediasoup-sfu -j$(nproc)
   --nodaemon \
   --port=3000 \
   --workers=1 \
-  --workerBin=./mediasoup-worker \
-  --redisHost=0.0.0.0 \
-  --redisPort=1 \
-  --noRedisRequired
+  --workerBin=./mediasoup-worker
 ```
 
 如果使用 `build-slim`，把命令中的 `./build/mediasoup-sfu` 换成 `./build-slim/mediasoup-sfu`。
@@ -159,8 +154,7 @@ cmake --build build-slim --target mediasoup-sfu -j$(nproc)
   --nodaemon \
   --port=3000 \
   --workers=1 \
-  --workerBin=./mediasoup-worker \
-  --noRedisRequired
+  --workerBin=./mediasoup-worker
 ```
 
 需要放通 TCP `3000` 以及 mediasoup worker 的 UDP RTC 端口范围，默认是 `10000-59999/udp`。
@@ -288,12 +282,6 @@ https://127.0.0.1:9000/
 5. 浏览器 B 再点击发布媒体，浏览器 A 应能看到 B 的远端视频。
 6. 关闭其中一个标签页，另一个标签页不应断开或导致服务崩溃。
 
-录制回放页面：
-
-```text
-https://127.0.0.1:3000/playback.html
-```
-
 ### 4. 基础自检命令
 
 ```bash
@@ -321,38 +309,25 @@ cmake --build build-test -j$(nproc)
 
 浏览器弱网 harness 依赖 Chrome / Chromium、Node 依赖和 `tc`/netem 权限；缺少这些环境时应记录为环境不足，而不是服务端构建失败。
 
-## 多节点路由架构 (Multi-Node Routing Architecture)
+## 本地运行时架构 (Local Runtime Architecture)
 
 ```text
 SignalingServer
   │
   ├─ WorkerThread Pool
-  │
-  └─ Registry Worker Thread
-       │
-       └─ RoomRegistry
-            ├─ Redis 命令连接
-            ├─ 本地房间缓存
-            ├─ 本地节点缓存
-            ├─ 房间所有权声明 / 刷新 / 注销
-            └─ resolveRoom(roomId, remoteIp)
-                 │
-                 └─ GeoRouter (可选)
-                      ├─ ip2region 查找
-                      ├─ 国家隔离
-                      └─ 基于 ISP / 距离的打分
+  └─ GeoRouter (可选)
+       ├─ ip2region 查找
+       ├─ 国家隔离
+       └─ 基于 ISP / 距离的打分
 ```
-
-此外，还有一个专用的 Redis 订阅者线程（subscriber thread），负责监听节点和房间更新，并刷新本地缓存状态。
 
 ## 特性 (Features)
 
 - 以房间为中心的设计：当一个 peer 开始发布媒体流时，房间内的其他 peer 会被自动订阅。
 - 基于 WorkerThread 的信令：房间控制逻辑在 uWS 主循环之外运行。
 - 会话身份标识：重连会替换旧连接，过时的请求会被 `sessionId` 拒绝。
-- 基于 Redis 的房间路由：房间所有权、缓存、pub/sub 同步、降级为本地模式。
+- 本地 single-node 房间路由：房间绑定到单个 WorkerThread，`/api/resolve` 返回本地节点。
 - 感知地理位置的路由：基于 ip2region 的国家 / ISP / 距离打分。
-- H264 / VP8 录制：通过 FFmpeg 进行 RTP 解包和 WebM 封装。
 - QoS 监控：服务器统计数据 + 客户端统计数据的聚合及定期推送。
 - Worker 崩溃恢复：带有速率限制的子进程重生（respawn）。
 - 守护进程模式 (daemon mode)：支持 fork、PID 文件、结构化日志。
@@ -380,7 +355,7 @@ SignalingServer
 当前仓库文档和生成的制品显示：
 
 - 浏览器上行矩阵：原 `43 / 43 PASS` 主 gate (`2026-04-13`) + `GD1-GD12` targeted PASS，当前总口径为 `55 case`
-- 服务端 QoS 单测、集成测试、录制精度测试和浏览器 harness 仍是当前回归入口。
+- 服务端 QoS 单测、集成测试和浏览器 harness 仍是当前回归入口。
 - 根目录原生 WebRTC QoS plain push/play client 已移除；相关 P2/P3 报告和验收脚本不再属于活跃路径。
 
 当前范围提示：
@@ -443,44 +418,27 @@ SignalingServer
 - 转发 RTP 数据
 - 通过 IPC 暴露统计信息
 
-### 注册中心工作线程 (Registry Worker)
-
-Redis 的“阅后即焚” (fire-and-forget) 维护任务不会内联执行在房间控制路径上。一个专用的注册中心工作线程负责处理：
-
-- 房间 TTL 刷新
-- 房间注销
-- 节点心跳 / 负载更新
-
-这使得稳态房间控制路径对 Redis 延迟不那么敏感。
-
 ## Thread Model
 
 | Thread | Count | Role |
 |---|---:|---|
 | uWS main | 1 | WebSocket, HTTP, timers, room dispatch |
 | WorkerThread | N | serial room logic + epoll-driven worker IPC |
-| Registry worker | 1 | async Redis maintenance tasks |
-| Redis subscriber | 1 | pub/sub cache updates |
 | Worker waiter | per worker | child process wait / death handling |
-| Recorder | per active recorder | UDP RTP receive + muxing |
 
 Typical small deployment:
 
 - 1 uWS main thread
-- 1 registry worker
-- 1 Redis subscriber
 - 1 WorkerThread
 - 1 mediasoup worker process
-- 0..M recorder threads
 
 ## Startup Sequence
 
 All critical modules are initialized before the server begins accepting traffic:
 
-1. `RoomRegistry`: Redis connect, `syncAll()`, subscriber thread
-2. `WorkerThread::start()`: create worker processes
-3. `waitReady()`: block until WorkerThreads report initialization complete
-4. `uWS::App().listen()`: only then begin accepting WebSocket / HTTP connections
+1. `WorkerThread::start()`: create worker processes
+2. `waitReady()`: block until WorkerThreads report initialization complete
+3. `uWS::App().listen()`: only then begin accepting WebSocket / HTTP connections
 
 ## 会话身份模型 (Session Identity Model)
 
@@ -522,7 +480,6 @@ client -> produce
       -> Channel::requestWait()
       -> mediasoup-worker 创建 Producer
       -> 自动给其他 peer 订阅 (auto-subscribe)
-      -> (可选) 启动录制链路
       -> 响应结果 deferred 传回客户端
 ```
 
@@ -535,7 +492,6 @@ client -> produce
       -> 收集 transport / producer / consumer 级别的 stats
       -> 合并 clientStats
       -> 广播 statsReport
-      -> 录制器 (recorder) 可能会追加写入 QoS snapshot
 ```
 
 ### 服务端 PlainTransport
@@ -545,7 +501,7 @@ client -> produce
       -> WebSocket join / plainPublish / plainSubscribe
       -> 绑定 mediasoup UDP RTP/RTCP
       -> 服务端创建 PlainTransport / Producer / Consumer
-      -> 复用 RoomService、录制和 QoS 聚合路径
+      -> 复用 RoomService 和 QoS 聚合路径
 ```
 
 ### Media
@@ -555,10 +511,6 @@ The media plane does not pass through the signaling logic after setup:
 ```text
 Browser A ──SRTP/UDP──→ WebRtcTransport → Producer
                                             ├──→ Consumer (SIMPLE) → WebRtcTransport → Browser B
-                                            └──→ Consumer (PIPE) → PlainTransport
-                                                    │ localhost UDP RTP
-                                                    ▼
-                                              PeerRecorder → .webm
 ```
 
 ## Room / Peer Model
@@ -593,24 +545,14 @@ When one peer produces:
 - all other peers with a recv transport are auto-subscribed
 - they receive `newConsumer` notifications
 
-## Redis / Room Ownership
+## Local Room Ownership
 
-`RoomRegistry` is responsible for:
+当前运行模式是 local-only：
 
-- node registration
-- node load publication
-- room ownership claim
-- room ownership refresh
-- room lookup / resolution
-- room and node cache maintenance
-
-Important behavior:
-
-- room ownership is stored in Redis
-- room and node info are cached locally
-- pub/sub keeps cache warm
-- `resolveRoom()` can fall back to a Redis-backed node refresh if local cache is missing fresh node data
-- when Redis is unavailable, the system degrades to local-only mode
+- 房间归属只存在于本进程内存
+- `roomId -> WorkerThread` 绑定只在本节点生效
+- `/api/resolve` 对现有部署返回本地节点结果
+- 不再依赖 Redis 做房间所有权、节点缓存或 pub/sub 同步
 
 ## Geo Routing
 
@@ -624,7 +566,7 @@ If `GeoRouter` is enabled:
   - geographic distance
   - current load
 
-This logic lives under `RoomRegistry`, not directly under `RoomService`.
+这部分打分逻辑由 `GeoRouter` 提供，路由决策在当前版本只服务本地节点选择与注册信息补充。
 
 ### Country Isolation
 
@@ -657,26 +599,6 @@ Disable with `--noCountryIsolation` or `"countryIsolation": false`.
   --country="United States"
 ```
 
-## Recording
-
-Recording is implemented as a side path:
-
-```text
-Producer
-  -> PIPE Consumer
-  -> PlainTransport
-  -> localhost UDP RTP
-  -> PeerRecorder
-  -> FFmpeg / WebM output
-```
-
-Recorder responsibilities include:
-
-- RTP receive
-- H264 / VP8 packet handling
-- muxing
-- QoS timeline sidecar output
-
 ## Quick Start
 
 ### Prerequisites
@@ -696,12 +618,7 @@ Dependency reference:
   - `libavutil`
   - `libswscale`
   - `libavdevice`
-- hiredis
 - `curl` 与 `tar`（被 `setup.sh` 用于下载和解压 `mediasoup-worker`）
-
-备注：
-
-- 对于单节点、仅本地路由（local-only）的模式，Redis 在运行时是可选的，但目前的默认构建依然会链接 `hiredis`。
 
 ### 构建 (Build)
 
@@ -734,8 +651,6 @@ cmake --build . -j$(nproc)
   --workers=1 \
   --workerThreads=1 \
   --workerBin=./mediasoup-worker \
-  --redisHost=127.0.0.1 \
-  --redisPort=6379 \
   --hawkeyeRegisterUrl=ws://127.0.0.1:8080/register_ws \
   --nodeId=<unique-node-id>
 ```
@@ -749,8 +664,6 @@ cat > config.json <<'EOF'
   "workers": 1,
   "workerThreads": 1,
   "workerBin": "./mediasoup-worker",
-  "redisHost": "127.0.0.1",
-  "redisPort": 6379,
   "hawkeyeRegisterUrl": "ws://127.0.0.1:8080/register_ws",
   "hawkeyeRegisterType": "mediasoup",
   "logDir": "/var/log/mediasoup",
@@ -778,8 +691,6 @@ EOF
 | `--logLevel` | `info` | 日志详细级别 |
 | `--logRotateHours` | `3` | 每 N 小时轮转守护进程日志，生成如 `mediasoup-sfu_2026041306_<pid>.log` 的文件 (`0` 为禁用轮转) |
 | `--nodaemon` | flag | 在前台运行 (不作为守护进程) |
-| `--redisHost` | `127.0.0.1` | Redis 主机地址 |
-| `--redisPort` | `6379` | Redis 端口 |
 | `--hawkeyeRegisterUrl` | 空 | Hawkeye websocket 注册地址，建议填 `ws://<hawkeye-host>:<port>/register_ws` |
 | `--hawkeyeRegisterType` | `mediasoup` | 注册到 Hawkeye 的服务类型 |
 | `--nodeId` | 自动生成 | 节点唯一标识 |
@@ -810,9 +721,9 @@ EOF
 
 集成测试依赖于在 `./build` 目录下使用相对路径来生成并启动二进制文件。
 
-### 3. 多节点模式需要可达的节点地址
+### 3. 单节点模式需要可达的节点地址
 
-如果启用了基于 Redis 的多节点路由，每个节点都必须发布一个能够被客户端或上游代理层访问到的 `ws://` 地址。
+当前服务只支持本地 single-node 路径。`--nodeAddress` 仍可用于对外公布地址，但不再承担 Redis 多节点路由职责。
 
 ## 测试 (Testing)
 
@@ -830,15 +741,11 @@ EOF
 ./build/mediasoup_qos_unit_tests
 ./build/mediasoup_review_fix_tests
 ./build/mediasoup_stability_integration_tests
-./build/mediasoup_multinode_tests
-./build/mediasoup_topology_tests
 ./build/mediasoup_integration_tests
 ./build/mediasoup_qos_integration_tests
 ./build/mediasoup_e2e_tests
 ./build/mediasoup_bench
 ```
-
-`mediasoup_review_fix_tests`、`mediasoup_multinode_tests` 以及 `mediasoup_topology_tests` 会自动启动一个隔离的 `redis-server`。这需要环境变量 `PATH` 中有 `redis-server` 可执行文件，但它们并不依赖 `127.0.0.1:6379` 上共享的 Redis。
 
 `./scripts/run_all_tests.sh` 和 `./scripts/run_qos_tests.sh` 都在有测试失败后继续运行剩余被选定的测试组，只有在打印最终的失败总结后才返回非零状态码。
 
@@ -938,8 +845,6 @@ node tests/qos_harness/browser_capacity_rooms.mjs --workers=1 --step=5 --max-roo
   确保你在最新的分支上，并且捆绑的 `third_party/ip2region` 目录存在。
 - `Could NOT find ... avformat/avcodec/avutil`  
   安装 FFmpeg 开发包（比如在 Debian/Ubuntu 上安装 `libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libavdevice-dev`），或者参阅 [docs/dependencies_cn.md](./docs/dependencies_cn.md)。
-- `hiredis not found` 或 Redis 符号的链接错误  
-  安装 hiredis 开发包 (`libhiredis-dev` / `hiredis-devel`)，或者参阅 [docs/dependencies_cn.md](./docs/dependencies_cn.md)。
 
 ## 监控 (Monitoring)
 
@@ -996,12 +901,10 @@ src/
 ├── RoomServiceMedia.cpp  # transport / produce / consume 流程
 ├── RoomServiceStats.cpp  # stats / QoS / 房间状态广播
 ├── RoomServiceDownlink.cpp # 下行规划 + 发布端供应
-├── RoomRecordingHelpers.* # 录制器创建 / 清理助手
 ├── RoomMediaHelpers.h    # 媒体侧辅助例程
 ├── RoomDownlinkHelpers.h # 下行辅助例程
 ├── RoomStatsQosHelpers.h # 统计/QoS 辅助例程
 ├── RoomManager.h         # 房间容器与生命周期
-├── RoomRegistry.*        # Redis 路由、缓存、pub/sub 同步
 ├── GeoRouter.h           # 地理位置解析和打分
 ├── WorkerManager.h       # worker 选取 / 容量辅助
 ├── Worker.*              # mediasoup-worker 子进程包装器
@@ -1013,7 +916,6 @@ src/
 ├── Producer.*            # producer 包装器
 ├── Consumer.*            # consumer 包装器
 ├── Peer.h                # peer + session 状态
-├── Recorder.h            # RTP -> WebM 录制与 QoS 时间线
 ├── EventEmitter.h        # 轻量级事件系统
 └── Logger.h              # spdlog 包装器
 ```

@@ -104,8 +104,7 @@ function startSfu() {
     path.join(repoRoot, 'build', 'mediasoup-sfu'),
     [
       '--nodaemon', `--port=${signalingPort}`,
-      '--workers=1', '--workerBin=./mediasoup-worker',
-      '--redisHost=0.0.0.0', '--redisPort=1', '--noRedisRequired',
+      '--workers=1', '--workerBin=./mediasoup-worker'
     ],
     { cwd: repoRoot, stdio: ['ignore', 'pipe', 'pipe'] },
   );
@@ -232,8 +231,8 @@ async function runCompetitionPhase(page, phaseName, caseDef, durationMs) {
             frameWidth: high.visible ? high.targetWidth : 0,
             frameHeight: high.visible ? high.targetHeight : 0,
             freezeRate: 0,
-          },
-        ],
+          }
+    ],
       }, h.sub);
     }, lowStats, highStats);
     await sleep(200);
@@ -242,8 +241,8 @@ async function runCompetitionPhase(page, phaseName, caseDef, durationMs) {
       const overrides = h.drainAndLogOverrides();
       return Promise.all([
         h.queryConsumerState(h.sub, h.consumerId),
-        h.queryConsumerState(h.sub, h.consumerId2),
-      ]).then(([sub1State, sub2State]) => {
+        h.queryConsumerState(h.sub, h.consumerId2)
+    ]).then(([sub1State, sub2State]) => {
         h.recordTraceEntry(ph, { sub1State, sub2State }, overrides);
       });
     }, phaseName);
@@ -255,7 +254,7 @@ async function runCompetitionPhase(page, phaseName, caseDef, durationMs) {
     const h = window.__downlinkV3Harness;
     return Promise.all([
       h.queryConsumerState(h.sub, h.consumerId),
-      h.queryConsumerState(h.sub, h.consumerId2),
+      h.queryConsumerState(h.sub, h.consumerId2)
     ]);
   });
   return {
@@ -289,7 +288,7 @@ async function runCompetitionCase(page, caseDef) {
     const h = window.__downlinkV3Harness;
     return Promise.all([
       h.publishPublisherStats(),
-      h.publishPublisherStats(h.pub2, h.producerId2, h.trackId2),
+      h.publishPublisherStats(h.pub2, h.producerId2, h.trackId2)
     ]);
   });
   await sleep(200);

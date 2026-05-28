@@ -1,5 +1,7 @@
 # mediasoup-cpp 架构文档
 
+> 历史说明：本文档包含旧的 Redis 多节点与录制实现设计。当前代码运行路径已经切换为 local-only，且 recorder / RoomRegistry 实现已移除。以当前行为为准时，请优先参考 `README.md` 与 `docs/DEVELOPMENT.md`。
+
 本文档是控制面架构的具体说明，重点回答下面几个问题：
 
 - 这个进程里到底有哪些线程和子进程

@@ -232,9 +232,6 @@ public:
 			"--webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(port_)),
 			"--workers=1",
 			"--workerBin=" + testWorkerBinaryPath(),
-			"--redisHost=0.0.0.0",
-			"--redisPort=1",
-			"--noRedisRequired",
 		};
 		args.insert(args.end(), extraArgs.begin(), extraArgs.end());
 

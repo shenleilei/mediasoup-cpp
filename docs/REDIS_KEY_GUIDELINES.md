@@ -1,5 +1,7 @@
 # mediasoup-cpp Redis Key 规范
 
+> 历史说明：本文档对应已经移除的 Redis / RoomRegistry 运行路径，仅作为历史设计记录保留。
+
 ## 目标
 
 这份文档定义 `mediasoup-cpp` 项目内 Redis key 的命名、编码和使用规则，目标是解决以下问题：

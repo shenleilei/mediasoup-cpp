@@ -1,5 +1,7 @@
 # Fix: RoomRegistry subscriberLoop CPU 100% Busy Loop
 
+> 历史说明：本文档对应已经移除的 `RoomRegistry` 实现，仅作为历史问题记录保留。
+
 ## 问题现象
 
 `mediasoup-sfu` 进程 CPU 占用持续 99%+，通过 `top -H` 定位到单个线程（subscriber 线程）占满 CPU。

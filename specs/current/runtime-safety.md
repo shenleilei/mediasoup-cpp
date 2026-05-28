@@ -41,11 +41,6 @@
 - 当 mediasoup worker 崩溃导致现有房间不可继续服务时，服务器**必须 (SHALL)** 向受影响房间内的客户端发送 `serverRestart` 通知。
 - 当前系统认可的崩溃处理模型是“通知并拆除旧房间，再允许新房间在 respawn 后的 worker 上继续创建”；系统**不承诺 (DOES NOT GUARANTEE)** 旧房间的无损状态恢复。
 
-## 房间注册中心快照一致性 (Room Registry Snapshot Integrity)
-
-- `RoomRegistry` 的全量快照同步**严禁 (SHALL NOT)** 用不完整的 Redis `SCAN` / `MGET` 结果替换当前缓存。
-- 当全量快照组装在任一步骤中失败或中断时，系统**必须 (SHALL)** 保留旧缓存，并跳过 `replaceAll(...)` 发布。
-
 ## Transport Connect Contract
 
 - `WebRtcTransport::connect()`、`PlainTransport::connect()` 与 `PipeTransport::connect()` **必须 (SHALL)** 校验 Worker 返回的响应体类型与所请求的 connect 操作一致。
@@ -60,15 +55,4 @@
 
 - `/api/resolve` 接口与 WS `join` 握手**严禁 (SHALL NOT)** 盲目信任用户直接提供的 IP 查询参数或 JSON 字段来做地理路由（Geo-routing）决策。系统**必须 (MUST)** 从底层的 Socket 远端地址，或者从被明确验证过的反向代理 `X-Forwarded-For` HTTP 头中提取用户位置。
 - 纯 C++ 客户端的 `SourceWorker` 在文件输入或摄像头输入路径上，如果 FFmpeg decoder 参数导入或 `avcodec_open2()` 失败，**必须 (SHALL)** 安全停止，且**严禁 (SHALL NOT)** 继续进入后续 decode/send 循环。
-- 长期运行的录制器 RTP 时间戳**必须 (SHALL)** 被拓宽映射为 64 位整数精度，以防止大于 6 小时的有符号 32 位整数算术溢出 Bug。
-- 生成的录制产物文件名**必须 (SHALL)** 包含毫秒级精度或 UUID，以避免客户端短时间快速重连时发生文件覆盖碰撞。
-
-- 格式错误的 Redis 回复或缺少字符串负载的情况**必须 (SHALL)** 被忽略或拒绝，**严禁 (SHALL NOT)** 解引用空指针（Null Reply Elements）。
 - 无效的数字型 CLI 参数**必须 (SHALL)** 在启动时显式抛出错误并退出，而不能直接 Crash 或静默回退到默认值。
-
-## 录制器安全护栏 (Recorder Guardrails)
-
-- 如果 FFmpeg 无法分配必要的音频或视频流，录制器（Recorder）的启动**必须 (SHALL)** 安全失败。
-- 构建 H264 extradata 时，如果传入的 SPS 数据短于 4 字节，**必须 (SHALL)** 直接拒绝，严禁发生越界读取。
-- 录制器的 QoS 时间戳**必须 (SHALL)** 使用同步安全的、以首个 RTP 包为基准的时间基线。
-- 录制器的 RTP PTS 差值**必须 (SHALL)** 使用无符号 32 位模运算（Modulo-32），并在缩放（rescale）之前拓宽精度，避免长时间会话中发生有符号 32 位溢出。

@@ -55,7 +55,7 @@ async function withTimeout(label, promise, timeoutMs = 30000) {
       promise,
       new Promise((_, reject) => {
         timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs} ms`)), timeoutMs);
-      }),
+      })
     ]);
   } finally {
     if (timer) clearTimeout(timer);
@@ -79,8 +79,7 @@ function startSfu() {
   ensureSignalingTlsFiles();
   const child = spawn(
     path.join(repoRoot, 'build', 'mediasoup-sfu'),
-    ['--nodaemon', `--port=${signalingPort}`, '--workers=1', '--workerBin=./mediasoup-worker',
-     '--redisHost=0.0.0.0', '--redisPort=1', '--noRedisRequired'],
+    ['--nodaemon', `--port=${signalingPort}`, '--workers=1', '--workerBin=./mediasoup-worker'],
     { cwd: repoRoot, stdio: ['ignore', 'pipe', 'pipe'] },
   );
   child.stdout.on('data', () => {});
@@ -181,7 +180,7 @@ async function sendRealSnapshots(page, consumers, { highPinned = false, highScre
       { consumerId: consumers[0].consumerId, producerId: consumers[0].producerId,
         pinned: highPinned, isScreenShare: highScreenShare, targetWidth: 1280, targetHeight: 720 },
       { consumerId: consumers[1].consumerId, producerId: consumers[1].producerId,
-        pinned: false, isScreenShare: false, targetWidth: 320, targetHeight: 180 },
+        pinned: false, isScreenShare: false, targetWidth: 320, targetHeight: 180 }
     ]);
   }, consumers, highPinned, highScreenShare);
 }

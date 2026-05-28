@@ -4,15 +4,13 @@ English | [简体中文](./README.md)
 
 A C++17 SFU control plane built around the upstream `mediasoup-worker`.
 
-This project replaces mediasoup's usual Node.js control layer with a native C++ server while still relying on the battle-tested `mediasoup-worker` process for media handling. The result is a C++-native signaling stack with room/session management, multi-node room routing, recording, and QoS aggregation.
+This project replaces mediasoup's usual Node.js control layer with a native C++ server while still relying on the battle-tested `mediasoup-worker` process for media handling. The result is a C++-native signaling stack with room/session management, local room routing, and QoS aggregation.
 
 ## Live Demo
 
 Try it now: **http://47.99.237.234:3000**
 
 Open in two browser tabs or two devices to start a 1-on-1 call with real-time QoS monitoring.
-
-Recording playback: **http://47.99.237.234:3000/playback.html**
 
 ## Why
 
@@ -31,8 +29,8 @@ This project is:
 - a WebSocket/HTTP signaling server
 - a room / peer / session management layer
 - a transport / producer / consumer orchestration layer
-- a Redis-backed multi-node room routing layer
-- a recorder / QoS integration layer
+- a local room-routing layer
+- a QoS aggregation layer
 
 This project is not:
 
@@ -50,12 +48,12 @@ This project does not rewrite the mediasoup media worker. It keeps the upstream 
 
 ### 2. Browser Interop And Server PlainTransport
 - **Browser-first path:** the browser demo keeps WebSocket signaling, room join, publish, subscribe, and realtime QoS display.
-- **Server capability retained:** `plainPublish` / `plainSubscribe` remain server PlainTransport protocol capabilities for recording, tests, and future server-side media ingress.
+- **Server capability retained:** `plainPublish` / `plainSubscribe` remain server PlainTransport protocol capabilities for tests and future server-side media ingress.
 - **Native client removed:** the root `client/` WebRTC QoS plain push/play client has been removed, and the default build no longer depends on the external WebRTC QoS SDK package.
 
 ### 3. Reproducible QoS Validation
 - **Browser uplink matrix:** browser/Node harnesses validate the uplink QoS state machine and server aggregation path.
-- **Server QoS regression:** C++ QoS unit tests, integration tests, recording accuracy tests, browser harnesses, and uplink/downlink matrices remain active.
+- **Server QoS regression:** C++ QoS unit tests, integration tests, browser harnesses, and uplink/downlink matrices remain active.
 - **Explicit environment SKIP rules:** missing browser or netem prerequisites must be recorded as `SKIP/PARTIAL`, not counted as PASS.
 
 ## High-Level Architecture
@@ -105,7 +103,7 @@ RTP / SRTP / ICE / DTLS
 
 ## Simplified Service Boundary
 
-The repo keeps `mediasoup-sfu`, the browser demo, WebSocket signaling, room interop, recording, and server-side QoS/PlainTransport capabilities. The root `client/` native WebRTC QoS plain push/play client, its scripts, harnesses, unit tests, and generated reports have been removed.
+The repo keeps `mediasoup-sfu`, the browser demo, WebSocket signaling, room interop, and server-side QoS/PlainTransport capabilities. The root `client/` native WebRTC QoS plain push/play client, its scripts, harnesses, unit tests, and generated reports have been removed.
 
 The default build needs only server and test dependencies. It no longer searches for or requires the external WebRTC QoS SDK package:
 
@@ -114,38 +112,25 @@ cmake -S . -B build-slim -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF
 cmake --build build-slim --target mediasoup-sfu -j$(nproc)
 ```
 
-## Multi-Node Routing Architecture
+## Local Runtime Architecture
 
 ```text
 SignalingServer
   │
   ├─ WorkerThread Pool
-  │
-  └─ Registry Worker Thread
-       │
-       └─ RoomRegistry
-            ├─ Redis command connection
-            ├─ local room cache
-            ├─ local node cache
-            ├─ room ownership claim / refresh / unregister
-            └─ resolveRoom(roomId, clientIp)
-                 │
-                 └─ GeoRouter (optional)
-                      ├─ ip2region lookup
-                      ├─ country isolation
-                      └─ ISP / distance based scoring
+  └─ GeoRouter (optional)
+       ├─ ip2region lookup
+       ├─ country isolation
+       └─ ISP / distance based scoring
 ```
-
-There is also a dedicated Redis subscriber thread that listens for node and room updates and refreshes local cache state.
 
 ## Features
 
 - room-first design: when a peer produces, other peers in the room are auto-subscribed
 - WorkerThread-based signaling: room control logic runs off the uWS main loop
 - session identity: reconnect replaces the old connection and stale requests are rejected by `sessionId`
-- Redis-backed room routing: room ownership, cache, pub/sub sync, degrade-to-local mode
+- local single-node room routing
 - geo-aware routing: ip2region-based country / ISP / distance scoring
-- H264 / VP8 recording: RTP depacketization and WebM muxing through FFmpeg
 - QoS monitoring: server stats + client stats aggregation and periodic push
 - worker crash recovery: child process respawn with rate limiting
 - daemon mode: fork, PID file, structured logs
@@ -173,7 +158,7 @@ Current downlink scope is subscriber receive control plus zero-demand publisher 
 Current repo docs and generated artifacts show:
 
 - browser uplink matrix: original `43 / 43 PASS` main gate (`2026-04-13`) plus `GD1-GD12` targeted PASS; current total scope is `55 case`
-- server QoS unit tests, integration tests, recording accuracy tests, and browser harnesses remain the current regression surface.
+- server QoS unit tests, integration tests, and browser harnesses remain the current regression surface.
 - the root native WebRTC QoS plain push/play client has been removed; its P2/P3 reports and acceptance scripts are no longer active paths.
 
 Current scope note:
@@ -236,44 +221,27 @@ Those child processes:
 - forward RTP
 - expose stats over IPC
 
-### Registry Worker
-
-Redis fire-and-forget maintenance tasks are not executed inline on room control paths. A dedicated registry worker thread handles:
-
-- room TTL refresh
-- room unregister
-- node heartbeat / load update
-
-This keeps steady-state room control paths less sensitive to Redis latency.
-
 ## Thread Model
 
 | Thread | Count | Role |
 |---|---:|---|
 | uWS main | 1 | WebSocket, HTTP, timers, room dispatch |
 | WorkerThread | N | serial room logic + epoll-driven worker IPC |
-| Registry worker | 1 | async Redis maintenance tasks |
-| Redis subscriber | 1 | pub/sub cache updates |
 | Worker waiter | per worker | child process wait / death handling |
-| Recorder | per active recorder | UDP RTP receive + muxing |
 
 Typical small deployment:
 
 - 1 uWS main thread
-- 1 registry worker
-- 1 Redis subscriber
 - 1 WorkerThread
 - 1 mediasoup worker process
-- 0..M recorder threads
 
 ## Startup Sequence
 
 All critical modules are initialized before the server begins accepting traffic:
 
-1. `RoomRegistry`: Redis connect, `syncAll()`, subscriber thread
-2. `WorkerThread::start()`: create worker processes
-3. `waitReady()`: block until WorkerThreads report initialization complete
-4. `uWS::App().listen()`: only then begin accepting WebSocket / HTTP connections
+1. `WorkerThread::start()`: create worker processes
+2. `waitReady()`: block until WorkerThreads report initialization complete
+3. `uWS::App().listen()`: only then begin accepting WebSocket / HTTP connections
 
 ## Session Identity Model
 
@@ -315,7 +283,6 @@ client -> produce
       -> Channel::requestWait()
       -> mediasoup-worker creates Producer
       -> auto-subscribe other peers
-      -> optionally start recorder path
       -> response deferred back to client
 ```
 
@@ -328,7 +295,6 @@ timer -> main thread
       -> gathers transport / producer / consumer stats
       -> merges clientStats
       -> broadcasts statsReport
-      -> recorder may append QoS snapshots
 ```
 
 ### Server PlainTransport
@@ -338,7 +304,7 @@ external media ingress
       -> WebSocket join / plainPublish / plainSubscribe
       -> bind mediasoup UDP RTP/RTCP
       -> server creates PlainTransport / Producer / Consumer
-      -> reuse RoomService, recording, and QoS aggregation paths
+      -> reuse RoomService and QoS aggregation paths
 ```
 
 ### Media
@@ -348,10 +314,6 @@ The media plane does not pass through the signaling logic after setup:
 ```text
 Browser A ──SRTP/UDP──→ WebRtcTransport → Producer
                                             ├──→ Consumer (SIMPLE) → WebRtcTransport → Browser B
-                                            └──→ Consumer (PIPE) → PlainTransport
-                                                    │ localhost UDP RTP
-                                                    ▼
-                                              PeerRecorder → .webm
 ```
 
 ## Room / Peer Model
@@ -386,24 +348,14 @@ When one peer produces:
 - all other peers with a recv transport are auto-subscribed
 - they receive `newConsumer` notifications
 
-## Redis / Room Ownership
+## Local Room Ownership
 
-`RoomRegistry` is responsible for:
+The runtime now operates in local-only mode:
 
-- node registration
-- node load publication
-- room ownership claim
-- room ownership refresh
-- room lookup / resolution
-- room and node cache maintenance
-
-Important behavior:
-
-- room ownership is stored in Redis
-- room and node info are cached locally
-- pub/sub keeps cache warm
-- `resolveRoom()` can fall back to a Redis-backed node refresh if local cache is missing fresh node data
-- when Redis is unavailable, the system degrades to local-only mode
+- room ownership lives only in process memory
+- `roomId -> WorkerThread` dispatch is local to the current node
+- `/api/resolve` returns the local node for current deployments
+- Redis is no longer required for room ownership, node cache, or pub/sub sync
 
 ## Geo Routing
 
@@ -417,7 +369,7 @@ If `GeoRouter` is enabled:
   - geographic distance
   - current load
 
-This logic lives under `RoomRegistry`, not directly under `RoomService`.
+This logic is provided by `GeoRouter`; in the current runtime it supports local node selection and registration metadata.
 
 ### Country Isolation
 
@@ -450,26 +402,6 @@ Disable with `--noCountryIsolation` or `"countryIsolation": false`.
   --country="United States"
 ```
 
-## Recording
-
-Recording is implemented as a side path:
-
-```text
-Producer
-  -> PIPE Consumer
-  -> PlainTransport
-  -> localhost UDP RTP
-  -> PeerRecorder
-  -> FFmpeg / WebM output
-```
-
-Recorder responsibilities include:
-
-- RTP receive
-- H264 / VP8 packet handling
-- muxing
-- QoS timeline sidecar output
-
 ## Quick Start
 
 ### Prerequisites
@@ -489,12 +421,7 @@ Dependency reference:
   - `libavutil`
   - `libswscale`
   - `libavdevice`
-- hiredis
 - `curl` and `tar` (used by `setup.sh` to fetch and unpack `mediasoup-worker`)
-
-Notes:
-
-- Redis is optional at runtime for single-node local-only mode, but the current default build still links `hiredis`.
 
 ### Build
 
@@ -529,8 +456,6 @@ Recommended production-style invocation:
   --workers=1 \
   --workerThreads=1 \
   --workerBin=./mediasoup-worker \
-  --redisHost=127.0.0.1 \
-  --redisPort=6379 \
   --hawkeyeRegisterUrl=ws://127.0.0.1:8080/register_ws \
   --nodeId=<unique-node-id>
 ```
@@ -544,11 +469,8 @@ cat > config.json <<'EOF'
   "workers": 1,
   "workerThreads": 1,
   "workerBin": "./mediasoup-worker",
-  "redisHost": "127.0.0.1",
-  "redisPort": 6379,
   "hawkeyeRegisterUrl": "ws://127.0.0.1:8080/register_ws",
   "hawkeyeRegisterType": "mediasoup",
-  "recordDir": "./recordings",
   "logDir": "/var/log/mediasoup",
   "logPrefix": "mediasoup-sfu",
   "logRotateHours": 3
@@ -568,14 +490,11 @@ Open `http://<server-ip>:3000`.
 | `--workers` | CPU based | mediasoup worker process count |
 | `--workerThreads` | auto | WorkerThread event loop count |
 | `--workerBin` | `./mediasoup-worker` | worker binary path |
-| `--recordDir` | `./recordings` | recording output directory |
 | `--logDir` | `/var/log/mediasoup` | daemon log directory |
 | `--logPrefix` | `mediasoup-sfu` | daemon log file prefix |
 | `--logLevel` | `info` | log verbosity |
 | `--logRotateHours` | `3` | rotate daemon log every N hours into files like `mediasoup-sfu_2026041306_<pid>.log` (`0` disables rotation) |
 | `--nodaemon` | flag | run in foreground |
-| `--redisHost` | `127.0.0.1` | Redis host |
-| `--redisPort` | `6379` | Redis port |
 | `--hawkeyeRegisterUrl` | empty | Hawkeye websocket registration endpoint, e.g. `ws://<hawkeye-host>:<port>/register_ws` |
 | `--hawkeyeRegisterType` | `mediasoup` | Service type reported to Hawkeye |
 | `--nodeId` | auto | node identifier |
@@ -606,9 +525,9 @@ Set:
 
 The integration tests spawn binaries using relative paths under `./build`.
 
-### 3. Multi-node requires reachable node addresses
+### 3. Single-node still needs a reachable node address
 
-If Redis multi-node routing is enabled, every node must publish a `ws://` address reachable by clients or by the upstream proxy layer.
+The server now runs only in local single-node mode. `--nodeAddress` can still be set to publish an external address, but it is no longer used for room ownership routing.
 
 ## Testing
 
@@ -626,17 +545,11 @@ All tests must be run from the project root directory.
 ./build/mediasoup_qos_unit_tests
 ./build/mediasoup_review_fix_tests
 ./build/mediasoup_stability_integration_tests
-./build/mediasoup_multinode_tests
-./build/mediasoup_topology_tests
 ./build/mediasoup_integration_tests
 ./build/mediasoup_qos_integration_tests
 ./build/mediasoup_e2e_tests
 ./build/mediasoup_bench
 ```
-
-`mediasoup_review_fix_tests`, `mediasoup_multinode_tests`, and `mediasoup_topology_tests`
-start an isolated `redis-server` automatically. They require the `redis-server` binary in
-`PATH`, but they do not rely on a shared Redis on `127.0.0.1:6379`.
 
 `./scripts/run_all_tests.sh` and `./scripts/run_qos_tests.sh` both keep running the remaining
 selected test groups after a test failure and return non-zero only after printing a final
@@ -667,12 +580,8 @@ The regression-heavy suites currently cover:
 - stale request rejection
 - restartIce correctness
 - non-blocking stats path
-- recording path stability
 - geo routing
 - country isolation
-- Redis degrade mode
-- cache propagation
-- full-node redirect behavior
 
 ### Quick Quality Gate
 
@@ -741,8 +650,6 @@ Behavior:
   Ensure you are on the latest branch and the bundled `third_party/ip2region` directory exists.
 - `Could NOT find ... avformat/avcodec/avutil`  
   Install FFmpeg development packages (for example `libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libavdevice-dev` on Debian/Ubuntu), or see [docs/dependencies_cn.md](./docs/dependencies_cn.md).
-- `hiredis not found` or link errors for Redis symbols  
-  Install the hiredis development package (`libhiredis-dev` / `hiredis-devel`), or see [docs/dependencies_cn.md](./docs/dependencies_cn.md).
 
 ## Monitoring
 
@@ -789,7 +696,7 @@ src/
 ├── SignalingServer.h     # signaling server facade
 ├── SignalingServerWs.*   # WebSocket request/session dispatch
 ├── SignalingServerHttp.* # HTTP routes, metrics, file serving
-├── SignalingServerRuntime.cpp # runtime snapshot, registry worker, room dispatch helpers
+├── SignalingServerRuntime.cpp # runtime snapshot and room dispatch helpers
 ├── SignalingSocketState.h     # ws session / rate-limit helpers
 ├── SignalingRequestDispatcher.h # method -> RoomService dispatch glue
 ├── StaticFileResponder.h      # static-file path resolution + streaming
@@ -799,12 +706,10 @@ src/
 ├── RoomServiceMedia.cpp  # transport / produce / consume flows
 ├── RoomServiceStats.cpp  # stats / QoS / room-state broadcast
 ├── RoomServiceDownlink.cpp # downlink planning + publisher supply
-├── RoomRecordingHelpers.* # recorder setup / cleanup helpers
 ├── RoomMediaHelpers.h    # media-side helper routines
 ├── RoomDownlinkHelpers.h # downlink helper routines
 ├── RoomStatsQosHelpers.h # stats/QoS helper routines
 ├── RoomManager.h         # room container and lifecycle
-├── RoomRegistry.*        # Redis routing, cache, pub/sub sync
 ├── GeoRouter.h           # geolocation and scoring
 ├── WorkerManager.h       # worker selection / capacity helpers
 ├── Worker.*              # mediasoup-worker child process wrapper
@@ -812,11 +717,10 @@ src/
 ├── Router.*              # router wrapper
 ├── Transport.*           # transport wrapper
 ├── WebRtcTransport.*     # ICE / DTLS transport
-├── PlainTransport.h      # plain RTP transport for recorder path
+├── PlainTransport.h      # plain RTP transport
 ├── Producer.*            # producer wrapper
 ├── Consumer.*            # consumer wrapper
 ├── Peer.h                # peer + session state
-├── Recorder.h            # RTP -> WebM recording and QoS timeline
 ├── EventEmitter.h        # lightweight event system
 └── Logger.h              # spdlog wrapper
 ```

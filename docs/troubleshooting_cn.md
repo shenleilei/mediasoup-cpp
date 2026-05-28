@@ -417,17 +417,7 @@ curl -H "X-Forwarded-For: 1.2.3.4" -sk "https://127.0.0.1:3000/api/resolve?roomI
 
 默认运行契约下，Redis 不可用不会再隐式降级成单节点：
 
-- 启动阶段：进程直接启动失败
-- 运行阶段：`/readyz` 返回 `503`
-- 新的 `/api/resolve` / `join` 等依赖 room-registry 的路径会显式失败
-
-只有显式使用 `redisRequired=false` 时，才允许 local-only 模式继续运行。
-
-### 8.4 subscriber 忙循环
-
-如果看到 subscriber 相关 CPU 异常或日志异常密集，先看已有专题文档：
-
-- [fix-subscriber-busyloop.md](./fix-subscriber-busyloop.md)
+- 当前版本默认运行在 local-only 模式，不再依赖 Redis 房间注册中心。
 
 ## 9. QoS 问题
 
@@ -471,22 +461,9 @@ curl -H "X-Forwarded-For: 1.2.3.4" -sk "https://127.0.0.1:3000/api/resolve?roomI
 
 先看控制面，不要第一时间去翻 `Transport` / `Producer` 的 IPC。
 
-## 10. 录制问题
+## 10. 历史 Redis / 录制问题
 
-### 10.1 症状分类
-
-- 没有 `.webm`
-- 有 `.webm` 但没有 `.qos.json`
-- 文件存在但内容异常
-- 开录制后 publish 明显变慢
-
-### 10.2 录制链排查顺序
-
-1. `RoomService::autoRecord()` 是否执行
-2. `PeerRecorder::createSocket()` / `start()` 是否成功
-3. `Router::createPlainTransport()` 是否成功
-4. `PlainTransport::connect(127.0.0.1, port)` 是否成功
-5. `pt->consume(pipe=true)` 是否成功
+当前运行路径已经不再包含 Redis 房间注册中心和录制器实现。本章节对应的是历史版本排障说明，阅读时请以当前 README / DEVELOPMENT / 代码为准。
 
 如果录制链失败，媒体主链通常仍然可能正常。
 

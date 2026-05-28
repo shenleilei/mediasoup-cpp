@@ -10,7 +10,6 @@ ALL_GROUPS=(
   unit
   integration
   qos
-  topology
 )
 ALIAS_GROUPS=(
   non-qos
@@ -128,15 +127,13 @@ Groups:
   unit         core unit suites inside mediasoup_tests
   integration  integration / e2e / stability / review-fix binaries
   qos          full QoS regression delegated to scripts/run_qos_tests.sh
-  topology     topology + multinode binaries
-  non-qos      alias for unit + integration + topology
+  non-qos      alias for unit + integration
 
 Notes:
   - This script is the full repository regression entry.
   - Selected groups keep running after a test failure; the script exits non-zero at the end if any group failed.
   - It covers the native groups here and delegates the full QoS regression surface to scripts/run_qos_tests.sh.
-  - mediasoup_review_fix_tests, mediasoup_multinode_tests, and mediasoup_topology_tests
-    start an isolated Redis and require redis-server in PATH.
+  - QoS tests are delegated to scripts/run_qos_tests.sh.
 EOF
 }
 
@@ -151,7 +148,7 @@ normalize_selected_groups() {
 
   for group in "${SELECTED_GROUPS[@]}"; do
     if [[ "$group" == "non-qos" ]]; then
-      for expanded_group in unit integration topology; do
+      for expanded_group in unit integration; do
         case " ${normalized[*]} " in
           *" $expanded_group "*) continue ;;
         esac
@@ -386,12 +383,10 @@ build_targets() {
     mediasoup_integration_tests \
     mediasoup_e2e_tests \
     mediasoup_qos_integration_tests \
-    mediasoup_topology_tests \
     mediasoup_stability_integration_tests \
-    mediasoup_multinode_tests \
     mediasoup_review_fix_tests \
     mediasoup_qos_accuracy_tests \
-    mediasoup_qos_recording_accuracy_tests
+    
   log_system_snapshot "post-build"
 }
 
@@ -446,7 +441,6 @@ run_integration() {
     failed=1
   fi
   cleanup_test_ports
-  require_command redis-server "integration:preflight:redis-server" || return 1
   if ! run_cmd "integration:mediasoup_review_fix_tests" "$BUILD_DIR/mediasoup_review_fix_tests"; then
     failed=1
   fi
@@ -462,29 +456,12 @@ run_qos() {
     "$ROOT_DIR/scripts/run_qos_tests.sh" all
 }
 
-run_topology() {
-  local failed=0
-  cleanup_test_ports
-  require_file "$BUILD_DIR/mediasoup_topology_tests" "topology:preflight:mediasoup_topology_tests" || return 1
-  require_file "$BUILD_DIR/mediasoup_multinode_tests" "topology:preflight:mediasoup_multinode_tests" || return 1
-  require_command redis-server "topology:preflight:redis-server" || return 1
-  if ! run_cmd "topology:mediasoup_topology_tests" "$BUILD_DIR/mediasoup_topology_tests"; then
-    failed=1
-  fi
-  cleanup_test_ports
-  if ! run_cmd "topology:mediasoup_multinode_tests" "$BUILD_DIR/mediasoup_multinode_tests"; then
-    failed=1
-  fi
-  return "$failed"
-}
-
 run_group() {
   local group="$1"
   case "$group" in
     unit) run_unit ;;
     integration) run_integration ;;
     qos) run_qos ;;
-    topology) run_topology ;;
     *) echo "error: unknown group '$group'" >&2; return 1 ;;
   esac
 }

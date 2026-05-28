@@ -1,5 +1,7 @@
 # 全链路架构流程图
 
+> 历史说明：本文档描述的是包含 Redis 多节点与 auto-record 的旧流程。当前代码运行路径已经切换为 local-only，且 recorder / RoomRegistry 实现已移除。
+
 > 从客户端 WebSocket 连接到 Worker 媒体转发的完整路径。
 
 ## 1. 进程 / 线程模型总览

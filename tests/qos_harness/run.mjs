@@ -318,10 +318,7 @@ function startSfu() {
       '--nodaemon',
       `--port=${port}`,
       '--workers=1',
-      '--workerBin=./mediasoup-worker',
-      '--redisHost=0.0.0.0',
-      '--redisPort=1',
-      '--noRedisRequired',
+      '--workerBin=./mediasoup-worker'
     ],
     {
       cwd: repoRoot,
@@ -368,7 +365,7 @@ function defaultRtpCapabilities() {
         kind: 'video',
         clockRate: 90000,
         preferredPayloadType: 101,
-      },
+      }
     ],
     headerExtensions: [],
   };

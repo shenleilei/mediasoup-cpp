@@ -72,8 +72,7 @@ function startSfu() {
     path.join(repoRoot, 'build', 'mediasoup-sfu'),
     [
       '--nodaemon', `--port=${signalingPort}`,
-      '--workers=1', '--workerBin=./mediasoup-worker',
-      '--redisHost=0.0.0.0', '--redisPort=1', '--noRedisRequired',
+      '--workers=1', '--workerBin=./mediasoup-worker'
     ],
     { cwd: repoRoot, stdio: ['ignore', 'pipe', 'pipe'] },
   );

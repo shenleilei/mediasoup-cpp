@@ -1,5 +1,7 @@
 # Hawkeye WebSocket 注册测试结果
 
+> 说明：本文档中的 Redis 相关行为描述反映的是历史测试环境；当前 `mediasoup-cpp` 主运行路径已经切换为 local-only。
+
 ## 测试目标
 
 验证 `mediasoup-cpp` 新增的 Hawkeye WebSocket 注册链路是否可用，并确认：

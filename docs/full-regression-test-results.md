@@ -1,14 +1,14 @@
 # Full Regression Test Results
 
-Generated at: `2026-05-28 17:53:12 CST`
+Generated at: `2026-05-28 21:05:00 CST`
 
 ## Summary
 
 - Script: `scripts/run_all_tests.sh`
-- Selected groups: `unit`, `integration`, `topology`
+- Selected groups: `unit`, `integration`
 - Overall status: `PASS`
-- Attempted tasks: `7`
-- Passed tasks: `7`
+- Attempted tasks: `5`
+- Passed tasks: `5`
 - Failed tasks: `0`
 - Failed groups: none
 
@@ -24,9 +24,7 @@ Generated at: `2026-05-28 17:53:12 CST`
 | `integration:mediasoup_integration_tests` | `integration` | `PASS` | `20s` |
 | `integration:mediasoup_e2e_tests` | `integration` | `PASS` | `5s` |
 | `integration:mediasoup_stability_integration_tests` | `integration` | `PASS` | `9s` |
-| `integration:mediasoup_review_fix_tests` | `integration` | `PASS` | `62s` |
-| `topology:mediasoup_topology_tests` | `topology` | `PASS` | `15s` |
-| `topology:mediasoup_multinode_tests` | `topology` | `PASS` | `48s` |
+| `integration:mediasoup_review_fix_tests` | `integration` | `PASS` | `17s` |
 
 ## Task Duration View
 
@@ -36,9 +34,7 @@ Generated at: `2026-05-28 17:53:12 CST`
 | `integration:mediasoup_integration_tests` | `20s` | ###### |
 | `integration:mediasoup_e2e_tests` | `5s` | # |
 | `integration:mediasoup_stability_integration_tests` | `9s` | ## |
-| `integration:mediasoup_review_fix_tests` | `62s` | #################### |
-| `topology:mediasoup_topology_tests` | `15s` | #### |
-| `topology:mediasoup_multinode_tests` | `48s` | ############### |
+| `integration:mediasoup_review_fix_tests` | `17s` | ##### |
 
 ## Detailed Reports
 

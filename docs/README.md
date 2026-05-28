@@ -17,7 +17,7 @@
 | 搭环境 / 查依赖 | [dependencies_cn.md](./dependencies_cn.md) → [README.md](../README.md) → [DEVELOPMENT.md](./DEVELOPMENT.md) |
 | 做仓库全量回归 | [README.md](../README.md) → [DEVELOPMENT.md](./DEVELOPMENT.md) → [run_all_tests.sh](../scripts/run_all_tests.sh) → [full-regression-test-results.md](./full-regression-test-results.md) |
 | 配 nightly 全量回归邮件 | [nightly-full-regression.md](./nightly-full-regression.md) → [run_all_tests.sh](../scripts/run_all_tests.sh) → [full-regression-test-results.md](./full-regression-test-results.md) |
-| 做线上排障 | [troubleshooting_cn.md](./troubleshooting_cn.md) → [architecture_cn.md](./architecture_cn.md) → [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) |
+| 做线上排障 | [troubleshooting_cn.md](./troubleshooting_cn.md) → [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) |
 | 做 QoS 改动 | [qos-status.md](./qos-status.md) → [uplink-qos-design_cn.md](./uplink-qos-design_cn.md) → [downlink-qos-design_cn.md](./downlink-qos-design_cn.md) → [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md) → [downlink-qos-v3-design_cn.md](./downlink-qos-v3-design_cn.md) → [downlink-qos-v3-implementation-plan_cn.md](./downlink-qos-v3-implementation-plan_cn.md) → [run_qos_tests.sh](../scripts/run_qos_tests.sh) |
 | 查 worker 架构 | [mediasoup-worker-architecture-analysis_cn.md](./mediasoup-worker-architecture-analysis_cn.md) |
 | 查 QoS 详细 case 结果 | [uplink-qos-case-analysis.md](./uplink-qos-case-analysis.md) |
@@ -28,19 +28,19 @@
 
 | 文档 | 用途 |
 |---|---|
-| [full-architecture-flow_cn.md](./full-architecture-flow_cn.md) | 全链路架构流程图：从信令加入到 Worker 媒体转发，覆盖进程模型、SDP/DTLS/ICE、IPC、BWE、Redis 多节点、QoS。 |
-| [architecture_cn.md](./architecture_cn.md) | 运行时架构详解，覆盖线程/进程模型、关键时序、IPC、多节点与故障恢复。 |
+| [full-architecture-flow_cn.md](./full-architecture-flow_cn.md) | 历史全链路架构流程图，包含旧的多节点/录制实现说明；不要将其作为当前运行事实来源。 |
+| [architecture_cn.md](./architecture_cn.md) | 历史架构详解，包含旧的多节点/录制实现说明；不要将其作为当前运行事实来源。 |
 | [dependencies_cn.md](./dependencies_cn.md) | 构建 / 运行 / 测试依赖总览，统一说明系统包、vendored 依赖、Node harness 依赖和 `setup.sh` / CMake 解析规则。 |
 | [qos-status.md](./qos-status.md) | QoS 总状态摘要，统一给出 browser uplink / server QoS / downlink 的当前口径与结果入口。 |
 | [full-regression-test-results.md](./full-regression-test-results.md) | 最新一次 `scripts/run_all_tests.sh` 生成的仓库全量回归结果页，按选择分组记录逐任务 PASS/FAIL 和耗时。 |
 | [nightly-full-regression.md](./nightly-full-regression.md) | nightly 全量回归自动化说明，包含 03:00 cron 安装、日志目录、邮件摘要和 Markdown 附件约定。 |
 | [downlink-qos-status.md](./downlink-qos-status.md) | downlink QoS 当前状态摘要，说明当前范围、当前结果入口和后续边界。 |
-| [troubleshooting_cn.md](./troubleshooting_cn.md) | 运行时排障手册，覆盖 join/IPC/Redis/QoS/录制/worker crash 的定位路径。 |
+| [troubleshooting_cn.md](./troubleshooting_cn.md) | 运行时排障手册；其中 Redis/录制章节属于历史实现说明。 |
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | 项目开发主文档，包含架构、线程模型、构建与测试入口。 |
 | [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) | 监控、告警与值班处理流程。 |
 | [PRODUCTION_CHECKLIST.md](./PRODUCTION_CHECKLIST.md) | 上线前检查项。 |
 | [mediasoup-worker-architecture-analysis_cn.md](./mediasoup-worker-architecture-analysis_cn.md) | 基于 `mediasoup-worker 3.14.6` 源码的架构与模块分析，从进程入口到 `Router/Transport/Producer/Consumer/BWE`。 |
-| [REDIS_KEY_GUIDELINES.md](./REDIS_KEY_GUIDELINES.md) | Redis key 设计和约束。 |
+| [REDIS_KEY_GUIDELINES.md](./REDIS_KEY_GUIDELINES.md) | 历史 Redis key 设计说明，当前 local-only 运行路径不再使用。 |
 
 ## 3. QoS 专项文档
 
@@ -114,7 +114,6 @@ cd /root/mediasoup-cpp
 - `cpp-unit`: 服务端 QoS 单测
 - `cpp-integration`: 服务端 QoS 集成测试
 - `cpp-accuracy`: QoS 统计精度测试
-- `cpp-recording`: QoS 录制精度测试
 - `node-harness`: Node QoS harness
 - `browser-harness`: browser signaling / loopback
 - `matrix`: browser loopback 弱网矩阵

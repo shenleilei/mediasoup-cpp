@@ -21,8 +21,8 @@ const chromiumCandidates = [
   '/usr/lib64/chromium-browser/headless_shell',
   '/usr/bin/chromium-browser',
   '/usr/bin/chromium',
-  '/usr/bin/google-chrome',
-].filter(Boolean);
+  '/usr/bin/google-chrome'
+    ].filter(Boolean);
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -83,10 +83,7 @@ function startSfu() {
       '--nodaemon',
       `--port=${signalingPort}`,
       '--workers=1',
-      '--workerBin=./mediasoup-worker',
-      '--redisHost=0.0.0.0',
-      '--redisPort=1',
-      '--noRedisRequired',
+      '--workerBin=./mediasoup-worker'
     ],
     {
       cwd: repoRoot,
@@ -212,8 +209,8 @@ async function runScenario() {
         window.__qosServerHarness.waitOverride([
           'server_auto_poor',
           'server_auto_lost',
-          'server_room_pressure',
-        ])
+          'server_room_pressure'
+    ])
       );
     } catch (error) {
       const controllerState = await page.evaluate(() => window.__qosServerHarness.getControllerState());
@@ -260,8 +257,8 @@ async function runScenario() {
               framesPerSecond: 24,
               qualityLimitationReason: 'none',
             },
-          },
-        ],
+          }
+    ],
       })
     );
     let clearOverride;
@@ -269,8 +266,8 @@ async function runScenario() {
       clearOverride = await page.evaluate(() =>
         window.__qosServerHarness.waitOverride([
           'server_auto_clear',
-          'server_room_pressure_clear',
-        ])
+          'server_room_pressure_clear'
+    ])
       );
     } catch (error) {
       const controllerState = await page.evaluate(() => window.__qosServerHarness.getControllerState());

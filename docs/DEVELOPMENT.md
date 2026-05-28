@@ -14,12 +14,9 @@
 |------|------|----------|------|
 | uWS 主线程 | 1 | epoll_wait（非阻塞事件循环） | WebSocket 收发、HTTP、定时器、defer 回调、room dispatch |
 | WorkerThread | ×N | epoll_wait（task queue + Channel IPC + timer） | 串行执行 RoomService 方法、Channel IPC、health/GC |
-| Registry worker | 1 | condition_variable::wait | 串行执行 Redis fire-and-forget 任务（refresh/unregister） |
-| Redis subscriber | 1 | redisGetReply（2s read timeout） | pub/sub 监听，更新本地 node/room 缓存 |
 | Worker waiter | ×N worker | waitpid() | 等待子进程退出，触发 respawn |
-| Recorder recvLoop | ×M peer | recv() on UDP socket | 收 RTP 包，解包写 WebM |
 
-典型部署：1 WorkerThread + 1 worker + 2 录制 peer = **6 线程**。
+典型部署：1 WorkerThread + 1 worker = **2-4 线程**（取决于辅助子线程和系统运行时）。
 
 ### 关键不变量
 
@@ -34,10 +31,9 @@ Worker 以 `threaded=false` 创建。Channel 的 consumer fd 注册到 WorkerThr
 ## 启动序列
 
 ```
-1. RoomRegistry: Redis connect + syncAll() + subscriber thread
-2. WorkerThread::start() → createWorkers() (fork+exec worker)
-3. waitReady() 阻塞直到所有 WorkerThread 初始化完成
-4. uWS::App().listen() — 此时才开始接受连接
+1. WorkerThread::start() → createWorkers() (fork+exec worker)
+2. waitReady() 阻塞直到所有 WorkerThread 初始化完成
+3. uWS::App().listen() — 此时才开始接受连接
 ```
 
 所有模块必须在 listen 之前就绪。
@@ -47,12 +43,9 @@ Worker 以 `threaded=false` 创建。Channel 的 consumer fd 注册到 WorkerThr
 ```
 1. g_shutdown = true → uWS timer 检测到 → 关闭 listen socket → uWS loop 退出
 2. server.run() 返回
-3. WorkerThread::stop() — closeAllRooms() 触发 unregisterRoom 入队到 registry worker
-4. server.stopRegistryWorker() — 排空剩余 Redis 任务
-5. registry->stop() — 断开 Redis 连接
+3. WorkerThread::stop() — 关闭房间与 worker 资源
+4. 主进程退出
 ```
-
-顺序不能反：WorkerThread 先停（产生 unregister 任务），registry worker 后停（消费任务）。
 
 ## Session Identity
 
@@ -67,31 +60,6 @@ join 请求 → 主线程预分配 newSessionId = g_nextSessionId++
 ```
 
 `g_nextSessionId` 从随机大数开始，避免重启后 ID 碰撞。
-
-## Redis 缓存架构
-
-### 锁分离
-
-- `cmdMutex_`：串行化 Redis 命令（EVAL/GET/SET/MGET）
-- `cacheMutex_`：保护本地 `nodeCache_` / `roomCache_` 读写
-
-**规则：`cacheMutex_` 内禁止做 Redis I/O。** 先做 Redis 调用收集数据，再拿 `cacheMutex_` 一次性更新。
-
-### 批量操作
-
-- `syncAllUnlocked()`：KEYS + MGET（2 次往返），不是 KEYS + N×GET
-- `evictDeadNodes()`：pipeline EXISTS（1 次往返），不是 N×EXISTS
-- `syncNodesUnlocked()`：轻量版，只同步 node 缓存（resolveRoom cache miss fallback）
-
-### 读路径
-
-- `claimRoom()`：先查 `roomCache_`（零 Redis），miss 时走 Redis EVAL
-- `findBestNodeCached()`：纯内存遍历 `nodeCache_`
-- `resolveRoom()`：cache miss 时 `syncNodesUnlocked()` 回 Redis 查一次再重试
-
-### Fire-and-forget
-
-`refreshRoom()` / `unregisterRoom()` 通过 `registryTask_` 回调投递到 registry worker 线程，不在 WorkerThread 执行。`enqueueRegistryTask` 有 stopped 守卫：registry worker 已停时 inline 执行。
 
 ## Worker 管理
 
@@ -130,7 +98,7 @@ join
   -> plainPublish / plainSubscribe
   -> UDP PlainTransport RTP/RTCP
   -> RoomService / Router / Transport
-  -> Producer / Consumer / recording / QoS aggregation
+  -> Producer / Consumer / QoS aggregation
 ```
 
 ## 数据流
@@ -143,7 +111,6 @@ join
   → WorkerThread: sessionId 校验 → RoomService.produce()
     → ORTC 协商 → Channel.requestWait() → pipe write → poll+read
     → auto-subscribe: 为其他 peer 创建 Consumer
-    → auto-record: PlainTransport + PIPE Consumer
   → loop->defer() → uWS 主线程 → ws.send(response)
   → loop->defer() → ws.send(newConsumer) → 其他浏览器
 ```
@@ -156,7 +123,6 @@ join
                                           └──→ Consumer(PIPE) → PlainTransport
                                                   │ UDP 127.0.0.1
                                                   ▼
-                                            PeerRecorder → .webm + .qos.json
 ```
 
 ## 测试
@@ -165,17 +131,14 @@ join
 
 | 套件 | 内容 |
 |------|------|
-| mediasoup_tests | ORTC、RTP 类型、Room/Peer、geo、多节点辅助、request timeout、review fixes、基础稳定性单测 |
+| mediasoup_tests | ORTC、RTP 类型、Room/Peer、geo、request timeout、review fixes、基础稳定性单测 |
 | mediasoup_qos_unit_tests | uplink/downlink QoS 单测、downlink planner / demand / supply 单测 |
 | mediasoup_integration_tests | 黑盒：真实 SFU + WebSocket 客户端 |
-| mediasoup_review_fix_tests | 重连、geo 路由、country isolation、缓存、session identity |
+| mediasoup_review_fix_tests | 重连、geo 路由、country isolation、session identity |
 | mediasoup_stability_integration_tests | close/disconnect 各种时序 |
 | mediasoup_qos_integration_tests | stats 采集、广播、policy / override、downlink / publisher supply、plainPublish 约束 |
 | mediasoup_e2e_tests | 多 peer 发布/订阅压力 |
-| mediasoup_topology_tests | 多节点 room affinity、crash takeover |
-| mediasoup_multinode_tests | 多节点 resolve、负载、TTL、fallback |
 | mediasoup_qos_accuracy_tests | QoS 精度（真实 UDP 收发） |
-| mediasoup_qos_recording_accuracy_tests | 录制 QoS 精度 |
 | mediasoup_bench | Worker 并发压测 |
 
 ### 运行
@@ -194,19 +157,12 @@ cd /path/to/mediasoup-cpp
 ./build/mediasoup_stability_integration_tests
 ./build/mediasoup_qos_integration_tests
 ./build/mediasoup_e2e_tests
-./build/mediasoup_topology_tests
-./build/mediasoup_multinode_tests
-
-# Redis-backed 套件会自启临时 Redis（需要 PATH 中有 redis-server）
-# mediasoup_review_fix_tests
-# mediasoup_topology_tests
-# mediasoup_multinode_tests
 
 # run_all_tests.sh / run_qos_tests.sh 遇到单个测试失败后会继续跑剩余选中项，
 # 最终统一输出失败汇总并返回非 0。
 # run_all_tests.sh 同时会刷新 docs/full-regression-test-results.md，
 # 记录本次仓库全量回归的选择项和逐任务结果。
-./scripts/run_all_tests.sh unit integration topology
+./scripts/run_all_tests.sh unit integration
 ./scripts/run_all_tests.sh non-qos
 
 # nightly 全量回归包装器：
@@ -221,15 +177,10 @@ cd /path/to/mediasoup-cpp
 ./build/mediasoup_qos_unit_tests
 ```
 
-### 已知 flaky test
-
-- `QosRecordingAccuracyTest.TwentyPercentLossQosFile`：依赖 RTCP RR 统计时序，系统负载高时偶发失败。单独跑稳定通过。
-- `MultiSfuTopologyTest.NodeCrashRoomTakeover`：依赖 pub/sub 传播延迟（subscriber 2 秒 read timeout），偶发失败。
-
 ## 关键规则
 
 1. **Channel IPC 只用 `requestWait()`**，禁止 `request().get()`（非线程模式死锁）
-2. **`cacheMutex_` 内禁止 Redis I/O**
+2. **主线程和 WorkerThread 的状态变更必须保持单线程所有权**
 3. **Room dispatch 在 dispatch 前绑定**，不在 defer 里
 4. **每次新增功能必须补测试**
 5. **`signal(SIGPIPE, SIG_IGN)` 必须在 main 开头**
@@ -262,7 +213,7 @@ src/
 ├── SignalingServer.h         # signaling server facade
 ├── SignalingServerWs.{h,cpp} # WebSocket 请求、session、stale 请求保护
 ├── SignalingServerHttp.{h,cpp} # HTTP 路由、metrics、静态文件
-├── SignalingServerRuntime.cpp # runtime snapshot、registry worker、dispatch helper
+├── SignalingServerRuntime.cpp # runtime snapshot、dispatch helper
 ├── SignalingSocketState.h    # ws/session/rate-limit helper
 ├── SignalingRequestDispatcher.h # method -> RoomService dispatch
 ├── StaticFileResponder.h     # 静态文件 path resolve + streaming
@@ -272,15 +223,13 @@ src/
 ├── RoomServiceMedia.cpp      # transport / produce / consume
 ├── RoomServiceStats.cpp      # peer stats collect / stats broadcast
 ├── RoomServiceQos.cpp        # QoS ingest / override / connection-quality / room-pressure
-├── RoomServiceRegistryView.cpp # registry heartbeat / resolve / node-load view
+├── RoomServiceRegistryView.cpp # local resolve / node-load view
 ├── RoomServiceDownlink.cpp   # downlink ingest / planning / publisher supply
 ├── RoomMediaHelpers.h        # room-level media helper
-├── RoomRecordingHelpers.{h,cpp} # recorder helper
 ├── RoomDownlinkHelpers.h     # downlink helper
 ├── RoomStatsQosHelpers.h     # stats / QoS helper
 ├── RoomCleanupHelpers.h      # room cleanup helper
 ├── RoomManager.h             # Room/Peer 生命周期、idle GC
-├── RoomRegistry.{h,cpp}      # Redis 多节点路由 + 本地缓存 + pub/sub
 ├── GeoRouter.h               # IP 地理定位 + ISP 评分
 ├── WorkerManager.h           # Worker 池、负载均衡、respawn 限流
 ├── Channel.h/cpp             # Pipe IPC（FlatBuffers，request/response/notification）
@@ -288,36 +237,30 @@ src/
 ├── Router.h/cpp              # Router：创建 transport、管理 producer
 ├── Transport.h/cpp           # produce/consume/getStats FlatBuffers 协议
 ├── WebRtcTransport.h/cpp     # ICE/DTLS transport
-├── PlainTransport.h          # Plain RTP transport（录制用）
+├── PlainTransport.h          # Plain RTP transport
 ├── Producer.h/cpp            # Producer（score 追踪、stats）
 ├── Consumer.h/cpp            # Consumer（score 追踪、stats）
 ├── Peer.h                    # Peer 状态（transports、producers、consumers、sessionId）
 ├── ortc.h                    # ORTC 协商（codec 匹配、RTP mapping）
-├── Recorder.h                # PeerRecorder 声明
-├── Recorder.cpp              # RTP→WebM 录制 + QoS 时间线实现（依赖 common/media + common/ffmpeg）
 ├── EventEmitter.h            # 轻量事件系统
 └── Logger.h                  # spdlog 封装
 tests/
 ├── test_ortc.cpp                      # ORTC 协商
 ├── test_room.cpp                      # Room/Peer 管理
 ├── test_rtp_types.cpp                 # RTP 类型序列化
-├── test_stability.cpp                 # Recorder 稳定性、EventEmitter 清理
+├── test_stability.cpp                 # EventEmitter 清理
 ├── test_worker_queue.cpp              # WorkerThread 任务队列
-├── test_multinode.cpp                 # WorkerManager、room dispatch、respawn 限流
 ├── test_request_timeout.cpp           # Channel IPC 超时
 ├── test_review_fixes.cpp              # 历史 review 修复回归
 ├── test_common_media.cpp              # 共享 RTP/H264 helper 单测
 ├── test_qos_unit.cpp                  # QoS 数据结构
 ├── test_qos_accuracy.cpp             # QoS 精度（真实 UDP 收发）
-├── test_qos_recording_accuracy.cpp   # 录制 QoS 精度
 ├── test_geo_router.cpp               # 地理路由评分
 ├── test_integration.cpp              # 黑盒集成测试
 ├── test_review_fixes_integration.cpp # 重连/geo/cache/session 集成测试
 ├── test_stability_integration.cpp    # close/disconnect 集成测试
 ├── test_qos_integration.cpp          # QoS 集成测试
 ├── test_e2e_pubsub.cpp              # 端到端发布订阅
-├── test_multi_sfu_topology.cpp      # 多节点拓扑
-├── test_multinode_integration.cpp   # 多节点集成
 └── bench_worker_load.cpp              # Worker 压测
 ```
 

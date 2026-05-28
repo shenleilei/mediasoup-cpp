@@ -20,7 +20,6 @@ DEFAULT_GROUPS=(
   cpp-unit
   cpp-integration
   cpp-accuracy
-  cpp-recording
   node-harness
   browser-harness
   matrix
@@ -63,7 +62,6 @@ Available groups:
   cpp-unit          服务端 QoS 相关单测（包含 uplink/downlink QoS 单测）
   cpp-integration   服务端 QoS 集成测试（包含 uplink/downlink QoS 集成测试）
   cpp-accuracy      QoS accuracy 测试
-  cpp-recording     QoS recording accuracy 测试
   node-harness      Node QoS harness 场景
   browser-harness   browser_server_signal + browser_loopback + downlink browser harnesses
   matrix            browser loopback full matrix（run_matrix.mjs）
@@ -664,18 +662,6 @@ run_cpp_accuracy() {
     "$BUILD_DIR/mediasoup_qos_accuracy_tests"
 }
 
-run_cpp_recording() {
-  require_file "$BUILD_DIR/mediasoup_qos_recording_accuracy_tests"
-  ensure_target_built \
-    mediasoup_qos_recording_accuracy_tests \
-    "$BUILD_DIR/mediasoup_qos_recording_accuracy_tests" \
-    "$ROOT_DIR/tests/test_qos_recording_accuracy.cpp"
-  run_cmd \
-    "cpp-recording" \
-    --cwd "$ROOT_DIR" \
-    "$BUILD_DIR/mediasoup_qos_recording_accuracy_tests"
-}
-
 run_node_harness() {
   prepare_test_port 14011 "QoS node harness SFU port 14011"
   local failed=0
@@ -817,7 +803,6 @@ run_group() {
     cpp-unit) run_cpp_unit ;;
     cpp-integration) run_cpp_integration ;;
     cpp-accuracy) run_cpp_accuracy ;;
-    cpp-recording) run_cpp_recording ;;
     node-harness) run_node_harness ;;
     browser-harness) run_browser_harness ;;
     matrix) run_matrix ;;
@@ -829,7 +814,7 @@ run_group() {
 run_target() {
   local target="$1"
   case "$target" in
-    client-js|cpp-unit|cpp-integration|cpp-accuracy|cpp-recording|node-harness|browser-harness|matrix|downlink-matrix)
+    client-js|cpp-unit|cpp-integration|cpp-accuracy|node-harness|browser-harness|matrix|downlink-matrix)
       run_group "$target"
       ;;
     node-harness:*)

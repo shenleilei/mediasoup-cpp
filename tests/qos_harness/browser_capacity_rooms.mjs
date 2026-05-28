@@ -26,7 +26,7 @@ async function withTimeout(label, promise, timeoutMs) {
       promise,
       new Promise((_, reject) => {
         timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs} ms`)), timeoutMs);
-      }),
+      })
     ]);
   } finally {
     if (timer) {
@@ -192,10 +192,7 @@ function startSfu({ port, workers }) {
       '--nodaemon',
       `--port=${port}`,
       `--workers=${workers}`,
-      '--workerBin=./mediasoup-worker',
-      '--redisHost=0.0.0.0',
-      '--redisPort=1',
-      '--noRedisRequired',
+      '--workerBin=./mediasoup-worker'
     ],
     {
       cwd: repoRoot,
@@ -321,7 +318,7 @@ async function run() {
     protocolTimeout: 10 * 60 * 1000,
     args: [
       '--no-sandbox',
-      '--autoplay-policy=no-user-gesture-required',
+      '--autoplay-policy=no-user-gesture-required'
     ],
   });
 

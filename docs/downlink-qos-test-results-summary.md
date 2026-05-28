@@ -10,7 +10,7 @@
 - 失败：`1`
 - 未执行：`0`
 - 执行脚本：`scripts/run_qos_tests.sh`
-- 本次选择目标：`client-js`, `cpp-unit`, `cpp-integration`, `cpp-accuracy`, `cpp-recording`, `node-harness`, `browser-harness`, `matrix`, `downlink-matrix`
+- 本次选择目标：`client-js`, `cpp-unit`, `cpp-integration`, `cpp-accuracy`, `node-harness`, `browser-harness`, `matrix`, `downlink-matrix`
 
 ### 1.1 失败任务
 

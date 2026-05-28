@@ -176,12 +176,7 @@ Redis 在运行时的定位是：
 - Redis 不可用时，启动不会成功
 - Redis 在运行中失联时，`/readyz` 会失败
 
-如果确实需要本地 isolated 调试，必须显式配置 `redisRequired=false`，而不是依赖隐式降级。
-
-- 无论是否启用 local-only：
-
-- 构建时仍需要 `hiredis`
-- 多节点测试和生产路由依赖 Redis
+当前运行路径是 local-only，默认构建与测试不再依赖 Redis / hiredis。
 
 ### 5.3 `ip2region.xdb`
 

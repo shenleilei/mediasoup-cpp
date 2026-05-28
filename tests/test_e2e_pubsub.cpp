@@ -68,7 +68,6 @@ protected:
 			" --port=" + std::to_string(PORT) +
 			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(PORT)) +
 			" --workers=2 --workerBin=./mediasoup-worker"
-			" --redisHost=0.0.0.0 --redisPort=1 --noRedisRequired"
 			" > /dev/null 2>&1 & echo $!";
 		FILE* fp = popen(cmd.c_str(), "r");
 		ASSERT_NE(fp, nullptr);

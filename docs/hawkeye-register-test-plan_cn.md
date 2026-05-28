@@ -1,5 +1,7 @@
 # Hawkeye WebSocket 注册联调测试文档
 
+> 说明：本文档中的 Redis 字段和观测步骤反映的是历史联调环境，当前 `mediasoup-cpp` 主运行路径已经切换为 local-only。
+
 本文档用于验证 `mediasoup-cpp` 新增的 Hawkeye WebSocket 注册能力，以及 `hawkeye-server` 对服务注册、注销和选服的行为。
 
 ## 1. 目标
