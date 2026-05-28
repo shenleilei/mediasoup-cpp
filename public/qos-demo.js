@@ -1274,29 +1274,52 @@
         appData: {},
       });
 
-      const element = document.createElement(consumer.kind === 'video' ? 'video' : 'audio');
-      element.autoplay = true;
-      element.playsInline = true;
-      element.srcObject = new MediaStream([consumer.track]);
-      element.play().catch(() => {});
-
       if (consumer.kind === 'video') {
+        const stream = new MediaStream([consumer.track]);
         const card = createVideoCard({
           title: '远端视频',
           subtitle: data.peerId || data.producerId,
           badgeText: '已订阅',
-          stream: new MediaStream([consumer.track]),
+          stream,
           muted: true,
         });
         const renderedElement = card.querySelector('video');
         card.dataset.remoteProducerId = data.producerId;
         card.dataset.consumerId = consumer.id;
 
+        const ensurePlayback = () => {
+          if (!renderedElement) {
+            return;
+          }
+          if (renderedElement.srcObject !== stream) {
+            renderedElement.srcObject = stream;
+          }
+          const playResult = renderedElement.play();
+          if (playResult && typeof playResult.catch === 'function') {
+            playResult.catch(error => {
+              log(`Remote video play retry failed for ${data.peerId || data.producerId}: ${error.message}`);
+            });
+          }
+        };
+
+        renderedElement.autoplay = true;
+        renderedElement.playsInline = true;
+        renderedElement.muted = true;
+        renderedElement.srcObject = stream;
+        renderedElement.addEventListener('loadedmetadata', ensurePlayback, { once: true });
+        renderedElement.addEventListener('canplay', ensurePlayback, { once: true });
+        consumer.track.onunmute = () => {
+          log(`Remote track unmuted for ${data.peerId || data.producerId}`);
+          ensurePlayback();
+        };
+        ensurePlayback();
+
         const entry = {
           consumer,
           producerId: data.producerId,
           peerId: data.peerId || data.producerId,
           element: renderedElement,
+          stream,
           hintTargetEl: card.querySelector('.video-frame'),
           card,
           serverState: null,
@@ -2219,6 +2242,53 @@
     renderQosPanel();
     updateControls();
   }
+
+  function snapshotDemoState() {
+    return {
+      roomId: state.roomId,
+      peerId: state.peerId,
+      status: els.status ? els.status.textContent || '' : '',
+      localVideos: els.localVideos ? els.localVideos.querySelectorAll('video').length : 0,
+      remoteVideos: els.remoteVideos ? els.remoteVideos.querySelectorAll('video').length : 0,
+      remotePeerGroups: els.remoteVideos ? els.remoteVideos.querySelectorAll('.remote-peer-group').length : 0,
+      remoteVideoConsumers: state.remoteVideoConsumers.size,
+      pendingConsumers: state.pendingConsumers.length,
+      hasSendTransport: Boolean(state.sendTransport),
+      hasRecvTransport: Boolean(state.recvTransport),
+      publishedProducers: state.publishedProducers.size,
+    };
+  }
+
+  async function waitForRemoteVideos(minCount = 1, timeoutMs = 15000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (state.remoteVideoConsumers.size >= minCount) {
+        const rendered = els.remoteVideos
+          ? els.remoteVideos.querySelectorAll('video').length
+          : 0;
+        if (rendered >= minCount) {
+          return snapshotDemoState();
+        }
+      }
+      await sleep(100);
+    }
+    throw new Error(`remote videos not rendered within ${timeoutMs}ms`);
+  }
+
+  window.__qosDemoHarness = {
+    join: async (roomId = 'test-room') => {
+      els.roomInput.value = roomId;
+      await joinRoom();
+      return snapshotDemoState();
+    },
+    publish: async () => {
+      await publishMedia();
+      return snapshotDemoState();
+    },
+    snapshot: snapshotDemoState,
+    waitForRemoteVideos,
+    stopQos,
+  };
 
   function renderOverviewSection() {
     const currentPeerStats = getCurrentPeerStats();
