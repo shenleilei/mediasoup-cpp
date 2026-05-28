@@ -19,14 +19,12 @@ WorkerThread::WorkerThread(int id,
 	int numWorkers,
 	const std::vector<nlohmann::json>& mediaCodecs,
 	const std::vector<nlohmann::json>& listenInfos,
-	RoomRegistry* registry,
 	int webRtcServerPortBase,
 	size_t maxRoutersPerWorker)
 	: id_(id)
 	, workerSettings_(workerSettings)
 	, mediaCodecs_(mediaCodecs)
 	, listenInfos_(listenInfos)
-	, registry_(registry)
 	, webRtcServerPortBase_(webRtcServerPortBase)
 	, maxRoutersPerWorker_(maxRoutersPerWorker)
 	, numWorkersTarget_(numWorkers)
@@ -264,7 +262,7 @@ void WorkerThread::createWorkers()
 	}
 
 	roomManager_ = std::make_unique<RoomManager>(*workerManager_, mediaCodecs_, listenInfos_);
-	roomService_ = std::make_unique<RoomService>(*roomManager_, registry_);
+	roomService_ = std::make_unique<RoomService>(*roomManager_);
 
 	if (notifyFn_) roomService_->setNotify(notifyFn_);
 	if (broadcastFn_) roomService_->setBroadcast(broadcastFn_);

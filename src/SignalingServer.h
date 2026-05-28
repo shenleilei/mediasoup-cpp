@@ -19,7 +19,6 @@ using json = nlohmann::json;
 inline constexpr const char* kSignalingTlsCertFile = "/opt/mediasoup-cpp/certs/tls.pem";
 inline constexpr const char* kSignalingTlsKeyFile = "/opt/mediasoup-cpp/certs/tls.key";
 
-class RoomRegistry;
 class WorkerThread;
 struct SignalingServerHttp;
 struct SignalingServerWs;
@@ -36,11 +35,8 @@ public:
 	/// Construct with WorkerThread pool (new architecture).
 	/// @param port           WebSocket listening port
 	/// @param workerThreads  Pool of WorkerThreads (each owns Workers + Rooms)
-	/// @param registry       Shared RoomRegistry (nullable)
 	SignalingServer(int port,
 		std::vector<std::unique_ptr<WorkerThread>>& workerThreads,
-		RoomRegistry* registry,
-		bool redisRequired = true,
 		SignalingTlsOptions tlsOptions = {});
 	~SignalingServer();
 	bool run(const std::function<void(bool)>& startupResult = {});
@@ -56,13 +52,9 @@ private:
 		size_t totalWorkers = 0;
 		size_t totalMaxRooms = 0;
 		size_t availableWorkerThreads = 0;
-		size_t knownNodes = 0;
 		size_t dispatchRooms = 0;
 		uint64_t staleRequestDrops = 0;
 		uint64_t rejectedClientStats = 0;
-		bool registryEnabled = false;
-		bool redisRequired = true;
-		bool redisReady = false;
 		bool startupSucceeded = false;
 		bool shutdownRequested = false;
 		json workerQueues = json::array();
@@ -90,8 +82,6 @@ private:
 
 	int port_;
 	std::vector<std::unique_ptr<WorkerThread>>& workerThreads_;
-	RoomRegistry* registry_;
-	bool redisRequired_ = true;
 	SignalingTlsOptions tlsOptions_;
 	std::atomic<bool> running_{false};
 

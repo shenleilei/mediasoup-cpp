@@ -5,7 +5,6 @@
 #include "SignalingSocketState.h"
 #include "SignalingServerWs.h"
 #include "StaticFileResponder.h"
-#include "RoomRegistry.h"
 #include "WorkerThread.h"
 #include "qos/QosValidator.h"
 #include <App.h>
@@ -77,13 +76,9 @@ bool ValidateSignalingTlsFiles(const SignalingTlsOptions& options, std::string& 
 
 SignalingServer::SignalingServer(int port,
 	std::vector<std::unique_ptr<WorkerThread>>& workerThreads,
-	RoomRegistry* registry,
-	bool redisRequired,
 	SignalingTlsOptions tlsOptions)
 	: port_(port)
 	, workerThreads_(workerThreads)
-	, registry_(registry)
-	, redisRequired_(redisRequired)
 	, tlsOptions_(std::move(tlsOptions))
 {}
 
@@ -119,9 +114,6 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 
 	// Stats broadcast timer — dispatches to all WorkerThreads
 	struct us_timer_t* statsTimer = nullptr;
-
-	// Redis heartbeat timer — runs in main thread (RoomRegistry is thread-safe)
-	struct us_timer_t* redisTimer = nullptr;
 	struct us_timer_t* shutdownTimer = nullptr;
 
 	bool listenSucceeded = false;
@@ -133,7 +125,7 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 
 	SignalingServerHttp::RegisterHttpRoutes(app, *this, loop);
 
-		app.listen(port_, [this, &statsTimer, &redisTimer, &shutdownTimer, &listenSucceeded, &notifyStartup](auto* listenSocket) {
+		app.listen(port_, [this, &statsTimer, &shutdownTimer, &listenSucceeded, &notifyStartup](auto* listenSocket) {
 			if (listenSocket) {
 				listenSucceeded = true;
 				notifyStartup(true);
@@ -146,7 +138,6 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 					loop,
 					listenSocket,
 					statsTimer,
-					redisTimer,
 					shutdownTimer);
 			} else {
 				notifyStartup(false);
@@ -163,7 +154,6 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 		}
 	};
 	closeTimer(statsTimer);
-	closeTimer(redisTimer);
 	closeTimer(shutdownTimer);
 
 	running_.store(false, std::memory_order_relaxed);

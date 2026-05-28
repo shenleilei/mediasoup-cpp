@@ -2,8 +2,8 @@
 
 namespace mediasoup {
 
-RoomService::RoomService(RoomManager& roomManager, RoomRegistry* registry)
-	: roomManager_(roomManager), registry_(registry)
+RoomService::RoomService(RoomManager& roomManager)
+	: roomManager_(roomManager)
 	, logger_(Logger::Get("RoomService")) {}
 
 } // namespace mediasoup

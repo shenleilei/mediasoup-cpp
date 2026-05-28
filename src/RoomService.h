@@ -31,7 +31,6 @@
 namespace mediasoup {
 
 using json = nlohmann::json;
-class RoomRegistry;
 
 class RoomService {
 public:
@@ -47,7 +46,7 @@ public:
 	using DownlinkSnapshotAppliedFn = std::function<void(
 		const std::string&, const std::string&, uint64_t)>;
 
-	RoomService(RoomManager& roomManager, RoomRegistry* registry);
+	RoomService(RoomManager& roomManager);
 
 	void setNotify(NotifyFn fn) { notify_ = std::move(fn); }
 	void setBroadcast(BroadcastFn fn) { broadcast_ = std::move(fn); }
@@ -198,7 +197,6 @@ private:
 		const std::unordered_map<std::string, std::shared_ptr<Producer>>& producers);
 
 	RoomManager& roomManager_;
-	RoomRegistry* registry_;
 	NotifyFn notify_;
 	BroadcastFn broadcast_;
 	RoomLifecycleFn roomLifecycle_;

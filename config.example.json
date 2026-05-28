@@ -3,8 +3,6 @@
   "workers": 0,
   "workerBin": "./mediasoup-worker",
   "webRtcServerPort": 9000,
-  "redisHost": "127.0.0.1",
-  "redisPort": 6379,
   "nodeId": "",
   "nodeAddress": "",
   "hawkeyeRegisterUrl": "ws://127.0.0.1:8080/register_ws",

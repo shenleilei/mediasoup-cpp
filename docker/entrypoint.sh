@@ -49,24 +49,6 @@ fi
 
 args+=("--webRtcServerPort=${web_rtc_server_port}")
 
-if [[ -n "${MEDIASOUP_REDIS_HOST:-}" ]]; then
-  args+=("--redisHost=${MEDIASOUP_REDIS_HOST}")
-else
-  args+=("--redisHost=0.0.0.0")
-fi
-
-if [[ -n "${MEDIASOUP_REDIS_PORT:-}" ]]; then
-  args+=("--redisPort=${MEDIASOUP_REDIS_PORT}")
-else
-  args+=(--redisPort=1)
-fi
-
-if [[ "${MEDIASOUP_REDIS_REQUIRED:-0}" == "1" ]]; then
-  args+=(--redisRequired)
-else
-  args+=(--noRedisRequired)
-fi
-
 if [[ -n "${MEDIASOUP_NODE_ID:-}" ]]; then
   args+=("--nodeId=${MEDIASOUP_NODE_ID}")
 fi

@@ -138,11 +138,8 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 					if (cfg.contains("port")) options.signalingPort = cfg["port"].get<int>();
 					if (cfg.contains("workers")) { int v = cfg["workers"].get<int>(); if (v > 0) options.numWorkers = v; }
 					if (cfg.contains("workerThreads")) { int v = cfg["workerThreads"].get<int>(); if (v > 0) options.numWorkerThreads = v; }
-					if (cfg.contains("workerBin")) options.workerBin = cfg["workerBin"].get<std::string>();
-					if (cfg.contains("redisHost")) options.redisHost = cfg["redisHost"].get<std::string>();
-					if (cfg.contains("redisPort")) options.redisPort = cfg["redisPort"].get<int>();
-					if (cfg.contains("redisRequired")) options.redisRequired = cfg["redisRequired"].get<bool>();
-					if (cfg.contains("webRtcServerPort")) { int v = cfg["webRtcServerPort"].get<int>(); if (v > 0) options.webRtcServerPort = v; }
+				if (cfg.contains("workerBin")) options.workerBin = cfg["workerBin"].get<std::string>();
+				if (cfg.contains("webRtcServerPort")) { int v = cfg["webRtcServerPort"].get<int>(); if (v > 0) options.webRtcServerPort = v; }
 				if (cfg.contains("nodeId")) options.nodeId = cfg["nodeId"].get<std::string>();
 				if (cfg.contains("nodeAddress")) options.nodeAddress = cfg["nodeAddress"].get<std::string>();
 				if (cfg.contains("hawkeyeRegisterUrl")) options.hawkeyeRegisterUrl = cfg["hawkeyeRegisterUrl"].get<std::string>();
@@ -194,13 +191,9 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 			if (trySetInt("--port=", options.signalingPort)) {}
 			else if (trySetInt("--workers=", options.numWorkers)) {}
 			else if (trySetInt("--workerThreads=", options.numWorkerThreads)) {}
-			else if (arg.find("--workerBin=") == 0) options.workerBin = arg.substr(12);
-			else if (arg.find("--redisHost=") == 0) options.redisHost = arg.substr(12);
-			else if (trySetInt("--redisPort=", options.redisPort)) {}
-			else if (arg == "--redisRequired") options.redisRequired = true;
-			else if (arg == "--noRedisRequired") options.redisRequired = false;
-			else if (trySetInt("--webRtcServerPort=", options.webRtcServerPort)) {}
-			else if (arg.find("--nodeId=") == 0) options.nodeId = arg.substr(9);
+		else if (arg.find("--workerBin=") == 0) options.workerBin = arg.substr(12);
+		else if (trySetInt("--webRtcServerPort=", options.webRtcServerPort)) {}
+		else if (arg.find("--nodeId=") == 0) options.nodeId = arg.substr(9);
 		else if (arg.find("--nodeAddress=") == 0) options.nodeAddress = arg.substr(14);
 		else if (arg.find("--hawkeyeRegisterUrl=") == 0) options.hawkeyeRegisterUrl = arg.substr(21);
 		else if (arg.find("--hawkeyeRegisterType=") == 0) options.hawkeyeRegisterType = arg.substr(22);
@@ -351,27 +344,9 @@ RuntimeServices CreateRuntimeServices(RuntimeOptions& options)
 	}
 
 	try {
-		services.registry = std::make_unique<RoomRegistry>(
-			options.redisHost, options.redisPort,
-			options.nodeId, options.nodeAddress,
-			options.nodeLat, options.nodeLng,
-			options.nodeIsp, options.nodeCountry,
-			options.countryIsolation);
-		if (services.geoRouter) services.registry->setGeoRouter(services.geoRouter.get());
-		services.registry->start();
-		spdlog::info("RoomRegistry started [nodeId:{} addr:{} lat:{} lng:{} isp:{} country:{} isolation:{}]",
-			options.nodeId, options.nodeAddress, options.nodeLat, options.nodeLng,
-			options.nodeIsp, options.nodeCountry, options.countryIsolation);
+		spdlog::info("Starting in local-only mode");
 	} catch (const std::exception& e) {
-		if (options.redisRequired) {
-			services.startupError =
-				"Redis required but unavailable: " + std::string(e.what());
-			spdlog::error("{}", services.startupError);
-		} else {
-			spdlog::warn(
-				"Redis not available ({}), local-only mode explicitly enabled via redisRequired=false",
-				e.what());
-		}
+		(void)e;
 	}
 
 	return services;
@@ -423,8 +398,7 @@ WorkerSettings BuildWorkerSettings(const RuntimeOptions& options)
 std::vector<std::unique_ptr<WorkerThread>> CreateWorkerThreadPool(
 	const RuntimeOptions& options,
 	const std::vector<nlohmann::json>& mediaCodecs,
-	const std::vector<nlohmann::json>& listenInfos,
-	RoomRegistry* registry)
+	const std::vector<nlohmann::json>& listenInfos)
 {
 	auto workerSettings = BuildWorkerSettings(options);
 	auto workersPerThread = ComputeWorkersPerThread(options.numWorkers, options.numWorkerThreads);
@@ -439,7 +413,6 @@ std::vector<std::unique_ptr<WorkerThread>> CreateWorkerThreadPool(
 				workersPerThread[i],
 				mediaCodecs,
 				listenInfos,
-				registry,
 				nextWebRtcServerPort,
 				options.maxRoutersPerWorker > 0 ? static_cast<size_t>(options.maxRoutersPerWorker) : 0);
 			workerThreads.push_back(std::move(workerThread));

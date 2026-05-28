@@ -21,7 +21,6 @@
 
 namespace mediasoup {
 
-class RoomRegistry;
 inline bool IsRecoverableEpollWaitError(int errorCode)
 {
 	return errorCode == EINTR;
@@ -58,10 +57,9 @@ public:
 		const WorkerSettings& workerSettings,
 		int numWorkers,
 		const std::vector<nlohmann::json>& mediaCodecs,
-	const std::vector<nlohmann::json>& listenInfos,
-	RoomRegistry* registry,
-	int webRtcServerPortBase = 9000,
-	size_t maxRoutersPerWorker = 0);
+		const std::vector<nlohmann::json>& listenInfos,
+		int webRtcServerPortBase = 9000,
+		size_t maxRoutersPerWorker = 0);
 	~WorkerThread();
 
 	void start();
@@ -123,7 +121,6 @@ private:
 	WorkerSettings workerSettings_;
 	std::vector<nlohmann::json> mediaCodecs_;
 	std::vector<nlohmann::json> listenInfos_;
-	RoomRegistry* registry_;
 	int webRtcServerPortBase_;
 	size_t maxRoutersPerWorker_;
 	int numWorkersTarget_;

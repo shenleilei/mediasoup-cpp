@@ -1,7 +1,6 @@
 #include "RoomService.h"
 
 #include "RoomCleanupHelpers.h"
-#include "RoomRegistry.h"
 #include "RoomStatsQosHelpers.h"
 
 namespace mediasoup {
@@ -9,15 +8,7 @@ namespace mediasoup {
 RoomService::Result RoomService::join(const std::string& roomId, const std::string& peerId,
 	const std::string& displayName, const json& rtpCapabilities, const std::string& clientIp)
 {
-	if (registry_) {
-		try {
-			std::string addr = registry_->claimRoom(roomId, clientIp);
-			if (!addr.empty()) return {false, {}, addr, ""};
-		} catch (const std::exception& e) {
-			MS_WARN(logger_, "[{} {}] claimRoom failed ({}), rejecting join", roomId, peerId, e.what());
-			return {false, {}, "", "room registry unavailable"};
-		}
-	}
+	(void)clientIp;
 
 	auto existingRoom = roomManager_.getRoom(roomId);
 	if (!existingRoom) {
@@ -25,16 +16,8 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 		if (maxRooms > 0 && roomManager_.roomCount() >= maxRooms) {
 			MS_WARN(logger_, "[{} {}] local node at capacity ({}/{})", roomId, peerId,
 				roomManager_.roomCount(), maxRooms);
-			if (registry_) {
-				try {
-					registry_->unregisterRoom(roomId);
-					auto resolved = registry_->resolveRoom(roomId, clientIp);
-					if (!resolved.wsUrl.empty() && resolved.wsUrl != registry_->nodeAddress())
-						return {false, {}, resolved.wsUrl, ""};
-				} catch (...) {}
-			}
-			return {false, {}, "", "no available capacity"};
-		}
+		return {false, {}, "", "no available capacity"};
+	}
 	}
 
 	if (!rtpCapabilities.is_null() && !rtpCapabilities.empty() && !rtpCapabilities.is_object()) {
@@ -74,12 +57,6 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 		subscriberControllers_.erase(roomstatsqos::MakePeerKey(roomId, peerId));
 		cleanupPeerTrackQosOverrides(roomId, peerId);
 		markDownlinkRoomDirty(roomId);
-	}
-
-	if (registry_) {
-		auto* reg = registry_;
-		std::string rid = roomId;
-		postRegistryTask([reg, rid] { reg->refreshRoom(rid); });
 	}
 
 	json existingProducers = json::array();
@@ -142,11 +119,6 @@ RoomService::Result RoomService::leave(const std::string& roomId, const std::str
 	}
 
 	if (room->empty()) {
-		if (registry_) {
-			auto* reg = registry_;
-			std::string rid = roomId;
-			postRegistryTask([reg, rid] { reg->unregisterRoom(rid); });
-		}
 		roomManager_.removeRoom(roomId);
 		if (roomLifecycle_) roomLifecycle_(roomId, false);
 	}
@@ -231,11 +203,6 @@ void RoomService::cleanupRoomResources(const std::string& roomId) {
 
 void RoomService::destroyRoom(const std::string& roomId) {
 	cleanupRoomResources(roomId);
-	if (registry_) {
-		auto* reg = registry_;
-		std::string rid = roomId;
-		postRegistryTask([reg, rid] { reg->unregisterRoom(rid); });
-	}
 	roomManager_.removeRoom(roomId);
 	if (roomLifecycle_) roomLifecycle_(roomId, false);
 }

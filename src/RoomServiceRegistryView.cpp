@@ -1,22 +1,14 @@
 #include "RoomService.h"
 
-#include "RoomRegistry.h"
 #include "RoomStatsQosHelpers.h"
 
 namespace mediasoup {
 
 json RoomService::resolveRoom(const std::string& roomId, const std::string& clientIp)
 {
-	if (!registry_) return {{"wsUrl", ""}, {"isNew", true}};
-	try {
-		auto result = registry_->resolveRoom(roomId, clientIp);
-		if (result.isNew && result.wsUrl.empty())
-			return {{"error", "no available nodes"}, {"wsUrl", ""}, {"isNew", true}};
-		return {{"wsUrl", result.wsUrl}, {"isNew", result.isNew}};
-	} catch (const std::exception& e) {
-		MS_WARN(logger_, "resolveRoom failed ({}), returning registry unavailable", e.what());
-		return {{"error", "room registry unavailable"}, {"wsUrl", ""}, {"isNew", false}};
-	}
+	(void)roomId;
+	(void)clientIp;
+	return {{"wsUrl", ""}, {"isNew", true}};
 }
 
 json RoomService::getNodeLoad() const

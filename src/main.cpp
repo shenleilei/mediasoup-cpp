@@ -77,7 +77,7 @@ int main(int argc, char* argv[]) {
 	if (!runtimeServices.startupError.empty()) {
 		return failExit();
 	}
-	auto workerThreads = CreateWorkerThreadPool(options, mediaCodecs, listenInfos, runtimeServices.registry.get());
+	auto workerThreads = CreateWorkerThreadPool(options, mediaCodecs, listenInfos);
 
 	if (workerThreads.empty()) {
 		spdlog::error("No WorkerThreads created, exiting");
@@ -94,8 +94,6 @@ int main(int argc, char* argv[]) {
 	SignalingServer server(
 		options.signalingPort,
 		workerThreads,
-		runtimeServices.registry.get(),
-		options.redisRequired,
 		tlsOptions);
 
 	spdlog::info("mediasoup-cpp SFU ready - {} WorkerThreads, {} total workers, signaling on port {}, nodeId={}",
@@ -107,16 +105,15 @@ int main(int argc, char* argv[]) {
 
 	// Graceful shutdown (reached when g_shutdown causes uWS loop to stop)
 	spdlog::info("Shutting down...");
-	// Stop WorkerThreads first — closeAllRooms() enqueues unregisterRoom tasks
+	// Stop WorkerThreads first so room state and worker resources are released before exit.
 	for (auto& wt : workerThreads) {
 		wt->stop();
 	}
 	if (hawkeyeRegisterClient) {
 		hawkeyeRegisterClient->stop();
 	}
-	// Now stop registry worker — drains remaining unregister tasks
+	// Local-only runtime keeps this as a no-op compatibility hook.
 	server.stopRegistryWorker();
-	if (runtimeServices.registry) runtimeServices.registry->stop();
 	spdlog::info("Shutdown complete");
 	if (!runOk) return failExit();
 	NotifyDaemonStartupStatus(true);

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "GeoRouter.h"
-#include "RoomRegistry.h"
 #include "Worker.h"
 
 #include <nlohmann/json.hpp>
@@ -19,9 +18,6 @@ struct RuntimeOptions {
 	std::string listenIp{ "0.0.0.0" };
 	std::string announcedIp;
 	std::string workerBin;
-	std::string redisHost{ "127.0.0.1" };
-	int redisPort{ 6379 };
-	bool redisRequired{ true };
 	int webRtcServerPort{ 0 };
 	std::string nodeId;
 	std::string nodeAddress;
@@ -49,7 +45,6 @@ struct RuntimeOptions {
 
 struct RuntimeServices {
 	std::unique_ptr<GeoRouter> geoRouter;
-	std::unique_ptr<RoomRegistry> registry;
 	std::string startupError;
 };
 
@@ -63,7 +58,6 @@ WorkerSettings BuildWorkerSettings(const RuntimeOptions& options);
 std::vector<std::unique_ptr<WorkerThread>> CreateWorkerThreadPool(
 	const RuntimeOptions& options,
 	const std::vector<nlohmann::json>& mediaCodecs,
-	const std::vector<nlohmann::json>& listenInfos,
-	RoomRegistry* registry);
+	const std::vector<nlohmann::json>& listenInfos);
 
 } // namespace mediasoup

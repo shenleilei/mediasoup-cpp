@@ -1,7 +1,6 @@
 #include "SignalingServerHttp.h"
 
 #include "Logger.h"
-#include "RoomRegistry.h"
 #include "StaticFileResponder.h"
 #include "WorkerThread.h"
 
@@ -47,77 +46,13 @@ void SignalingServerHttp::RegisterHttpRoutes(uWS::SSLApp& app, SignalingServer& 
 		}
 		const std::string clientIp = ResolveClientIp(res, req);
 		const auto requestStart = std::chrono::steady_clock::now();
-		spdlog::debug("api.resolve received [req:{} roomId:{} clientIp:{} registry:{}]",
-			requestId, roomId, clientIp, server.registry_ != nullptr);
-
-		if (!server.registry_) {
-			if (server.redisRequired_) {
-				res->writeStatus("503 Service Unavailable")
-					->writeHeader("Content-Type", "application/json")
-					->writeHeader("Access-Control-Allow-Origin", "*")
-					->end(R"({"error":"room registry unavailable","wsUrl":"","isNew":false})");
-				return;
-			}
-			res->writeHeader("Content-Type", "application/json")
-				->writeHeader("Access-Control-Allow-Origin", "*")
-				->end(R"({"wsUrl":"","isNew":true})");
-			return;
-		}
-
-		auto aborted = std::make_shared<std::atomic<bool>>(false);
-		res->onAborted([aborted] {
-			aborted->store(true, std::memory_order_relaxed);
-		});
-
-		server.enqueueRegistryTask([&server, loop, res, aborted, roomId, clientIp, requestId, requestStart] {
-			RoomRegistry::ResolveResult result{"", true};
-			bool unavailable = false;
-			const auto resolveStart = std::chrono::steady_clock::now();
-			spdlog::debug("api.resolve executing [req:{} roomId:{} clientIp:{}]",
-				requestId, roomId, clientIp);
-			try {
-				result = server.registry_->resolveRoom(roomId, clientIp);
-				if (result.isNew && result.wsUrl.empty()) {
-					unavailable = true;
-				}
-			} catch (const std::exception& e) {
-				spdlog::warn("api.resolve failed [req:{} roomId:{} error:{}]",
-					requestId, roomId, e.what());
-				unavailable = true;
-			} catch (...) {
-				spdlog::warn("api.resolve failed [req:{} roomId:{} error:unknown]",
-					requestId, roomId);
-				unavailable = true;
-			}
-			const auto resolveMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-				std::chrono::steady_clock::now() - resolveStart).count();
-			spdlog::debug("api.resolve resolved [req:{} roomId:{} wsUrl:{} isNew:{} resolveMs:{}]",
-				requestId, roomId, result.wsUrl, result.isNew, resolveMs);
-
-			json responseBody;
-			std::string status = "200 OK";
-			if (unavailable) {
-				status = "503 Service Unavailable";
-				responseBody = {{"error", "room registry unavailable"}, {"wsUrl", ""}, {"isNew", false}};
-			} else if (!result.wsUrl.empty()) {
-				responseBody = {{"wsUrl", result.wsUrl}, {"isNew", result.isNew}};
-			} else {
-				responseBody = {{"wsUrl", ""}, {"isNew", true}};
-			}
-			std::string body = responseBody.dump();
-
-			loop->defer([res, aborted, status = std::move(status), body = std::move(body)] {
-				if (aborted->load(std::memory_order_relaxed)) return;
-				res->writeStatus(status)
-					->writeHeader("Content-Type", "application/json")
-					->writeHeader("Access-Control-Allow-Origin", "*")
-					->end(body);
-			});
-			const auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-				std::chrono::steady_clock::now() - requestStart).count();
-			spdlog::debug("api.resolve response scheduled [req:{} roomId:{} totalMs:{}]",
-				requestId, roomId, totalMs);
-		}, "api.resolve#" + std::to_string(requestId) + " room=" + roomId);
+		(void)loop;
+		(void)clientIp;
+		(void)requestStart;
+		spdlog::debug("api.resolve received [req:{} roomId:{} local-only:true]", requestId, roomId);
+		res->writeHeader("Content-Type", "application/json")
+			->writeHeader("Access-Control-Allow-Origin", "*")
+			->end(R"({"wsUrl":"","isNew":true})");
 	});
 
 	app.get("/api/node-load", [&server](auto* res, auto*) {
@@ -128,10 +63,6 @@ void SignalingServerHttp::RegisterHttpRoutes(uWS::SSLApp& app, SignalingServer& 
 			{"workers", snapshot.totalWorkers},
 			{"workerThreads", server.workerThreads_.size()},
 			{"availableWorkerThreads", snapshot.availableWorkerThreads},
-			{"knownNodes", snapshot.knownNodes},
-			{"registryEnabled", snapshot.registryEnabled},
-			{"redisRequired", snapshot.redisRequired},
-			{"redisReady", snapshot.redisReady},
 			{"startupSucceeded", snapshot.startupSucceeded},
 			{"shutdownRequested", snapshot.shutdownRequested},
 			{"healthy", server.isHealthy(snapshot)},
@@ -154,9 +85,6 @@ void SignalingServerHttp::RegisterHttpRoutes(uWS::SSLApp& app, SignalingServer& 
 			{"ok", healthy},
 			{"startupSucceeded", snapshot.startupSucceeded},
 			{"shutdownRequested", snapshot.shutdownRequested},
-			{"registryEnabled", snapshot.registryEnabled},
-			{"redisRequired", snapshot.redisRequired},
-			{"redisReady", snapshot.redisReady},
 			{"ready", server.isReady(snapshot)},
 			{"workers", snapshot.totalWorkers},
 			{"workerThreads", server.workerThreads_.size()},
@@ -180,9 +108,6 @@ void SignalingServerHttp::RegisterHttpRoutes(uWS::SSLApp& app, SignalingServer& 
 			{"ok", ready},
 			{"startupSucceeded", snapshot.startupSucceeded},
 			{"shutdownRequested", snapshot.shutdownRequested},
-			{"registryEnabled", snapshot.registryEnabled},
-			{"redisRequired", snapshot.redisRequired},
-			{"redisReady", snapshot.redisReady},
 			{"workers", snapshot.totalWorkers},
 			{"workerThreads", server.workerThreads_.size()},
 			{"availableWorkerThreads", snapshot.availableWorkerThreads}
@@ -221,7 +146,6 @@ void SignalingServerHttp::StartBackgroundTimers(
 	uWS::Loop* loop,
 	us_listen_socket_t* listenSocket,
 	us_timer_t*& statsTimer,
-	us_timer_t*& redisTimer,
 	us_timer_t*& shutdownTimer)
 {
 	statsTimer = us_create_timer((struct us_loop_t*)loop, 0, sizeof(SignalingServer*));
@@ -242,36 +166,7 @@ void SignalingServerHttp::StartBackgroundTimers(
 		}
 	}, kStatsBroadcastIntervalMs, kStatsBroadcastIntervalMs);
 
-	redisTimer = us_create_timer((struct us_loop_t*)loop, 0, sizeof(SignalingServer*));
-	memcpy(us_timer_ext(redisTimer), &self, sizeof(SignalingServer*));
-	us_timer_set(redisTimer, [](struct us_timer_t* t) {
-		SignalingServer* s;
-		memcpy(&s, us_timer_ext(t), sizeof(SignalingServer*));
-		if (s->registry_) {
-			size_t totalRooms = 0;
-			size_t maxRooms = 0;
-			for (auto& wt : s->workerThreads_) {
-				totalRooms += wt->roomCount();
-				maxRooms += wt->maxRoomsCapacity();
-			}
-			std::vector<std::string> allRoomIds;
-			allRoomIds.reserve(s->roomDispatch_.size());
-			for (auto& [rid, assignedThread] : s->roomDispatch_) {
-				(void)assignedThread;
-				allRoomIds.push_back(rid);
-			}
-			s->enqueueRegistryTask([s, totalRooms, maxRooms, allRoomIds = std::move(allRoomIds)]() mutable {
-				try {
-					s->registry_->heartbeat();
-					if (!allRoomIds.empty())
-						s->registry_->refreshRooms(allRoomIds);
-					s->registry_->updateLoad(totalRooms, maxRooms);
-				} catch (const std::exception& e) {
-					spdlog::error("registry heartbeat failed: {}", e.what());
-				}
-			}, "registry.heartbeat rooms=" + std::to_string(allRoomIds.size()));
-		}
-	}, kRedisHeartbeatIntervalSec * 1000, kRedisHeartbeatIntervalSec * 1000);
+	(void)loop;
 
 	struct ShutdownCtx { us_listen_socket_t* sock; };
 	shutdownTimer = us_create_timer((struct us_loop_t*)loop, 0, sizeof(ShutdownCtx));
