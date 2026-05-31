@@ -10,8 +10,12 @@ namespace mediasoup {
 namespace {
 
 constexpr const char* kPlainClientH264BaselineProfileLevelId = "42e01f";
+constexpr const char* kMidExtensionUri =
+	"urn:ietf:params:rtp-hdrext:sdes:mid";
 constexpr const char* kTransportCcExtensionUri =
 	"http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01";
+constexpr const char* kAbsCaptureTimeExtensionUri =
+	"http://www.webrtc.org/experiments/rtp-hdrext/abs-capture-time";
 
 struct RemovedPeerEntries {
 	std::unordered_map<std::string, std::shared_ptr<Producer>> producers;
@@ -86,6 +90,40 @@ uint8_t FindTransportCcExtensionId(const RtpCapabilities& caps, const std::strin
 		}
 		return extension.preferredId;
 	}
+	return 0;
+}
+
+uint8_t FindMidExtensionId(const RtpCapabilities& caps, const std::string& kind)
+{
+	for (const auto& extension : caps.headerExtensions) {
+		if (extension.kind != kind) {
+			continue;
+		}
+		if (extension.uri != kMidExtensionUri) {
+			continue;
+		}
+		if (extension.preferredId == 0) {
+			continue;
+		}
+		return extension.preferredId;
+	}
+	return 0;
+}
+
+uint8_t FindAbsCaptureTimeExtensionId(const RtpCapabilities& caps, const std::string& kind)
+{
+	for (const auto& extension : caps.headerExtensions) {
+		if (extension.kind != kind) {
+			continue;
+		}
+
+		if (extension.uri != kAbsCaptureTimeExtensionUri) {
+			continue;
+		}
+
+		return extension.preferredId;
+	}
+
 	return 0;
 }
 
@@ -320,7 +358,9 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 
 	const uint8_t videoPt = selectedVideoCodec->preferredPayloadType;
 	json videoCodecParameters = selectedVideoCodec->parameters;
+	const uint8_t videoMidExtId = FindMidExtensionId(caps, "video");
 	const uint8_t videoTransportCcExtId = FindTransportCcExtensionId(caps, "video");
+	const uint8_t videoAbsCaptureTimeExtId = FindAbsCaptureTimeExtensionId(caps, "video");
 	const uint8_t audioTransportCcExtId = enableAudio ? FindTransportCcExtensionId(caps, "audio") : 0;
 
 	std::vector<std::shared_ptr<Producer>> videoProducers;
@@ -337,15 +377,33 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 			{"encodings", {{{"ssrc", videoSsrc}}}},
 			{"rtcp", {{"cname", peerId + "-video-" + std::to_string(index)}}}
 		};
-		if (videoTransportCcExtId != 0) {
-			videoRtpParams["headerExtensions"] = json::array({
-				{
-					{"uri", kTransportCcExtensionUri},
-					{"id", videoTransportCcExtId},
-					{"encrypt", false},
-					{"parameters", json::object()}
-				}
+		json videoHeaderExtensions = json::array();
+		if (videoMidExtId != 0) {
+			videoHeaderExtensions.push_back({
+				{"uri", kMidExtensionUri},
+				{"id", videoMidExtId},
+				{"encrypt", false},
+				{"parameters", json::object()}
 			});
+		}
+		if (videoTransportCcExtId != 0) {
+			videoHeaderExtensions.push_back({
+				{"uri", kTransportCcExtensionUri},
+				{"id", videoTransportCcExtId},
+				{"encrypt", false},
+				{"parameters", json::object()}
+			});
+		}
+		if (videoAbsCaptureTimeExtId != 0) {
+			videoHeaderExtensions.push_back({
+				{"uri", kAbsCaptureTimeExtensionUri},
+				{"id", videoAbsCaptureTimeExtId},
+				{"encrypt", false},
+				{"parameters", json::object()}
+			});
+		}
+		if (!videoHeaderExtensions.empty()) {
+			videoRtpParams["headerExtensions"] = std::move(videoHeaderExtensions);
 		}
 		json videoProdOpts = {
 			{"kind", "video"}, {"rtpParameters", videoRtpParams},
@@ -407,7 +465,8 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 			{"pt", videoPt},
 			{"ssrc", videoSsrcs[index]},
 			{"producerId", videoProducers[index]->id()},
-			{"transportCcExtId", videoTransportCcExtId}
+			{"transportCcExtId", videoTransportCcExtId},
+			{"absCaptureTimeExtId", videoAbsCaptureTimeExtId}
 		});
 	}
 	json result = {
@@ -418,6 +477,7 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 		{"videoCodec", requestedVideoCodec},
 		{"videoTracks", videoTracks},
 		{"videoTransportCcExtId", videoTransportCcExtId},
+		{"videoAbsCaptureTimeExtId", videoAbsCaptureTimeExtId},
 		{"audioEnabled", enableAudio}
 	};
 	if (enableAudio && audioProd) {
@@ -430,17 +490,34 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 }
 
 RoomService::Result RoomService::plainSubscribe(const std::string& roomId,
-	const std::string& peerId, const std::string& recvIp, uint16_t recvPort)
+	const std::string& peerId,
+	const std::optional<std::string>& recvIp,
+	const std::optional<uint16_t>& recvPort,
+	bool autoReturn)
 {
 	auto room = roomManager_.getRoom(roomId);
 	if (!room) return {false, {}, "", "room not found"};
 	auto peer = room->getPeer(peerId);
 	if (!peer) return {false, {}, "", "peer not found"};
 
+	if (autoReturn) {
+		if (recvIp.has_value() || recvPort.has_value()) {
+			MS_WARN(logger_, "[{} {}] plainSubscribe failed: autoReturn cannot be combined with recvIp/recvPort",
+				roomId, peerId);
+			return {false, {}, "", "plainSubscribe autoReturn cannot be combined with recvIp/recvPort"};
+		}
+	} else {
+		if (!recvIp.has_value() || !recvPort.has_value() || recvIp->empty() || *recvPort == 0) {
+			MS_WARN(logger_, "[{} {}] plainSubscribe failed: recvIp/recvPort required",
+				roomId, peerId);
+			return {false, {}, "", "plainSubscribe requires recvIp and recvPort"};
+		}
+	}
+
 	PlainTransportOptions opts;
 	opts.listenInfos = roomManager_.listenInfos();
 	opts.rtcpMux = true;
-	opts.comedia = false;
+	opts.comedia = autoReturn;
 
 	if (peer->plainRecvTransport) {
 		peer->plainRecvTransport->close();
@@ -450,7 +527,23 @@ RoomService::Result RoomService::plainSubscribe(const std::string& roomId,
 
 	auto transport = room->router()->createPlainTransport(opts);
 	peer->plainRecvTransport = transport;
-	transport->connect(recvIp, recvPort);
+	if (!autoReturn) {
+		try {
+			transport->connect(*recvIp, *recvPort);
+		} catch (const std::exception& e) {
+			MS_WARN(logger_, "[{} {}] plainSubscribe connect failed: {}",
+				roomId, peerId, e.what());
+			transport->close();
+			peer->plainRecvTransport.reset();
+			return {false, {}, "", std::string("plainSubscribe connect failed: ") + e.what()};
+		} catch (...) {
+			MS_WARN(logger_, "[{} {}] plainSubscribe connect failed: unknown error",
+				roomId, peerId);
+			transport->close();
+			peer->plainRecvTransport.reset();
+			return {false, {}, "", "plainSubscribe connect failed: unknown error"};
+		}
+	}
 
 	json consumers = roommedia::ConsumeExistingProducers(
 		roomId,
@@ -466,6 +559,7 @@ RoomService::Result RoomService::plainSubscribe(const std::string& roomId,
 	return {true, {
 		{"transportId", transport->id()},
 		{"ip", tuple.localAddress}, {"port", tuple.localPort},
+		{"autoReturn", autoReturn},
 		{"consumers", consumers}
 	}};
 }

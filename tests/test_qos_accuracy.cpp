@@ -13,6 +13,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <cstring>
+#include <cmath>
 #include <random>
 #include <thread>
 #include <chrono>
@@ -37,11 +38,25 @@ static int createUdpSocket(uint16_t& port) {
 	return fd;
 }
 
+static uint64_t unixMsToNtp64(uint64_t unixMs) {
+	constexpr uint64_t kUnixNtpOffset = 0x83AA7E80ULL;
+	constexpr uint64_t kNtpFractionalUnit = 1ULL << 32;
+
+	const uint64_t seconds = (unixMs / 1000ULL) + kUnixNtpOffset;
+	const uint64_t fractions = static_cast<uint64_t>(
+		std::llround((static_cast<long double>(unixMs % 1000ULL) / 1000.0L) * kNtpFractionalUnit));
+
+	return (seconds << 32) | (fractions & 0xFFFFFFFFULL);
+}
+
 struct TestRoom {
 	std::shared_ptr<Router> router;
 	std::shared_ptr<PlainTransport> prodTransport;
+	std::shared_ptr<PlainTransport> consTransport;
 	std::shared_ptr<Producer> producer;
+	std::shared_ptr<Consumer> consumer;
 	int senderFd = -1;
+	int receiverFd = -1;
 	sockaddr_in destAddr{};
 	uint16_t seq = 1;
 	uint32_t ts = 1000;
@@ -50,6 +65,7 @@ struct TestRoom {
 
 	~TestRoom() {
 		if (senderFd >= 0) close(senderFd);
+		if (receiverFd >= 0) close(receiverFd);
 		if (router) try { router->close(); } catch (...) {}
 	}
 };
@@ -88,12 +104,28 @@ static TestRoom createTestRoom(std::shared_ptr<Worker>& worker) {
 			{"mimeType", "audio/opus"}, {"payloadType", room.pt},
 			{"clockRate", 48000}, {"channels", 2}
 		}}},
+		{"headerExtensions", {{
+			{"uri", "http://www.webrtc.org/experiments/rtp-hdrext/abs-capture-time"},
+			{"id", 13},
+			{"encrypt", false}
+		}}},
 		{"encodings", {{{"ssrc", room.ssrc}}}},
 		{"mid", "0"}
 	};
 	room.producer = room.prodTransport->produce({
 		{"kind", "audio"}, {"rtpParameters", rtpParams},
 		{"routerRtpCapabilities", caps}
+	});
+
+	room.consTransport = room.router->createPlainTransport(opts);
+	uint16_t receiverPort;
+	room.receiverFd = createUdpSocket(receiverPort);
+	room.consTransport->connect("127.0.0.1", receiverPort);
+	room.consumer = room.consTransport->consume({
+		{"producerId", room.producer->id()},
+		{"rtpCapabilities", caps},
+		{"consumableRtpParameters", room.producer->consumableRtpParameters()},
+		{"pipe", true}
 	});
 
 	return room;
@@ -117,6 +149,59 @@ static void sendPacket(TestRoom& room) {
 	sendto(room.senderFd, buf, 200, 0, (sockaddr*)&room.destAddr, sizeof(room.destAddr));
 	room.seq++;
 	room.ts += 960; // 20ms at 48kHz
+}
+
+static void sendPacketWithAbsCaptureTime(
+	TestRoom& room,
+	uint64_t captureUnixMs,
+	bool includeOffset = false,
+	int64_t captureClockOffsetNtp = 0)
+{
+	uint8_t buf[256];
+	memset(buf, 0, sizeof(buf));
+	buf[0] = 0x90; // V=2 + extension bit
+	buf[1] = room.pt | 0x80; // marker
+	buf[2] = (room.seq >> 8) & 0xFF;
+	buf[3] = room.seq & 0xFF;
+	buf[4] = (room.ts >> 24) & 0xFF;
+	buf[5] = (room.ts >> 16) & 0xFF;
+	buf[6] = (room.ts >> 8) & 0xFF;
+	buf[7] = room.ts & 0xFF;
+	buf[8] = (room.ssrc >> 24) & 0xFF;
+	buf[9] = (room.ssrc >> 16) & 0xFF;
+	buf[10] = (room.ssrc >> 8) & 0xFF;
+	buf[11] = room.ssrc & 0xFF;
+
+	// One-byte RTP header extension profile.
+	buf[12] = 0xBE;
+	buf[13] = 0xDE;
+
+	const uint64_t captureNtp64 = unixMsToNtp64(captureUnixMs);
+	const size_t extValueLen = includeOffset ? 16u : 8u;
+	const size_t extBlockLen = 1u + extValueLen;
+	const size_t paddedExtBlockLen = (extBlockLen + 3u) & ~size_t(3u);
+	const size_t extWords = paddedExtBlockLen / 4u;
+
+	buf[14] = (extWords >> 8) & 0xFF;
+	buf[15] = extWords & 0xFF;
+	buf[16] = static_cast<uint8_t>(0xD0 | ((extValueLen - 1u) & 0x0F)); // id=13
+
+	for (size_t i = 0; i < 8; ++i) {
+		buf[17 + i] = static_cast<uint8_t>((captureNtp64 >> ((7 - i) * 8)) & 0xFF);
+	}
+	if (includeOffset) {
+		const uint64_t rawOffset = static_cast<uint64_t>(captureClockOffsetNtp);
+		for (size_t i = 0; i < 8; ++i) {
+			buf[25 + i] = static_cast<uint8_t>((rawOffset >> ((7 - i) * 8)) & 0xFF);
+		}
+	}
+
+	const size_t payloadOffset = 16u + paddedExtBlockLen;
+	memset(buf + payloadOffset, 0xAB, 188);
+	sendto(room.senderFd, buf, payloadOffset + 188u, 0, (sockaddr*)&room.destAddr, sizeof(room.destAddr));
+
+	room.seq++;
+	room.ts += 960;
 }
 
 class QosAccuracyTest : public ::testing::Test {
@@ -191,12 +276,16 @@ TEST_F(QosAccuracyTest, TenPercentLossDetected) {
 	double fracNorm = frac / 256.0;
 
 	// packetsLost should be close to dropped count
-	EXPECT_GT(lost, dropped * 0.5) << "Lost too few: " << lost << " vs dropped " << dropped;
-	EXPECT_LT(lost, dropped * 1.5) << "Lost too many: " << lost << " vs dropped " << dropped;
+	EXPECT_GT(lost, dropped * 0.5) << "Lost too few: " << lost << " vs dropped " << dropped
+		<< " stat=" << s.dump();
+	EXPECT_LT(lost, dropped * 1.5) << "Lost too many: " << lost << " vs dropped " << dropped
+		<< " stat=" << s.dump();
 
 	// fractionLost normalized should be roughly 10%
-	EXPECT_GT(fracNorm, 0.03) << "fractionLost too low: " << fracNorm;
-	EXPECT_LT(fracNorm, 0.25) << "fractionLost too high: " << fracNorm;
+	EXPECT_GT(fracNorm, 0.03) << "fractionLost too low: " << fracNorm
+		<< " stat=" << s.dump();
+	EXPECT_LT(fracNorm, 0.25) << "fractionLost too high: " << fracNorm
+		<< " stat=" << s.dump();
 }
 
 // ─── Test 3: 50% loss → fractionLost ≈ 0.5 ───
@@ -345,4 +434,30 @@ TEST_F(QosAccuracyTest, ScoreReportedInStats) {
 	int score = s.value("score", -1);
 	EXPECT_GE(score, 0);
 	EXPECT_LE(score, 10);
+}
+
+TEST_F(QosAccuracyTest, AbsCaptureTimeExposedInProducerStats) {
+	auto room = createTestRoom(worker);
+
+	const auto now = std::chrono::system_clock::now();
+	const auto nowMs = static_cast<uint64_t>(
+		std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count());
+	const auto captureMs = nowMs > 120 ? nowMs - 120 : nowMs;
+
+	sendPacketWithAbsCaptureTime(room, captureMs, true, static_cast<int64_t>(1ULL << 31));
+	std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+	auto stats = room.producer->getStats();
+	ASSERT_FALSE(stats.empty());
+	auto& s = stats[0];
+
+	EXPECT_TRUE(s.contains("absCaptureTimestampNtp")) << s.dump();
+	EXPECT_TRUE(s.contains("absCaptureTimestampMs")) << s.dump();
+	EXPECT_TRUE(s.contains("estimatedCaptureClockOffset")) << s.dump();
+	EXPECT_TRUE(s.contains("estimatedCaptureClockOffsetMs")) << s.dump();
+	EXPECT_TRUE(s.contains("absCaptureReceiveDeltaMs")) << s.dump();
+
+	EXPECT_EQ(s.value("absCaptureTimestampMs", uint64_t{ 0 }), captureMs);
+	EXPECT_NEAR(static_cast<double>(s.value("estimatedCaptureClockOffsetMs", int64_t{ 0 })), 500.0, 2.0);
+	EXPECT_GE(s.value("absCaptureReceiveDeltaMs", int64_t{ -1 }), 0);
 }

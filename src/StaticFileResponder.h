@@ -162,6 +162,9 @@ void ServeResolvedFile(
 			(std::istreambuf_iterator<char>(file)),
 			std::istreambuf_iterator<char>());
 		res->writeHeader("Content-Type", contentType);
+		res->writeHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+		res->writeHeader("Pragma", "no-cache");
+		res->writeHeader("Expires", "0");
 		res->end(content);
 		return;
 	}
@@ -175,6 +178,9 @@ void ServeResolvedFile(
 	}
 
 	res->writeHeader("Content-Type", contentType);
+	res->writeHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+	res->writeHeader("Pragma", "no-cache");
+	res->writeHeader("Expires", "0");
 	auto aborted = state->aborted;
 	res->onAborted([aborted] {
 		aborted->store(true, std::memory_order_relaxed);

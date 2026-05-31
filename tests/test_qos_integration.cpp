@@ -6,12 +6,82 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
 #include <chrono>
 #include <fstream>
 #include <functional>
 #include <optional>
+#include <cstring>
+#include <cmath>
 
 static const std::string HOST = "127.0.0.1";
+
+static int createUdpSocket(uint16_t& port) {
+	int fd = socket(AF_INET, SOCK_DGRAM, 0);
+	sockaddr_in addr{};
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	addr.sin_port = 0;
+	bind(fd, (sockaddr*)&addr, sizeof(addr));
+	socklen_t len = sizeof(addr);
+	getsockname(fd, (sockaddr*)&addr, &len);
+	port = ntohs(addr.sin_port);
+	return fd;
+}
+
+static uint64_t unixMsToNtp64(uint64_t unixMs) {
+	constexpr uint64_t kUnixNtpOffset = 0x83AA7E80ULL;
+	constexpr uint64_t kNtpFractionalUnit = 1ULL << 32;
+	const uint64_t seconds = (unixMs / 1000ULL) + kUnixNtpOffset;
+	const uint64_t fractions = static_cast<uint64_t>(
+		std::llround((static_cast<long double>(unixMs % 1000ULL) / 1000.0L) * kNtpFractionalUnit));
+	return (seconds << 32) | (fractions & 0xFFFFFFFFULL);
+}
+
+static void sendPlainRtpWithAbsCaptureTime(
+	int fd,
+	uint16_t port,
+	uint8_t payloadType,
+	uint32_t ssrc,
+	uint16_t seq,
+	uint32_t timestamp,
+	uint8_t absCaptureTimeExtId,
+	uint64_t captureUnixMs)
+{
+	uint8_t buf[256];
+	memset(buf, 0, sizeof(buf));
+	buf[0] = 0x90; // V=2 + extension bit
+	buf[1] = payloadType | 0x80;
+	buf[2] = (seq >> 8) & 0xFF;
+	buf[3] = seq & 0xFF;
+	buf[4] = (timestamp >> 24) & 0xFF;
+	buf[5] = (timestamp >> 16) & 0xFF;
+	buf[6] = (timestamp >> 8) & 0xFF;
+	buf[7] = timestamp & 0xFF;
+	buf[8] = (ssrc >> 24) & 0xFF;
+	buf[9] = (ssrc >> 16) & 0xFF;
+	buf[10] = (ssrc >> 8) & 0xFF;
+	buf[11] = ssrc & 0xFF;
+	buf[12] = 0xBE;
+	buf[13] = 0xDE;
+	buf[14] = 0x00;
+	buf[15] = 0x03; // 12 bytes
+	buf[16] = static_cast<uint8_t>((absCaptureTimeExtId << 4) | 0x07); // len=8
+	const uint64_t captureNtp64 = unixMsToNtp64(captureUnixMs);
+	for (size_t i = 0; i < 8; ++i) {
+		buf[17 + i] = static_cast<uint8_t>((captureNtp64 >> ((7 - i) * 8)) & 0xFF);
+	}
+	memset(buf + 28, 0xAB, 188);
+
+	sockaddr_in dest{};
+	dest.sin_family = AF_INET;
+	dest.sin_port = htons(port);
+	inet_pton(AF_INET, "127.0.0.1", &dest.sin_addr);
+	sendto(fd, buf, 216, 0, reinterpret_cast<sockaddr*>(&dest), sizeof(dest));
+}
 
 class QosIntegrationTest : public ::testing::Test {
 protected:
@@ -949,6 +1019,180 @@ TEST_F(QosIntegrationTest, PlainPublishSupportsVideoOnlyAndKeepsLegacyAudioDefau
 	ASSERT_TRUE(legacyStats["data"].contains("producers")) << legacyStats.dump();
 	EXPECT_EQ(legacyStats["data"]["producers"].size(), 2u)
 		<< "legacy plainPublish should keep current audio/video producer behavior";
+}
+
+TEST_F(QosIntegrationTest, PlainPublishReturnsAbsCaptureTimeExtensionId) {
+	auto alice = joinRoom(testRoom_, "alice");
+
+	auto resp = alice.ws->request("plainPublish", {
+		{"videoSsrc", 11111111u},
+		{"enableAudio", false}
+	});
+	ASSERT_TRUE(resp.value("ok", false)) << resp.dump();
+	ASSERT_TRUE(resp["data"].contains("videoAbsCaptureTimeExtId")) << resp.dump();
+	EXPECT_EQ(resp["data"]["videoAbsCaptureTimeExtId"], 13);
+	ASSERT_TRUE(resp["data"].contains("videoTracks")) << resp.dump();
+	ASSERT_EQ(resp["data"]["videoTracks"].size(), 1u) << resp.dump();
+	EXPECT_EQ(resp["data"]["videoTracks"][0]["absCaptureTimeExtId"], 13) << resp.dump();
+}
+
+TEST_F(QosIntegrationTest, PlainPublishAbsCaptureTimeAppearsInStats) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto observer = joinRoom(testRoom_, "observer");
+
+	uint16_t senderPort = 0;
+	int senderFd = createUdpSocket(senderPort);
+	ASSERT_GE(senderFd, 0);
+
+	auto resp = alice.ws->request("plainPublish", {
+		{"videoSsrc", 11111111u},
+		{"enableAudio", false},
+		{"senderIp", "127.0.0.1"},
+		{"senderPort", senderPort}
+	});
+	ASSERT_TRUE(resp.value("ok", false)) << resp.dump();
+	ASSERT_TRUE(resp["data"].contains("videoAbsCaptureTimeExtId")) << resp.dump();
+
+	const uint8_t payloadType = static_cast<uint8_t>(resp["data"]["videoPt"].get<int>());
+	const uint8_t absCaptureTimeExtId =
+		static_cast<uint8_t>(resp["data"]["videoAbsCaptureTimeExtId"].get<int>());
+	const auto captureMs = static_cast<uint64_t>(
+		std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::system_clock::now().time_since_epoch()).count()) - 120u;
+
+	sendPlainRtpWithAbsCaptureTime(
+		senderFd,
+		resp["data"]["port"].get<uint16_t>(),
+		payloadType,
+		11111111u,
+		1u,
+		3000u,
+		absCaptureTimeExtId,
+		captureMs);
+	sendPlainRtpWithAbsCaptureTime(
+		senderFd,
+		resp["data"]["port"].get<uint16_t>(),
+		payloadType,
+		11111111u,
+		2u,
+		6000u,
+		absCaptureTimeExtId,
+		captureMs + 20u);
+	sendPlainRtpWithAbsCaptureTime(
+		senderFd,
+		resp["data"]["port"].get<uint16_t>(),
+		payloadType,
+		11111111u,
+		3u,
+		9000u,
+		absCaptureTimeExtId,
+		captureMs + 40u);
+	::close(senderFd);
+
+	json statsResp = waitForPeerStats(
+		observer,
+		"alice",
+		[](const json& data) {
+			if (!data.contains("producers") || data["producers"].empty()) return false;
+			for (const auto& item : data["producers"].items()) {
+				const auto& producer = item.value();
+				if (!producer.contains("stats") || !producer["stats"].is_array()) continue;
+				for (const auto& stat : producer["stats"]) {
+					if (stat.contains("absCaptureTimestampMs") && stat.contains("absCaptureReceiveDeltaMs")) {
+						return true;
+					}
+				}
+			}
+			return false;
+		},
+		4000);
+
+	ASSERT_TRUE(statsResp.value("ok", false)) << statsResp.dump();
+	bool found = false;
+	for (const auto& item : statsResp["data"]["producers"].items()) {
+		const auto& producer = item.value();
+		if (!producer.contains("stats") || !producer["stats"].is_array()) continue;
+		for (const auto& stat : producer["stats"]) {
+			if (!stat.contains("absCaptureTimestampMs")) continue;
+			found = true;
+			const auto observedCaptureMs = stat["absCaptureTimestampMs"].get<uint64_t>();
+			EXPECT_GE(observedCaptureMs, captureMs);
+			EXPECT_LE(observedCaptureMs, captureMs + 40u);
+			EXPECT_TRUE(stat.contains("absCaptureReceiveDeltaMs"));
+			EXPECT_GE(stat["absCaptureReceiveDeltaMs"].get<int64_t>(), 0);
+		}
+	}
+	EXPECT_TRUE(found) << statsResp.dump();
+}
+
+TEST_F(QosIntegrationTest, PlainPublishConsumeReturnsHeaderExtensionsForBrowser) {
+	auto alice = joinRoom(testRoom_, "alice");
+
+	auto publish = alice.ws->request("plainPublish", {
+		{"videoSsrc", 11111111u},
+		{"enableAudio", false}
+	});
+	ASSERT_TRUE(publish.value("ok", false)) << publish.dump();
+	const auto producerId = publish["data"]["videoProdId"].get<std::string>();
+
+	auto bob = joinRoom(testRoom_, "bob");
+	auto recvResp = bob.ws->request("createWebRtcTransport", {
+		{"producing", false},
+		{"consuming", true},
+		{"rtpCapabilities", bob.joinData["routerRtpCapabilities"]}
+	});
+	ASSERT_TRUE(recvResp.value("ok", false)) << recvResp.dump();
+
+	auto consumeResp = bob.ws->request("consume", {
+		{"transportId", recvResp["data"]["id"]},
+		{"producerId", producerId},
+		{"rtpCapabilities", bob.joinData["routerRtpCapabilities"]}
+	});
+	ASSERT_TRUE(consumeResp.value("ok", false)) << consumeResp.dump();
+	ASSERT_TRUE(consumeResp["data"].contains("rtpParameters")) << consumeResp.dump();
+	const auto& rtpParameters = consumeResp["data"]["rtpParameters"];
+	ASSERT_TRUE(rtpParameters.contains("mid")) << consumeResp.dump();
+	EXPECT_FALSE(rtpParameters["mid"].get<std::string>().empty()) << consumeResp.dump();
+	ASSERT_TRUE(rtpParameters.contains("headerExtensions")) << consumeResp.dump();
+	ASSERT_TRUE(rtpParameters["headerExtensions"].is_array()) << consumeResp.dump();
+	EXPECT_FALSE(rtpParameters["headerExtensions"].empty()) << consumeResp.dump();
+}
+
+TEST_F(QosIntegrationTest, PlainSubscribeAutoReturnRejectsExplicitAddress) {
+	auto alice = joinRoom(testRoom_, "alice");
+
+	auto resp = alice.ws->request("plainSubscribe", {
+		{"autoReturn", true},
+		{"recvIp", "127.0.0.1"},
+		{"recvPort", 40000}
+	});
+
+	EXPECT_FALSE(resp.value("ok", false)) << resp.dump();
+	EXPECT_NE(resp.value("error", std::string()), "") << resp.dump();
+}
+
+TEST_F(QosIntegrationTest, PlainSubscribeAutoReturnCreatesComediaTransport) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoom(testRoom_, "bob");
+
+	auto publish = alice.ws->request("plainPublish", {
+		{"videoSsrc", 11111111u},
+		{"enableAudio", false}
+	});
+	ASSERT_TRUE(publish.value("ok", false)) << publish.dump();
+
+	auto resp = bob.ws->request("plainSubscribe", {
+		{"autoReturn", true}
+	});
+	ASSERT_TRUE(resp.value("ok", false)) << resp.dump();
+	ASSERT_TRUE(resp["data"].contains("transportId")) << resp.dump();
+	ASSERT_TRUE(resp["data"].contains("ip")) << resp.dump();
+	ASSERT_TRUE(resp["data"].contains("port")) << resp.dump();
+	ASSERT_TRUE(resp["data"].contains("autoReturn")) << resp.dump();
+	EXPECT_TRUE(resp["data"]["autoReturn"].get<bool>()) << resp.dump();
+	ASSERT_TRUE(resp["data"].contains("consumers")) << resp.dump();
+	EXPECT_TRUE(resp["data"]["consumers"].is_array()) << resp.dump();
+	EXPECT_GT(resp["data"]["port"].get<uint16_t>(), 0) << resp.dump();
 }
 
 TEST_F(QosIntegrationTest, PlainPublishReplacesOldTransportAndUsesBaselineCodec) {

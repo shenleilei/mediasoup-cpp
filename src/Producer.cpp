@@ -104,7 +104,7 @@ json Producer::getStats(int timeoutMs) {
 		auto* stat = statsResp->stats()->Get(i);
 		if (!stat || !stat->data()) continue;
 
-		json entry = ProducerRecvStatsToJson(stat);
+		json entry = AnyRtpStreamStatsToJson(stat);
 		if (!entry.empty()) result.push_back(entry);
 	}
 	return result;

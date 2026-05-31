@@ -252,6 +252,8 @@ json Transport::dump(int timeoutMs) {
 			if (extensions->rrid().has_value()) recvExtensions["rrid"] = extensions->rrid().value();
 			if (extensions->abs_send_time().has_value())
 				recvExtensions["absSendTime"] = extensions->abs_send_time().value();
+			if (extensions->abs_capture_time().has_value())
+				recvExtensions["absCaptureTime"] = extensions->abs_capture_time().value();
 			if (extensions->transport_wide_cc01().has_value())
 				recvExtensions["transportWideCc01"] = extensions->transport_wide_cc01().value();
 			result["recvRtpHeaderExtensions"] = std::move(recvExtensions);

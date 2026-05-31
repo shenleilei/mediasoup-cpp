@@ -167,7 +167,7 @@ json Consumer::getStats(int timeoutMs) {
 		auto* stat = statsResp->stats()->Get(i);
 		if (!stat || !stat->data()) continue;
 
-		json entry = ConsumerSendStatsToJson(stat);
+		json entry = AnyRtpStreamStatsToJson(stat);
 		if (!entry.empty()) result.push_back(entry);
 	}
 	return result;

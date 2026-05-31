@@ -113,7 +113,9 @@ public:
 		uint16_t senderPort = 0);
 	// PlainTransport: one-shot subscribe (create transport + consume all)
 	Result plainSubscribe(const std::string& roomId, const std::string& peerId,
-		const std::string& recvIp, uint16_t recvPort);
+		const std::optional<std::string>& recvIp,
+		const std::optional<uint16_t>& recvPort,
+		bool autoReturn = false);
 	Result setQosOverride(const std::string& roomId, const std::string& callerPeerId,
 		const std::string& targetPeerId, const json& overrideData);
 	Result setQosPolicy(const std::string& roomId, const std::string& callerPeerId,
