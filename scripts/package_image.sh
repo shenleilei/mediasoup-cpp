@@ -39,4 +39,9 @@ if [[ ! -x ./mediasoup-worker ]]; then
   exit 1
 fi
 
+if ! python3 ./scripts/ipc_contract_guard.py verify-release-readiness; then
+  >&2 printf 'ERROR: IPC regression guard failed. Run: cd %s && ./script/run_all_tests.sh all\n' "$repo_root"
+  exit 1
+fi
+
 exec ./build_image.sh "$@"

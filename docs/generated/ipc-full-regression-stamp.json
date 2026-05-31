@@ -1,0 +1,9 @@
+{
+  "command": "./script/run_all_tests.sh all",
+  "fullRegressionReportGeneratedAt": "2026-05-31 23:59:26 CST",
+  "generatedAtUtc": "2026-05-31T15:59:26Z",
+  "ipcContractFingerprint": "c654b73c056793f5c0b62e1174f3e4b82ef307af62bda5f82fbbcb42509e30c9",
+  "ipcSensitiveFileCount": 283,
+  "manifestPath": "docs/generated/ipc-contract-manifest.json",
+  "requiredEntryPoint": "./script/run_all_tests.sh all"
+}

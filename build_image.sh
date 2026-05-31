@@ -110,11 +110,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 require_cmd docker
+require_cmd python3
 
 if [[ ! -f "$dockerfile" ]]; then
   >&2 printf "ERROR: Dockerfile not found: %s\n" "$dockerfile"
   exit 1
 fi
+
+python3 "$repo_root/scripts/ipc_contract_guard.py" verify-release-readiness
 
 ensure_build_context_deps
 

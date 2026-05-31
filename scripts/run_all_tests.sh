@@ -5,6 +5,16 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build"
 REPORT_FILE="$ROOT_DIR/docs/full-regression-test-results.md"
 JOBS="${JOBS:-$(nproc)}"
+WORKER_SRC_DIR="$ROOT_DIR/src/mediasoup-worker-src/worker"
+WORKER_RELEASE_DIR="$WORKER_SRC_DIR/out/Release"
+WORKER_BINARY="$ROOT_DIR/mediasoup-worker"
+WORKER_TEST_BINARY="$WORKER_RELEASE_DIR/mediasoup-worker"
+IPC_GUARD="$ROOT_DIR/scripts/ipc_contract_guard.py"
+
+export MEDIASOUP_TEST_WORKER_BIN="$WORKER_TEST_BINARY"
+export QOS_CPP_CLIENT_WORKER_BIN="$WORKER_TEST_BINARY"
+
+cd "$ROOT_DIR"
 
 ALL_GROUPS=(
   unit
@@ -304,11 +314,8 @@ write_report() {
     echo
     echo "| Report | Scope | Link | Updated |"
     echo "|---|---|---|---|"
-    append_report_link_row "$ROOT_DIR/docs/uplink-qos-test-results-summary.md" "Uplink Summary" "Uplink QoS summary"
-    append_report_link_row "$ROOT_DIR/docs/uplink-qos-case-results.md" "Uplink Cases" "Browser uplink per-case report"
     append_report_link_row "$ROOT_DIR/docs/downlink-qos-test-results-summary.md" "Downlink Summary" "Downlink QoS summary"
     append_report_link_row "$ROOT_DIR/docs/downlink-qos-case-results.md" "Downlink Cases" "Downlink per-case report"
-    append_report_link_row "$ROOT_DIR/docs/generated/uplink-qos-matrix-report.json" "Uplink Matrix JSON" "Latest browser uplink matrix artifact"
     append_report_link_row "$ROOT_DIR/docs/generated/downlink-qos-matrix-report.json" "Downlink Matrix JSON" "Latest downlink matrix artifact"
   } > "$REPORT_FILE"
 }
@@ -337,6 +344,34 @@ require_command() {
   }
 }
 
+ensure_build_dir_matches_root() {
+  local cache_file="$BUILD_DIR/CMakeCache.txt"
+  local cache_root=""
+
+  if [[ ! -f "$cache_file" ]]; then
+    return 0
+  fi
+
+  cache_root="$(sed -n 's|^CMAKE_HOME_DIRECTORY:INTERNAL=||p' "$cache_file" | head -1)"
+  if [[ -z "$cache_root" ]]; then
+    cache_root="$(sed -n 's|^# For build in directory: \(.*\)/build$|\1|p' "$cache_file" | head -1)"
+  fi
+
+  if [[ -n "$cache_root" && "$cache_root" != "$ROOT_DIR" ]]; then
+    echo "info: build directory was configured for a different source root: $cache_root" >&2
+    echo "info: removing stale build directory and regenerating for $ROOT_DIR" >&2
+    rm -rf "$BUILD_DIR"
+  fi
+}
+
+configure_build_dir() {
+  ensure_build_dir_matches_root
+  if [[ ! -f "$BUILD_DIR/CMakeCache.txt" ]]; then
+    echo "==> configuring build directory"
+    cmake -S "$ROOT_DIR" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=RelWithDebInfo
+  fi
+}
+
 log_system_snapshot() {
   local label="$1"
   echo
@@ -353,7 +388,7 @@ log_system_snapshot() {
     ps -eo pid,ppid,rss,stat,comm,args --sort=-rss | head -n 12 || true
     echo "browser_and_build_processes:"
     ps -eo pid,ppid,rss,stat,comm,args | awk '
-      NR == 1 || /headless_shell|esbuild|cc1plus|mediasoup-sfu|run_matrix\.mjs|run_qos_tests\.sh|cmake|gmake/
+      NR == 1 || /headless_shell|esbuild|cc1plus|mediasoup-sfu|run_qos_tests\.sh|cmake|gmake/
     ' || true
   fi
 }
@@ -374,7 +409,15 @@ cleanup_test_ports() {
 }
 
 build_targets() {
+  configure_build_dir
+  python3 "$IPC_GUARD" check-consistency --warn-changed
   log_system_snapshot "pre-build"
+  echo "==> building mediasoup-worker"
+  (
+    cd "$WORKER_SRC_DIR"
+    python3 -m invoke mediasoup-worker
+  )
+  install -Dm755 "$WORKER_RELEASE_DIR/mediasoup-worker" "$WORKER_BINARY"
   echo "==> building full regression test targets"
   cmake --build "$BUILD_DIR" -j"$JOBS" --target \
     mediasoup-sfu \
@@ -498,6 +541,7 @@ main() {
 
   echo
   if ((${#FAILED_GROUPS[@]} == 0)); then
+    python3 "$IPC_GUARD" record-success --command "./script/run_all_tests.sh all"
     echo "full regression test run passed"
   else
     echo "full regression test run completed with failures in group(s): ${FAILED_GROUPS[*]}" >&2

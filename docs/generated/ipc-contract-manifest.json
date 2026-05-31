@@ -1,0 +1,1161 @@
+{
+  "generatedAtUtc": "2026-05-31T15:59:26Z",
+  "ipcContractFingerprint": "c654b73c056793f5c0b62e1174f3e4b82ef307af62bda5f82fbbcb42509e30c9",
+  "ipcSensitiveFiles": [
+    {
+      "path": "CMakeLists.txt",
+      "sha256": "05704c7133c2a786f00b208d099375e1abcd116ce92bf8e3f2dbfabbd4ba48ee"
+    },
+    {
+      "path": "fbs/activeSpeakerObserver.fbs",
+      "sha256": "c6e1cd038705bebfc995d1411a2ef7a28de64280882b3711e37e6420f42664ca"
+    },
+    {
+      "path": "fbs/audioLevelObserver.fbs",
+      "sha256": "ab1afde1954ba9018b1032512cd179569d5727cff106c481820441079c462dab"
+    },
+    {
+      "path": "fbs/common.fbs",
+      "sha256": "ca8247bf38ae396348d3f8915774c85d01975126cc98850ba947d4d969792322"
+    },
+    {
+      "path": "fbs/consumer.fbs",
+      "sha256": "1bbdbdf2eb8d21cfe70954c95765659c0c834f2f9af4af2bc74c961ce8a7ffbb"
+    },
+    {
+      "path": "fbs/dataConsumer.fbs",
+      "sha256": "a3de35f3aa1971e007665cef8d4d6717ec70d3f8fc4ee66e16c089bc05a39a18"
+    },
+    {
+      "path": "fbs/dataProducer.fbs",
+      "sha256": "1b8454568941761a5c552457ba7e6d0aa6428901f4e0730701faf8549247c60f"
+    },
+    {
+      "path": "fbs/directTransport.fbs",
+      "sha256": "bd8f8cb3a2c25533800012114e22b4a2ff85444f3e14f990f9c86de0e26fbfa2"
+    },
+    {
+      "path": "fbs/liburing.fbs",
+      "sha256": "dc0aa40968de6c64e7c265135e46639afd61b6a42db5b0e19c28e0b1efa6af73"
+    },
+    {
+      "path": "fbs/log.fbs",
+      "sha256": "cc2cfed2944afc01afab14e0150c7e053fd705f29a0738d120d7f0c29aa5826f"
+    },
+    {
+      "path": "fbs/message.fbs",
+      "sha256": "ccccdf2abe4aa528e69fd7f898671e5c0bd3028c222420d8489fb125844ed104"
+    },
+    {
+      "path": "fbs/notification.fbs",
+      "sha256": "a1eba4bb490b3e8a5a559db6f50b614b87b056f89467a5d5cce6b4513b218968"
+    },
+    {
+      "path": "fbs/pipeTransport.fbs",
+      "sha256": "91fb48ef9df7a975c13068a62ad6b7f2fdd4888016ebcbf05d121c7603128c06"
+    },
+    {
+      "path": "fbs/plainTransport.fbs",
+      "sha256": "18fd1b1002eae6796c26eef4029ad4846dc904d6b0b5ad5b02c95d8873b36c93"
+    },
+    {
+      "path": "fbs/producer.fbs",
+      "sha256": "cb5493418a17c4a585a4d0409fefdbc74714b97688045846d61b8ba33eaf14d8"
+    },
+    {
+      "path": "fbs/request.fbs",
+      "sha256": "9319bce1db67ca9870bf1a33ee815e433c11d9c74dc70f6239c1c5d2c85add56"
+    },
+    {
+      "path": "fbs/response.fbs",
+      "sha256": "308dd4e6876825bfffc8a1d15d903324280197b54b866f9ead09316ed31a1812"
+    },
+    {
+      "path": "fbs/router.fbs",
+      "sha256": "244c58fc0bd2d1532e7db0fef93143b3ded4f22af85d505266829dade862f658"
+    },
+    {
+      "path": "fbs/rtpObserver.fbs",
+      "sha256": "bc3256659c4080521c95e6f1c91bbd7bd5a67921953d40a57c26d9458b62d700"
+    },
+    {
+      "path": "fbs/rtpPacket.fbs",
+      "sha256": "d57ca51802392d4b00635b63a36d41d857f62a4cd184fb3afaef56b993df311a"
+    },
+    {
+      "path": "fbs/rtpParameters.fbs",
+      "sha256": "cdc736fa919dca313913abec38ea83f100be8446ef9a991e93a3a33b995073c1"
+    },
+    {
+      "path": "fbs/rtpStream.fbs",
+      "sha256": "66a995b1d51300e3807576cfb7a9f891195c05e5bdd33509b112c0094dd1fbd0"
+    },
+    {
+      "path": "fbs/rtxStream.fbs",
+      "sha256": "3e21e55bce8ac2c9223e33ab2a31b5a1bef28ab1fba00a6415989cb0e20de4ba"
+    },
+    {
+      "path": "fbs/sctpAssociation.fbs",
+      "sha256": "b48c5aa8b8a21760d827a2289f414b4f0e6c77f49283bf4484d336e0ffee9ab3"
+    },
+    {
+      "path": "fbs/sctpParameters.fbs",
+      "sha256": "3be81932dfd7fefc27726d9e08706641d740b299b2f7887a722a7b4f8b124898"
+    },
+    {
+      "path": "fbs/srtpParameters.fbs",
+      "sha256": "abb32d4963924423a904cc53482638ab10262f3293ee0549da78e4358a069f83"
+    },
+    {
+      "path": "fbs/transport.fbs",
+      "sha256": "6ef7cf947df50c8cf5796111f3876bc995618e169edc45a60eba05ed9a0eb76e"
+    },
+    {
+      "path": "fbs/webRtcServer.fbs",
+      "sha256": "e04bc4f16e668ecefd3af2ce9679ed59651225c252e9e3a09db157719dcfd5eb"
+    },
+    {
+      "path": "fbs/webRtcTransport.fbs",
+      "sha256": "7bd3efdfc4804e4868bacfdff67bbad41123ccdb36473ead72e90d9c36e6478e"
+    },
+    {
+      "path": "fbs/worker.fbs",
+      "sha256": "508fa281eea1d730690cb7acff38e83f36331086d14c56bde2c8033caf1c8ecb"
+    },
+    {
+      "path": "generated/activeSpeakerObserver_generated.h",
+      "sha256": "152fa720859afaeee5eca0d79487c2afe8e5b708314b9240f7dd801a4d12c1d0"
+    },
+    {
+      "path": "generated/audioLevelObserver_generated.h",
+      "sha256": "694636bc72d723152f530a16373de2a0b59010c775b557ca32bbabb1781afd89"
+    },
+    {
+      "path": "generated/common_generated.h",
+      "sha256": "4bd5d936648e105b3dc4373f96de75e3cfc2706ea14cc52f744b33d3b4807a29"
+    },
+    {
+      "path": "generated/consumer_generated.h",
+      "sha256": "16120857339f0ca3972ac7839bb465b313cdaff0f49919a67c1bf8599a294625"
+    },
+    {
+      "path": "generated/dataConsumer_generated.h",
+      "sha256": "714b5b6e134233ff2d9ec81f0d5a5e5dc65327178e7a607224196bc4344e351d"
+    },
+    {
+      "path": "generated/dataProducer_generated.h",
+      "sha256": "af3d7f4a3dc56eb8e1d1919dac8c56adff262fe7b4608a34b21efab2b1f892b2"
+    },
+    {
+      "path": "generated/directTransport_generated.h",
+      "sha256": "71dee12a7edfdb7f28d375950a37d28d20ea1c46f8df603221ef39257b00a0ce"
+    },
+    {
+      "path": "generated/liburing_generated.h",
+      "sha256": "85e38eb257072e5d03eae7a3614211c07e831e5a590a12ea6158baa8ed42449b"
+    },
+    {
+      "path": "generated/log_generated.h",
+      "sha256": "57589561170e6f4bfef1faab2d5b6fd8ec83e6e344782df9e1a56d0564c0a27a"
+    },
+    {
+      "path": "generated/message_generated.h",
+      "sha256": "b3d5bfc16fae1d6057305b618000e734474e5b63264323af8256630e13042f85"
+    },
+    {
+      "path": "generated/notification_generated.h",
+      "sha256": "042bbb2157d7d55215a4f80c6a84af77e87b288d0d4d0c3e6b207aff0bdc6b9a"
+    },
+    {
+      "path": "generated/pipeTransport_generated.h",
+      "sha256": "ee7ae747700bc182a26530b4219fbb4723c976affbc66f3dd0fdcc68db552ebf"
+    },
+    {
+      "path": "generated/plainTransport_generated.h",
+      "sha256": "5bed3338b2064394fa537d8106181cd609de49e777a446f414309b22c3705b47"
+    },
+    {
+      "path": "generated/producer_generated.h",
+      "sha256": "e4c935f4a90750e27b501d3b2841caa4321fa066c471c23cc2a750d4cc63fd08"
+    },
+    {
+      "path": "generated/request_generated.h",
+      "sha256": "00d60483c1b87759d5f78db09cee3f86468403b8d5f0a672e622688d79d445fa"
+    },
+    {
+      "path": "generated/response_generated.h",
+      "sha256": "3ee10fa0a3aeebab123fd8efb0920ee010af88bc314950f73bfbf414e5ad8597"
+    },
+    {
+      "path": "generated/router_generated.h",
+      "sha256": "ebe6a28a37143a26e5c348b1d3c8b1606962aca727256062981d140419cf2f59"
+    },
+    {
+      "path": "generated/rtpObserver_generated.h",
+      "sha256": "c8c0215ee30de356b5598dc1fe13d29be37a95f058f767e0c07ac425bb027082"
+    },
+    {
+      "path": "generated/rtpPacket_generated.h",
+      "sha256": "75a4c3df58c7ea05c8b6342e6da016c21620721fb14b78a20cdbd4524c728c83"
+    },
+    {
+      "path": "generated/rtpParameters_generated.h",
+      "sha256": "4c928f2c8487fead712e0f975ee53a94c0ebd8d7d890954c5f87b742fb99f185"
+    },
+    {
+      "path": "generated/rtpStream_generated.h",
+      "sha256": "2a90b68b81c0cf57db6860560fd387c926dc43f529cfdecd2573ec1c2e3c2e5b"
+    },
+    {
+      "path": "generated/rtxStream_generated.h",
+      "sha256": "cea0f9a65134f6cdddab3ad33d08f492d41d21f51ea927ab06bec490886cc72c"
+    },
+    {
+      "path": "generated/sctpAssociation_generated.h",
+      "sha256": "619149b56535b87c3654177a51214591bcf8bbf90676dc6ad65fe9a9d129d619"
+    },
+    {
+      "path": "generated/sctpParameters_generated.h",
+      "sha256": "b6406c3003562e631969218f46bf636a394d5cbca1f5a686de52df0f9654a0b1"
+    },
+    {
+      "path": "generated/srtpParameters_generated.h",
+      "sha256": "5a23e7e1b1bea268de52a0cd9904a1ba53508cca7985a5f76e10a5240a44ae57"
+    },
+    {
+      "path": "generated/transport_generated.h",
+      "sha256": "31fe504b7bcdb2f9bc495faae30295d5117be48e0b45ea1122f9c481f608d8cc"
+    },
+    {
+      "path": "generated/webRtcServer_generated.h",
+      "sha256": "87fa4c8b7ba638b54f1a339abd4038bffe010e4fb0001d8b56003b706657bd31"
+    },
+    {
+      "path": "generated/webRtcTransport_generated.h",
+      "sha256": "3507e4928059a718c6bfd09aaa0c17bc225d87ebac33ad031cb5d8179c6dd52d"
+    },
+    {
+      "path": "generated/worker_generated.h",
+      "sha256": "c8030a75a8235078840a3d73e1f3931a895052dd1179b609299b3311172bb45d"
+    },
+    {
+      "path": "setup.sh",
+      "sha256": "81d0b9391dac0957e24054aa7018d3e284a5c0b84140e9400b8ca17c22e4d548"
+    },
+    {
+      "path": "src/Channel.cpp",
+      "sha256": "6c9e39a9fe7c8946eb559548fe1bea219e89ec9cd5f7b374e0a852b8a464809e"
+    },
+    {
+      "path": "src/Channel.h",
+      "sha256": "5142d8faaef12dd30fc9e98969cbb3af4d1b480a0db217363db06123577a352b"
+    },
+    {
+      "path": "src/TransportConnectResponseUtils.h",
+      "sha256": "2a2c62e621e497d16faa47532ba0c497ad2d87dd9b7b68c242505051b5484642"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/activeSpeakerObserver.fbs",
+      "sha256": "c6e1cd038705bebfc995d1411a2ef7a28de64280882b3711e37e6420f42664ca"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/audioLevelObserver.fbs",
+      "sha256": "ab1afde1954ba9018b1032512cd179569d5727cff106c481820441079c462dab"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/common.fbs",
+      "sha256": "ca8247bf38ae396348d3f8915774c85d01975126cc98850ba947d4d969792322"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/consumer.fbs",
+      "sha256": "1bbdbdf2eb8d21cfe70954c95765659c0c834f2f9af4af2bc74c961ce8a7ffbb"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/dataConsumer.fbs",
+      "sha256": "a3de35f3aa1971e007665cef8d4d6717ec70d3f8fc4ee66e16c089bc05a39a18"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/dataProducer.fbs",
+      "sha256": "1b8454568941761a5c552457ba7e6d0aa6428901f4e0730701faf8549247c60f"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/directTransport.fbs",
+      "sha256": "bd8f8cb3a2c25533800012114e22b4a2ff85444f3e14f990f9c86de0e26fbfa2"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/liburing.fbs",
+      "sha256": "dc0aa40968de6c64e7c265135e46639afd61b6a42db5b0e19c28e0b1efa6af73"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/log.fbs",
+      "sha256": "cc2cfed2944afc01afab14e0150c7e053fd705f29a0738d120d7f0c29aa5826f"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/meson.build",
+      "sha256": "3f81f78c67842f547e12a196789469bf50d271c8bfbc6eb339a73c9cb4192956"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/message.fbs",
+      "sha256": "ccccdf2abe4aa528e69fd7f898671e5c0bd3028c222420d8489fb125844ed104"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/notification.fbs",
+      "sha256": "a1eba4bb490b3e8a5a559db6f50b614b87b056f89467a5d5cce6b4513b218968"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/pipeTransport.fbs",
+      "sha256": "91fb48ef9df7a975c13068a62ad6b7f2fdd4888016ebcbf05d121c7603128c06"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/plainTransport.fbs",
+      "sha256": "18fd1b1002eae6796c26eef4029ad4846dc904d6b0b5ad5b02c95d8873b36c93"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/producer.fbs",
+      "sha256": "cb5493418a17c4a585a4d0409fefdbc74714b97688045846d61b8ba33eaf14d8"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/request.fbs",
+      "sha256": "9319bce1db67ca9870bf1a33ee815e433c11d9c74dc70f6239c1c5d2c85add56"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/response.fbs",
+      "sha256": "308dd4e6876825bfffc8a1d15d903324280197b54b866f9ead09316ed31a1812"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/router.fbs",
+      "sha256": "244c58fc0bd2d1532e7db0fef93143b3ded4f22af85d505266829dade862f658"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/rtpObserver.fbs",
+      "sha256": "bc3256659c4080521c95e6f1c91bbd7bd5a67921953d40a57c26d9458b62d700"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/rtpPacket.fbs",
+      "sha256": "d57ca51802392d4b00635b63a36d41d857f62a4cd184fb3afaef56b993df311a"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/rtpParameters.fbs",
+      "sha256": "1dbf5c58961963da9f4409a0618b33fb59e6d85207410028789349df161e313f"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/rtpStream.fbs",
+      "sha256": "66a995b1d51300e3807576cfb7a9f891195c05e5bdd33509b112c0094dd1fbd0"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/rtxStream.fbs",
+      "sha256": "3e21e55bce8ac2c9223e33ab2a31b5a1bef28ab1fba00a6415989cb0e20de4ba"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/sctpAssociation.fbs",
+      "sha256": "b48c5aa8b8a21760d827a2289f414b4f0e6c77f49283bf4484d336e0ffee9ab3"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/sctpParameters.fbs",
+      "sha256": "3be81932dfd7fefc27726d9e08706641d740b299b2f7887a722a7b4f8b124898"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/srtpParameters.fbs",
+      "sha256": "abb32d4963924423a904cc53482638ab10262f3293ee0549da78e4358a069f83"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/transport.fbs",
+      "sha256": "6ef7cf947df50c8cf5796111f3876bc995618e169edc45a60eba05ed9a0eb76e"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/webRtcServer.fbs",
+      "sha256": "e04bc4f16e668ecefd3af2ce9679ed59651225c252e9e3a09db157719dcfd5eb"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/webRtcTransport.fbs",
+      "sha256": "7bd3efdfc4804e4868bacfdff67bbad41123ccdb36473ead72e90d9c36e6478e"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/fbs/worker.fbs",
+      "sha256": "508fa281eea1d730690cb7acff38e83f36331086d14c56bde2c8033caf1c8ecb"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/Channel/ChannelNotification.hpp",
+      "sha256": "e727d72f5e4a30fe90681a171e335c4e4309002be7ebebc335a243cefcea1b07"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/Channel/ChannelNotifier.hpp",
+      "sha256": "54c9b5323a8390660ad28fd63590c035e51581d632a72f19d4812476734e73d7"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/Channel/ChannelRequest.hpp",
+      "sha256": "3cedaf2af3fb40c45451d1385ab55647812859a75e839a3b1c8abd258619b85f"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/Channel/ChannelSocket.hpp",
+      "sha256": "6415ef146f364619dffbb5b575b30d9c91ffbded7b30274a06addb9cc51810a4"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/ActiveSpeakerObserver.hpp",
+      "sha256": "75eb8cfebfb7d3e2f57e78ff178aa646f1d3bba4217cd9102b1ed63ac203e4ec"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/AudioLevelObserver.hpp",
+      "sha256": "5ec14b775b514dcecbb9ce2dd7378ab2043e1e2011866261b9c0b3818d637235"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/BweType.hpp",
+      "sha256": "829f2bfb57b366cca0364eac1c0d7097746ce96ab2516f4938f0368938bfdec1"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/Codecs/H264.hpp",
+      "sha256": "67518a181e8ffa8e55a0e56bebe0754faf34b7eb450b06a529a2b9e68d46d39c"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/Codecs/H264_SVC.hpp",
+      "sha256": "0679a734c7bd9c1a7cc0c48acdafec2fb1ffde028e579d097935fc415a862390"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/Codecs/Opus.hpp",
+      "sha256": "662383ddfc57f899b897019df90c4697c813145350ef885c63d76c58d109a024"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/Codecs/PayloadDescriptorHandler.hpp",
+      "sha256": "d8baa7aa4f7042a48f55e0a72bda57cebe1c7182344c59d29bd3b477a6f55fc7"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/Codecs/Tools.hpp",
+      "sha256": "bb711f7744c565b65dda1ece5dd269c04706d9804b75ea5a89e7c7102a291dcc"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/Codecs/VP8.hpp",
+      "sha256": "0d08da4adcf924c158eac1db9ddc1e34730008796bef469c75d021a7bc20c59f"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/Codecs/VP9.hpp",
+      "sha256": "d9a6f44506b9adaf84434be9f6eb8bfd89647303c8aa5c3218ef668463cbf3e3"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/Consumer.hpp",
+      "sha256": "d1c0f407595da39a8f0cbe4a0f0d474dd7612496c6a23bb77e1574e3b8251d7c"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/DataConsumer.hpp",
+      "sha256": "11e8033b64cb154cfba5d7be4df89744c0809351ad612e14b1abaae526d2b280"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/DataProducer.hpp",
+      "sha256": "42217410631d57bf2f0d80b8dd540d39417adf7c3f372759b8c76df9c5ef5d67"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/DirectTransport.hpp",
+      "sha256": "ffbb29e2a62a606caec6b8de200cdf9f3e8905acb64899722febfa6dd57d0084"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/DtlsTransport.hpp",
+      "sha256": "cf75f1521b5654ebb98d15da6a10eb62b9f9b3f11a82e44564405bcb7b20bfa7"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/IceCandidate.hpp",
+      "sha256": "910e68e0ae2b10ed9d636b17ccbd0b3102e2ac4ab0b4916e1f36446297df2f23"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/IceServer.hpp",
+      "sha256": "de0c1b1b063b3ff7a8ae54e729e1ab7867879dfa9740a47074b652a4a7fd4fe8"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/KeyFrameRequestManager.hpp",
+      "sha256": "d09835e694259c6c2bfe5bb955ccad5847fdaaa923a85b8a8f9fdfc3a9b863b5"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/NackGenerator.hpp",
+      "sha256": "e8c29e42830523b2fd21af52e1336316cc60dd1d0b3e2e0d4861ebea7ad3cdb1"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/Parameters.hpp",
+      "sha256": "0381c15a714d72bb2a18ca123f728c623201068818b4ec1209f44f2a1eb014bb"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/PipeConsumer.hpp",
+      "sha256": "144272a57925ac6ec3f43e97e6c6342b428534398bc5e2fc923ebcc8a78c3f4f"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/PipeTransport.hpp",
+      "sha256": "82399e3708d74a4b3203ab5df2ba8fe80b9aad5da33a9dafa33b823bd69a73cc"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/PlainTransport.hpp",
+      "sha256": "f44277b538b7697275805bb5d982a338327af75b94cb84f1da3566e99fb45f57"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/PortManager.hpp",
+      "sha256": "246fb035e1c7296030fc256eb0c474ee3761233e2c43fb2f6de539793c2cc1f8"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/ProbeEgressAdapter.hpp",
+      "sha256": "0e0d02cc60457664870974e356ea674dfa2735aee01e6fb2087e724bd8ccc2ea"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/Producer.hpp",
+      "sha256": "68531f23d3b668167c1e6868359c910b4ebc0a5077119b6225b5be319e59639b"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/Bye.hpp",
+      "sha256": "697d5e6b38cf84442e25ef65a0d043e0bff038406ebc392e752e1578f535457d"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/CompoundPacket.hpp",
+      "sha256": "dd35ea28f587233c64b1df56e9f3437d5f953781105b3c3740eb1d49af2a6788"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/Feedback.hpp",
+      "sha256": "2eb611786d93c96f2cbd6eeccff8d533ed78953afdf1237ff068fc5f188584f6"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/FeedbackItem.hpp",
+      "sha256": "3acb3c2b03902250cc9b56178a38033467e981cd0870b4e7c6664480360dd648"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/FeedbackPs.hpp",
+      "sha256": "b357c03ceb26b8341adae748e9ed4d2a23a370cbe56a62f20cf6c7177822889e"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/FeedbackPsAfb.hpp",
+      "sha256": "51929a64111c86883c75dc21b0f25d1c8f45177e49d7dbd85632d42b43030afc"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/FeedbackPsFir.hpp",
+      "sha256": "07739e4095dcb251892249649be139432d69a28ac7e8cd8155f7469a2589ba24"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/FeedbackPsLei.hpp",
+      "sha256": "76ee2dd899ee5939330be0aa8c347dca3fecb5cc8e8757d1ae3aee1e33b9e83d"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/FeedbackPsPli.hpp",
+      "sha256": "cb9bbaf2535f7b1f792b88bf554e2ce83c84bf938135bba8989950cfbd15589b"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/FeedbackPsRemb.hpp",
+      "sha256": "dec16e2c9fe9b96dbbb3969b1e7e15a131a1fa98064ab63e89ca800a01cc83df"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/FeedbackPsRpsi.hpp",
+      "sha256": "b2e67223604d44b6d6639d47318c4691597ce5559e92662e056ce70ece080e64"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/FeedbackPsSli.hpp",
+      "sha256": "da08a54d2a19707218ad6839e4cf74da12a92d1690657bf55d5221d424c9a935"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/FeedbackPsTst.hpp",
+      "sha256": "313ec1abbb5e3f7b56905d825ca71d01ef233bb1458d5115843e771c97547258"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/FeedbackPsVbcm.hpp",
+      "sha256": "d66bba15e006aca44ca6e87ce6cf79cf6b3bef9e38b67f09be6fb0549a885e4f"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/FeedbackRtp.hpp",
+      "sha256": "4d985908fa36dc5b0b04f236072cd4b1f7efc57d3114c22d1aeed5579c5ae238"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/FeedbackRtpEcn.hpp",
+      "sha256": "c452f2641436308425706afc91b4c74787fa20f55f6272a2ccd3dff4b9b225bd"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/FeedbackRtpNack.hpp",
+      "sha256": "735512ee71c2990a456da1f5f07fdfeb906526fca3d2df03bdc6510535215b3a"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/FeedbackRtpSrReq.hpp",
+      "sha256": "2786993bfacd74716721711273257ce7c2cfd44d86a2dbecfef90c94ce12e5a0"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/FeedbackRtpTllei.hpp",
+      "sha256": "000b1f46e20dba8c35506eddfb1d142198a7d03bb7e1b5a832b27bb932fa9637"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/FeedbackRtpTmmb.hpp",
+      "sha256": "f4039f3cf67b5afab120706978642506207d1ddd69f8a9812084bbc6032adfa1"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/FeedbackRtpTransport.hpp",
+      "sha256": "aee3dd7a0fc22fd4faeedd3cd7f456c40b6c522166bb47265a10538891d2532f"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/Packet.hpp",
+      "sha256": "7a9790dece98744f125c37ce04ae19c77aea067ca1ba7ec75b83d1d6de4ba926"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/ReceiverReport.hpp",
+      "sha256": "969507203515e9f425bab6b818b920c2543b6d2388a43d7d0442694a9f90a5f2"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/Sdes.hpp",
+      "sha256": "76ddf5332c86aa28ce57bef55ef89aa3fac28593cec3196fed010f4061f03f95"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/SenderReport.hpp",
+      "sha256": "0905c33a251505b81aaddbe6a7683dc65704b3d24dcab558c31aec8d758b0355"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/XR.hpp",
+      "sha256": "32a1880e84958866dcc99520bd1f15863c64c6ce2e1d8cba216408e833a06d8a"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/XrDelaySinceLastRr.hpp",
+      "sha256": "786d4fb57964281f12b60237cf074c8e34abbe362df0e310fb199809e0c6db97"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/XrReceiverReferenceTime.hpp",
+      "sha256": "f269cfb73746d0ce90174c0ecb136677fed8f9a8935e7212ced53dceabe292db"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RateCalculator.hpp",
+      "sha256": "63676e751dc1390c275b1b3dc55c174750c28d9982dab60c8bc0f204d57f6f86"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/Router.hpp",
+      "sha256": "83fe7edf609fd0f7faa3216fbec4276c77139d2102788c34bbe39870ec9a10a4"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RtcLogger.hpp",
+      "sha256": "f14f88f5f791d20f735df47c6819d461a1ab8ea5b05c79c1d3671f4b931f8806"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RtpDictionaries.hpp",
+      "sha256": "5ae630c1bec8751384b19cbb508ec848957ea4963a40499fb72477cb3e72253d"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RtpHeaderExtensionIds.hpp",
+      "sha256": "55834af4ae8c7d50b42f3d53a858c0c0f3f94c9cfc3eed5a5c51a6b5653b0ae6"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RtpListener.hpp",
+      "sha256": "f380e2b609f0f7111e857866433ea6dfdcf2f6da4a319b80be161c01afa406e1"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RtpObserver.hpp",
+      "sha256": "cd384d9553c7254eba33cf11495a8607e96d81f10333025ed972fd29008e1109"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RtpPacket.hpp",
+      "sha256": "7aaf7b61903465cc57259dfc4cda9b752317992b72ae8287728c0aea91585448"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RtpProbationGenerator.hpp",
+      "sha256": "6ea516c47b206beecdce098db72be690bdd0833e7c2c7d692b08cc8a91c4d2a1"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RtpRetransmissionBuffer.hpp",
+      "sha256": "ba9ee4d9b559fb17a61c42cd4798b7838d3b87069a0993a18ab8ea5f94077a2d"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RtpStream.hpp",
+      "sha256": "79dd3b81c3df76a6bca33e9ed4b1f8bb8d93ce4afb70720794a626f2b2a3da9f"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RtpStreamRecv.hpp",
+      "sha256": "bfb7988f4ce1b7948fd71c385f3ece6c986f17086cb53f72298cdca8a59b003b"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RtpStreamSend.hpp",
+      "sha256": "393b0bcfdfb3532cadbbfc62a027cc3dddfe7cbde52dca9ee389471eb0e702d1"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/RtxStream.hpp",
+      "sha256": "402dc141a0fb30a9d7b6eb1a15ed162674689ea764d7d8041daf4dd5be5b2957"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/SctpAssociation.hpp",
+      "sha256": "6c84f2bef240453618f96894a68487d96596e63ec1b9985a0dfb7fa0fc8aa8c3"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/SctpDictionaries.hpp",
+      "sha256": "7739579818f48e0101c64936eb66d2c5d8e159611212e2e4f8628cb4a44dd9b8"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/SctpListener.hpp",
+      "sha256": "e61970135efe96909261e2848688e52e0b49d57867595b2e37d7f3efc3346f7e"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/SenderBandwidthEstimator.hpp",
+      "sha256": "6d0f2c68f062a7df343c01ef401e1c4408e989479342d88208a2946cdf2c7e5d"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/SeqManager.hpp",
+      "sha256": "ffa26c635c9883eeab5c4cc86e1a6a33a37f4534d5f86341802ca1a4be1c3156"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/Shared.hpp",
+      "sha256": "473aa938bdb6efcd85ce7dd4f311541951df463f084cdbcd5e3077f3912f7488"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/SimpleConsumer.hpp",
+      "sha256": "c48e57748c147fbf373c2360a35f490ed6acc61fede3bdc469d693fbee8316d1"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/SimulcastConsumer.hpp",
+      "sha256": "41afbdc32c304acc8e14369af8c0023225ed5da7c829f6cac7b50fb15d8fa3a2"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/SrtpSession.hpp",
+      "sha256": "1717d8479b755bdd6d4c3cd57fca7f7e207aafb018b6435599161d817e6dca0b"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/StunPacket.hpp",
+      "sha256": "c9346c9c092cd33ba80f057323dd758b0b9933b2355cfd840bada95aaefe22ca"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/SvcConsumer.hpp",
+      "sha256": "9983e88c7f4f1edf9482a66e23dd0696e4a5b4d90b9e0d26b6992d13cc376402"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/TcpConnection.hpp",
+      "sha256": "d9b7e69ac5b2da19d2995cb198b13ae0ca0b2e59628c3e07decfe6d0ad0b38b0"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/TcpServer.hpp",
+      "sha256": "40781282edeafb2b4beb853c62b870f74d443e9dd8393fdab877e89652da6b84"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/Transport.hpp",
+      "sha256": "41c1cac193aa75b7afd824bdd8618efd9bf1a78a5220440e79bc98f896e4a356"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/TransportCongestionControlClient.hpp",
+      "sha256": "92a08d89333da299d3931aff5d6787d0a4f5a231d1d4915931b16e264d5eb9d4"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/TransportCongestionControlServer.hpp",
+      "sha256": "034e332a2fc38bbd13da7d6e5ba6c3cd9d08160a4ac1e11dd51936816a5453f7"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/TransportTuple.hpp",
+      "sha256": "6646cb9b671944c858fa7630b9423ee393f6e901f29af6ab91d42566946cf018"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/TrendCalculator.hpp",
+      "sha256": "9ea7e976cf3443858f48c981c58fff06a31968c39ece8a2f137ca16764186840"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/UdpSocket.hpp",
+      "sha256": "13f746efea3e59dfef72986eab512b37b83be17324c7a5e1d8ea188042076bc4"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/WebRtcServer.hpp",
+      "sha256": "e5ee531f2f1c1156e4cb446fdd341b4b77240a3f786788892d55d777ff7bddd1"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/include/RTC/WebRtcTransport.hpp",
+      "sha256": "5262752aab23f0d8a0b3fbd6bcd3faa59549efb22a8710bf5ae13dffe8a81f17"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/Channel/ChannelNotification.cpp",
+      "sha256": "ae83a99af1594f501113b175921264d3b251de4579a4c7ba77ee5aa9734dc6a6"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/Channel/ChannelNotifier.cpp",
+      "sha256": "2a672e203956211e3b448590864d3bf191c32dcce2630f708864461281849a3f"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/Channel/ChannelRequest.cpp",
+      "sha256": "0450bef4c5fe1872065b78d8b1e8b88e0dd2bc394873ca58751c530f93700e94"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/Channel/ChannelSocket.cpp",
+      "sha256": "b4aa37fc1ed6094501586c28195425652cf8ca59d2c80782165cf2f79c8f82de"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/ActiveSpeakerObserver.cpp",
+      "sha256": "8245e21bbe8b4aff0a462349b371ff87df8f94a4f62a7608fa61169bc5b8b70d"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/AudioLevelObserver.cpp",
+      "sha256": "92fc71f4663856a3ac6facd27312d05c9eee3f786a097bf952515dbc4a038b39"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/Codecs/H264.cpp",
+      "sha256": "90bf3d61a65daa1860f17c6a47d7233cae2eeb2bdaedf5e3350997edfff76caa"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/Codecs/H264_SVC.cpp",
+      "sha256": "abed3110650988e91f5ef127796e2e7326c862fede5e0e0d179d7217faf48ea3"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/Codecs/Opus.cpp",
+      "sha256": "faef54e6e4ee30674a63a9e35f0e393f5a642dba39ec67d4eb1a8f58383c0333"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/Codecs/VP8.cpp",
+      "sha256": "a1e10f9469fb5d657bac5994f63077f02cb38e9f28693134d758188c24c61e7f"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/Codecs/VP9.cpp",
+      "sha256": "8ac6a760719175d54f6066265f9d2ab1ab5fb680c9abd7fbca42e2a99e8c5eec"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/Consumer.cpp",
+      "sha256": "593fe286b1255ddb742476acbef8a8a5795e4acc016c29e78e9c77b8f9febc99"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/DataConsumer.cpp",
+      "sha256": "0a15920e705bb79b14721b7ec70135a490e4c5599e29d1b66b9d9b38e237273f"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/DataProducer.cpp",
+      "sha256": "0264a587c30b2ea09b36ef8002e2b0142344c6c9ad119abab3928941e1f3b662"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/DirectTransport.cpp",
+      "sha256": "29e222d4f9721589c3371abfdd933c3f586a7fedd78011092f9bf07a5ee58e21"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+      "sha256": "c275da123caba1b500490b071b74d79cf8e0ffd02f2970a9b373bae9a502ecb6"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/IceCandidate.cpp",
+      "sha256": "69dcac515f4fa4df032e33bd06915af9f1271f5b41a466ed6a70721f65225951"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/IceServer.cpp",
+      "sha256": "8b45e515743732eff0185f25d0560a62e5c3deb285827c22032020a3bce745a7"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/KeyFrameRequestManager.cpp",
+      "sha256": "5d6dda36b85089c1c18c4c31f3e72a0b17e7f6d699fc2f11461b8e3efc0ca1f4"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/NackGenerator.cpp",
+      "sha256": "273faf515a9093ed430dda114d18153574e6771dffc85df60e93dfffacc19d74"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/PipeConsumer.cpp",
+      "sha256": "ddcc34824ef1077ff91c52e58725cf5d46e6a5db307675d95c860bf9801fa6ab"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/PipeTransport.cpp",
+      "sha256": "168ccaba244930d17b4a0e5ad9e7488c86292114003a8f8d40fc98cb78abce88"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/PlainTransport.cpp",
+      "sha256": "f560f93a5ae4b31ac97845747772f0a789fc6f84be726ff7a96f795e5dcd5089"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/PortManager.cpp",
+      "sha256": "3220155ccf379eec5498c6566a07fdad6e2b47a0ef4915d836a0ab39459d319f"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/ProbeEgressAdapter.cpp",
+      "sha256": "90fda1ed72c310dfccabb8a6e5e92bcb1c03f08767a08a652531fb03e4038d1c"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/Producer.cpp",
+      "sha256": "35449fbdf323c950ff3b0892c5118e35d67938d24cf1ff68d5bc39ad0cf89d19"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/Bye.cpp",
+      "sha256": "78a9a3967303172caebcedabb87af5536f2d218b2f6299c033d9b562ee56ec73"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/CompoundPacket.cpp",
+      "sha256": "3d59f4dd202aa5c9c6e55dab9546f5caa4f29de65c76e419668b0070297ea886"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/Feedback.cpp",
+      "sha256": "22bebbe9dcef1af26144f1c8eed79dd93fa68e90e4215d3292714e9d081eb86f"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackPs.cpp",
+      "sha256": "985a675d4394209e14d30b3130ce3be1b632ad9ada9c12972af02ea069a04a19"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackPsAfb.cpp",
+      "sha256": "0cf8acdcd96313e4c10296db88298c56e787d4f8a2a48c615ab7c0a7d08a0596"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackPsFir.cpp",
+      "sha256": "d6864e351b17d43fdf488ecd62242857a2e4d01e013b6be31be6994bd37c3814"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackPsLei.cpp",
+      "sha256": "908797531765d7fb71ec22017719d518359b535311d70738ca1b25b35993dad4"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackPsPli.cpp",
+      "sha256": "43682a28523c566b91b911fa5341a71fe7adffa29d7a4b4e65f6f23159fd8872"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackPsRemb.cpp",
+      "sha256": "a7eb1950dcc9b182f3e0faa14cdb2f32f76750c4d04b7f5e42a1f33cf185a5b8"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackPsRpsi.cpp",
+      "sha256": "4f9e2877db2784dfe519b39b0847deebfa992297dbc6406e9ca3c8dcd4aa7afc"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackPsSli.cpp",
+      "sha256": "1c0e5734fdd29b868de222bb9e21bd14e2aba1e9644e8bd4e4a857ceeb8f0440"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackPsTst.cpp",
+      "sha256": "3f4381771c9ab8b81c7f999f8d23e911cd1bcea760f5cdaa3aa7f69c05a5bca8"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackPsVbcm.cpp",
+      "sha256": "70daa18c4cadbda103e2176a9970dee18dbbe09db20fc0ea8147a7f06911424f"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtp.cpp",
+      "sha256": "0f53d30c0622de95d787e24d32216a8877374a384c4d67e622d8df5eecb5e113"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpEcn.cpp",
+      "sha256": "7154cdcbe52b6649d87bf72bf8d7f8aa3cdb7d9a8ef15504d13c5caeb45f7c63"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpNack.cpp",
+      "sha256": "60ebdfd939cf118afaa853e770702826c3893ad4e356219bd23d160e533daf4e"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpSrReq.cpp",
+      "sha256": "99644f2efdfed8ab723eb218f8fb64c1b217050627e420585f5a0bc0641c0d36"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpTllei.cpp",
+      "sha256": "e82a9419c043b03d5c1c6a6ffdbb256b7797f1ea0c56e46ce3e6416c20af1e40"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpTmmb.cpp",
+      "sha256": "27f65b38a7c14d26c3b9744bcf8e8ca22b857b0d40503accc5a42a16664ce342"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpTransport.cpp",
+      "sha256": "4d24d9186af92e3e627d0b7de397e2305770119426601bd5250d07845173f7e9"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/Packet.cpp",
+      "sha256": "02200cab79fed9e293eaf3f3df912b9a33bd69be399cf1ffeac46c78d3a8462b"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/ReceiverReport.cpp",
+      "sha256": "7b95faeb844453d522f7c2d6b099f8f6bfc54c4b19278b6c06ae6e898a986079"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/Sdes.cpp",
+      "sha256": "0469b55c7d996c26ecc8d0060858583831b68d1748e2e68eb5106bbb6fe3f46f"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/SenderReport.cpp",
+      "sha256": "d0d838a7ea312344e09b364c23e9fa27b33f7b0f575d7f0aaf1f750cb66847f7"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/XR.cpp",
+      "sha256": "c548abb5da7745a29c49185873de435a9e6f90ab58e7f6b3ab7b05318165a835"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/XrDelaySinceLastRr.cpp",
+      "sha256": "00447987e8df1f8f53ad46957e478ba3ee1cbdb317bec38f77d89e74a331e631"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/XrReceiverReferenceTime.cpp",
+      "sha256": "ff8e9b9814fc56f832283da515d7904bbf93399d5aea6ec4395f26c198485429"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RateCalculator.cpp",
+      "sha256": "7d4ce20c95375a05c8d11097984b7876eababd1d133e2235b0410e51d1ff0153"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/Router.cpp",
+      "sha256": "400137bc99a3cb49d1f12876df08b2c44ad1dcc1f224221fb73a2db057faebc2"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RtcLogger.cpp",
+      "sha256": "8f95739ffe771e83aefff66d0f2920c7dd213770200c190f0e40b67b54ebc42c"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RtpDictionaries/Parameters.cpp",
+      "sha256": "9837a074fe9199679f3519c9b98c1643bf31cd81cef05730a4a77b6055e9c720"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RtpDictionaries/RtcpFeedback.cpp",
+      "sha256": "4ea50ce627cea11e4f47db5a4f80fa6c8b9810b75e124d6f284be515eef704cb"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RtpDictionaries/RtcpParameters.cpp",
+      "sha256": "0492206dcb90238a2aad3029c40da5510f43dd921f2928d6c5a7501c24cb0179"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RtpDictionaries/RtpCodecMimeType.cpp",
+      "sha256": "a2b98e88968993653e9991c4ff241f9787aac44619e0c734d93281543a8ef262"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RtpDictionaries/RtpCodecParameters.cpp",
+      "sha256": "5d59976230c4eb297aca502f7aa6b2a9f8e4d93da7c0517b0dd4673f2bd30523"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RtpDictionaries/RtpEncodingParameters.cpp",
+      "sha256": "2053a18335a483b9edeb52fcfeaaf601517b86e8f9dadfa4c8f0e11c3c490afd"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RtpDictionaries/RtpHeaderExtensionParameters.cpp",
+      "sha256": "cdb7fd1d7390db2cd3b43c46e65c508ac7deb9be1bbd24940cf21a4a95867cc9"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RtpDictionaries/RtpHeaderExtensionUri.cpp",
+      "sha256": "5716abf11e9cc4683a5d19a57c25ce3b3635f665ef0b3296e3de77ad3ef0156e"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RtpDictionaries/RtpParameters.cpp",
+      "sha256": "fe0050db762309d4fff2e3683beb3f8a99c96139d8ca11548a4326c9dcc1146a"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RtpDictionaries/RtpRtxParameters.cpp",
+      "sha256": "2688a324f36660f417aa72b348550eab73015b2244f17394a3c87f023034b9a1"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RtpListener.cpp",
+      "sha256": "24bc5f2bbab75b66e76db9bf1fd3e04e2401faf5ce6e6dcca577c9c0e7ab36b0"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RtpObserver.cpp",
+      "sha256": "86cee400a11d201d2c2683ee4c86c02be9a81bfd748e86288fca09569cd61c97"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RtpPacket.cpp",
+      "sha256": "80b15d9b611c053f4e6ece2deed2ba2b0eb10214cafcd50fd2ec26055cc11916"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RtpProbationGenerator.cpp",
+      "sha256": "44a81a5e5a3c6d3695e4afcba0c3ad555d35c7bf70c3d481434aa1a66c804d4a"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RtpRetransmissionBuffer.cpp",
+      "sha256": "0240c844d6e19eb19da20ec1eef3a2792e42611fde3a838bfa9ece8833219562"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RtpStream.cpp",
+      "sha256": "c488bacd069ab1884d791ff77dddd5910a48e683e4fcf0f5bcfcb3ee93e23dba"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamRecv.cpp",
+      "sha256": "dc3124ca6854cfcccdc05eac96981bcab39c90a7d81a4453dff4755cb43d21bf"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamSend.cpp",
+      "sha256": "2e4b2dd325d2cc46a0dddca6ef47d44c852d797c0d0d6d481571d7b2a4de4ba5"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/RtxStream.cpp",
+      "sha256": "ef241b29b11e63c11762d67fd6b0531b9734455716e71c5c5c622e5c70aefa55"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+      "sha256": "9d67594fce7f61fbd3a804f2a229ceaeb0bdfaf763689df7fb63cdaebd349e1a"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/SctpDictionaries/SctpStreamParameters.cpp",
+      "sha256": "f779ed531138aed350e4255d3a9483e9970e427fb69bd88a5718766bee6272b6"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/SctpListener.cpp",
+      "sha256": "c5df7b4d5ddc5ee694970bdcebcf90d8928c7a1b161ffe59b4e5f1d0230d3c44"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/SenderBandwidthEstimator.cpp",
+      "sha256": "44b78eeefe3c7c412eee3cbd27e56b81a444ac87f938588839bb7578dda1001b"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/SeqManager.cpp",
+      "sha256": "01247fee57b0f68d23c4beaefaf3f291a1edbe71cf1b5510fcb1650973b6111d"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/Shared.cpp",
+      "sha256": "cd991aaad734daf56a8b790278ca3e9e0dafdebf09db550b5ae66ca01edd63e5"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/SimpleConsumer.cpp",
+      "sha256": "b713f5fc681c4933803563a7ef4398ef86b723a18005b25234c7852042c371bc"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/SimulcastConsumer.cpp",
+      "sha256": "50a5a1d70d6d4ff1d0b845ee9087c95113a584b801fbc9df7b6bea08fb4e8d6d"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/SrtpSession.cpp",
+      "sha256": "54367498dfc416990f3e74dece5fbcaeb92079ada37bde21b4f8527e19673132"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+      "sha256": "0e9ae628a84afd9c30b28e3f4685da9a150a18a214b93fe0b3891c5de8b64997"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/SvcConsumer.cpp",
+      "sha256": "2d9314167ffbafdd0aad78a1c7844ee89c4caaf63fa73de8ddbd3a679c963cef"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/TcpConnection.cpp",
+      "sha256": "a6e69e45596282e5080e9cd3d4d0cbbea2600e6ee040921ac45e501d197aa9e3"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/TcpServer.cpp",
+      "sha256": "ceada54839de5632942f69fd0ec63135e6296ef21715430d74474cdf519f057f"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+      "sha256": "9adc47c3c075b47bc613ea10861f592ea3fc6b007373f832ea70300be2b1ccb2"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/TransportCongestionControlClient.cpp",
+      "sha256": "ca22498d987f411d9485a401414d310e7ebc50ddb5b6631c64761976dfb1b488"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/TransportCongestionControlServer.cpp",
+      "sha256": "bc94f34add18a371bb4865711ae39d763348accbf097b298f8669fd10d606fc1"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/TransportTuple.cpp",
+      "sha256": "5e89761419af0cca676d959fdc6ad54b83f03a900d72e28ecd07baad150b99e2"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/TrendCalculator.cpp",
+      "sha256": "4f552afcad8b7508d6f94441094fdb6cf5f1363e5c50f7c69a141f82e5348469"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/UdpSocket.cpp",
+      "sha256": "d42fcbb47ef8e1fa10c75f6a37cd2f3e5616a381e3c0b0c05ee260d8543e419c"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/WebRtcServer.cpp",
+      "sha256": "2218efcdf0bc99cd8c1118965e26a224c4193d746d5c480ddfc2a299fcdf13ce"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+      "sha256": "fc9ec18b184e7665f712cad5f35b6e1f7e7c5f08de843e26d431c7603e9e08c5"
+    },
+    {
+      "path": "src/mediasoup-worker-src/worker/subprojects/flatbuffers.wrap",
+      "sha256": "f0c051565b281e43be20496be96d3b8cce608938beac40c246a9042d7a1fc0ff"
+    }
+  ],
+  "main": {
+    "generatedMessageVersion": "25.12.19",
+    "generatedNotificationVersion": "25.12.19",
+    "generationArgs": [
+      "--cpp",
+      "--gen-object-api",
+      "--scoped-enums"
+    ],
+    "runtimeInclude": "third_party/flatbuffers/include",
+    "runtimeVersion": "25.12.19"
+  },
+  "worker": {
+    "generatedMessageVersion": "24.3.6",
+    "generatedNotificationVersion": "24.3.6",
+    "generationArgs": [
+      "--cpp",
+      "--cpp-field-case-style lower",
+      "--reflect-names",
+      "--scoped-enums",
+      "--filename-suffix ''"
+    ],
+    "wrapVersion": "24.3.6"
+  }
+}

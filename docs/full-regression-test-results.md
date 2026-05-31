@@ -1,14 +1,14 @@
 # Full Regression Test Results
 
-Generated at: `2026-05-28 21:05:00 CST`
+Generated at: `2026-05-31 23:59:26 CST`
 
 ## Summary
 
 - Script: `scripts/run_all_tests.sh`
-- Selected groups: `unit`, `integration`
+- Selected groups: `unit`, `integration`, `qos`
 - Overall status: `PASS`
-- Attempted tasks: `5`
-- Passed tasks: `5`
+- Attempted tasks: `6`
+- Passed tasks: `6`
 - Failed tasks: `0`
 - Failed groups: none
 
@@ -20,29 +20,28 @@ Generated at: `2026-05-28 21:05:00 CST`
 
 | Task | Group | Status | Duration |
 |---|---|---|---|
-| `unit` | `unit` | `PASS` | `2s` |
-| `integration:mediasoup_integration_tests` | `integration` | `PASS` | `20s` |
+| `unit` | `unit` | `PASS` | `1s` |
+| `integration:mediasoup_integration_tests` | `integration` | `PASS` | `57s` |
 | `integration:mediasoup_e2e_tests` | `integration` | `PASS` | `5s` |
-| `integration:mediasoup_stability_integration_tests` | `integration` | `PASS` | `9s` |
+| `integration:mediasoup_stability_integration_tests` | `integration` | `PASS` | `11s` |
 | `integration:mediasoup_review_fix_tests` | `integration` | `PASS` | `17s` |
+| `qos:qos-regression` | `qos` | `PASS` | `778s` |
 
 ## Task Duration View
 
 | Task | Duration | Visual |
 |---|---:|---|
-| `unit` | `2s` | # |
-| `integration:mediasoup_integration_tests` | `20s` | ###### |
+| `unit` | `1s` | # |
+| `integration:mediasoup_integration_tests` | `57s` | # |
 | `integration:mediasoup_e2e_tests` | `5s` | # |
-| `integration:mediasoup_stability_integration_tests` | `9s` | ## |
-| `integration:mediasoup_review_fix_tests` | `17s` | ##### |
+| `integration:mediasoup_stability_integration_tests` | `11s` | # |
+| `integration:mediasoup_review_fix_tests` | `17s` | # |
+| `qos:qos-regression` | `778s` | #################### |
 
 ## Detailed Reports
 
 | Report | Scope | Link | Updated |
 |---|---|---|---|
-| Uplink Summary | Uplink QoS summary | [uplink-qos-test-results-summary.md](uplink-qos-test-results-summary.md) | 2026-05-25 17:38:21 |
-| Uplink Cases | Browser uplink per-case report | [uplink-qos-case-results.md](uplink-qos-case-results.md) | 2026-05-25 17:38:21 |
-| Downlink Summary | Downlink QoS summary | [downlink-qos-test-results-summary.md](downlink-qos-test-results-summary.md) | 2026-05-25 21:11:10 |
-| Downlink Cases | Downlink per-case report | [downlink-qos-case-results.md](downlink-qos-case-results.md) | 2026-05-25 17:38:20 |
-| Uplink Matrix JSON | Latest browser uplink matrix artifact | [uplink-qos-matrix-report.json](generated/uplink-qos-matrix-report.json) | 2026-05-25 17:38:21 |
-| Downlink Matrix JSON | Latest downlink matrix artifact | - | - |
+| Downlink Summary | Downlink QoS summary | [downlink-qos-test-results-summary.md](downlink-qos-test-results-summary.md) | 2026-05-31 23:59:26 |
+| Downlink Cases | Downlink per-case report | [downlink-qos-case-results.md](downlink-qos-case-results.md) | 2026-05-31 23:59:26 |
+| Downlink Matrix JSON | Latest downlink matrix artifact | [downlink-qos-matrix-report.json](generated/downlink-qos-matrix-report.json) | 2026-05-31 23:59:25 |
