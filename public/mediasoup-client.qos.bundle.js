@@ -5,9 +5,9 @@ var mediasoupClient = (() => {
     return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
   };
 
-  // node_modules/ms/index.js
+  // tests/qos_harness/node_modules/ms/index.js
   var require_ms = __commonJS({
-    "node_modules/ms/index.js"(exports, module) {
+    "tests/qos_harness/node_modules/ms/index.js"(exports, module) {
       var s = 1e3;
       var m = s * 60;
       var h = m * 60;
@@ -121,9 +121,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // node_modules/debug/src/common.js
+  // tests/qos_harness/node_modules/debug/src/common.js
   var require_common = __commonJS({
-    "node_modules/debug/src/common.js"(exports, module) {
+    "tests/qos_harness/node_modules/debug/src/common.js"(exports, module) {
       function setup(env) {
         createDebug.debug = createDebug;
         createDebug.default = createDebug;
@@ -224,49 +224,63 @@ var mediasoupClient = (() => {
           createDebug.namespaces = namespaces;
           createDebug.names = [];
           createDebug.skips = [];
-          let i;
-          const split = (typeof namespaces === "string" ? namespaces : "").split(/[\s,]+/);
-          const len = split.length;
-          for (i = 0; i < len; i++) {
-            if (!split[i]) {
-              continue;
-            }
-            namespaces = split[i].replace(/\*/g, ".*?");
-            if (namespaces[0] === "-") {
-              createDebug.skips.push(new RegExp("^" + namespaces.slice(1) + "$"));
+          const split = (typeof namespaces === "string" ? namespaces : "").trim().replace(/\s+/g, ",").split(",").filter(Boolean);
+          for (const ns of split) {
+            if (ns[0] === "-") {
+              createDebug.skips.push(ns.slice(1));
             } else {
-              createDebug.names.push(new RegExp("^" + namespaces + "$"));
+              createDebug.names.push(ns);
             }
           }
         }
+        function matchesTemplate(search, template) {
+          let searchIndex = 0;
+          let templateIndex = 0;
+          let starIndex = -1;
+          let matchIndex = 0;
+          while (searchIndex < search.length) {
+            if (templateIndex < template.length && (template[templateIndex] === search[searchIndex] || template[templateIndex] === "*")) {
+              if (template[templateIndex] === "*") {
+                starIndex = templateIndex;
+                matchIndex = searchIndex;
+                templateIndex++;
+              } else {
+                searchIndex++;
+                templateIndex++;
+              }
+            } else if (starIndex !== -1) {
+              templateIndex = starIndex + 1;
+              matchIndex++;
+              searchIndex = matchIndex;
+            } else {
+              return false;
+            }
+          }
+          while (templateIndex < template.length && template[templateIndex] === "*") {
+            templateIndex++;
+          }
+          return templateIndex === template.length;
+        }
         function disable() {
           const namespaces = [
-            ...createDebug.names.map(toNamespace),
-            ...createDebug.skips.map(toNamespace).map((namespace) => "-" + namespace)
+            ...createDebug.names,
+            ...createDebug.skips.map((namespace) => "-" + namespace)
           ].join(",");
           createDebug.enable("");
           return namespaces;
         }
         function enabled(name) {
-          if (name[name.length - 1] === "*") {
-            return true;
-          }
-          let i;
-          let len;
-          for (i = 0, len = createDebug.skips.length; i < len; i++) {
-            if (createDebug.skips[i].test(name)) {
+          for (const skip of createDebug.skips) {
+            if (matchesTemplate(name, skip)) {
               return false;
             }
           }
-          for (i = 0, len = createDebug.names.length; i < len; i++) {
-            if (createDebug.names[i].test(name)) {
+          for (const ns of createDebug.names) {
+            if (matchesTemplate(name, ns)) {
               return true;
             }
           }
           return false;
-        }
-        function toNamespace(regexp) {
-          return regexp.toString().substring(2, regexp.toString().length - 2).replace(/\.\*\?$/, "*");
         }
         function coerce(val) {
           if (val instanceof Error) {
@@ -284,9 +298,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // node_modules/debug/src/browser.js
+  // tests/qos_harness/node_modules/debug/src/browser.js
   var require_browser = __commonJS({
-    "node_modules/debug/src/browser.js"(exports, module) {
+    "tests/qos_harness/node_modules/debug/src/browser.js"(exports, module) {
       exports.formatArgs = formatArgs;
       exports.save = save;
       exports.load = load;
@@ -428,7 +442,7 @@ var mediasoupClient = (() => {
       function load() {
         let r;
         try {
-          r = exports.storage.getItem("debug");
+          r = exports.storage.getItem("debug") || exports.storage.getItem("DEBUG");
         } catch (error) {
         }
         if (!r && typeof process !== "undefined" && "env" in process) {
@@ -454,23 +468,33 @@ var mediasoupClient = (() => {
     }
   });
 
-  // node_modules/ua-parser-js/src/ua-parser.js
+  // tests/qos_harness/node_modules/ua-parser-js/src/main/ua-parser.js
   var require_ua_parser = __commonJS({
-    "node_modules/ua-parser-js/src/ua-parser.js"(exports, module) {
+    "tests/qos_harness/node_modules/ua-parser-js/src/main/ua-parser.js"(exports, module) {
       (function(window2, undefined2) {
         "use strict";
-        var LIBVERSION = "1.0.39", EMPTY = "", UNKNOWN = "?", FUNC_TYPE = "function", UNDEF_TYPE = "undefined", OBJ_TYPE = "object", STR_TYPE = "string", MAJOR = "major", MODEL = "model", NAME = "name", TYPE = "type", VENDOR = "vendor", VERSION = "version", ARCHITECTURE = "architecture", CONSOLE = "console", MOBILE = "mobile", TABLET = "tablet", SMARTTV = "smarttv", WEARABLE = "wearable", EMBEDDED = "embedded", UA_MAX_LENGTH = 500;
-        var AMAZON = "Amazon", APPLE = "Apple", ASUS = "ASUS", BLACKBERRY = "BlackBerry", BROWSER = "Browser", CHROME = "Chrome", EDGE = "Edge", FIREFOX = "Firefox", GOOGLE = "Google", HUAWEI = "Huawei", LG = "LG", MICROSOFT = "Microsoft", MOTOROLA = "Motorola", OPERA = "Opera", SAMSUNG = "Samsung", SHARP = "Sharp", SONY = "Sony", XIAOMI = "Xiaomi", ZEBRA = "Zebra", FACEBOOK = "Facebook", CHROMIUM_OS = "Chromium OS", MAC_OS = "Mac OS", SUFFIX_BROWSER = " Browser";
-        var extend = function(regexes2, extensions) {
-          var mergedRegexes = {};
-          for (var i in regexes2) {
-            if (extensions[i] && extensions[i].length % 2 === 0) {
-              mergedRegexes[i] = extensions[i].concat(regexes2[i]);
-            } else {
-              mergedRegexes[i] = regexes2[i];
+        var LIBVERSION = "2.0.10", UA_MAX_LENGTH = 500, USER_AGENT = "user-agent", EMPTY = "", UNKNOWN = "?", TYPEOF = {
+          FUNCTION: "function",
+          OBJECT: "object",
+          STRING: "string",
+          UNDEFINED: "undefined"
+        }, BROWSER = "browser", CPU = "cpu", DEVICE = "device", ENGINE = "engine", OS = "os", RESULT = "result", NAME = "name", TYPE = "type", VENDOR = "vendor", VERSION = "version", ARCHITECTURE = "architecture", MAJOR = "major", MODEL = "model", CONSOLE = "console", MOBILE = "mobile", TABLET = "tablet", SMARTTV = "smarttv", WEARABLE = "wearable", XR = "xr", EMBEDDED = "embedded", FETCHER = "fetcher", INAPP = "inapp", BRANDS = "brands", FORMFACTORS = "formFactors", FULLVERLIST = "fullVersionList", PLATFORM = "platform", PLATFORMVER = "platformVersion", BITNESS = "bitness", CH = "sec-ch-ua", CH_FULL_VER_LIST = CH + "-full-version-list", CH_ARCH = CH + "-arch", CH_BITNESS = CH + "-" + BITNESS, CH_FORM_FACTORS = CH + "-form-factors", CH_MOBILE = CH + "-" + MOBILE, CH_MODEL = CH + "-" + MODEL, CH_PLATFORM = CH + "-" + PLATFORM, CH_PLATFORM_VER = CH_PLATFORM + "-version", CH_ALL_VALUES = [BRANDS, FULLVERLIST, MOBILE, MODEL, PLATFORM, PLATFORMVER, ARCHITECTURE, FORMFACTORS, BITNESS], AMAZON = "Amazon", APPLE = "Apple", ASUS = "ASUS", BLACKBERRY = "BlackBerry", GOOGLE = "Google", HUAWEI = "Huawei", LENOVO = "Lenovo", HONOR = "Honor", LG = "LG", MICROSOFT = "Microsoft", MOTOROLA = "Motorola", NVIDIA = "Nvidia", ONEPLUS = "OnePlus", OPPO = "OPPO", SAMSUNG = "Samsung", SHARP = "Sharp", SONY = "Sony", XIAOMI = "Xiaomi", ZEBRA = "Zebra", CHROME = "Chrome", CHROMIUM = "Chromium", CHROMECAST = "Chromecast", EDGE = "Edge", FIREFOX = "Firefox", OPERA = "Opera", FACEBOOK = "Facebook", SOGOU = "Sogou", PREFIX_MOBILE = "Mobile ", SUFFIX_BROWSER = " Browser", WINDOWS = "Windows";
+        var isWindow = typeof window2 !== TYPEOF.UNDEFINED, NAVIGATOR = isWindow && window2.navigator ? window2.navigator : undefined2, NAVIGATOR_UADATA = NAVIGATOR && NAVIGATOR.userAgentData ? NAVIGATOR.userAgentData : undefined2;
+        var extend = function(defaultRgx, extensions) {
+          var mergedRgx = {};
+          var extraRgx = extensions;
+          if (!isExtensions(extensions)) {
+            extraRgx = {};
+            for (var i in extensions) {
+              for (var j in extensions[i]) {
+                extraRgx[j] = extensions[i][j].concat(extraRgx[j] ? extraRgx[j] : []);
+              }
             }
           }
-          return mergedRegexes;
+          for (var k in defaultRgx) {
+            mergedRgx[k] = extraRgx[k] && extraRgx[k].length % 2 === 0 ? extraRgx[k].concat(defaultRgx[k]) : defaultRgx[k];
+          }
+          return mergedRgx;
         }, enumerize = function(arr) {
           var enums = {};
           for (var i = 0; i < arr.length; i++) {
@@ -478,18 +502,57 @@ var mediasoupClient = (() => {
           }
           return enums;
         }, has = function(str1, str2) {
-          return typeof str1 === STR_TYPE ? lowerize(str2).indexOf(lowerize(str1)) !== -1 : false;
-        }, lowerize = function(str) {
-          return str.toLowerCase();
-        }, majorize = function(version) {
-          return typeof version === STR_TYPE ? version.replace(/[^\d\.]/g, EMPTY).split(".")[0] : undefined2;
-        }, trim = function(str, len) {
-          if (typeof str === STR_TYPE) {
-            str = str.replace(/^\s\s*/, EMPTY);
-            return typeof len === UNDEF_TYPE ? str : str.substring(0, UA_MAX_LENGTH);
+          if (typeof str1 === TYPEOF.OBJECT && str1.length > 0) {
+            for (var i in str1) {
+              if (lowerize(str2) == lowerize(str1[i])) return true;
+            }
+            return false;
           }
+          return isString(str1) ? lowerize(str2) == lowerize(str1) : false;
+        }, isExtensions = function(obj, deep) {
+          for (var prop in obj) {
+            return /^(browser|cpu|device|engine|os)$/.test(prop) || (deep ? isExtensions(obj[prop]) : false);
+          }
+        }, isString = function(val) {
+          return typeof val === TYPEOF.STRING;
+        }, itemListToArray = function(header) {
+          if (!header) return undefined2;
+          var arr = [];
+          var tokens = normalizeHeaderValue(header).split(",");
+          for (var i = 0; i < tokens.length; i++) {
+            if (tokens[i].indexOf(";") > -1) {
+              var token = trim(tokens[i]).split(";v=");
+              arr[i] = { brand: token[0], version: token[1] };
+            } else {
+              arr[i] = trim(tokens[i]);
+            }
+          }
+          return arr;
+        }, lowerize = function(str) {
+          return isString(str) ? str.toLowerCase() : str;
+        }, majorize = function(version) {
+          return isString(version) ? strip(/[^\d\.]/g, version).split(".")[0] : undefined2;
+        }, normalizeHeaderValue = function(str) {
+          return isString(str) ? trim(strip(/\\?\"/g, str), UA_MAX_LENGTH) : undefined2;
+        }, setProps = function(arr) {
+          for (var i in arr) {
+            if (!arr.hasOwnProperty(i)) continue;
+            var propName = arr[i];
+            if (typeof propName == TYPEOF.OBJECT && propName.length == 2) {
+              this[propName[0]] = propName[1];
+            } else {
+              this[propName] = undefined2;
+            }
+          }
+          return this;
+        }, strip = function(pattern, str) {
+          return isString(str) ? str.replace(pattern, EMPTY) : str;
+        }, trim = function(str, len) {
+          str = strip(/^\s\s*/, String(str));
+          return typeof len === TYPEOF.UNDEFINED ? str : str.substring(0, len);
         };
         var rgxMapper = function(ua, arrays) {
+          if (!ua || !arrays) return;
           var i = 0, j, k, p, q, matches, match;
           while (i < arrays.length && !matches) {
             var regex = arrays[i], props = arrays[i + 1];
@@ -503,21 +566,29 @@ var mediasoupClient = (() => {
                 for (p = 0; p < props.length; p++) {
                   match = matches[++k];
                   q = props[p];
-                  if (typeof q === OBJ_TYPE && q.length > 0) {
+                  if (typeof q === TYPEOF.OBJECT && q.length > 0) {
                     if (q.length === 2) {
-                      if (typeof q[1] == FUNC_TYPE) {
+                      if (typeof q[1] == TYPEOF.FUNCTION) {
                         this[q[0]] = q[1].call(this, match);
                       } else {
                         this[q[0]] = q[1];
                       }
-                    } else if (q.length === 3) {
-                      if (typeof q[1] === FUNC_TYPE && !(q[1].exec && q[1].test)) {
-                        this[q[0]] = match ? q[1].call(this, match, q[2]) : undefined2;
+                    } else if (q.length >= 3) {
+                      if (typeof q[1] === TYPEOF.FUNCTION && !(q[1].exec && q[1].test)) {
+                        if (q.length > 3) {
+                          this[q[0]] = match ? q[1].apply(this, q.slice(2)) : undefined2;
+                        } else {
+                          this[q[0]] = match ? q[1].call(this, match, q[2]) : undefined2;
+                        }
                       } else {
-                        this[q[0]] = match ? match.replace(q[1], q[2]) : undefined2;
+                        if (q.length == 3) {
+                          this[q[0]] = match ? match.replace(q[1], q[2]) : undefined2;
+                        } else if (q.length == 4) {
+                          this[q[0]] = match ? q[3].call(this, match.replace(q[1], q[2])) : undefined2;
+                        } else if (q.length > 4) {
+                          this[q[0]] = match ? q[3].apply(this, [match.replace(q[1], q[2])].concat(q.slice(4))) : undefined2;
+                        }
                       }
-                    } else if (q.length === 4) {
-                      this[q[0]] = match ? q[3].call(this, match.replace(q[1], q[2])) : undefined2;
                     }
                   } else {
                     this[q] = match ? match : undefined2;
@@ -527,9 +598,11 @@ var mediasoupClient = (() => {
             }
             i += 2;
           }
+        }, strTest = function(str, map) {
+          return map.test.test(str) ? map.ifTrue : map.ifFalse;
         }, strMapper = function(str, map) {
           for (var i in map) {
-            if (typeof map[i] === OBJ_TYPE && map[i].length > 0) {
+            if (typeof map[i] === TYPEOF.OBJECT && map[i].length > 0) {
               for (var j = 0; j < map[i].length; j++) {
                 if (has(map[i][j], str)) {
                   return i === UNKNOWN ? undefined2 : i;
@@ -541,38 +614,53 @@ var mediasoupClient = (() => {
           }
           return map.hasOwnProperty("*") ? map["*"] : str;
         };
-        var oldSafariMap = {
-          "1.0": "/8",
-          "1.2": "/1",
-          "1.3": "/3",
-          "2.0": "/412",
-          "2.0.2": "/416",
-          "2.0.3": "/417",
-          "2.0.4": "/419",
-          "?": "/"
-        }, windowsVersionMap = {
+        var windowsVersionMap = {
           "ME": "4.90",
-          "NT 3.11": "NT3.51",
-          "NT 4.0": "NT4.0",
-          "2000": "NT 5.0",
-          "XP": ["NT 5.1", "NT 5.2"],
-          "Vista": "NT 6.0",
-          "7": "NT 6.1",
-          "8": "NT 6.2",
-          "8.1": "NT 6.3",
-          "10": ["NT 6.4", "NT 10.0"],
-          "RT": "ARM"
+          "NT 3.51": "3.51",
+          "NT 4.0": "4.0",
+          "2000": ["5.0", "5.01"],
+          "XP": ["5.1", "5.2"],
+          "Vista": "6.0",
+          "7": "6.1",
+          "8": "6.2",
+          "8.1": "6.3",
+          "10": ["6.4", "10.0"],
+          "NT": ""
+        }, formFactorsMap = {
+          "embedded": "Automotive",
+          "mobile": "Mobile",
+          "tablet": ["Tablet", "EInk"],
+          "smarttv": "TV",
+          "wearable": "Watch",
+          "xr": ["VR", "XR"],
+          "?": ["Desktop", "Unknown"],
+          "*": undefined2
+        }, browserHintsMap = {
+          "Chrome": "Google Chrome",
+          "Edge": "Microsoft Edge",
+          "Edge WebView2": "Microsoft Edge WebView2",
+          "Chrome WebView": "Android WebView",
+          "Chrome Headless": "HeadlessChrome",
+          "Huawei Browser": "HuaweiBrowser",
+          "MIUI Browser": "Miui Browser",
+          "Opera Mobi": "OperaMobile",
+          "Yandex": "YaBrowser"
         };
-        var regexes = {
+        var defaultRegexes = {
           browser: [
             [
+              // Most common regardless engine
               /\b(?:crmo|crios)\/([\w\.]+)/i
               // Chrome for Android/iOS
             ],
-            [VERSION, [NAME, "Chrome"]],
+            [VERSION, [NAME, PREFIX_MOBILE + "Chrome"]],
+            [
+              /webview.+edge\/([\w\.]+)/i
+              // Microsoft Edge
+            ],
+            [VERSION, [NAME, EDGE + " WebView"], [TYPE, INAPP]],
             [
               /edg(?:e|ios|a)?\/([\w\.]+)/i
-              // Microsoft Edge
             ],
             [VERSION, [NAME, "Edge"]],
             [
@@ -607,22 +695,31 @@ var mediasoupClient = (() => {
             ],
             [VERSION, [NAME, "Baidu"]],
             [
+              /\b(?:mxbrowser|mxios|myie2)\/?([-\w\.]*)\b/i
+              // Maxthon
+            ],
+            [VERSION, [NAME, "Maxthon"]],
+            [
               /(kindle)\/([\w\.]+)/i,
               // Kindle
               /(lunascape|maxthon|netfront|jasmine|blazer|sleipnir)[\/ ]?([\w\.]*)/i,
               // Lunascape/Maxthon/Netfront/Jasmine/Blazer/Sleipnir
               // Trident based
-              /(avant|iemobile|slim)\s?(?:browser)?[\/ ]?([\w\.]*)/i,
-              // Avant/IEMobile/SlimBrowser
+              /(avant|iemobile|slim(?:browser|boat|jet))[\/ ]?([\d\.]*)/i,
+              // Avant/IEMobile/SlimBrowser/SlimBoat/Slimjet
               /(?:ms|\()(ie) ([\w\.]+)/i,
               // Internet Explorer
-              // Webkit/KHTML based                                               // Flock/RockMelt/Midori/Epiphany/Silk/Skyfire/Bolt/Iron/Iridium/PhantomJS/Bowser/QupZilla/Falkon
-              /(flock|rockmelt|midori|epiphany|silk|skyfire|ovibrowser|bolt|iron|vivaldi|iridium|phantomjs|bowser|qupzilla|falkon|rekonq|puffin|brave|whale(?!.+naver)|qqbrowserlite|duckduckgo|klar|helio)\/([-\w\.]+)/i,
-              // Rekonq/Puffin/Brave/Whale/QQBrowserLite/QQ//Vivaldi/DuckDuckGo/Klar/Helio
-              /(heytap|ovi)browser\/([\d\.]+)/i,
-              // HeyTap/Ovi
-              /(weibo)__([\d\.]+)/i
-              // Weibo
+              // Blink/Webkit/KHTML based                                         // Flock/RockMelt/Midori/Epiphany/Silk/Skyfire/Bolt/Iron/Iridium/PhantomJS/Bowser/QupZilla/Falkon/LG Browser/Otter/qutebrowser/Dooble/Palemoon/HiBrowser
+              /(atlas|flock|rockmelt|midori|epiphany|silk|skyfire|bolt|iron|vivaldi|iridium|phantomjs|bowser|qupzilla|falkon|rekonq|puffin|whale(?!.+naver)|qqbrowserlite|duckduckgo|klar|helio|(?=comodo_)?dragon|otter|dooble|(?:hi|lg |ovi|qute)browser|palemoon)\/v?([-\w\.]+)/i,
+              // Atlas/Rekonq/Puffin/Whale/QQBrowserLite/QQ//Vivaldi/DuckDuckGo/Klar/Helio/Dragon
+              /(brave)(?: chrome)?\/([\d\.]+)/i,
+              // Brave
+              /(aloha|heytap|ovi|115|surf|qwant)browser\/([\d\.]+)/i,
+              // Aloha/HeyTap/Ovi/115/Surf
+              /(qwant)(?:ios|mobile)\/([\d\.]+)/i,
+              // Qwant
+              /(ecosia|weibo)(?:__| \w+@)([\d\.]+)/i
+              // Ecosia/Weibo
             ],
             [NAME, VERSION],
             [
@@ -636,10 +733,10 @@ var mediasoupClient = (() => {
             ],
             [VERSION, [NAME, "DuckDuckGo"]],
             [
-              /(?:\buc? ?browser|(?:juc.+)ucweb)[\/ ]?([\w\.]+)/i
+              /(?:\buc? ?browser|(?:juc.+)ucweb| ucpc)[\/ ]?([\w\.]+)/i
               // UCBrowser
             ],
-            [VERSION, [NAME, "UC" + BROWSER]],
+            [VERSION, [NAME, "UCBrowser"]],
             [
               /microm.+\bqbcore\/([\w\.]+)/i,
               // WeChat Desktop for Windows Built-in Browser
@@ -667,19 +764,29 @@ var mediasoupClient = (() => {
               /slbrowser\/([\w\.]+)/i
               // Smart Lenovo Browser
             ],
-            [VERSION, [NAME, "Smart Lenovo " + BROWSER]],
+            [VERSION, [NAME, "Smart " + LENOVO + SUFFIX_BROWSER]],
             [
-              /(avast|avg)\/([\w\.]+)/i
-              // Avast/AVG Secure Browser
+              /(av(?:ast|g|ira))\/([\w\.]+)/i
+              // Avast/AVG/Avira Secure Browser
             ],
-            [[NAME, /(.+)/, "$1 Secure " + BROWSER], VERSION],
+            [[NAME, /(.+)/, "$1 Secure" + SUFFIX_BROWSER], VERSION],
+            [
+              /norton\/([\w\.]+)/i
+              // Norton Private Browser
+            ],
+            [VERSION, [NAME, "Norton Private" + SUFFIX_BROWSER]],
             [
               /\bfocus\/([\w\.]+)/i
               // Firefox Focus
             ],
             [VERSION, [NAME, FIREFOX + " Focus"]],
             [
-              /\bopt\/([\w\.]+)/i
+              / mms\/([\w\.]+)$/i
+              // Opera Neon
+            ],
+            [VERSION, [NAME, OPERA + " Neon"]],
+            [
+              / opt\/([\w\.]+)$/i
               // Opera Touch
             ],
             [VERSION, [NAME, OPERA + " Touch"]],
@@ -702,17 +809,17 @@ var mediasoupClient = (() => {
               /miuibrowser\/([\w\.]+)/i
               // MIUI Browser
             ],
-            [VERSION, [NAME, "MIUI " + BROWSER]],
+            [VERSION, [NAME, "MIUI" + SUFFIX_BROWSER]],
             [
-              /fxios\/([-\w\.]+)/i
+              /fxios\/([\w\.-]+)/i
               // Firefox for iOS
             ],
-            [VERSION, [NAME, FIREFOX]],
+            [VERSION, [NAME, PREFIX_MOBILE + FIREFOX]],
             [
-              /\bqihu|(qi?ho?o?|360)browser/i
+              /\bqihoobrowser\/?([\w\.]*)/i
               // 360
             ],
-            [[NAME, "360" + SUFFIX_BROWSER]],
+            [VERSION, [NAME, "360"]],
             [
               /\b(qq)\/([\w\.]+)/i
               // QQ
@@ -723,55 +830,58 @@ var mediasoupClient = (() => {
             ],
             [[NAME, /(.+)/, "$1" + SUFFIX_BROWSER], VERSION],
             [
-              // Oculus/Sailfish/HuaweiBrowser/VivoBrowser/PicoBrowser
+              // Oculus/Sailfish/VivoBrowser/PicoBrowser
+              / HBPC\/([\w\.]+)/
+              // Huawei Browser
+            ],
+            [VERSION, [NAME, HUAWEI + SUFFIX_BROWSER]],
+            [
               /samsungbrowser\/([\w\.]+)/i
               // Samsung Internet
             ],
             [VERSION, [NAME, SAMSUNG + " Internet"]],
             [
-              /(comodo_dragon)\/([\w\.]+)/i
-              // Comodo Dragon
-            ],
-            [[NAME, /_/g, " "], VERSION],
-            [
               /metasr[\/ ]?([\d\.]+)/i
               // Sogou Explorer
             ],
-            [VERSION, [NAME, "Sogou Explorer"]],
+            [VERSION, [NAME, SOGOU + " Explorer"]],
             [
               /(sogou)mo\w+\/([\d\.]+)/i
               // Sogou Mobile
             ],
-            [[NAME, "Sogou Mobile"], VERSION],
+            [[NAME, SOGOU + " Mobile"], VERSION],
             [
               /(electron)\/([\w\.]+) safari/i,
               // Electron-based App
               /(tesla)(?: qtcarbrowser|\/(20\d\d\.[-\w\.]+))/i,
               // Tesla
-              /m?(qqbrowser|2345Explorer)[\/ ]?([\w\.]+)/i
-              // QQBrowser/2345 Browser
+              /m?(qqbrowser|2345(?=browser|chrome|explorer))\w*[\/ ]?v?([\w\.]+)/i
+              // QQ/2345
             ],
             [NAME, VERSION],
             [
-              /(lbbrowser|rekonq)/i,
-              // LieBao Browser/Rekonq
-              /\[(linkedin)app\]/i
-              // LinkedIn App for iOS & Android
+              /(lbbrowser|luakit|rekonq|steam(?= (clie|tenf|gameo)))/i
+              // LieBao Browser/Luakit/Rekonq/Steam
             ],
             [NAME],
+            [
+              /ome\/([\w\.]+).+(iron(?= saf)|360(?=[es]e$))/i
+              // Iron / 360
+            ],
+            [VERSION, NAME],
             [
               // WebView
               /((?:fban\/fbios|fb_iab\/fb4a)(?!.+fbav)|;fbav\/([\w\.]+);)/i
               // Facebook App for iOS & Android
             ],
-            [[NAME, FACEBOOK], VERSION],
+            [[NAME, FACEBOOK], VERSION, [TYPE, INAPP]],
             [
-              /(Klarna)\/([\w\.]+)/i,
-              // Klarna Shopping Browser for iOS & Android
               /(kakao(?:talk|story))[\/ ]([\w\.]+)/i,
               // Kakao App
               /(naver)\(.*?(\d+\.[\w\.]+).*\)/i,
               // Naver InApp
+              /(daum)apps[\/ ]([\w\.]+)/i,
+              // Daum App
               /safari (line)\/([\w\.]+)/i,
               // Line App for iOS
               /\b(line)\/([\w\.]+)\/iab/i,
@@ -780,68 +890,109 @@ var mediasoupClient = (() => {
               // Alipay
               /(twitter)(?:and| f.+e\/([\w\.]+))/i,
               // Twitter
-              /(chromium|instagram|snapchat)[\/ ]([-\w\.]+)/i
-              // Chromium/Instagram/Snapchat
+              /(bing)(?:web|sapphire)\/([\w\.]+)/i,
+              // Bing
+              /(instagram|snapchat|klarna)[\/ ]([-\w\.]+)/i
+              // Instagram/Snapchat/Klarna
             ],
-            [NAME, VERSION],
+            [NAME, VERSION, [TYPE, INAPP]],
             [
               /\bgsa\/([\w\.]+) .*safari\//i
               // Google Search Appliance on iOS
             ],
-            [VERSION, [NAME, "GSA"]],
+            [VERSION, [NAME, "GSA"], [TYPE, INAPP]],
             [
-              /musical_ly(?:.+app_?version\/|_)([\w\.]+)/i
+              /(?:musical_ly|trill)(?:.+app_?version\/|_)([\w\.]+)/i
               // TikTok
             ],
-            [VERSION, [NAME, "TikTok"]],
+            [VERSION, [NAME, "TikTok"], [TYPE, INAPP]],
+            [
+              /\[(linkedin)app\]/i
+              // LinkedIn App for iOS & Android
+            ],
+            [NAME, [TYPE, INAPP]],
+            [
+              /(zalo(?:app)?)[\/\sa-z]*([\w\.-]+)/i
+              // Zalo 
+            ],
+            [[NAME, /(.+)/, "Zalo"], VERSION, [TYPE, INAPP]],
+            [
+              /(chromium)[\/ ]([-\w\.]+)/i
+              // Chromium
+            ],
+            [NAME, VERSION],
+            [
+              /ome-(lighthouse)$/i
+              // Chrome Lighthouse
+            ],
+            [NAME, [TYPE, FETCHER]],
             [
               /headlesschrome(?:\/([\w\.]+)| )/i
               // Chrome Headless
             ],
             [VERSION, [NAME, CHROME + " Headless"]],
             [
-              / wv\).+(chrome)\/([\w\.]+)/i
+              /wv\).+chrome\/([\w\.]+).+edgw\//i
+              // Edge WebView2
+            ],
+            [VERSION, [NAME, EDGE + " WebView2"], [TYPE, INAPP]],
+            [
+              /; wv\).+(chrome)\/([\w\.]+)/i
               // Chrome WebView
             ],
-            [[NAME, CHROME + " WebView"], VERSION],
+            [[NAME, CHROME + " WebView"], VERSION, [TYPE, INAPP]],
             [
               /droid.+ version\/([\w\.]+)\b.+(?:mobile safari|safari)/i
               // Android Browser
             ],
-            [VERSION, [NAME, "Android " + BROWSER]],
+            [VERSION, [NAME, "Android" + SUFFIX_BROWSER]],
+            [
+              /chrome\/([\w\.]+) mobile/i
+              // Chrome Mobile
+            ],
+            [VERSION, [NAME, PREFIX_MOBILE + "Chrome"]],
             [
               /(chrome|omniweb|arora|[tizenoka]{5} ?browser)\/v?([\w\.]+)/i
               // Chrome/OmniWeb/Arora/Tizen/Nokia
             ],
             [NAME, VERSION],
             [
-              /version\/([\w\.\,]+) .*mobile\/\w+ (safari)/i
-              // Mobile Safari
+              /version\/([\w\.\,]+) .*mobile(?:\/\w+ | ?)safari/i
+              // Safari Mobile
             ],
-            [VERSION, [NAME, "Mobile Safari"]],
+            [VERSION, [NAME, PREFIX_MOBILE + "Safari"]],
             [
-              /version\/([\w(\.|\,)]+) .*(mobile ?safari|safari)/i
-              // Safari & Safari Mobile
+              /iphone .*mobile(?:\/\w+ | ?)safari/i
+            ],
+            [[NAME, PREFIX_MOBILE + "Safari"]],
+            [
+              /version\/([\w\.\,]+) .*(safari)/i
+              // Safari
             ],
             [VERSION, NAME],
             [
               /webkit.+?(mobile ?safari|safari)(\/[\w\.]+)/i
               // Safari < 3.0
             ],
-            [NAME, [VERSION, strMapper, oldSafariMap]],
+            [NAME, [VERSION, "1"]],
             [
               /(webkit|khtml)\/([\w\.]+)/i
             ],
             [NAME, VERSION],
             [
               // Gecko based
+              /(?:mobile|tablet);.*(firefox)\/([\w\.-]+)/i
+              // Firefox Mobile
+            ],
+            [[NAME, PREFIX_MOBILE + FIREFOX], VERSION],
+            [
               /(navigator|netscape\d?)\/([-\w\.]+)/i
               // Netscape
             ],
             [[NAME, "Netscape"], VERSION],
             [
-              /(wolvic)\/([\w\.]+)/i
-              // Wolvic
+              /(wolvic|librewolf)\/([\w\.]+)/i
+              // Wolvic/LibreWolf
             ],
             [NAME, VERSION],
             [
@@ -856,16 +1007,16 @@ var mediasoupClient = (() => {
               // Swiftfox
               /(icedragon|iceweasel|camino|chimera|fennec|maemo browser|minimo|conkeror)[\/ ]?([\w\.\+]+)/i,
               // IceDragon/Iceweasel/Camino/Chimera/Fennec/Maemo/Minimo/Conkeror
-              /(seamonkey|k-meleon|icecat|iceape|firebird|phoenix|palemoon|basilisk|waterfox)\/([-\w\.]+)$/i,
+              /(seamonkey|k-meleon|icecat|iceape|firebird|phoenix|basilisk|waterfox)\/([-\w\.]+)$/i,
               // Firefox/SeaMonkey/K-Meleon/IceCat/IceApe/Firebird/Phoenix
               /(firefox)\/([\w\.]+)/i,
               // Other Firefox-based
-              /(mozilla)\/([\w\.]+) .+rv\:.+gecko\/\d+/i,
+              /(mozilla)\/([\w\.]+(?= .+rv\:.+gecko\/\d+)|[0-4][\w\.]+(?!.+compatible))/i,
               // Mozilla
               // Other
-              /(polaris|lynx|dillo|icab|doris|amaya|w3m|netsurf|obigo|mosaic|(?:go|ice|up)[\. ]?browser)[-\/ ]?v?([\w\.]+)/i,
-              // Polaris/Lynx/Dillo/iCab/Doris/Amaya/w3m/NetSurf/Obigo/Mosaic/Go/ICE/UP.Browser
-              /(links) \(([\w\.]+)/i
+              /(amaya|dillo|doris|icab|ladybird|lynx|mosaic|netsurf|obigo|polaris|w3m|(?:go|ice|up)[\. ]?browser)[-\/ ]?v?([\w\.]+)/i,
+              // Polaris/Lynx/Dillo/iCab/Doris/Amaya/w3m/NetSurf/Obigo/Mosaic/Go/ICE/UP.Browser/Ladybird
+              /\b(links) \(([\w\.]+)/i
               // Links
             ],
             [NAME, [VERSION, /_/g, "."]],
@@ -873,54 +1024,58 @@ var mediasoupClient = (() => {
               /(cobalt)\/([\w\.]+)/i
               // Cobalt
             ],
-            [NAME, [VERSION, /master.|lts./, ""]]
+            [NAME, [VERSION, /[^\d\.]+./, EMPTY]]
           ],
           cpu: [
             [
-              /(?:(amd|x(?:(?:86|64)[-_])?|wow|win)64)[;\)]/i
+              /\b((amd|x|x86[-_]?|wow|win)64)\b/i
               // AMD64 (x64)
             ],
             [[ARCHITECTURE, "amd64"]],
             [
-              /(ia32(?=;))/i
+              /(ia32(?=;))/i,
               // IA32 (quicktime)
-            ],
-            [[ARCHITECTURE, lowerize]],
-            [
-              /((?:i[346]|x)86)[;\)]/i
+              /\b((i[346]|x)86)(pc)?\b/i
               // IA32 (x86)
             ],
             [[ARCHITECTURE, "ia32"]],
             [
-              /\b(aarch64|arm(v?8e?l?|_?64))\b/i
+              /\b(aarch64|arm(v?[89]e?l?|_?64))\b/i
               // ARM64
             ],
             [[ARCHITECTURE, "arm64"]],
             [
-              /\b(arm(?:v[67])?ht?n?[fl]p?)\b/i
+              /\b(arm(v[67])?ht?n?[fl]p?)\b/i
               // ARMHF
             ],
             [[ARCHITECTURE, "armhf"]],
             [
               // PocketPC mistakenly identified as PowerPC
-              /windows (ce|mobile); ppc;/i
+              /( (ce|mobile); ppc;|\/[\w\.]+arm\b)/i
             ],
             [[ARCHITECTURE, "arm"]],
             [
-              /((?:ppc|powerpc)(?:64)?)(?: mac|;|\))/i
-              // PowerPC
-            ],
-            [[ARCHITECTURE, /ower/, EMPTY, lowerize]],
-            [
-              /(sun4\w)[;\)]/i
+              / sun4\w[;\)]/i
               // SPARC
             ],
             [[ARCHITECTURE, "sparc"]],
             [
-              /((?:avr32|ia64(?=;))|68k(?=\))|\barm(?=v(?:[1-7]|[5-7]1)l?|;|eabi)|(?=atmel )avr|(?:irix|mips|sparc)(?:64)?\b|pa-risc)/i
               // IA64, 68K, ARM/64, AVR/32, IRIX/64, MIPS/64, SPARC/64, PA-RISC
+              /\b(avr32|ia64(?=;)|68k(?=\))|\barm(?=v([1-7]|[5-7]1)l?|;|eabi)|(irix|mips|sparc)(64)?\b|pa-risc)/i,
+              /((ppc|powerpc)(64)?)( mac|;|\))/i,
+              // PowerPC
+              /(?:osf1|[freopnt]{3,4}bsd) (alpha)/i
+              // Alpha
             ],
-            [[ARCHITECTURE, lowerize]]
+            [[ARCHITECTURE, /ower/, EMPTY, lowerize]],
+            [
+              /mc680.0/i
+            ],
+            [[ARCHITECTURE, "68k"]],
+            [
+              /winnt.+\[axp/i
+            ],
+            [[ARCHITECTURE, "alpha"]]
           ],
           device: [
             [
@@ -933,21 +1088,20 @@ var mediasoupClient = (() => {
             [MODEL, [VENDOR, SAMSUNG], [TYPE, TABLET]],
             [
               /\b((?:s[cgp]h|gt|sm)-(?![lr])\w+|sc[g-]?[\d]+a?|galaxy nexus)/i,
-              /samsung[- ]((?!sm-[lr])[-\w]+)/i,
+              /samsung[- ]((?!sm-[lr]|browser)[-\w]+)/i,
               /sec-(sgh\w+)/i
             ],
             [MODEL, [VENDOR, SAMSUNG], [TYPE, MOBILE]],
             [
               // Apple
-              /(?:\/|\()(ip(?:hone|od)[\w, ]*)(?:\/|;)/i
+              /(?:\/|\()(ip(?:hone|od)[\w, ]*)[\/\);]/i
               // iPod/iPhone
             ],
             [MODEL, [VENDOR, APPLE], [TYPE, MOBILE]],
             [
-              /\((ipad);[-\w\),; ]+apple/i,
+              /\b(?:ios|apple\w+)\/.+[\(\/](ipad)/i,
               // iPad
-              /applecoremedia\/[\w\.]+ \((ipad)/i,
-              /\b(ipad)\d\d?,\d\d?[;\]].+ios/i
+              /\b(ipad)[\d,]*[;\] ].+(mac |i(pad)?)os/i
             ],
             [MODEL, [VENDOR, APPLE], [TYPE, TABLET]],
             [
@@ -960,51 +1114,68 @@ var mediasoupClient = (() => {
             ],
             [MODEL, [VENDOR, SHARP], [TYPE, MOBILE]],
             [
+              // Honor
+              /\b((?:brt|eln|hey2?|gdi|jdn)-a?[lnw]09|(?:ag[rm]3?|jdn2|kob2)-a?[lw]0[09]hn)(?: bui|\)|;)/i
+            ],
+            [MODEL, [VENDOR, HONOR], [TYPE, TABLET]],
+            [
+              /honor([-\w ]+)[;\)]/i
+            ],
+            [MODEL, [VENDOR, HONOR], [TYPE, MOBILE]],
+            [
               // Huawei
-              /\b((?:ag[rs][23]?|bah2?|sht?|btv)-a?[lw]\d{2})\b(?!.+d\/s)/i
+              /\b((?:ag[rs][2356]?k?|bah[234]?|bg[2o]|bt[kv]|cmr|cpn|db[ry]2?|jdn2|got|kob2?k?|mon|pce|scm|sht?|[tw]gr|vrd)-[ad]?[lw][0125][09]b?|605hw|bg2-u03|(?:gem|fdr|m2|ple|t1)-[7a]0[1-4][lu]|t1-a2[13][lw]|mediapad[\w\. ]*(?= bui|\)))\b(?!.+d\/s)/i
             ],
             [MODEL, [VENDOR, HUAWEI], [TYPE, TABLET]],
             [
-              /(?:huawei|honor)([-\w ]+)[;\)]/i,
-              /\b(nexus 6p|\w{2,4}e?-[atu]?[ln][\dx][012359c][adn]?)\b(?!.+d\/s)/i
+              /(?:huawei) ?([-\w ]+)[;\)]/i,
+              /\b(nexus 6p|\w{2,4}e?-[atu]?[ln][\dx][\dc][adnt]?)\b(?!.+d\/s)/i
             ],
             [MODEL, [VENDOR, HUAWEI], [TYPE, MOBILE]],
             [
               // Xiaomi
-              /\b(poco[\w ]+|m2\d{3}j\d\d[a-z]{2})(?: bui|\))/i,
-              // Xiaomi POCO
+              /oid[^\)]+; (2[\dbc]{4}(182|283|rp\w{2})[cgl]|m2105k81a?c)(?: bui|\))/i,
+              /\b(?:xiao)?((?:red)?mi[-_ ]?pad[\w- ]*)(?: bui|\))/i
+              // Mi Pad tablets
+            ],
+            [[MODEL, /_/g, " "], [VENDOR, XIAOMI], [TYPE, TABLET]],
+            [
               /\b; (\w+) build\/hm\1/i,
               // Xiaomi Hongmi 'numeric' models
               /\b(hm[-_ ]?note?[_ ]?(?:\d\w)?) bui/i,
               // Xiaomi Hongmi
-              /\b(redmi[\-_ ]?(?:note|k)?[\w_ ]+)(?: bui|\))/i,
-              // Xiaomi Redmi
-              /oid[^\)]+; (m?[12][0-389][01]\w{3,6}[c-y])( bui|; wv|\))/i,
-              // Xiaomi Redmi 'numeric' models
-              /\b(mi[-_ ]?(?:a\d|one|one[_ ]plus|note lte|max|cc)?[_ ]?(?:\d?\w?)[_ ]?(?:plus|se|lite|pro)?)(?: bui|\))/i
+              // Xiaomi Redmi / POCO / Black Shark / Qin
+              /oid[^\)]+; (redmi[\-_ ]?(?:note|k)?[\w_ ]+|m?[12]\d[01]\d\w{3,6}|poco[\w ]+|(shark )?\w{3}-[ah]0|qin ?[1-3](s\+|ultra| pro)?)( bui|; wv|\))/i,
               // Xiaomi Mi
+              /\b(mi[-_ ]?(?:a\d|one|one[_ ]plus|note|max|cc)?[_ ]?(?:\d{0,2}\w?)[_ ]?(?:plus|se|lite|pro)?( 5g|lte)?)(?: bui|\))/i,
+              /; ([\w ]+) miui\/v?\d/i
             ],
             [[MODEL, /_/g, " "], [VENDOR, XIAOMI], [TYPE, MOBILE]],
             [
-              /oid[^\)]+; (2\d{4}(283|rpbf)[cgl])( bui|\))/i,
-              // Redmi Pad
-              /\b(mi[-_ ]?(?:pad)(?:[\w_ ]+))(?: bui|\))/i
-              // Mi Pad tablets
+              // OnePlus
+              /droid.+; (cph2[3-6]\d[13579]|((gm|hd)19|(ac|be|in|kb)20|(d[en]|eb|le|mt)21|ne22)[0-2]\d|p[g-l]\w[1m]10)\b/i,
+              /(?:one)?(?:plus)? (a\d0\d\d)(?: b|\))/i
             ],
-            [[MODEL, /_/g, " "], [VENDOR, XIAOMI], [TYPE, TABLET]],
+            [MODEL, [VENDOR, ONEPLUS], [TYPE, MOBILE]],
             [
               // OPPO
               /; (\w+) bui.+ oppo/i,
               /\b(cph[12]\d{3}|p(?:af|c[al]|d\w|e[ar])[mt]\d0|x9007|a101op)\b/i
             ],
-            [MODEL, [VENDOR, "OPPO"], [TYPE, MOBILE]],
+            [MODEL, [VENDOR, OPPO], [TYPE, MOBILE]],
             [
-              /\b(opd2\d{3}a?) bui/i
+              /\b(opd2(\d{3}a?))(?: bui|\))/i
             ],
-            [MODEL, [VENDOR, "OPPO"], [TYPE, TABLET]],
+            [MODEL, [VENDOR, strMapper, { "OnePlus": ["203", "304", "403", "404", "413", "415"], "*": OPPO }], [TYPE, TABLET]],
+            [
+              // BLU
+              /(vivo (5r?|6|8l?|go|one|s|x[il]?[2-4]?)[\w\+ ]*)(?: bui|\))/i
+              // Vivo series
+            ],
+            [MODEL, [VENDOR, "BLU"], [TYPE, MOBILE]],
             [
               // Vivo
-              /vivo (\w+)(?: bui|\))/i,
+              /; vivo (\w+)(?: bui|\))/i,
               /\b(v[12]\d{3}\w?[at])(?: bui|;)/i
             ],
             [MODEL, [VENDOR, "Vivo"], [TYPE, MOBILE]],
@@ -1014,10 +1185,20 @@ var mediasoupClient = (() => {
             ],
             [MODEL, [VENDOR, "Realme"], [TYPE, MOBILE]],
             [
+              // Lenovo
+              /(ideatab[-\w ]+|602lv|d-42a|a101lv|a2109a|a3500-hv|s[56]000|pb-6505[my]|tb-?x?\d{3,4}(?:f[cu]|xu|[av])|yt\d?-[jx]?\d+[lfmx])( bui|;|\)|\/)/i,
+              /lenovo ?(b[68]0[08]0-?[hf]?|tab(?:[\w- ]+?)|tb[\w-]{6,7})( bui|;|\)|\/)/i
+            ],
+            [MODEL, [VENDOR, LENOVO], [TYPE, TABLET]],
+            [
+              /lenovo[-_ ]?([-\w ]+?)(?: bui|\)|\/)/i
+            ],
+            [MODEL, [VENDOR, LENOVO], [TYPE, MOBILE]],
+            [
               // Motorola
               /\b(milestone|droid(?:[2-4x]| (?:bionic|x2|pro|razr))?:?( 4g)?)\b[\w ]+build\//i,
-              /\bmot(?:orola)?[- ](\w*)/i,
-              /((?:moto[\w\(\) ]+|xt\d{3,4}|nexus 6)(?= bui|\)))/i
+              /\bmot(?:orola)?[- ]([\w\s]+)(\)| bui)/i,
+              /((?:moto(?! 360)[-\w\(\) ]+|xt\d{3,4}[cgkosw\+]?[-\d]*|nexus 6)(?= bui|\)))/i
             ],
             [MODEL, [VENDOR, MOTOROLA], [TYPE, MOBILE]],
             [
@@ -1026,41 +1207,43 @@ var mediasoupClient = (() => {
             [MODEL, [VENDOR, MOTOROLA], [TYPE, TABLET]],
             [
               // LG
-              /((?=lg)?[vl]k\-?\d{3}) bui| 3\.[-\w; ]{10}lg?-([06cv9]{3,4})/i
+              /\b(?:lg)?([vl]k\-?\d{3}) bui| 3\.[-\w; ]{10}lg?-([06cv9]{3,4})/i
             ],
             [MODEL, [VENDOR, LG], [TYPE, TABLET]],
             [
               /(lm(?:-?f100[nv]?|-[\w\.]+)(?= bui|\))|nexus [45])/i,
-              /\blg[-e;\/ ]+((?!browser|netcast|android tv)\w+)/i,
+              /\blg[-e;\/ ]+(?!.*(?:browser|netcast|android tv|watch|webos))(\w+)/i,
               /\blg-?([\d\w]+) bui/i
             ],
             [MODEL, [VENDOR, LG], [TYPE, MOBILE]],
             [
-              // Lenovo
-              /(ideatab[-\w ]+)/i,
-              /lenovo ?(s[56]000[-\w]+|tab(?:[\w ]+)|yt[-\d\w]{6}|tb[-\d\w]{6})/i
-            ],
-            [MODEL, [VENDOR, "Lenovo"], [TYPE, TABLET]],
-            [
               // Nokia
-              /(?:maemo|nokia).*(n900|lumia \d+)/i,
-              /nokia[-_ ]?([-\w\.]*)/i
+              /(nokia) (t[12][01])/i
             ],
-            [[MODEL, /_/g, " "], [VENDOR, "Nokia"], [TYPE, MOBILE]],
+            [VENDOR, MODEL, [TYPE, TABLET]],
+            [
+              /(?:maemo|nokia).*(n900|lumia \d+|rm-\d+)/i,
+              /nokia[-_ ]?(([-\w\. ]*?))( bui|\)|;|\/)/i
+            ],
+            [[MODEL, /_/g, " "], [TYPE, MOBILE], [VENDOR, "Nokia"]],
             [
               // Google
-              /(pixel c)\b/i
-              // Google Pixel C
+              /(pixel (c|tablet))\b/i
+              // Google Pixel C/Tablet
             ],
             [MODEL, [VENDOR, GOOGLE], [TYPE, TABLET]],
             [
-              /droid.+; (pixel[\daxl ]{0,6})(?: bui|\))/i
               // Google Pixel
+              /droid.+;(?: google)? (g(01[13]a|020[aem]|025[jn]|1b60|1f8f|2ybb|4s1m|576d|5nz6|8hhn|8vou|a02099|c15s|d1yq|e2ae|ec77|gh2x|kv4x|p4bc|pj41|r83y|tt9q|ur25|wvk6)|pixel[\d ]*a?( pro)?( xl)?( fold)?( \(5g\))?)( bui|\))/i
             ],
             [MODEL, [VENDOR, GOOGLE], [TYPE, MOBILE]],
             [
+              /(google) (pixelbook( go)?)/i
+            ],
+            [VENDOR, MODEL],
+            [
               // Sony
-              /droid.+ (a?\d[0-2]{2}so|[c-g]\d{4}|so[-gl]\w+|xq-a\w[4-7][12])(?= bui|\).+chrome\/(?![1-6]{0,1}\d\.))/i
+              /droid.+; (a?\d[0-2]{2}so|[c-g]\d{4}|so[-gl]\w+|xq-\w\w\d\d)(?= bui|\).+chrome\/(?![1-6]{0,1}\d\.))/i
             ],
             [MODEL, [VENDOR, SONY], [TYPE, MOBILE]],
             [
@@ -1068,12 +1251,6 @@ var mediasoupClient = (() => {
               /\b(?:sony)?sgp\w+(?: bui|\))/i
             ],
             [[MODEL, "Xperia Tablet"], [VENDOR, SONY], [TYPE, TABLET]],
-            [
-              // OnePlus
-              / (kb2005|in20[12]5|be20[12][59])\b/i,
-              /(?:one)?(?:plus)? (a\d0\d\d)(?: b|\))/i
-            ],
-            [MODEL, [VENDOR, "OnePlus"], [TYPE, MOBILE]],
             [
               // Amazon
               /(alexa)webm/i,
@@ -1096,8 +1273,7 @@ var mediasoupClient = (() => {
             [MODEL, VENDOR, [TYPE, TABLET]],
             [
               /\b((?:bb[a-f]|st[hv])100-\d)/i,
-              /\(bb10; (\w+)/i
-              // BlackBerry 10
+              /(?:blackberry|\(bb10;) (\w+)/i
             ],
             [MODEL, [VENDOR, BLACKBERRY], [TYPE, MOBILE]],
             [
@@ -1126,9 +1302,14 @@ var mediasoupClient = (() => {
             [VENDOR, [MODEL, /_/g, " "], [TYPE, MOBILE]],
             [
               // TCL
-              /droid [\w\.]+; ((?:8[14]9[16]|9(?:0(?:48|60|8[01])|1(?:3[27]|66)|2(?:6[69]|9[56])|466))[gqswx])\w*(\)| bui)/i
+              /tcl (xess p17aa)/i,
+              /droid [\w\.]+; ((?:8[14]9[16]|9(?:0(?:48|60|8[01])|1(?:3[27]|66)|2(?:6[69]|9[56])|466))[gqswx])(_\w(\w|\w\w))?(\)| bui)/i
             ],
             [MODEL, [VENDOR, "TCL"], [TYPE, TABLET]],
+            [
+              /droid [\w\.]+; (418(?:7d|8v)|5087z|5102l|61(?:02[dh]|25[adfh]|27[ai]|56[dh]|59k|65[ah])|a509dl|t(?:43(?:0w|1[adepqu])|50(?:6d|7[adju])|6(?:09dl|10k|12b|71[efho]|76[hjk])|7(?:66[ahju]|67[hw]|7[045][bh]|71[hk]|73o|76[ho]|79w|81[hks]?|82h|90[bhsy]|99b)|810[hs]))(_\w(\w|\w\w))?(\)| bui)/i
+            ],
+            [MODEL, [VENDOR, "TCL"], [TYPE, MOBILE]],
             [
               // itel
               /(itel) ((\w+))/i
@@ -1151,49 +1332,86 @@ var mediasoupClient = (() => {
             ],
             [MODEL, [VENDOR, "Ulefone"], [TYPE, MOBILE]],
             [
+              // Energizer
+              /; (energy ?\w+)(?: bui|\))/i,
+              /; energizer ([\w ]+)(?: bui|\))/i
+            ],
+            [MODEL, [VENDOR, "Energizer"], [TYPE, MOBILE]],
+            [
+              // Cat
+              /; cat (b35);/i,
+              /; (b15q?|s22 flip|s48c|s62 pro)(?: bui|\))/i
+            ],
+            [MODEL, [VENDOR, "Cat"], [TYPE, MOBILE]],
+            [
+              // Smartfren
+              /((?:new )?andromax[\w- ]+)(?: bui|\))/i
+            ],
+            [MODEL, [VENDOR, "Smartfren"], [TYPE, MOBILE]],
+            [
               // Nothing
-              /droid.+; (a(?:015|06[35]|142p?))/i
+              /droid.+; (a(in)?(0(15|59|6[35])|142)p?)/i
             ],
             [MODEL, [VENDOR, "Nothing"], [TYPE, MOBILE]],
             [
+              // Archos
+              /; (x67 5g|tikeasy \w+|ac[1789]\d\w+)( b|\))/i,
+              /archos ?(5|gamepad2?|([\w ]*[t1789]|hello) ?\d+[\w ]*)( b|\))/i
+            ],
+            [MODEL, [VENDOR, "Archos"], [TYPE, TABLET]],
+            [
+              /archos ([\w ]+)( b|\))/i,
+              /; (ac[3-6]\d\w{2,8})( b|\))/i
+            ],
+            [MODEL, [VENDOR, "Archos"], [TYPE, MOBILE]],
+            [
+              // Blackview
+              /blackview ([-\w ]+)( b|\))/i,
+              /; (bv\d{4}[-\w ]*)( b|\))/i
+            ],
+            [MODEL, [VENDOR, "Blackview"], [TYPE, MOBILE]],
+            [
+              // HMD
+              /; (n159v)/i
+            ],
+            [MODEL, [VENDOR, "HMD"], [TYPE, MOBILE]],
+            [
+              // T-Mobile
+              /((revvl[ \w\+]+|tm(?:rv|af)\w*[45]g(?:tb)?))( b|\))/i
+            ],
+            [MODEL, [TYPE, strTest, { "test": /ta?b/i, "ifTrue": TABLET, "ifFalse": MOBILE }], [VENDOR, "T-Mobile"]],
+            [
               // MIXED
-              /(blackberry|benq|palm(?=\-)|sonyericsson|acer|asus|dell|meizu|motorola|polytron|infinix|tecno)[-_ ]?([-\w]*)/i,
-              // BlackBerry/BenQ/Palm/Sony-Ericsson/Acer/Asus/Dell/Meizu/Motorola/Polytron
+              /(imo) (tab \w+)/i,
+              // IMO
+              /(infinix|tecno) (x1101b?|p904|dp(7c|8d|10a)( pro)?|p70[1-3]a?|p904|t1101)/i
+              // Infinix XPad / Tecno
+            ],
+            [VENDOR, MODEL, [TYPE, TABLET]],
+            [
+              /(blackberry|benq|palm(?=\-)|sonyericsson|acer|asus(?! zenw)|dell|jolla|meizu|motorola|polytron|tecno|micromax|advan)[-_ ]?([-\w]*)/i,
+              // BlackBerry/BenQ/Palm/Sony-Ericsson/Acer/Asus/Dell/Meizu/Motorola/Polytron/Tecno/Micromax/Advan
+              // BLU/Coolpad/CUBOT/HMD/IMO/Infinix/Lava/OnePlus/TCL/Wiko
+              /; (blu|coolpad|cubot|hmd|imo|infinix|lava|oneplus|tcl|wiko)[_ ]([-\w\+ ]+?)(?: bui|\)|; r)/i,
               /(hp) ([\w ]+\w)/i,
               // HP iPAQ
-              /(asus)-?(\w+)/i,
-              // Asus
               /(microsoft); (lumia[\w ]+)/i,
               // Microsoft Lumia
-              /(lenovo)[-_ ]?([-\w]+)/i,
-              // Lenovo
-              /(jolla)/i,
-              // Jolla
-              /(oppo) ?([\w ]+) bui/i
+              /(oppo) ?([\w ]+) bui/i,
               // OPPO
+              /(hisense) ([ehv][\w ]+)\)/i,
+              // Hisense
+              /droid[^;]+; (philips)[_ ]([sv-x][\d]{3,4}[xz]?)/i
+              // Philips
             ],
             [VENDOR, MODEL, [TYPE, MOBILE]],
             [
               /(kobo)\s(ereader|touch)/i,
               // Kobo
-              /(archos) (gamepad2?)/i,
-              // Archos
               /(hp).+(touchpad(?!.+tablet)|tablet)/i,
               // HP TouchPad
-              /(kindle)\/([\w\.]+)/i,
+              /(kindle)\/([\w\.]+)/i
               // Kindle
-              /(nook)[\w ]+build\/(\w+)/i,
-              // Nook
-              /(dell) (strea[kpr\d ]*[\dko])/i,
-              // Dell Streak
-              /(le[- ]+pan)[- ]+(\w{1,9}) bui/i,
-              // Le Pan Tablets
-              /(trinity)[- ]*(t\d{3}) bui/i,
-              // Trinity Tablets
-              /(gigaset)[- ]+(q\w{1,9}) bui/i,
-              // Gigaset Tablets
-              /(vodafone) ([\w ]+)(?:\)| bui)/i
-              // Vodafone
             ],
             [VENDOR, MODEL, [TYPE, TABLET]],
             [
@@ -1207,115 +1425,10 @@ var mediasoupClient = (() => {
             ],
             [MODEL, [VENDOR, "Fairphone"], [TYPE, MOBILE]],
             [
-              /(u304aa)/i
-              // AT&T
+              /((?:tegranote|shield t(?!.+d tv))[\w- ]*?)(?: b|\))/i
+              // Nvidia Tablets
             ],
-            [MODEL, [VENDOR, "AT&T"], [TYPE, MOBILE]],
-            [
-              /\bsie-(\w*)/i
-              // Siemens
-            ],
-            [MODEL, [VENDOR, "Siemens"], [TYPE, MOBILE]],
-            [
-              /\b(rct\w+) b/i
-              // RCA Tablets
-            ],
-            [MODEL, [VENDOR, "RCA"], [TYPE, TABLET]],
-            [
-              /\b(venue[\d ]{2,7}) b/i
-              // Dell Venue Tablets
-            ],
-            [MODEL, [VENDOR, "Dell"], [TYPE, TABLET]],
-            [
-              /\b(q(?:mv|ta)\w+) b/i
-              // Verizon Tablet
-            ],
-            [MODEL, [VENDOR, "Verizon"], [TYPE, TABLET]],
-            [
-              /\b(?:barnes[& ]+noble |bn[rt])([\w\+ ]*) b/i
-              // Barnes & Noble Tablet
-            ],
-            [MODEL, [VENDOR, "Barnes & Noble"], [TYPE, TABLET]],
-            [
-              /\b(tm\d{3}\w+) b/i
-            ],
-            [MODEL, [VENDOR, "NuVision"], [TYPE, TABLET]],
-            [
-              /\b(k88) b/i
-              // ZTE K Series Tablet
-            ],
-            [MODEL, [VENDOR, "ZTE"], [TYPE, TABLET]],
-            [
-              /\b(nx\d{3}j) b/i
-              // ZTE Nubia
-            ],
-            [MODEL, [VENDOR, "ZTE"], [TYPE, MOBILE]],
-            [
-              /\b(gen\d{3}) b.+49h/i
-              // Swiss GEN Mobile
-            ],
-            [MODEL, [VENDOR, "Swiss"], [TYPE, MOBILE]],
-            [
-              /\b(zur\d{3}) b/i
-              // Swiss ZUR Tablet
-            ],
-            [MODEL, [VENDOR, "Swiss"], [TYPE, TABLET]],
-            [
-              /\b((zeki)?tb.*\b) b/i
-              // Zeki Tablets
-            ],
-            [MODEL, [VENDOR, "Zeki"], [TYPE, TABLET]],
-            [
-              /\b([yr]\d{2}) b/i,
-              /\b(dragon[- ]+touch |dt)(\w{5}) b/i
-              // Dragon Touch Tablet
-            ],
-            [[VENDOR, "Dragon Touch"], MODEL, [TYPE, TABLET]],
-            [
-              /\b(ns-?\w{0,9}) b/i
-              // Insignia Tablets
-            ],
-            [MODEL, [VENDOR, "Insignia"], [TYPE, TABLET]],
-            [
-              /\b((nxa|next)-?\w{0,9}) b/i
-              // NextBook Tablets
-            ],
-            [MODEL, [VENDOR, "NextBook"], [TYPE, TABLET]],
-            [
-              /\b(xtreme\_)?(v(1[045]|2[015]|[3469]0|7[05])) b/i
-              // Voice Xtreme Phones
-            ],
-            [[VENDOR, "Voice"], MODEL, [TYPE, MOBILE]],
-            [
-              /\b(lvtel\-)?(v1[12]) b/i
-              // LvTel Phones
-            ],
-            [[VENDOR, "LvTel"], MODEL, [TYPE, MOBILE]],
-            [
-              /\b(ph-1) /i
-              // Essential PH-1
-            ],
-            [MODEL, [VENDOR, "Essential"], [TYPE, MOBILE]],
-            [
-              /\b(v(100md|700na|7011|917g).*\b) b/i
-              // Envizen Tablets
-            ],
-            [MODEL, [VENDOR, "Envizen"], [TYPE, TABLET]],
-            [
-              /\b(trio[-\w\. ]+) b/i
-              // MachSpeed Tablets
-            ],
-            [MODEL, [VENDOR, "MachSpeed"], [TYPE, TABLET]],
-            [
-              /\btu_(1491) b/i
-              // Rotor Tablets
-            ],
-            [MODEL, [VENDOR, "Rotor"], [TYPE, TABLET]],
-            [
-              /(shield[\w ]+) b/i
-              // Nvidia Shield Tablets
-            ],
-            [MODEL, [VENDOR, "Nvidia"], [TYPE, TABLET]],
+            [MODEL, [VENDOR, NVIDIA], [TYPE, TABLET]],
             [
               /(sprint) (\w+)/i
               // Sprint Phones
@@ -1327,7 +1440,7 @@ var mediasoupClient = (() => {
             ],
             [[MODEL, /\./g, " "], [VENDOR, MICROSOFT], [TYPE, MOBILE]],
             [
-              /droid.+; (cc6666?|et5[16]|mc[239][23]x?|vc8[03]x?)\)/i
+              /droid.+; ([c6]+|et5[16]|mc[239][23]x?|vc8[03]x?)\)/i
               // Zebra
             ],
             [MODEL, [VENDOR, ZEBRA], [TYPE, TABLET]],
@@ -1339,6 +1452,8 @@ var mediasoupClient = (() => {
               ///////////////////
               // SMARTTVS
               ///////////////////
+              /(philips)[\w ]+tv/i,
+              // Philips
               /smart-tv.+(samsung)/i
               // Samsung
             ],
@@ -1348,8 +1463,14 @@ var mediasoupClient = (() => {
             ],
             [[MODEL, /^/, "SmartTV"], [VENDOR, SAMSUNG], [TYPE, SMARTTV]],
             [
-              /(nux; netcast.+smarttv|lg (netcast\.tv-201\d|android tv))/i
+              /(vizio)(?: |.+model\/)(\w+-\w+)/i,
+              // Vizio
+              /tcast.+(lg)e?. ([-\w]+)/i
               // LG SmartTV
+            ],
+            [VENDOR, MODEL, [TYPE, SMARTTV]],
+            [
+              /(nux; netcast.+smarttv|lg (netcast\.tv-201\d|android tv))/i
             ],
             [[VENDOR, LG], [TYPE, SMARTTV]],
             [
@@ -1358,15 +1479,40 @@ var mediasoupClient = (() => {
             ],
             [VENDOR, [MODEL, APPLE + " TV"], [TYPE, SMARTTV]],
             [
-              /crkey/i
-              // Google Chromecast
+              /crkey.*devicetype\/chromecast/i
+              // Google Chromecast Third Generation
             ],
-            [[MODEL, CHROME + "cast"], [VENDOR, GOOGLE], [TYPE, SMARTTV]],
+            [[MODEL, CHROMECAST + " Third Generation"], [VENDOR, GOOGLE], [TYPE, SMARTTV]],
+            [
+              /crkey.*devicetype\/([^/]*)/i
+              // Google Chromecast with specific device type
+            ],
+            [[MODEL, /^/, "Chromecast "], [VENDOR, GOOGLE], [TYPE, SMARTTV]],
+            [
+              /fuchsia.*crkey/i
+              // Google Chromecast Nest Hub
+            ],
+            [[MODEL, CHROMECAST + " Nest Hub"], [VENDOR, GOOGLE], [TYPE, SMARTTV]],
+            [
+              /crkey/i
+              // Google Chromecast, Linux-based or unknown
+            ],
+            [[MODEL, CHROMECAST], [VENDOR, GOOGLE], [TYPE, SMARTTV]],
+            [
+              /(portaltv)/i
+              // Facebook Portal TV
+            ],
+            [MODEL, [VENDOR, FACEBOOK], [TYPE, SMARTTV]],
             [
               /droid.+aft(\w+)( bui|\))/i
               // Fire TV
             ],
             [MODEL, [VENDOR, AMAZON], [TYPE, SMARTTV]],
+            [
+              /(shield \w+ tv)/i
+              // Nvidia Shield TV
+            ],
+            [MODEL, [VENDOR, NVIDIA], [TYPE, SMARTTV]],
             [
               /\(dtv[\);].+(aquos)/i,
               /(aquos-tv[\w ]+)\)/i
@@ -1379,7 +1525,7 @@ var mediasoupClient = (() => {
             ],
             [MODEL, [VENDOR, SONY], [TYPE, SMARTTV]],
             [
-              /(mitv-\w{5}) bui/i
+              /(mi(tv|box)-?\w+) bui/i
               // Xiaomi
             ],
             [MODEL, [VENDOR, XIAOMI], [TYPE, SMARTTV]],
@@ -1394,29 +1540,12 @@ var mediasoupClient = (() => {
               /hbbtv\/\d+\.\d+\.\d+ +\([\w\+ ]*; *([\w\d][^;]*);([^;]*)/i
               // HbbTV devices
             ],
-            [[VENDOR, trim], [MODEL, trim], [TYPE, SMARTTV]],
-            [
-              /\b(android tv|smart[- ]?tv|opera tv|tv; rv:)\b/i
-              // SmartTV from Unidentified Vendors
-            ],
-            [[TYPE, SMARTTV]],
+            [[VENDOR, /.+\/(\w+)/, "$1", strMapper, { "LG": "lge" }], [MODEL, trim], [TYPE, SMARTTV]],
             [
               ///////////////////
               // CONSOLES
               ///////////////////
-              /(ouya)/i,
-              // Ouya
-              /(nintendo) ([wids3utch]+)/i
-              // Nintendo
-            ],
-            [VENDOR, MODEL, [TYPE, CONSOLE]],
-            [
-              /droid.+; (shield) bui/i
-              // Nvidia
-            ],
-            [MODEL, [VENDOR, "Nvidia"], [TYPE, CONSOLE]],
-            [
-              /(playstation [345portablevi]+)/i
+              /(playstation \w+)/i
               // Playstation
             ],
             [MODEL, [VENDOR, SONY], [TYPE, CONSOLE]],
@@ -1426,37 +1555,89 @@ var mediasoupClient = (() => {
             ],
             [MODEL, [VENDOR, MICROSOFT], [TYPE, CONSOLE]],
             [
+              /(ouya)/i,
+              // Ouya
+              /(nintendo) (\w+)/i,
+              // Nintendo
+              /(retroid) (pocket ([^\)]+))/i,
+              // Retroid Pocket
+              /(valve).+(steam deck)/i,
+              /droid.+; ((shield|rgcube|gr0006))( bui|\))/i
+              // Nvidia Portable/Anbernic/Logitech
+            ],
+            [[VENDOR, strMapper, { "Nvidia": "Shield", "Anbernic": "RGCUBE", "Logitech": "GR0006" }], MODEL, [TYPE, CONSOLE]],
+            [
               ///////////////////
               // WEARABLES
               ///////////////////
-              /\b(sm-[lr]\d\d[05][fnuw]?s?)\b/i
+              /\b(sm-[lr]\d\d[0156][fnuw]?s?|gear live)\b/i
               // Samsung Galaxy Watch
             ],
             [MODEL, [VENDOR, SAMSUNG], [TYPE, WEARABLE]],
             [
-              /((pebble))app/i
+              /((pebble))app/i,
               // Pebble
+              /(asus|google|lg|oppo|xiaomi) ((pixel |zen)?watch[\w ]*)( bui|\))/i
+              // Asus ZenWatch / LG Watch / Pixel Watch / Xiaomi Watch
             ],
             [VENDOR, MODEL, [TYPE, WEARABLE]],
+            [
+              /(ow(?:19|20)?we?[1-3]{1,3})/i
+              // Oppo Watch
+            ],
+            [MODEL, [VENDOR, OPPO], [TYPE, WEARABLE]],
             [
               /(watch)(?: ?os[,\/]|\d,\d\/)[\d\.]+/i
               // Apple Watch
             ],
             [MODEL, [VENDOR, APPLE], [TYPE, WEARABLE]],
             [
-              /droid.+; (glass) \d/i
-              // Google Glass
+              /(opwwe\d{3})/i
+              // OnePlus Watch
             ],
-            [MODEL, [VENDOR, GOOGLE], [TYPE, WEARABLE]],
+            [MODEL, [VENDOR, ONEPLUS], [TYPE, WEARABLE]],
+            [
+              /(moto 360)/i
+              // Motorola 360
+            ],
+            [MODEL, [VENDOR, MOTOROLA], [TYPE, WEARABLE]],
+            [
+              /(smartwatch 3)/i
+              // Sony SmartWatch
+            ],
+            [MODEL, [VENDOR, SONY], [TYPE, WEARABLE]],
+            [
+              /(g watch r)/i
+              // LG G Watch R
+            ],
+            [MODEL, [VENDOR, LG], [TYPE, WEARABLE]],
             [
               /droid.+; (wt63?0{2,3})\)/i
             ],
             [MODEL, [VENDOR, ZEBRA], [TYPE, WEARABLE]],
             [
-              /(quest( \d| pro)?)/i
-              // Oculus Quest
+              ///////////////////
+              // XR
+              ///////////////////
+              /droid.+; (glass) \d/i
+              // Google Glass
             ],
-            [MODEL, [VENDOR, FACEBOOK], [TYPE, WEARABLE]],
+            [MODEL, [VENDOR, GOOGLE], [TYPE, XR]],
+            [
+              /(pico) ([\w ]+) os\d/i
+              // Pico
+            ],
+            [VENDOR, MODEL, [TYPE, XR]],
+            [
+              /(quest( \d| pro)?s?).+vr/i
+              // Meta Quest
+            ],
+            [MODEL, [VENDOR, FACEBOOK], [TYPE, XR]],
+            [
+              /mobile vr; rv.+firefox/i
+              // Unidentifiable VR device using Firefox Reality / Wolvic
+            ],
+            [[TYPE, XR]],
             [
               ///////////////////
               // EMBEDDED
@@ -1471,18 +1652,31 @@ var mediasoupClient = (() => {
             ],
             [MODEL, [VENDOR, AMAZON], [TYPE, EMBEDDED]],
             [
+              /(homepod).+mac os/i
+              // Apple HomePod
+            ],
+            [MODEL, [VENDOR, APPLE], [TYPE, EMBEDDED]],
+            [
+              /windows iot/i
+              // Unidentifiable embedded device using Windows IoT
+            ],
+            [[TYPE, EMBEDDED]],
+            [
               ////////////////////
               // MIXED (GENERIC)
               ///////////////////
-              /droid .+?; ([^;]+?)(?: bui|; wv\)|\) applew).+? mobile safari/i
-              // Android Phones from Unidentified Vendors
+              /droid.+; ([\w- ]+) (4k|android|smart|google)[- ]?tv/i
+              // Unidentifiable SmartTV
             ],
-            [MODEL, [TYPE, MOBILE]],
+            [MODEL, [TYPE, SMARTTV]],
             [
-              /droid .+?; ([^;]+?)(?: bui|\) applew).+?(?! mobile) safari/i
-              // Android Tablets from Unidentified Vendors
+              /\b((4k|android|smart|opera)[- ]?tv|tv; rv:|large screen[\w ]+safari)\b/i
             ],
-            [MODEL, [TYPE, TABLET]],
+            [[TYPE, SMARTTV]],
+            [
+              /droid .+?; ([^;]+?)(?: bui|; wv\)|\) applew|; hmsc).+?(mobile|vr|\d) safari/i
+            ],
+            [MODEL, [TYPE, strMapper, { "mobile": "Mobile", "xr": "VR", "*": TABLET }]],
             [
               /\b((tablet|tab)[;\/]|focus\/\d(?!.+mobile))/i
               // Unidentifiable Tablet
@@ -1494,7 +1688,7 @@ var mediasoupClient = (() => {
             ],
             [[TYPE, MOBILE]],
             [
-              /(android[-\w\. ]{0,9});.+buil/i
+              /droid .+?; ([\w\. -]+)( bui|\))/i
               // Generic Android Device
             ],
             [MODEL, [VENDOR, "Generic"]]
@@ -1506,6 +1700,11 @@ var mediasoupClient = (() => {
             ],
             [VERSION, [NAME, EDGE + "HTML"]],
             [
+              /(arkweb)\/([\w\.]+)/i
+              // ArkWeb
+            ],
+            [NAME, VERSION],
+            [
               /webkit\/537\.36.+chrome\/(?!27)([\w\.]+)/i
               // Blink
             ],
@@ -1513,17 +1712,22 @@ var mediasoupClient = (() => {
             [
               /(presto)\/([\w\.]+)/i,
               // Presto
-              /(webkit|trident|netfront|netsurf|amaya|lynx|w3m|goanna)\/([\w\.]+)/i,
-              // WebKit/Trident/NetFront/NetSurf/Amaya/Lynx/w3m/Goanna
+              /(webkit|trident|netfront|netsurf|amaya|lynx|w3m|goanna|servo)\/([\w\.]+)/i,
+              // WebKit/Trident/NetFront/NetSurf/Amaya/Lynx/w3m/Goanna/Servo
               /ekioh(flow)\/([\w\.]+)/i,
               // Flow
-              /(khtml|tasman|links)[\/ ]\(?([\w\.]+)/i,
-              // KHTML/Tasman/Links
+              /(khtml|tasman|links|dillo)[\/ ]\(?([\w\.]+)/i,
+              // KHTML/Tasman/Links/Dillo
               /(icab)[\/ ]([23]\.[\d\.]+)/i,
               // iCab
               /\b(libweb)/i
+              // LibWeb
             ],
             [NAME, VERSION],
+            [
+              /ladybird\//i
+            ],
+            [[NAME, "LibWeb"]],
             [
               /rv\:([\w\.]{1,9})\b.+(gecko)/i
               // Gecko
@@ -1533,51 +1737,84 @@ var mediasoupClient = (() => {
           os: [
             [
               // Windows
-              /microsoft (windows) (vista|xp)/i
-              // Windows (iTunes)
+              /(windows nt) (6\.[23]); arm/i
+              // Windows RT
+            ],
+            [[NAME, /N/, "R"], [VERSION, strMapper, windowsVersionMap]],
+            [
+              /(windows (?:phone|mobile|iot))(?: os)?[\/ ]?([\d\.]*( se)?)/i,
+              // Windows IoT/Mobile/Phone
+              // Windows NT/3.1/95/98/ME/2000/XP/Vista/7/8/8.1/10/11
+              /(windows)[\/ ](1[01]|2000|3\.1|7|8(\.1)?|9[58]|me|server 20\d\d( r2)?|vista|xp)/i
             ],
             [NAME, VERSION],
             [
-              /(windows (?:phone(?: os)?|mobile))[\/ ]?([\d\.\w ]*)/i
-              // Windows Phone
+              /windows nt ?([\d\.\)]*)(?!.+xbox)/i,
+              /\bwin(?=3| ?9|n)(?:nt| 9x )?([\d\.;]*)/i
             ],
-            [NAME, [VERSION, strMapper, windowsVersionMap]],
+            [[VERSION, /(;|\))/g, "", strMapper, windowsVersionMap], [NAME, WINDOWS]],
             [
-              /windows nt 6\.2; (arm)/i,
-              // Windows RT
-              /windows[\/ ]?([ntce\d\. ]+\w)(?!.+xbox)/i,
-              /(?:win(?=3|9|n)|win 9x )([nt\d\.]+)/i
+              /(windows ce)\/?([\d\.]*)/i
+              // Windows CE
             ],
-            [[VERSION, strMapper, windowsVersionMap], [NAME, "Windows"]],
+            [NAME, VERSION],
             [
               // iOS/macOS
-              /ip[honead]{2,4}\b(?:.*os ([\w]+) like mac|; opera)/i,
+              /[adehimnop]{4,7}\b(?:.*os ([\w]+) like mac|; opera)/i,
               // iOS
-              /(?:ios;fbsv\/|iphone.+ios[\/ ])([\d\.]+)/i,
+              /(?:ios;fbsv|ios(?=.+ip(?:ad|hone)|.+apple ?tv)|ip(?:ad|hone)(?: |.+i(?:pad)?)os|apple ?tv.+ios)[\/ ]([\w\.]+)/i,
+              /\btvos ?([\w\.]+)/i,
               /cfnetwork\/.+darwin/i
             ],
             [[VERSION, /_/g, "."], [NAME, "iOS"]],
             [
               /(mac os x) ?([\w\. ]*)/i,
-              /(macintosh|mac_powerpc\b)(?!.+haiku)/i
+              /(macintosh|mac_powerpc\b)(?!.+(haiku|morphos))/i
               // Mac OS
             ],
-            [[NAME, MAC_OS], [VERSION, /_/g, "."]],
+            [[NAME, "macOS"], [VERSION, /_/g, "."]],
+            [
+              // Google Chromecast
+              /android ([\d\.]+).*crkey/i
+              // Google Chromecast, Android-based
+            ],
+            [VERSION, [NAME, CHROMECAST + " Android"]],
+            [
+              /fuchsia.*crkey\/([\d\.]+)/i
+              // Google Chromecast, Fuchsia-based
+            ],
+            [VERSION, [NAME, CHROMECAST + " Fuchsia"]],
+            [
+              /crkey\/([\d\.]+).*devicetype\/smartspeaker/i
+              // Google Chromecast, Linux-based Smart Speaker
+            ],
+            [VERSION, [NAME, CHROMECAST + " SmartSpeaker"]],
+            [
+              /linux.*crkey\/([\d\.]+)/i
+              // Google Chromecast, Legacy Linux-based
+            ],
+            [VERSION, [NAME, CHROMECAST + " Linux"]],
+            [
+              /crkey\/([\d\.]+)/i
+              // Google Chromecast, unknown
+            ],
+            [VERSION, [NAME, CHROMECAST]],
             [
               // Mobile OSes
-              /droid ([\w\.]+)\b.+(android[- ]x86|harmonyos)/i
-              // Android-x86/HarmonyOS
+              /droid ([\w\.]+)\b.+(android[- ]x86)/i
+              // Android-x86
             ],
             [VERSION, NAME],
             [
-              // Android/WebOS/QNX/Bada/RIM/Maemo/MeeGo/Sailfish OS
-              /(android|webos|qnx|bada|rim tablet os|maemo|meego|sailfish)[-\/ ]?([\w\.]*)/i,
-              /(blackberry)\w*\/([\w\.]*)/i,
-              // Blackberry
-              /(tizen|kaios)[\/ ]([\w\.]+)/i,
-              // Tizen/KaiOS
-              /\((series40);/i
-              // Series 40
+              /(ubuntu) ([\w\.]+) like android/i
+              // Ubuntu Touch
+            ],
+            [[NAME, /(.+)/, "$1 Touch"], VERSION],
+            [
+              /(harmonyos)[\/ ]?([\d\.]*)/i,
+              // HarmonyOS
+              // Android/Blackberry/WebOS/QNX/Bada/RIM/KaiOS/Maemo/MeeGo/S40/Sailfish OS/OpenHarmony/Tizen
+              /(android|bada|blackberry|kaios|maemo|meego|openharmony|qnx|rim tablet os|sailfish|series40|symbian|tizen)\w*[-\/\.; ]?([\d\.]*)/i
             ],
             [NAME, VERSION],
             [
@@ -1586,189 +1823,455 @@ var mediasoupClient = (() => {
             ],
             [VERSION, [NAME, BLACKBERRY]],
             [
-              /(?:symbian ?os|symbos|s60(?=;)|series60)[-\/ ]?([\w\.]*)/i
+              /(?:symbian ?os|symbos|s60(?=;)|series ?60)[-\/ ]?([\w\.]*)/i
               // Symbian
             ],
             [VERSION, [NAME, "Symbian"]],
             [
-              /mozilla\/[\d\.]+ \((?:mobile|tablet|tv|mobile; [\w ]+); rv:.+ gecko\/([\w\.]+)/i
+              /mozilla\/[\d\.]+ \((?:mobile[;\w ]*|tablet|tv|[^\)]*(?:viera|lg(?:l25|-d300)|alcatel ?o.+|y300-f1)); rv:([\w\.]+)\).+gecko\//i
               // Firefox OS
             ],
             [VERSION, [NAME, FIREFOX + " OS"]],
             [
-              /web0s;.+rt(tv)/i,
-              /\b(?:hp)?wos(?:browser)?\/([\w\.]+)/i
+              /\b(?:hp)?wos(?:browser)?\/([\w\.]+)/i,
               // WebOS
+              /webos(?:[ \/]?|\.tv-20(?=2[2-9]))(\d[\d\.]*)/i
             ],
             [VERSION, [NAME, "webOS"]],
             [
-              /watch(?: ?os[,\/]|\d,\d\/)([\d\.]+)/i
+              /web0s;.+?(?:chr[o0]me|safari)\/(\d+)/i
+              // https://webostv.developer.lge.com/develop/specifications/web-api-and-web-engine
+            ],
+            [[VERSION, strMapper, { "25": "120", "24": "108", "23": "94", "22": "87", "6": "79", "5": "68", "4": "53", "3": "38", "2": "538", "1": "537", "*": "TV" }], [NAME, "webOS"]],
+            [
+              /watch(?: ?os[,\/ ]|\d,\d\/)([\d\.]+)/i
               // watchOS
             ],
             [VERSION, [NAME, "watchOS"]],
             [
-              // Google Chromecast
-              /crkey\/([\d\.]+)/i
-              // Google Chromecast
-            ],
-            [VERSION, [NAME, CHROME + "cast"]],
-            [
-              /(cros) [\w]+(?:\)| ([\w\.]+)\b)/i
+              // Google ChromeOS
+              /cros [\w]+(?:\)| ([\w\.]+)\b)/i
               // Chromium OS
             ],
-            [[NAME, CHROMIUM_OS], VERSION],
+            [VERSION, [NAME, "Chrome OS"]],
             [
               // Smart TVs
-              /panasonic;(viera)/i,
-              // Panasonic Viera
+              /kepler ([\w\.]+); (aft|aeo)/i
+              // Vega OS
+            ],
+            [VERSION, [NAME, "Vega OS"]],
+            [
               /(netrange)mmh/i,
               // Netrange
               /(nettv)\/(\d+\.[\w\.]+)/i,
               // NetTV
               // Console
-              /(nintendo|playstation) ([wids345portablevuch]+)/i,
+              /(nintendo|playstation) (\w+)/i,
               // Nintendo/Playstation
               /(xbox); +xbox ([^\);]+)/i,
               // Microsoft Xbox (360, One, X, S, Series X, Series S)
+              /(pico) .+os([\w\.]+)/i,
+              // Pico
               // Other
               /\b(joli|palm)\b ?(?:os)?\/?([\w\.]*)/i,
               // Joli/Palm
-              /(mint)[\/\(\) ]?(\w*)/i,
+              /linux.+(mint)[\/\(\) ]?([\w\.]*)/i,
               // Mint
-              /(mageia|vectorlinux)[; ]/i,
-              // Mageia/VectorLinux
-              /([kxln]?ubuntu|debian|suse|opensuse|gentoo|arch(?= linux)|slackware|fedora|mandriva|centos|pclinuxos|red ?hat|zenwalk|linpus|raspbian|plan 9|minix|risc os|contiki|deepin|manjaro|elementary os|sabayon|linspire)(?: gnu\/linux)?(?: enterprise)?(?:[- ]linux)?(?:-gnu)?[-\/ ]?(?!chrom|package)([-\w\.]*)/i,
-              // Ubuntu/Debian/SUSE/Gentoo/Arch/Slackware/Fedora/Mandriva/CentOS/PCLinuxOS/RedHat/Zenwalk/Linpus/Raspbian/Plan9/Minix/RISCOS/Contiki/Deepin/Manjaro/elementary/Sabayon/Linspire
-              /(hurd|linux) ?([\w\.]*)/i,
-              // Hurd/Linux
+              /(mageia|vectorlinux|fuchsia|arcaos|arch(?= ?linux))[;l ]([\d\.]*)/i,
+              // Mageia/VectorLinux/Fuchsia/ArcaOS/Arch
+              /([kxln]?ubuntu|debian|suse|opensuse|gentoo|slackware|fedora|mandriva|centos|pclinuxos|red ?hat|zenwalk|linpus|raspbian|plan 9|minix|risc os|contiki|deepin|manjaro|elementary os|sabayon|linspire|knoppix)(?: gnu[\/ ]linux)?(?: enterprise)?(?:[- ]linux)?(?:-gnu)?[-\/ ]?(?!chrom|package)([-\w\.]*)/i,
+              // Ubuntu/Debian/SUSE/Gentoo/Slackware/Fedora/Mandriva/CentOS/PCLinuxOS/RedHat/Zenwalk/Linpus/Raspbian/Plan9/Minix/RISCOS/Contiki/Deepin/Manjaro/elementary/Sabayon/Linspire/Knoppix
+              /((?:open)?solaris)[-\/ ]?([\w\.]*)/i,
+              // Solaris
+              /\b(aix)[; ]([1-9\.]{0,4})/i,
+              // AIX
+              /(hurd|linux|morphos)(?: (?:arm|x86|ppc)\w*| ?)([\w\.]*)/i,
+              // Hurd/Linux/MorphOS
               /(gnu) ?([\w\.]*)/i,
               // GNU
               /\b([-frentopcghs]{0,5}bsd|dragonfly)[\/ ]?(?!amd|[ix346]{1,2}86)([\w\.]*)/i,
               // FreeBSD/NetBSD/OpenBSD/PC-BSD/GhostBSD/DragonFly
-              /(haiku) (\w+)/i
+              /(haiku) ?(r\d)?/i
               // Haiku
             ],
             [NAME, VERSION],
             [
-              /(sunos) ?([\w\.\d]*)/i
+              /(sunos) ?([\d\.]*)/i
               // Solaris
             ],
             [[NAME, "Solaris"], VERSION],
             [
-              /((?:open)?solaris)[-\/ ]?([\w\.]*)/i,
-              // Solaris
-              /(aix) ((\d)(?=\.|\)| )[\w\.])*/i,
-              // AIX
-              /\b(beos|os\/2|amigaos|morphos|openvms|fuchsia|hp-ux|serenityos)/i,
-              // BeOS/OS2/AmigaOS/MorphOS/OpenVMS/Fuchsia/HP-UX/SerenityOS
+              /\b(beos|os\/2|amigaos|openvms|hp-ux|serenityos)/i,
+              // BeOS/OS2/AmigaOS/OpenVMS/HP-UX/SerenityOS
               /(unix) ?([\w\.]*)/i
               // UNIX
             ],
             [NAME, VERSION]
           ]
         };
-        var UAParser = function(ua, extensions) {
-          if (typeof ua === OBJ_TYPE) {
-            extensions = ua;
-            ua = undefined2;
+        var defaultProps = (function() {
+          var props = { init: {}, isIgnore: {}, isIgnoreRgx: {}, toString: {} };
+          setProps.call(props.init, [
+            [BROWSER, [NAME, VERSION, MAJOR, TYPE]],
+            [CPU, [ARCHITECTURE]],
+            [DEVICE, [TYPE, MODEL, VENDOR]],
+            [ENGINE, [NAME, VERSION]],
+            [OS, [NAME, VERSION]]
+          ]);
+          setProps.call(props.isIgnore, [
+            [BROWSER, [VERSION, MAJOR]],
+            [ENGINE, [VERSION]],
+            [OS, [VERSION]]
+          ]);
+          setProps.call(props.isIgnoreRgx, [
+            [BROWSER, / ?browser$/i],
+            [OS, / ?os$/i]
+          ]);
+          setProps.call(props.toString, [
+            [BROWSER, [NAME, VERSION]],
+            [CPU, [ARCHITECTURE]],
+            [DEVICE, [VENDOR, MODEL]],
+            [ENGINE, [NAME, VERSION]],
+            [OS, [NAME, VERSION]]
+          ]);
+          return props;
+        })();
+        var createIData = function(item, itemType) {
+          var init_props = defaultProps.init[itemType], is_ignoreProps = defaultProps.isIgnore[itemType] || 0, is_ignoreRgx = defaultProps.isIgnoreRgx[itemType] || 0, toString_props = defaultProps.toString[itemType] || 0;
+          function IData() {
+            setProps.call(this, init_props);
           }
-          if (!(this instanceof UAParser)) {
-            return new UAParser(ua, extensions).getResult();
-          }
-          var _navigator = typeof window2 !== UNDEF_TYPE && window2.navigator ? window2.navigator : undefined2;
-          var _ua = ua || (_navigator && _navigator.userAgent ? _navigator.userAgent : EMPTY);
-          var _uach = _navigator && _navigator.userAgentData ? _navigator.userAgentData : undefined2;
-          var _rgxmap = extensions ? extend(regexes, extensions) : regexes;
-          var _isSelfNav = _navigator && _navigator.userAgent == _ua;
-          this.getBrowser = function() {
-            var _browser = {};
-            _browser[NAME] = undefined2;
-            _browser[VERSION] = undefined2;
-            rgxMapper.call(_browser, _ua, _rgxmap.browser);
-            _browser[MAJOR] = majorize(_browser[VERSION]);
-            if (_isSelfNav && _navigator && _navigator.brave && typeof _navigator.brave.isBrave == FUNC_TYPE) {
-              _browser[NAME] = "Brave";
+          IData.prototype.getItem = function() {
+            return item;
+          };
+          IData.prototype.withClientHints = function() {
+            if (!NAVIGATOR_UADATA) {
+              return item.parseCH().get();
             }
-            return _browser;
+            return NAVIGATOR_UADATA.getHighEntropyValues(CH_ALL_VALUES).then(function(res) {
+              return item.setCH(new UACHData(res, false)).parseCH().get();
+            });
           };
-          this.getCPU = function() {
-            var _cpu = {};
-            _cpu[ARCHITECTURE] = undefined2;
-            rgxMapper.call(_cpu, _ua, _rgxmap.cpu);
-            return _cpu;
+          IData.prototype.withFeatureCheck = function() {
+            return item.detectFeature().get();
           };
-          this.getDevice = function() {
-            var _device = {};
-            _device[VENDOR] = undefined2;
-            _device[MODEL] = undefined2;
-            _device[TYPE] = undefined2;
-            rgxMapper.call(_device, _ua, _rgxmap.device);
-            if (_isSelfNav && !_device[TYPE] && _uach && _uach.mobile) {
-              _device[TYPE] = MOBILE;
-            }
-            if (_isSelfNav && _device[MODEL] == "Macintosh" && _navigator && typeof _navigator.standalone !== UNDEF_TYPE && _navigator.maxTouchPoints && _navigator.maxTouchPoints > 2) {
-              _device[MODEL] = "iPad";
-              _device[TYPE] = TABLET;
-            }
-            return _device;
-          };
-          this.getEngine = function() {
-            var _engine = {};
-            _engine[NAME] = undefined2;
-            _engine[VERSION] = undefined2;
-            rgxMapper.call(_engine, _ua, _rgxmap.engine);
-            return _engine;
-          };
-          this.getOS = function() {
-            var _os = {};
-            _os[NAME] = undefined2;
-            _os[VERSION] = undefined2;
-            rgxMapper.call(_os, _ua, _rgxmap.os);
-            if (_isSelfNav && !_os[NAME] && _uach && _uach.platform && _uach.platform != "Unknown") {
-              _os[NAME] = _uach.platform.replace(/chrome os/i, CHROMIUM_OS).replace(/macos/i, MAC_OS);
-            }
-            return _os;
-          };
-          this.getResult = function() {
-            return {
-              ua: this.getUA(),
-              browser: this.getBrowser(),
-              engine: this.getEngine(),
-              os: this.getOS(),
-              device: this.getDevice(),
-              cpu: this.getCPU()
+          if (itemType != RESULT) {
+            IData.prototype.is = function(strToCheck) {
+              var is = false;
+              for (var i in this) {
+                if (this.hasOwnProperty(i) && !has(is_ignoreProps, i) && lowerize(is_ignoreRgx ? strip(is_ignoreRgx, this[i]) : this[i]) == lowerize(is_ignoreRgx ? strip(is_ignoreRgx, strToCheck) : strToCheck)) {
+                  is = true;
+                  if (strToCheck != TYPEOF.UNDEFINED) break;
+                } else if (strToCheck == TYPEOF.UNDEFINED && is) {
+                  is = !is;
+                  break;
+                }
+              }
+              return is;
             };
+            IData.prototype.toString = function() {
+              var str = EMPTY;
+              for (var i in toString_props) {
+                if (typeof this[toString_props[i]] !== TYPEOF.UNDEFINED) {
+                  str += (str ? " " : EMPTY) + this[toString_props[i]];
+                }
+              }
+              return str || TYPEOF.UNDEFINED;
+            };
+          }
+          IData.prototype.then = function(cb) {
+            var that = this;
+            var IDataResolve = function() {
+              for (var prop in that) {
+                if (that.hasOwnProperty(prop)) {
+                  this[prop] = that[prop];
+                }
+              }
+            };
+            IDataResolve.prototype = {
+              is: IData.prototype.is,
+              toString: IData.prototype.toString,
+              withClientHints: IData.prototype.withClientHints,
+              withFeatureCheck: IData.prototype.withFeatureCheck
+            };
+            var resolveData = new IDataResolve();
+            cb(resolveData);
+            return resolveData;
           };
-          this.getUA = function() {
-            return _ua;
-          };
-          this.setUA = function(ua2) {
-            _ua = typeof ua2 === STR_TYPE && ua2.length > UA_MAX_LENGTH ? trim(ua2, UA_MAX_LENGTH) : ua2;
-            return this;
-          };
-          this.setUA(_ua);
+          return new IData();
+        };
+        function UACHData(uach, isHttpUACH) {
+          uach = uach || {};
+          setProps.call(this, CH_ALL_VALUES);
+          if (isHttpUACH) {
+            setProps.call(this, [
+              [BRANDS, itemListToArray(uach[CH])],
+              [FULLVERLIST, itemListToArray(uach[CH_FULL_VER_LIST])],
+              [MOBILE, /\?1/.test(uach[CH_MOBILE])],
+              [MODEL, normalizeHeaderValue(uach[CH_MODEL])],
+              [PLATFORM, normalizeHeaderValue(uach[CH_PLATFORM])],
+              [PLATFORMVER, normalizeHeaderValue(uach[CH_PLATFORM_VER])],
+              [ARCHITECTURE, normalizeHeaderValue(uach[CH_ARCH])],
+              [FORMFACTORS, itemListToArray(uach[CH_FORM_FACTORS])],
+              [BITNESS, normalizeHeaderValue(uach[CH_BITNESS])]
+            ]);
+          } else {
+            for (var prop in uach) {
+              if (this.hasOwnProperty(prop) && typeof uach[prop] !== TYPEOF.UNDEFINED) this[prop] = uach[prop];
+            }
+          }
+        }
+        function UAItem(itemType, ua, rgxMap, uaCH) {
+          setProps.call(this, [
+            ["itemType", itemType],
+            ["ua", ua],
+            ["uaCH", uaCH],
+            ["rgxMap", rgxMap],
+            ["data", createIData(this, itemType)]
+          ]);
+          return this;
+        }
+        UAItem.prototype.get = function(prop) {
+          if (!prop) return this.data;
+          return this.data.hasOwnProperty(prop) ? this.data[prop] : undefined2;
+        };
+        UAItem.prototype.set = function(prop, val) {
+          this.data[prop] = val;
           return this;
         };
+        UAItem.prototype.setCH = function(ch) {
+          this.uaCH = ch;
+          return this;
+        };
+        UAItem.prototype.detectFeature = function() {
+          if (NAVIGATOR && NAVIGATOR.userAgent == this.ua) {
+            switch (this.itemType) {
+              case BROWSER:
+                if (NAVIGATOR.brave && typeof NAVIGATOR.brave.isBrave == TYPEOF.FUNCTION) {
+                  this.set(NAME, "Brave");
+                }
+                break;
+              case DEVICE:
+                if (!this.get(TYPE) && NAVIGATOR_UADATA && NAVIGATOR_UADATA[MOBILE]) {
+                  this.set(TYPE, MOBILE);
+                }
+                if (this.get(MODEL) == "Macintosh" && NAVIGATOR && typeof NAVIGATOR.standalone !== TYPEOF.UNDEFINED && NAVIGATOR.maxTouchPoints && NAVIGATOR.maxTouchPoints > 2) {
+                  this.set(MODEL, "iPad").set(TYPE, TABLET);
+                }
+                break;
+              case OS:
+                if (!this.get(NAME) && NAVIGATOR_UADATA && NAVIGATOR_UADATA[PLATFORM]) {
+                  this.set(NAME, NAVIGATOR_UADATA[PLATFORM]);
+                }
+                break;
+              case RESULT:
+                var data = this.data;
+                var detect = function(itemType) {
+                  return data[itemType].getItem().detectFeature().get();
+                };
+                this.set(BROWSER, detect(BROWSER)).set(CPU, detect(CPU)).set(DEVICE, detect(DEVICE)).set(ENGINE, detect(ENGINE)).set(OS, detect(OS));
+            }
+          }
+          return this;
+        };
+        UAItem.prototype.parseUA = function() {
+          if (this.itemType != RESULT) {
+            rgxMapper.call(this.data, this.ua, this.rgxMap);
+          }
+          switch (this.itemType) {
+            case BROWSER:
+              this.set(MAJOR, majorize(this.get(VERSION)));
+              break;
+            case OS:
+              if (this.get(NAME) == "iOS" && this.get(VERSION)) {
+                if (/^1[89][^\d]/.exec(this.get(VERSION))) {
+                  var realVersion = /\) Version\/((\d+)[\d\.]*)/.exec(this.ua);
+                  if (realVersion && parseInt(realVersion[2], 10) >= 26) {
+                    this.set(VERSION, realVersion[1]);
+                  }
+                }
+              }
+              break;
+          }
+          return this;
+        };
+        UAItem.prototype.parseCH = function() {
+          var uaCH = this.uaCH, rgxMap = this.rgxMap;
+          switch (this.itemType) {
+            case BROWSER:
+            case ENGINE:
+              var brands = uaCH[FULLVERLIST] || uaCH[BRANDS], prevName;
+              if (brands) {
+                for (var i = 0; i < brands.length; i++) {
+                  var brandName = brands[i].brand || brands[i], brandVersion = brands[i].version;
+                  if (this.itemType == BROWSER && !/not.a.brand/i.test(brandName) && (!prevName || /Chrom/.test(prevName) && brandName != CHROMIUM || prevName == EDGE && /WebView2/.test(brandName))) {
+                    brandName = strMapper(brandName, browserHintsMap);
+                    prevName = this.get(NAME);
+                    if (!(prevName && !/Chrom/.test(prevName) && /Chrom/.test(brandName))) {
+                      this.set(NAME, brandName).set(VERSION, brandVersion).set(MAJOR, majorize(brandVersion));
+                    }
+                    prevName = brandName;
+                  }
+                  if (this.itemType == ENGINE && brandName == CHROMIUM) {
+                    this.set(VERSION, brandVersion);
+                  }
+                }
+              }
+              break;
+            case CPU:
+              var archName = uaCH[ARCHITECTURE];
+              if (archName) {
+                if (archName && uaCH[BITNESS] == "64") archName += "64";
+                rgxMapper.call(this.data, archName + ";", rgxMap);
+              }
+              break;
+            case DEVICE:
+              if (uaCH[MOBILE]) {
+                this.set(TYPE, MOBILE);
+              }
+              if (uaCH[MODEL]) {
+                this.set(MODEL, uaCH[MODEL]);
+                if (!this.get(TYPE) || !this.get(VENDOR)) {
+                  var reParse = {};
+                  rgxMapper.call(reParse, "droid 9; " + uaCH[MODEL] + ")", rgxMap);
+                  if (!this.get(TYPE) && !!reParse.type) {
+                    this.set(TYPE, reParse.type);
+                  }
+                  if (!this.get(VENDOR) && !!reParse.vendor) {
+                    this.set(VENDOR, reParse.vendor);
+                  }
+                }
+              }
+              if (uaCH[FORMFACTORS]) {
+                var ff;
+                if (typeof uaCH[FORMFACTORS] !== "string") {
+                  var idx = 0;
+                  while (!ff && idx < uaCH[FORMFACTORS].length) {
+                    ff = strMapper(uaCH[FORMFACTORS][idx++], formFactorsMap);
+                  }
+                } else {
+                  ff = strMapper(uaCH[FORMFACTORS], formFactorsMap);
+                }
+                this.set(TYPE, ff);
+              }
+              break;
+            case OS:
+              var osName = uaCH[PLATFORM];
+              if (osName) {
+                var osVersion = uaCH[PLATFORMVER];
+                if (osName == WINDOWS) osVersion = parseInt(majorize(osVersion), 10) >= 13 ? "11" : "10";
+                this.set(NAME, osName).set(VERSION, osVersion);
+              }
+              if (this.get(NAME) == WINDOWS && uaCH[MODEL] == "Xbox") {
+                this.set(NAME, "Xbox").set(VERSION, undefined2);
+              }
+              break;
+            case RESULT:
+              var data = this.data;
+              var parse = function(itemType) {
+                return data[itemType].getItem().setCH(uaCH).parseCH().get();
+              };
+              this.set(BROWSER, parse(BROWSER)).set(CPU, parse(CPU)).set(DEVICE, parse(DEVICE)).set(ENGINE, parse(ENGINE)).set(OS, parse(OS));
+          }
+          return this;
+        };
+        function UAParser(ua, extensions, headers) {
+          if (typeof ua === TYPEOF.OBJECT) {
+            if (isExtensions(ua, true)) {
+              if (typeof extensions === TYPEOF.OBJECT) {
+                headers = extensions;
+              }
+              extensions = ua;
+            } else {
+              headers = ua;
+              extensions = undefined2;
+            }
+            ua = undefined2;
+          } else if (typeof ua === TYPEOF.STRING && !isExtensions(extensions, true)) {
+            headers = extensions;
+            extensions = undefined2;
+          }
+          if (headers) {
+            if (typeof headers.append === TYPEOF.FUNCTION) {
+              var kv = {};
+              headers.forEach(function(v, k) {
+                kv[String(k).toLowerCase()] = v;
+              });
+              headers = kv;
+            } else {
+              var normalized = {};
+              for (var header in headers) {
+                if (headers.hasOwnProperty(header)) {
+                  normalized[String(header).toLowerCase()] = headers[header];
+                }
+              }
+              headers = normalized;
+            }
+          }
+          if (!(this instanceof UAParser)) {
+            return new UAParser(ua, extensions, headers).getResult();
+          }
+          var userAgent = typeof ua === TYPEOF.STRING ? ua : (
+            // Passed user-agent string
+            headers && headers[USER_AGENT] ? headers[USER_AGENT] : (
+              // User-Agent from passed headers
+              NAVIGATOR && NAVIGATOR.userAgent ? NAVIGATOR.userAgent : (
+                // navigator.userAgent
+                EMPTY
+              )
+            )
+          ), httpUACH = new UACHData(headers, true), regexMap = defaultRegexes, createItemFunc = function(itemType) {
+            if (itemType == RESULT) {
+              return function() {
+                return new UAItem(itemType, userAgent, regexMap, httpUACH).set("ua", userAgent).set(BROWSER, this.getBrowser()).set(CPU, this.getCPU()).set(DEVICE, this.getDevice()).set(ENGINE, this.getEngine()).set(OS, this.getOS()).get();
+              };
+            } else {
+              return function() {
+                return new UAItem(itemType, userAgent, regexMap[itemType], httpUACH).parseUA().get();
+              };
+            }
+          };
+          setProps.call(this, [
+            ["getBrowser", createItemFunc(BROWSER)],
+            ["getCPU", createItemFunc(CPU)],
+            ["getDevice", createItemFunc(DEVICE)],
+            ["getEngine", createItemFunc(ENGINE)],
+            ["getOS", createItemFunc(OS)],
+            ["getResult", createItemFunc(RESULT)],
+            ["getUA", function() {
+              return userAgent;
+            }],
+            ["setUA", function(ua2) {
+              if (isString(ua2)) userAgent = trim(ua2, UA_MAX_LENGTH);
+              return this;
+            }],
+            ["useExtension", function(exts) {
+              if (exts) regexMap = extend(regexMap, exts);
+              return this;
+            }]
+          ]).setUA(userAgent).useExtension(extensions);
+          return this;
+        }
         UAParser.VERSION = LIBVERSION;
-        UAParser.BROWSER = enumerize([NAME, VERSION, MAJOR]);
+        UAParser.BROWSER = enumerize([NAME, VERSION, MAJOR, TYPE]);
         UAParser.CPU = enumerize([ARCHITECTURE]);
         UAParser.DEVICE = enumerize([MODEL, VENDOR, TYPE, CONSOLE, MOBILE, SMARTTV, TABLET, WEARABLE, EMBEDDED]);
         UAParser.ENGINE = UAParser.OS = enumerize([NAME, VERSION]);
-        if (typeof exports !== UNDEF_TYPE) {
-          if (typeof module !== UNDEF_TYPE && module.exports) {
+        if (typeof exports !== TYPEOF.UNDEFINED) {
+          if (typeof module !== TYPEOF.UNDEFINED && module.exports) {
             exports = module.exports = UAParser;
           }
           exports.UAParser = UAParser;
         } else {
-          if (typeof define === FUNC_TYPE && define.amd) {
+          if (typeof define === TYPEOF.FUNCTION && define.amd) {
             define(function() {
               return UAParser;
             });
-          } else if (typeof window2 !== UNDEF_TYPE) {
+          } else if (isWindow) {
             window2.UAParser = UAParser;
           }
         }
-        var $ = typeof window2 !== UNDEF_TYPE && (window2.jQuery || window2.Zepto);
+        var $ = isWindow && (window2.jQuery || window2.Zepto);
         if ($ && !$.ua) {
           var parser = new UAParser();
           $.ua = parser.getResult();
@@ -1787,9 +2290,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/Logger.js
+  // src/client/lib/Logger.js
   var require_Logger = __commonJS({
-    "lib/Logger.js"(exports) {
+    "src/client/lib/Logger.js"(exports) {
       "use strict";
       var __importDefault = exports && exports.__importDefault || function(mod) {
         return mod && mod.__esModule ? mod : { "default": mod };
@@ -1827,385 +2330,89 @@ var mediasoupClient = (() => {
     }
   });
 
-  // node_modules/npm-events-package/events.js
-  var require_events = __commonJS({
-    "node_modules/npm-events-package/events.js"(exports, module) {
-      "use strict";
-      var R = typeof Reflect === "object" ? Reflect : null;
-      var ReflectApply = R && typeof R.apply === "function" ? R.apply : function ReflectApply2(target, receiver, args) {
-        return Function.prototype.apply.call(target, receiver, args);
-      };
-      var ReflectOwnKeys;
-      if (R && typeof R.ownKeys === "function") {
-        ReflectOwnKeys = R.ownKeys;
-      } else if (Object.getOwnPropertySymbols) {
-        ReflectOwnKeys = function ReflectOwnKeys2(target) {
-          return Object.getOwnPropertyNames(target).concat(Object.getOwnPropertySymbols(target));
-        };
-      } else {
-        ReflectOwnKeys = function ReflectOwnKeys2(target) {
-          return Object.getOwnPropertyNames(target);
-        };
-      }
-      function ProcessEmitWarning(warning) {
-        if (console && console.warn) console.warn(warning);
-      }
-      var NumberIsNaN = Number.isNaN || function NumberIsNaN2(value) {
-        return value !== value;
-      };
-      function EventEmitter() {
-        EventEmitter.init.call(this);
-      }
-      module.exports = EventEmitter;
-      module.exports.once = once;
-      EventEmitter.EventEmitter = EventEmitter;
-      EventEmitter.prototype._events = void 0;
-      EventEmitter.prototype._eventsCount = 0;
-      EventEmitter.prototype._maxListeners = void 0;
-      var defaultMaxListeners = 10;
-      function checkListener(listener) {
-        if (typeof listener !== "function") {
-          throw new TypeError('The "listener" argument must be of type Function. Received type ' + typeof listener);
-        }
-      }
-      Object.defineProperty(EventEmitter, "defaultMaxListeners", {
-        enumerable: true,
-        get: function() {
-          return defaultMaxListeners;
-        },
-        set: function(arg) {
-          if (typeof arg !== "number" || arg < 0 || NumberIsNaN(arg)) {
-            throw new RangeError('The value of "defaultMaxListeners" is out of range. It must be a non-negative number. Received ' + arg + ".");
-          }
-          defaultMaxListeners = arg;
-        }
-      });
-      EventEmitter.init = function() {
-        if (this._events === void 0 || this._events === Object.getPrototypeOf(this)._events) {
-          this._events = /* @__PURE__ */ Object.create(null);
-          this._eventsCount = 0;
-        }
-        this._maxListeners = this._maxListeners || void 0;
-      };
-      EventEmitter.prototype.setMaxListeners = function setMaxListeners(n) {
-        if (typeof n !== "number" || n < 0 || NumberIsNaN(n)) {
-          throw new RangeError('The value of "n" is out of range. It must be a non-negative number. Received ' + n + ".");
-        }
-        this._maxListeners = n;
-        return this;
-      };
-      function _getMaxListeners(that) {
-        if (that._maxListeners === void 0)
-          return EventEmitter.defaultMaxListeners;
-        return that._maxListeners;
-      }
-      EventEmitter.prototype.getMaxListeners = function getMaxListeners() {
-        return _getMaxListeners(this);
-      };
-      EventEmitter.prototype.emit = function emit(type) {
-        var args = [];
-        for (var i = 1; i < arguments.length; i++) args.push(arguments[i]);
-        var doError = type === "error";
-        var events = this._events;
-        if (events !== void 0)
-          doError = doError && events.error === void 0;
-        else if (!doError)
-          return false;
-        if (doError) {
-          var er;
-          if (args.length > 0)
-            er = args[0];
-          if (er instanceof Error) {
-            throw er;
-          }
-          var err = new Error("Unhandled error." + (er ? " (" + er.message + ")" : ""));
-          err.context = er;
-          throw err;
-        }
-        var handler = events[type];
-        if (handler === void 0)
-          return false;
-        if (typeof handler === "function") {
-          ReflectApply(handler, this, args);
-        } else {
-          var len = handler.length;
-          var listeners = arrayClone(handler, len);
-          for (var i = 0; i < len; ++i)
-            ReflectApply(listeners[i], this, args);
-        }
-        return true;
-      };
-      function _addListener(target, type, listener, prepend) {
-        var m;
-        var events;
-        var existing;
-        checkListener(listener);
-        events = target._events;
-        if (events === void 0) {
-          events = target._events = /* @__PURE__ */ Object.create(null);
-          target._eventsCount = 0;
-        } else {
-          if (events.newListener !== void 0) {
-            target.emit(
-              "newListener",
-              type,
-              listener.listener ? listener.listener : listener
-            );
-            events = target._events;
-          }
-          existing = events[type];
-        }
-        if (existing === void 0) {
-          existing = events[type] = listener;
-          ++target._eventsCount;
-        } else {
-          if (typeof existing === "function") {
-            existing = events[type] = prepend ? [listener, existing] : [existing, listener];
-          } else if (prepend) {
-            existing.unshift(listener);
-          } else {
-            existing.push(listener);
-          }
-          m = _getMaxListeners(target);
-          if (m > 0 && existing.length > m && !existing.warned) {
-            existing.warned = true;
-            var w = new Error("Possible EventEmitter memory leak detected. " + existing.length + " " + String(type) + " listeners added. Use emitter.setMaxListeners() to increase limit");
-            w.name = "MaxListenersExceededWarning";
-            w.emitter = target;
-            w.type = type;
-            w.count = existing.length;
-            ProcessEmitWarning(w);
-          }
-        }
-        return target;
-      }
-      EventEmitter.prototype.addListener = function addListener(type, listener) {
-        return _addListener(this, type, listener, false);
-      };
-      EventEmitter.prototype.on = EventEmitter.prototype.addListener;
-      EventEmitter.prototype.prependListener = function prependListener(type, listener) {
-        return _addListener(this, type, listener, true);
-      };
-      function onceWrapper() {
-        if (!this.fired) {
-          this.target.removeListener(this.type, this.wrapFn);
-          this.fired = true;
-          if (arguments.length === 0)
-            return this.listener.call(this.target);
-          return this.listener.apply(this.target, arguments);
-        }
-      }
-      function _onceWrap(target, type, listener) {
-        var state = { fired: false, wrapFn: void 0, target, type, listener };
-        var wrapped = onceWrapper.bind(state);
-        wrapped.listener = listener;
-        state.wrapFn = wrapped;
-        return wrapped;
-      }
-      EventEmitter.prototype.once = function once2(type, listener) {
-        checkListener(listener);
-        this.on(type, _onceWrap(this, type, listener));
-        return this;
-      };
-      EventEmitter.prototype.prependOnceListener = function prependOnceListener(type, listener) {
-        checkListener(listener);
-        this.prependListener(type, _onceWrap(this, type, listener));
-        return this;
-      };
-      EventEmitter.prototype.removeListener = function removeListener(type, listener) {
-        var list, events, position, i, originalListener;
-        checkListener(listener);
-        events = this._events;
-        if (events === void 0)
-          return this;
-        list = events[type];
-        if (list === void 0)
-          return this;
-        if (list === listener || list.listener === listener) {
-          if (--this._eventsCount === 0)
-            this._events = /* @__PURE__ */ Object.create(null);
-          else {
-            delete events[type];
-            if (events.removeListener)
-              this.emit("removeListener", type, list.listener || listener);
-          }
-        } else if (typeof list !== "function") {
-          position = -1;
-          for (i = list.length - 1; i >= 0; i--) {
-            if (list[i] === listener || list[i].listener === listener) {
-              originalListener = list[i].listener;
-              position = i;
-              break;
-            }
-          }
-          if (position < 0)
-            return this;
-          if (position === 0)
-            list.shift();
-          else {
-            spliceOne(list, position);
-          }
-          if (list.length === 1)
-            events[type] = list[0];
-          if (events.removeListener !== void 0)
-            this.emit("removeListener", type, originalListener || listener);
-        }
-        return this;
-      };
-      EventEmitter.prototype.off = EventEmitter.prototype.removeListener;
-      EventEmitter.prototype.removeAllListeners = function removeAllListeners(type) {
-        var listeners, events, i;
-        events = this._events;
-        if (events === void 0)
-          return this;
-        if (events.removeListener === void 0) {
-          if (arguments.length === 0) {
-            this._events = /* @__PURE__ */ Object.create(null);
-            this._eventsCount = 0;
-          } else if (events[type] !== void 0) {
-            if (--this._eventsCount === 0)
-              this._events = /* @__PURE__ */ Object.create(null);
-            else
-              delete events[type];
-          }
-          return this;
-        }
-        if (arguments.length === 0) {
-          var keys = Object.keys(events);
-          var key;
-          for (i = 0; i < keys.length; ++i) {
-            key = keys[i];
-            if (key === "removeListener") continue;
-            this.removeAllListeners(key);
-          }
-          this.removeAllListeners("removeListener");
-          this._events = /* @__PURE__ */ Object.create(null);
-          this._eventsCount = 0;
-          return this;
-        }
-        listeners = events[type];
-        if (typeof listeners === "function") {
-          this.removeListener(type, listeners);
-        } else if (listeners !== void 0) {
-          for (i = listeners.length - 1; i >= 0; i--) {
-            this.removeListener(type, listeners[i]);
-          }
-        }
-        return this;
-      };
-      function _listeners(target, type, unwrap) {
-        var events = target._events;
-        if (events === void 0)
-          return [];
-        var evlistener = events[type];
-        if (evlistener === void 0)
-          return [];
-        if (typeof evlistener === "function")
-          return unwrap ? [evlistener.listener || evlistener] : [evlistener];
-        return unwrap ? unwrapListeners(evlistener) : arrayClone(evlistener, evlistener.length);
-      }
-      EventEmitter.prototype.listeners = function listeners(type) {
-        return _listeners(this, type, true);
-      };
-      EventEmitter.prototype.rawListeners = function rawListeners(type) {
-        return _listeners(this, type, false);
-      };
-      EventEmitter.listenerCount = function(emitter, type) {
-        if (typeof emitter.listenerCount === "function") {
-          return emitter.listenerCount(type);
-        } else {
-          return listenerCount.call(emitter, type);
-        }
-      };
-      EventEmitter.prototype.listenerCount = listenerCount;
-      function listenerCount(type) {
-        var events = this._events;
-        if (events !== void 0) {
-          var evlistener = events[type];
-          if (typeof evlistener === "function") {
-            return 1;
-          } else if (evlistener !== void 0) {
-            return evlistener.length;
-          }
-        }
-        return 0;
-      }
-      EventEmitter.prototype.eventNames = function eventNames() {
-        return this._eventsCount > 0 ? ReflectOwnKeys(this._events) : [];
-      };
-      function arrayClone(arr, n) {
-        var copy = new Array(n);
-        for (var i = 0; i < n; ++i)
-          copy[i] = arr[i];
-        return copy;
-      }
-      function spliceOne(list, index) {
-        for (; index + 1 < list.length; index++)
-          list[index] = list[index + 1];
-        list.pop();
-      }
-      function unwrapListeners(arr) {
-        var ret = new Array(arr.length);
-        for (var i = 0; i < ret.length; ++i) {
-          ret[i] = arr[i].listener || arr[i];
-        }
-        return ret;
-      }
-      function once(emitter, name) {
-        return new Promise(function(resolve, reject) {
-          function errorListener(err) {
-            emitter.removeListener(name, resolver);
-            reject(err);
-          }
-          function resolver() {
-            if (typeof emitter.removeListener === "function") {
-              emitter.removeListener("error", errorListener);
-            }
-            resolve([].slice.call(arguments));
-          }
-          ;
-          eventTargetAgnosticAddListener(emitter, name, resolver, { once: true });
-          if (name !== "error") {
-            addErrorHandlerIfEventEmitter(emitter, errorListener, { once: true });
-          }
-        });
-      }
-      function addErrorHandlerIfEventEmitter(emitter, handler, flags) {
-        if (typeof emitter.on === "function") {
-          eventTargetAgnosticAddListener(emitter, "error", handler, flags);
-        }
-      }
-      function eventTargetAgnosticAddListener(emitter, name, listener, flags) {
-        if (typeof emitter.on === "function") {
-          if (flags.once) {
-            emitter.once(name, listener);
-          } else {
-            emitter.on(name, listener);
-          }
-        } else if (typeof emitter.addEventListener === "function") {
-          emitter.addEventListener(name, function wrapListener(arg) {
-            if (flags.once) {
-              emitter.removeEventListener(name, wrapListener);
-            }
-            listener(arg);
-          });
-        } else {
-          throw new TypeError('The "emitter" argument must be of type EventEmitter. Received type ' + typeof emitter);
-        }
-      }
-    }
-  });
-
-  // lib/enhancedEvents.js
+  // src/client/lib/enhancedEvents.js
   var require_enhancedEvents = __commonJS({
-    "lib/enhancedEvents.js"(exports) {
+    "src/client/lib/enhancedEvents.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.EnhancedEventEmitter = void 0;
-      var npm_events_package_1 = require_events();
       var Logger_1 = require_Logger();
       var enhancedEventEmitterLogger = new Logger_1.Logger("EnhancedEventEmitter");
-      var EnhancedEventEmitter = class extends npm_events_package_1.EventEmitter {
+      var BaseEventEmitter = class {
+        constructor() {
+          this._events = /* @__PURE__ */ new Map();
+          this._maxListeners = Infinity;
+        }
+        setMaxListeners(value) {
+          this._maxListeners = value;
+          return this;
+        }
+        emit(eventName, ...args) {
+          const listeners = this._events.get(eventName);
+          if (!listeners || listeners.length === 0) {
+            return false;
+          }
+          for (const listener of [...listeners]) {
+            listener(...args);
+          }
+          return true;
+        }
+        on(eventName, listener) {
+          const listeners = this._events.get(eventName) ?? [];
+          listeners.push(listener);
+          this._events.set(eventName, listeners);
+          return this;
+        }
+        off(eventName, listener) {
+          const listeners = this._events.get(eventName);
+          if (!listeners) {
+            return this;
+          }
+          this._events.set(eventName, listeners.filter((item) => item !== listener));
+          return this;
+        }
+        prependListener(eventName, listener) {
+          const listeners = this._events.get(eventName) ?? [];
+          listeners.unshift(listener);
+          this._events.set(eventName, listeners);
+          return this;
+        }
+        once(eventName, listener) {
+          const wrapped = (...args) => {
+            this.off(eventName, wrapped);
+            listener(...args);
+          };
+          return this.on(eventName, wrapped);
+        }
+        prependOnceListener(eventName, listener) {
+          const wrapped = (...args) => {
+            this.off(eventName, wrapped);
+            listener(...args);
+          };
+          return this.prependListener(eventName, wrapped);
+        }
+        removeListener(eventName, listener) {
+          return this.off(eventName, listener);
+        }
+        removeAllListeners(eventName) {
+          if (typeof eventName === "undefined") {
+            this._events.clear();
+          } else {
+            this._events.delete(eventName);
+          }
+          return this;
+        }
+        listenerCount(eventName) {
+          return (this._events.get(eventName) ?? []).length;
+        }
+        listeners(eventName) {
+          return [...this._events.get(eventName) ?? []];
+        }
+        rawListeners(eventName) {
+          return this.listeners(eventName);
+        }
+      };
+      var EnhancedEventEmitter = class extends BaseEventEmitter {
         constructor() {
           super();
           this.setMaxListeners(Infinity);
@@ -2274,9 +2481,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/errors.js
+  // src/client/lib/errors.js
   var require_errors = __commonJS({
-    "lib/errors.js"(exports) {
+    "src/client/lib/errors.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.InvalidStateError = exports.UnsupportedError = void 0;
@@ -2307,9 +2514,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/utils.js
+  // src/client/lib/utils.js
   var require_utils = __commonJS({
-    "lib/utils.js"(exports) {
+    "src/client/lib/utils.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.clone = clone;
@@ -2342,18 +2549,18 @@ var mediasoupClient = (() => {
     }
   });
 
-  // node_modules/h264-profile-level-id/lib/Logger.js
+  // tests/qos_harness/node_modules/h264-profile-level-id/lib/Logger.js
   var require_Logger2 = __commonJS({
-    "node_modules/h264-profile-level-id/lib/Logger.js"(exports) {
+    "tests/qos_harness/node_modules/h264-profile-level-id/lib/Logger.js"(exports) {
       "use strict";
-      var __importDefault = exports && exports.__importDefault || function(mod) {
-        return mod && mod.__esModule ? mod : { "default": mod };
-      };
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.Logger = void 0;
-      var debug_1 = __importDefault(require_browser());
+      var debug_1 = require_browser();
       var APP_NAME = "h264-profile-level-id";
       var Logger = class {
+        _debug;
+        _warn;
+        _error;
         constructor(prefix) {
           if (prefix) {
             this._debug = (0, debug_1.default)(`${APP_NAME}:${prefix}`);
@@ -2382,12 +2589,21 @@ var mediasoupClient = (() => {
     }
   });
 
-  // node_modules/h264-profile-level-id/lib/index.js
+  // tests/qos_harness/node_modules/h264-profile-level-id/lib/index.js
   var require_lib = __commonJS({
-    "node_modules/h264-profile-level-id/lib/index.js"(exports) {
+    "tests/qos_harness/node_modules/h264-profile-level-id/lib/index.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
-      exports.generateProfileLevelIdStringForAnswer = exports.isSameProfile = exports.parseSdpProfileLevelId = exports.levelToString = exports.profileToString = exports.profileLevelIdToString = exports.parseProfileLevelId = exports.ProfileLevelId = exports.Level = exports.Profile = void 0;
+      exports.ProfileLevelId = exports.Level = exports.Profile = void 0;
+      exports.parseProfileLevelId = parseProfileLevelId;
+      exports.profileLevelIdToString = profileLevelIdToString;
+      exports.profileToString = profileToString;
+      exports.levelToString = levelToString;
+      exports.parseSdpProfileLevelId = parseSdpProfileLevelId;
+      exports.isSameProfile = isSameProfile;
+      exports.isSameProfileAndLevel = isSameProfileAndLevel;
+      exports.generateProfileLevelIdStringForAnswer = generateProfileLevelIdStringForAnswer;
+      exports.supportedLevel = supportedLevel;
       var Logger_1 = require_Logger2();
       var logger = new Logger_1.Logger();
       var Profile;
@@ -2420,6 +2636,8 @@ var mediasoupClient = (() => {
         Level2[Level2["L5_2"] = 52] = "L5_2";
       })(Level || (exports.Level = Level = {}));
       var ProfileLevelId = class {
+        profile;
+        level;
         constructor(profile, level) {
           this.profile = profile;
           this.level = level;
@@ -2428,6 +2646,8 @@ var mediasoupClient = (() => {
       exports.ProfileLevelId = ProfileLevelId;
       var DefaultProfileLevelId = new ProfileLevelId(Profile.ConstrainedBaseline, Level.L3_1);
       var BitPattern = class {
+        mask;
+        masked_value;
         constructor(str) {
           this.mask = ~byteMaskString("x", str);
           this.masked_value = byteMaskString("1", str);
@@ -2437,6 +2657,9 @@ var mediasoupClient = (() => {
         }
       };
       var ProfilePattern = class {
+        profile_idc;
+        profile_iop;
+        profile;
         constructor(profile_idc, profile_iop, profile) {
           this.profile_idc = profile_idc;
           this.profile_iop = profile_iop;
@@ -2453,6 +2676,93 @@ var mediasoupClient = (() => {
         new ProfilePattern(100, new BitPattern("00000000"), Profile.High),
         new ProfilePattern(100, new BitPattern("00001100"), Profile.ConstrainedHigh),
         new ProfilePattern(244, new BitPattern("00000000"), Profile.PredictiveHigh444)
+      ];
+      var LevelConstraints = [
+        {
+          max_macroblocks_per_second: 1485,
+          max_macroblock_frame_size: 99,
+          level: Level.L1
+        },
+        {
+          max_macroblocks_per_second: 1485,
+          max_macroblock_frame_size: 99,
+          level: Level.L1_b
+        },
+        {
+          max_macroblocks_per_second: 3e3,
+          max_macroblock_frame_size: 396,
+          level: Level.L1_1
+        },
+        {
+          max_macroblocks_per_second: 6e3,
+          max_macroblock_frame_size: 396,
+          level: Level.L1_2
+        },
+        {
+          max_macroblocks_per_second: 11880,
+          max_macroblock_frame_size: 396,
+          level: Level.L1_3
+        },
+        {
+          max_macroblocks_per_second: 11880,
+          max_macroblock_frame_size: 396,
+          level: Level.L2
+        },
+        {
+          max_macroblocks_per_second: 19800,
+          max_macroblock_frame_size: 792,
+          level: Level.L2_1
+        },
+        {
+          max_macroblocks_per_second: 20250,
+          max_macroblock_frame_size: 1620,
+          level: Level.L2_2
+        },
+        {
+          max_macroblocks_per_second: 40500,
+          max_macroblock_frame_size: 1620,
+          level: Level.L3
+        },
+        {
+          max_macroblocks_per_second: 108e3,
+          max_macroblock_frame_size: 3600,
+          level: Level.L3_1
+        },
+        {
+          max_macroblocks_per_second: 216e3,
+          max_macroblock_frame_size: 5120,
+          level: Level.L3_2
+        },
+        {
+          max_macroblocks_per_second: 245760,
+          max_macroblock_frame_size: 8192,
+          level: Level.L4
+        },
+        {
+          max_macroblocks_per_second: 245760,
+          max_macroblock_frame_size: 8192,
+          level: Level.L4_1
+        },
+        {
+          max_macroblocks_per_second: 522240,
+          max_macroblock_frame_size: 8704,
+          level: Level.L4_2
+        },
+        {
+          max_macroblocks_per_second: 589824,
+          max_macroblock_frame_size: 22080,
+          level: Level.L5
+        },
+        {
+          max_macroblocks_per_second: 983040,
+          max_macroblock_frame_size: 36864,
+          level: Level.L5_1
+        },
+        {
+          max_macroblocks_per_second: 2073600,
+          max_macroblock_frame_size: 36864,
+          level: Level.L5_2
+        }
       ];
       function parseProfileLevelId(str) {
         const ConstraintSet3Flag = 16;
@@ -2498,13 +2808,13 @@ var mediasoupClient = (() => {
         }
         for (const pattern of ProfilePatterns) {
           if (profile_idc === pattern.profile_idc && pattern.profile_iop.isMatch(profile_iop)) {
+            logger.debug(`parseProfileLevelId() | result [str:${str}, profile:${pattern.profile}, level:${level}]`);
             return new ProfileLevelId(pattern.profile, level);
           }
         }
         logger.warn(`parseProfileLevelId() | unrecognized profile_idc/profile_iop combination [str:${str}, profile_idc:${profile_idc}, profile_iop:${profile_iop}]`);
         return void 0;
       }
-      exports.parseProfileLevelId = parseProfileLevelId;
       function profileLevelIdToString(profile_level_id) {
         if (profile_level_id.level == Level.L1_b) {
           switch (profile_level_id.profile) {
@@ -2561,7 +2871,6 @@ var mediasoupClient = (() => {
         }
         return `${profile_idc_iop_string}${levelStr}`;
       }
-      exports.profileLevelIdToString = profileLevelIdToString;
       function profileToString(profile) {
         switch (profile) {
           case Profile.ConstrainedBaseline: {
@@ -2588,7 +2897,6 @@ var mediasoupClient = (() => {
           }
         }
       }
-      exports.profileToString = profileToString;
       function levelToString(level) {
         switch (level) {
           case Level.L1_b: {
@@ -2648,18 +2956,20 @@ var mediasoupClient = (() => {
           }
         }
       }
-      exports.levelToString = levelToString;
       function parseSdpProfileLevelId(params = {}) {
         const profile_level_id = params["profile-level-id"];
         return profile_level_id ? parseProfileLevelId(profile_level_id) : DefaultProfileLevelId;
       }
-      exports.parseSdpProfileLevelId = parseSdpProfileLevelId;
       function isSameProfile(params1 = {}, params2 = {}) {
         const profile_level_id_1 = parseSdpProfileLevelId(params1);
         const profile_level_id_2 = parseSdpProfileLevelId(params2);
         return Boolean(profile_level_id_1 && profile_level_id_2 && profile_level_id_1.profile === profile_level_id_2.profile);
       }
-      exports.isSameProfile = isSameProfile;
+      function isSameProfileAndLevel(params1 = {}, params2 = {}) {
+        const profile_level_id_1 = parseSdpProfileLevelId(params1);
+        const profile_level_id_2 = parseSdpProfileLevelId(params2);
+        return Boolean(profile_level_id_1 && profile_level_id_2 && profile_level_id_1.profile === profile_level_id_2.profile && profile_level_id_1.level == profile_level_id_2.level);
+      }
       function generateProfileLevelIdStringForAnswer(local_supported_params = {}, remote_offered_params = {}) {
         if (!local_supported_params["profile-level-id"] && !remote_offered_params["profile-level-id"]) {
           logger.warn("generateProfileLevelIdStringForAnswer() | profile-level-id missing in local and remote params");
@@ -2684,7 +2994,18 @@ var mediasoupClient = (() => {
         logger.debug(`generateProfileLevelIdStringForAnswer() | result [profile:${local_profile_level_id.profile}, level:${answer_level}]`);
         return profileLevelIdToString(new ProfileLevelId(local_profile_level_id.profile, answer_level));
       }
-      exports.generateProfileLevelIdStringForAnswer = generateProfileLevelIdStringForAnswer;
+      function supportedLevel(max_frame_pixel_count, max_fps) {
+        const PixelsPerMacroblock = 16 * 16;
+        for (let i = LevelConstraints.length - 1; i >= 0; --i) {
+          const level_constraint = LevelConstraints[i];
+          if (level_constraint.max_macroblock_frame_size * PixelsPerMacroblock <= max_frame_pixel_count && level_constraint.max_macroblocks_per_second <= max_fps * level_constraint.max_macroblock_frame_size) {
+            logger.debug(`supportedLevel() | result [max_frame_pixel_count:${max_frame_pixel_count}, max_fps:${max_fps}, level:${level_constraint.level}]`);
+            return level_constraint.level;
+          }
+        }
+        logger.warn(`supportedLevel() | no level supported [max_frame_pixel_count:${max_frame_pixel_count}, max_fps:${max_fps}]`);
+        return void 0;
+      }
       function byteMaskString(c, str) {
         return Number(str[0] === c) << 7 | Number(str[1] === c) << 6 | Number(str[2] === c) << 5 | Number(str[3] === c) << 4 | Number(str[4] === c) << 3 | Number(str[5] === c) << 2 | Number(str[6] === c) << 1 | Number(str[7] === c) << 0;
       }
@@ -2707,9 +3028,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/ortc.js
+  // src/client/lib/ortc.js
   var require_ortc = __commonJS({
-    "lib/ortc.js"(exports) {
+    "src/client/lib/ortc.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -3425,24 +3746,27 @@ var mediasoupClient = (() => {
     }
   });
 
-  // node_modules/awaitqueue/lib/Logger.js
+  // tests/qos_harness/node_modules/awaitqueue/lib/Logger.js
   var require_Logger3 = __commonJS({
-    "node_modules/awaitqueue/lib/Logger.js"(exports) {
+    "tests/qos_harness/node_modules/awaitqueue/lib/Logger.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.Logger = void 0;
-      var debug_1 = require_browser();
+      var debug = require_browser();
       var LIB_NAME = "awaitqueue";
       var Logger = class {
+        _debug;
+        _warn;
+        _error;
         constructor(prefix) {
           if (prefix) {
-            this._debug = (0, debug_1.default)(`${LIB_NAME}:${prefix}`);
-            this._warn = (0, debug_1.default)(`${LIB_NAME}:WARN:${prefix}`);
-            this._error = (0, debug_1.default)(`${LIB_NAME}:ERROR:${prefix}`);
+            this._debug = debug(`${LIB_NAME}:${prefix}`);
+            this._warn = debug(`${LIB_NAME}:WARN:${prefix}`);
+            this._error = debug(`${LIB_NAME}:ERROR:${prefix}`);
           } else {
-            this._debug = (0, debug_1.default)(LIB_NAME);
-            this._warn = (0, debug_1.default)(`${LIB_NAME}:WARN`);
-            this._error = (0, debug_1.default)(`${LIB_NAME}:ERROR`);
+            this._debug = debug(LIB_NAME);
+            this._warn = debug(`${LIB_NAME}:WARN`);
+            this._error = debug(`${LIB_NAME}:ERROR`);
           }
           this._debug.log = console.info.bind(console);
           this._warn.log = console.warn.bind(console);
@@ -3462,17 +3786,15 @@ var mediasoupClient = (() => {
     }
   });
 
-  // node_modules/awaitqueue/lib/index.js
-  var require_lib2 = __commonJS({
-    "node_modules/awaitqueue/lib/index.js"(exports) {
+  // tests/qos_harness/node_modules/awaitqueue/lib/errors.js
+  var require_errors2 = __commonJS({
+    "tests/qos_harness/node_modules/awaitqueue/lib/errors.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
-      exports.AwaitQueue = exports.AwaitQueueRemovedTaskError = exports.AwaitQueueStoppedError = void 0;
-      var Logger_1 = require_Logger3();
-      var logger = new Logger_1.Logger();
+      exports.AwaitQueueRemovedTaskError = exports.AwaitQueueStoppedError = void 0;
       var AwaitQueueStoppedError = class _AwaitQueueStoppedError extends Error {
         constructor(message) {
-          super(message ?? "AwaitQueue stopped");
+          super(message ?? "queue stopped");
           this.name = "AwaitQueueStoppedError";
           if (typeof Error.captureStackTrace === "function") {
             Error.captureStackTrace(this, _AwaitQueueStoppedError);
@@ -3482,7 +3804,7 @@ var mediasoupClient = (() => {
       exports.AwaitQueueStoppedError = AwaitQueueStoppedError;
       var AwaitQueueRemovedTaskError = class _AwaitQueueRemovedTaskError extends Error {
         constructor(message) {
-          super(message ?? "AwaitQueue task removed");
+          super(message ?? "queue task removed");
           this.name = "AwaitQueueRemovedTaskError";
           if (typeof Error.captureStackTrace === "function") {
             Error.captureStackTrace(this, _AwaitQueueRemovedTaskError);
@@ -3490,18 +3812,32 @@ var mediasoupClient = (() => {
         }
       };
       exports.AwaitQueueRemovedTaskError = AwaitQueueRemovedTaskError;
+    }
+  });
+
+  // tests/qos_harness/node_modules/awaitqueue/lib/AwaitQueue.js
+  var require_AwaitQueue = __commonJS({
+    "tests/qos_harness/node_modules/awaitqueue/lib/AwaitQueue.js"(exports) {
+      "use strict";
+      Object.defineProperty(exports, "__esModule", { value: true });
+      exports.AwaitQueue = void 0;
+      var Logger_1 = require_Logger3();
+      var errors_1 = require_errors2();
+      var logger = new Logger_1.Logger("AwaitQueue");
       var AwaitQueue = class {
+        // Queue of pending tasks (map of PendingTasks indexed by id).
+        pendingTasks = /* @__PURE__ */ new Map();
+        // Incrementing PendingTask id.
+        nextTaskId = 0;
         constructor() {
-          this.pendingTasks = /* @__PURE__ */ new Map();
-          this.nextTaskId = 0;
-          this.stopping = false;
+          logger.debug("constructor()");
         }
         get size() {
           return this.pendingTasks.size;
         }
-        async push(task, name) {
+        async push(task, name, options) {
           name = name ?? task.name;
-          logger.debug(`push() [name:${name}]`);
+          logger.debug(`push() [name:${name}, options:%o]`, options);
           if (typeof task !== "function") {
             throw new TypeError("given task is not a function");
           }
@@ -3512,6 +3848,15 @@ var mediasoupClient = (() => {
             }
           }
           return new Promise((resolve, reject) => {
+            if (name && options?.removeOngoingTasksWithSameName) {
+              for (const pendingTask2 of this.pendingTasks.values()) {
+                if (pendingTask2.name === name) {
+                  pendingTask2.reject(new errors_1.AwaitQueueRemovedTaskError(), {
+                    canExecuteNextTask: false
+                  });
+                }
+              }
+            }
             const pendingTask = {
               id: this.nextTaskId++,
               task,
@@ -3532,7 +3877,7 @@ var mediasoupClient = (() => {
                   void this.execute(nextPendingTask);
                 }
               },
-              reject: (error) => {
+              reject: (error, { canExecuteNextTask }) => {
                 if (pendingTask.completed) {
                   return;
                 }
@@ -3540,7 +3885,7 @@ var mediasoupClient = (() => {
                 this.pendingTasks.delete(pendingTask.id);
                 logger.debug(`rejecting task [name:${pendingTask.name}]: %s`, String(error));
                 reject(error);
-                if (!this.stopping) {
+                if (canExecuteNextTask) {
                   const [nextPendingTask] = this.pendingTasks.values();
                   if (nextPendingTask && !nextPendingTask.executedAt) {
                     void this.execute(nextPendingTask);
@@ -3556,12 +3901,12 @@ var mediasoupClient = (() => {
         }
         stop() {
           logger.debug("stop()");
-          this.stopping = true;
           for (const pendingTask of this.pendingTasks.values()) {
             logger.debug(`stop() | stopping task [name:${pendingTask.name}]`);
-            pendingTask.reject(new AwaitQueueStoppedError());
+            pendingTask.reject(new errors_1.AwaitQueueStoppedError(), {
+              canExecuteNextTask: false
+            });
           }
-          this.stopping = false;
         }
         remove(taskIdx) {
           logger.debug(`remove() [taskIdx:${taskIdx}]`);
@@ -3570,7 +3915,9 @@ var mediasoupClient = (() => {
             logger.debug(`stop() | no task with given idx [taskIdx:${taskIdx}]`);
             return;
           }
-          pendingTask.reject(new AwaitQueueRemovedTaskError());
+          pendingTask.reject(new errors_1.AwaitQueueRemovedTaskError(), {
+            canExecuteNextTask: true
+          });
         }
         dump() {
           const now = Date.now();
@@ -3593,7 +3940,7 @@ var mediasoupClient = (() => {
             const result = await pendingTask.task();
             pendingTask.resolve(result);
           } catch (error) {
-            pendingTask.reject(error);
+            pendingTask.reject(error, { canExecuteNextTask: true });
           }
         }
       };
@@ -3601,9 +3948,29 @@ var mediasoupClient = (() => {
     }
   });
 
-  // node_modules/queue-microtask/index.js
+  // tests/qos_harness/node_modules/awaitqueue/lib/index.js
+  var require_lib2 = __commonJS({
+    "tests/qos_harness/node_modules/awaitqueue/lib/index.js"(exports) {
+      "use strict";
+      Object.defineProperty(exports, "__esModule", { value: true });
+      exports.AwaitQueueRemovedTaskError = exports.AwaitQueueStoppedError = exports.AwaitQueue = void 0;
+      var AwaitQueue_1 = require_AwaitQueue();
+      Object.defineProperty(exports, "AwaitQueue", { enumerable: true, get: function() {
+        return AwaitQueue_1.AwaitQueue;
+      } });
+      var errors_1 = require_errors2();
+      Object.defineProperty(exports, "AwaitQueueStoppedError", { enumerable: true, get: function() {
+        return errors_1.AwaitQueueStoppedError;
+      } });
+      Object.defineProperty(exports, "AwaitQueueRemovedTaskError", { enumerable: true, get: function() {
+        return errors_1.AwaitQueueRemovedTaskError;
+      } });
+    }
+  });
+
+  // tests/qos_harness/node_modules/queue-microtask/index.js
   var require_queue_microtask = __commonJS({
-    "node_modules/queue-microtask/index.js"(exports, module) {
+    "tests/qos_harness/node_modules/queue-microtask/index.js"(exports, module) {
       var promise;
       module.exports = typeof queueMicrotask === "function" ? queueMicrotask.bind(typeof window !== "undefined" ? window : global) : (cb) => (promise || (promise = Promise.resolve())).then(cb).catch((err) => setTimeout(() => {
         throw err;
@@ -3611,9 +3978,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/Producer.js
+  // src/client/lib/Producer.js
   var require_Producer = __commonJS({
-    "lib/Producer.js"(exports) {
+    "src/client/lib/Producer.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.Producer = void 0;
@@ -3884,9 +4251,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/Consumer.js
+  // src/client/lib/Consumer.js
   var require_Consumer = __commonJS({
-    "lib/Consumer.js"(exports) {
+    "src/client/lib/Consumer.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.Consumer = void 0;
@@ -4073,9 +4440,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/DataProducer.js
+  // src/client/lib/DataProducer.js
   var require_DataProducer = __commonJS({
-    "lib/DataProducer.js"(exports) {
+    "src/client/lib/DataProducer.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.DataProducer = void 0;
@@ -4253,9 +4620,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/DataConsumer.js
+  // src/client/lib/DataConsumer.js
   var require_DataConsumer = __commonJS({
-    "lib/DataConsumer.js"(exports) {
+    "src/client/lib/DataConsumer.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.DataConsumer = void 0;
@@ -4415,9 +4782,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/Transport.js
+  // src/client/lib/Transport.js
   var require_Transport = __commonJS({
-    "lib/Transport.js"(exports) {
+    "src/client/lib/Transport.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -5146,9 +5513,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // node_modules/sdp-transform/lib/grammar.js
+  // tests/qos_harness/node_modules/sdp-transform/lib/grammar.js
   var require_grammar = __commonJS({
-    "node_modules/sdp-transform/lib/grammar.js"(exports, module) {
+    "tests/qos_harness/node_modules/sdp-transform/lib/grammar.js"(exports, module) {
       var grammar = module.exports = {
         v: [{
           name: "version",
@@ -5296,9 +5663,10 @@ var mediasoupClient = (() => {
           },
           {
             // a=msid:0c8b064d-d807-43b4-b434-f92a889d8587 98178685-d409-46e0-8e16-7ef0db0db64a
-            name: "msid",
-            reg: /^msid:(.*)/,
-            format: "msid:%s"
+            push: "msid",
+            reg: /^msid:([\w-]+)(?: ([\w-]+))?/,
+            names: ["id", "appdata"],
+            format: "msid:%s %s"
           },
           {
             // a=ptime:20
@@ -5614,9 +5982,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // node_modules/sdp-transform/lib/parser.js
+  // tests/qos_harness/node_modules/sdp-transform/lib/parser.js
   var require_parser = __commonJS({
-    "node_modules/sdp-transform/lib/parser.js"(exports) {
+    "tests/qos_harness/node_modules/sdp-transform/lib/parser.js"(exports) {
       var toIntIfInt = function(v) {
         return String(Number(v)) === v ? Number(v) : v;
       };
@@ -5721,9 +6089,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // node_modules/sdp-transform/lib/writer.js
+  // tests/qos_harness/node_modules/sdp-transform/lib/writer.js
   var require_writer = __commonJS({
-    "node_modules/sdp-transform/lib/writer.js"(exports, module) {
+    "tests/qos_harness/node_modules/sdp-transform/lib/writer.js"(exports, module) {
       var grammar = require_grammar();
       var formatRegExp = /%[sdv%]/g;
       var format = function(formatStr) {
@@ -5827,11 +6195,13 @@ var mediasoupClient = (() => {
     }
   });
 
-  // node_modules/sdp-transform/lib/index.js
+  // tests/qos_harness/node_modules/sdp-transform/lib/index.js
   var require_lib3 = __commonJS({
-    "node_modules/sdp-transform/lib/index.js"(exports) {
+    "tests/qos_harness/node_modules/sdp-transform/lib/index.js"(exports) {
       var parser = require_parser();
       var writer = require_writer();
+      var grammar = require_grammar();
+      exports.grammar = grammar;
       exports.write = writer;
       exports.parse = parser.parse;
       exports.parseParams = parser.parseParams;
@@ -5843,9 +6213,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/handlers/sdp/commonUtils.js
+  // src/client/lib/handlers/sdp/commonUtils.js
   var require_commonUtils = __commonJS({
-    "lib/handlers/sdp/commonUtils.js"(exports) {
+    "src/client/lib/handlers/sdp/commonUtils.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -6055,9 +6425,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/handlers/sdp/unifiedPlanUtils.js
+  // src/client/lib/handlers/sdp/unifiedPlanUtils.js
   var require_unifiedPlanUtils = __commonJS({
-    "lib/handlers/sdp/unifiedPlanUtils.js"(exports) {
+    "src/client/lib/handlers/sdp/unifiedPlanUtils.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.getRtpEncodings = getRtpEncodings;
@@ -6174,9 +6544,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/handlers/ortc/utils.js
+  // src/client/lib/handlers/ortc/utils.js
   var require_utils2 = __commonJS({
-    "lib/handlers/ortc/utils.js"(exports) {
+    "src/client/lib/handlers/ortc/utils.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.addNackSuppportForOpus = addNackSuppportForOpus;
@@ -6193,9 +6563,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/handlers/HandlerInterface.js
+  // src/client/lib/handlers/HandlerInterface.js
   var require_HandlerInterface = __commonJS({
-    "lib/handlers/HandlerInterface.js"(exports) {
+    "src/client/lib/handlers/HandlerInterface.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.HandlerInterface = void 0;
@@ -6209,9 +6579,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/handlers/sdp/MediaSection.js
+  // src/client/lib/handlers/sdp/MediaSection.js
   var require_MediaSection = __commonJS({
-    "lib/handlers/sdp/MediaSection.js"(exports) {
+    "src/client/lib/handlers/sdp/MediaSection.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -6416,13 +6786,13 @@ var mediasoupClient = (() => {
               this._mediaObject.payloads = answerRtpParameters.codecs.map((codec) => codec.payloadType).join(" ");
               this._mediaObject.ext = [];
               for (const ext of answerRtpParameters.headerExtensions) {
-                const found = (offerMediaObject.ext ?? []).some((localExt) => localExt.uri === ext.uri);
-                if (!found) {
+                const localExt = (offerMediaObject.ext ?? []).find((localExt2) => localExt2.uri === ext.uri);
+                if (!localExt) {
                   continue;
                 }
                 this._mediaObject.ext.push({
                   uri: ext.uri,
-                  value: ext.id
+                  value: localExt.value
                 });
               }
               if (extmapAllowMixed && offerMediaObject.extmapAllowMixed === "extmap-allow-mixed") {
@@ -6551,7 +6921,12 @@ var mediasoupClient = (() => {
               this._mediaObject.rtcpFb = [];
               this._mediaObject.fmtp = [];
               if (!this._planB) {
-                this._mediaObject.msid = `${streamId ?? "-"} ${trackId}`;
+                this._mediaObject.msid = [
+                  {
+                    id: streamId ?? "-",
+                    appdata: trackId
+                  }
+                ];
               }
               for (const codec of offerRtpParameters.codecs) {
                 const rtp = {
@@ -6753,9 +7128,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/handlers/sdp/RemoteSdp.js
+  // src/client/lib/handlers/sdp/RemoteSdp.js
   var require_RemoteSdp = __commonJS({
-    "lib/handlers/sdp/RemoteSdp.js"(exports) {
+    "src/client/lib/handlers/sdp/RemoteSdp.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -7026,9 +7401,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/scalabilityModes.js
+  // src/client/lib/scalabilityModes.js
   var require_scalabilityModes = __commonJS({
-    "lib/scalabilityModes.js"(exports) {
+    "src/client/lib/scalabilityModes.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.parse = parse;
@@ -7050,9 +7425,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/handlers/Chrome111.js
+  // src/client/lib/handlers/Chrome111.js
   var require_Chrome111 = __commonJS({
-    "lib/handlers/Chrome111.js"(exports) {
+    "src/client/lib/handlers/Chrome111.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -7720,9 +8095,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/handlers/Chrome74.js
+  // src/client/lib/handlers/Chrome74.js
   var require_Chrome74 = __commonJS({
-    "lib/handlers/Chrome74.js"(exports) {
+    "src/client/lib/handlers/Chrome74.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -8393,9 +8768,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/handlers/Chrome70.js
+  // src/client/lib/handlers/Chrome70.js
   var require_Chrome70 = __commonJS({
-    "lib/handlers/Chrome70.js"(exports) {
+    "src/client/lib/handlers/Chrome70.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -8985,9 +9360,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/handlers/sdp/planBUtils.js
+  // src/client/lib/handlers/sdp/planBUtils.js
   var require_planBUtils = __commonJS({
-    "lib/handlers/sdp/planBUtils.js"(exports) {
+    "src/client/lib/handlers/sdp/planBUtils.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.getRtpEncodings = getRtpEncodings;
@@ -9126,9 +9501,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/handlers/Chrome67.js
+  // src/client/lib/handlers/Chrome67.js
   var require_Chrome67 = __commonJS({
-    "lib/handlers/Chrome67.js"(exports) {
+    "src/client/lib/handlers/Chrome67.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -9694,9 +10069,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/handlers/Chrome55.js
+  // src/client/lib/handlers/Chrome55.js
   var require_Chrome55 = __commonJS({
-    "lib/handlers/Chrome55.js"(exports) {
+    "src/client/lib/handlers/Chrome55.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -10205,9 +10580,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/handlers/Firefox120.js
+  // src/client/lib/handlers/Firefox120.js
   var require_Firefox120 = __commonJS({
-    "lib/handlers/Firefox120.js"(exports) {
+    "src/client/lib/handlers/Firefox120.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -10872,9 +11247,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/handlers/Firefox60.js
+  // src/client/lib/handlers/Firefox60.js
   var require_Firefox60 = __commonJS({
-    "lib/handlers/Firefox60.js"(exports) {
+    "src/client/lib/handlers/Firefox60.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -11535,9 +11910,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/handlers/Safari12.js
+  // src/client/lib/handlers/Safari12.js
   var require_Safari12 = __commonJS({
-    "lib/handlers/Safari12.js"(exports) {
+    "src/client/lib/handlers/Safari12.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -12205,9 +12580,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/handlers/Safari11.js
+  // src/client/lib/handlers/Safari11.js
   var require_Safari11 = __commonJS({
-    "lib/handlers/Safari11.js"(exports) {
+    "src/client/lib/handlers/Safari11.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -12766,9 +13141,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/handlers/ortc/edgeUtils.js
+  // src/client/lib/handlers/ortc/edgeUtils.js
   var require_edgeUtils = __commonJS({
-    "lib/handlers/ortc/edgeUtils.js"(exports) {
+    "src/client/lib/handlers/ortc/edgeUtils.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -12846,9 +13221,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/handlers/Edge11.js
+  // src/client/lib/handlers/Edge11.js
   var require_Edge11 = __commonJS({
-    "lib/handlers/Edge11.js"(exports) {
+    "src/client/lib/handlers/Edge11.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -13265,9 +13640,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/handlers/ReactNativeUnifiedPlan.js
+  // src/client/lib/handlers/ReactNativeUnifiedPlan.js
   var require_ReactNativeUnifiedPlan = __commonJS({
-    "lib/handlers/ReactNativeUnifiedPlan.js"(exports) {
+    "src/client/lib/handlers/ReactNativeUnifiedPlan.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -13964,9 +14339,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/handlers/ReactNative.js
+  // src/client/lib/handlers/ReactNative.js
   var require_ReactNative = __commonJS({
-    "lib/handlers/ReactNative.js"(exports) {
+    "src/client/lib/handlers/ReactNative.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -14484,9 +14859,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/Device.js
+  // src/client/lib/Device.js
   var require_Device = __commonJS({
-    "lib/Device.js"(exports) {
+    "src/client/lib/Device.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -14891,25 +15266,25 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/RtpParameters.js
+  // src/client/lib/RtpParameters.js
   var require_RtpParameters = __commonJS({
-    "lib/RtpParameters.js"(exports) {
+    "src/client/lib/RtpParameters.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
     }
   });
 
-  // lib/SctpParameters.js
+  // src/client/lib/SctpParameters.js
   var require_SctpParameters = __commonJS({
-    "lib/SctpParameters.js"(exports) {
+    "src/client/lib/SctpParameters.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
     }
   });
 
-  // lib/types.js
+  // src/client/lib/types.js
   var require_types = __commonJS({
-    "lib/types.js"(exports) {
+    "src/client/lib/types.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -14941,9 +15316,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/adapters/producerAdapter.js
+  // src/client/lib/qos/adapters/producerAdapter.js
   var require_producerAdapter = __commonJS({
-    "lib/qos/adapters/producerAdapter.js"(exports) {
+    "src/client/lib/qos/adapters/producerAdapter.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.MediasoupProducerAdapter = void 0;
@@ -15044,9 +15419,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/constants.js
+  // src/client/lib/qos/constants.js
   var require_constants = __commonJS({
-    "lib/qos/constants.js"(exports) {
+    "src/client/lib/qos/constants.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.QOS_MAX_TRACKS_PER_SNAPSHOT = exports.QOS_MAX_SEQ = exports.DEFAULT_TRACE_BUFFER_SIZE = exports.DEFAULT_RECOVERY_COOLDOWN_MS = exports.DEFAULT_SNAPSHOT_INTERVAL_MS = exports.DEFAULT_SAMPLE_INTERVAL_MS = exports.QOS_OVERRIDE_SCHEMA_V1 = exports.QOS_POLICY_SCHEMA_V1 = exports.QOS_CLIENT_SCHEMA_V1 = void 0;
@@ -15062,9 +15437,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/protocol.js
+  // src/client/lib/qos/protocol.js
   var require_protocol = __commonJS({
-    "lib/qos/protocol.js"(exports) {
+    "src/client/lib/qos/protocol.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.parseClientQosSnapshot = parseClientQosSnapshot;
@@ -15414,9 +15789,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/adapters/signalChannel.js
+  // src/client/lib/qos/adapters/signalChannel.js
   var require_signalChannel = __commonJS({
-    "lib/qos/adapters/signalChannel.js"(exports) {
+    "src/client/lib/qos/adapters/signalChannel.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.QosSignalChannel = void 0;
@@ -15510,9 +15885,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/adapters/statsProvider.js
+  // src/client/lib/qos/adapters/statsProvider.js
   var require_statsProvider = __commonJS({
-    "lib/qos/adapters/statsProvider.js"(exports) {
+    "src/client/lib/qos/adapters/statsProvider.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.ProducerSenderStatsProvider = void 0;
@@ -15739,9 +16114,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/adapters/index.js
+  // src/client/lib/qos/adapters/index.js
   var require_adapters = __commonJS({
-    "lib/qos/adapters/index.js"(exports) {
+    "src/client/lib/qos/adapters/index.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -15766,9 +16141,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/clock.js
+  // src/client/lib/qos/clock.js
   var require_clock = __commonJS({
-    "lib/qos/clock.js"(exports) {
+    "src/client/lib/qos/clock.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.ManualQosClock = exports.SystemQosClock = void 0;
@@ -15854,9 +16229,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/coordinator.js
+  // src/client/lib/qos/coordinator.js
   var require_coordinator = __commonJS({
-    "lib/qos/coordinator.js"(exports) {
+    "src/client/lib/qos/coordinator.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.PeerQosCoordinator = void 0;
@@ -15953,9 +16328,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/downlinkHints.js
+  // src/client/lib/qos/downlinkHints.js
   var require_downlinkHints = __commonJS({
-    "lib/qos/downlinkHints.js"(exports) {
+    "src/client/lib/qos/downlinkHints.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.DownlinkHints = void 0;
@@ -16022,9 +16397,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/downlinkProtocol.js
+  // src/client/lib/qos/downlinkProtocol.js
   var require_downlinkProtocol = __commonJS({
-    "lib/qos/downlinkProtocol.js"(exports) {
+    "src/client/lib/qos/downlinkProtocol.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.DOWNLINK_SCHEMA_V1 = "mediasoup.qos.downlink.client.v1";
@@ -16105,9 +16480,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/downlinkReporter.js
+  // src/client/lib/qos/downlinkReporter.js
   var require_downlinkReporter = __commonJS({
-    "lib/qos/downlinkReporter.js"(exports) {
+    "src/client/lib/qos/downlinkReporter.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.DownlinkReporter = void 0;
@@ -16185,9 +16560,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/downlinkSampler.js
+  // src/client/lib/qos/downlinkSampler.js
   var require_downlinkSampler = __commonJS({
-    "lib/qos/downlinkSampler.js"(exports) {
+    "src/client/lib/qos/downlinkSampler.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.DownlinkSampler = void 0;
@@ -16197,6 +16572,7 @@ var mediasoupClient = (() => {
           this._hints = /* @__PURE__ */ new Map();
           this._prevPacketsLost = /* @__PURE__ */ new Map();
           this._prevPacketsReceived = /* @__PURE__ */ new Map();
+          this._prevVideoFrameCounters = /* @__PURE__ */ new Map();
           this._statsProvider = typeof options.statsProvider === "function" ? options.statsProvider : async () => this._transport?.getStats?.();
         }
         /**
@@ -16211,6 +16587,7 @@ var mediasoupClient = (() => {
           this._hints.delete(consumerId);
           this._prevPacketsLost.delete(consumerId);
           this._prevPacketsReceived.delete(consumerId);
+          this._prevVideoFrameCounters.delete(consumerId);
         }
         /**
          * Sample current recv transport stats and return a subscriptions array
@@ -16248,6 +16625,17 @@ var mediasoupClient = (() => {
               this._prevPacketsLost.set(consumerId, Number(stats.packetsLost) || 0);
               this._prevPacketsReceived.set(consumerId, Number(stats.packetsReceived) || 0);
             }
+            const derivedFramesPerSecond = computeDerivedFramesPerSecond(
+              stats,
+              this._prevVideoFrameCounters.get(consumerId)
+            );
+            if (stats && hint.kind === "video") {
+              this._prevVideoFrameCounters.set(consumerId, {
+                timestampMs: Number(stats.timestamp) || 0,
+                framesDecoded: Number(stats.framesDecoded) || 0,
+                framesReceived: Number(stats.framesReceived) || 0
+              });
+            }
             subscriptions.push({
               consumerId,
               producerId: hint.producerId || "",
@@ -16260,7 +16648,7 @@ var mediasoupClient = (() => {
               targetHeight: hint.targetHeight || 0,
               packetsLost: lossPercent,
               jitter: stats?.jitter || 0,
-              framesPerSecond: stats?.framesPerSecond || 0,
+              framesPerSecond: (stats?.framesPerSecond || 0) > 0 ? stats.framesPerSecond : derivedFramesPerSecond,
               frameWidth: stats?.frameWidth || 0,
               frameHeight: stats?.frameHeight || 0,
               freezeRate: computeFreezeRate(stats),
@@ -16299,6 +16687,33 @@ var mediasoupClient = (() => {
           return totalDelay / emittedCount * 1e3;
         }
         return totalDelay * 1e3;
+      }
+      function computeDerivedFramesPerSecond(stats, previous) {
+        if (!stats) return 0;
+        const timestampMs = Number(stats.timestamp);
+        if (!Number.isFinite(timestampMs) || !previous || !Number.isFinite(previous.timestampMs) || timestampMs <= previous.timestampMs) {
+          return 0;
+        }
+        const currentFramesDecoded = Number(stats.framesDecoded);
+        const currentFramesReceived = Number(stats.framesReceived);
+        const previousFramesDecoded = Number(previous.framesDecoded);
+        const previousFramesReceived = Number(previous.framesReceived);
+        const frameDeltaCandidates = [];
+        if (Number.isFinite(currentFramesDecoded) && Number.isFinite(previousFramesDecoded) && currentFramesDecoded >= previousFramesDecoded) {
+          frameDeltaCandidates.push(currentFramesDecoded - previousFramesDecoded);
+        }
+        if (Number.isFinite(currentFramesReceived) && Number.isFinite(previousFramesReceived) && currentFramesReceived >= previousFramesReceived) {
+          frameDeltaCandidates.push(currentFramesReceived - previousFramesReceived);
+        }
+        const frameDelta = frameDeltaCandidates.length > 0 ? Math.max(...frameDeltaCandidates) : 0;
+        if (frameDelta <= 0) {
+          return 0;
+        }
+        const elapsedSeconds = (timestampMs - previous.timestampMs) / 1e3;
+        if (!(elapsedSeconds > 0)) {
+          return 0;
+        }
+        return frameDelta / elapsedSeconds;
       }
       function readOptionalNumber(stats, key) {
         const value = Number(stats?.[key]);
@@ -16379,9 +16794,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/planner.js
+  // src/client/lib/qos/planner.js
   var require_planner = __commonJS({
-    "lib/qos/planner.js"(exports) {
+    "src/client/lib/qos/planner.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.planActionsForLevel = planActionsForLevel;
@@ -16527,9 +16942,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/probe.js
+  // src/client/lib/qos/probe.js
   var require_probe = __commonJS({
-    "lib/qos/probe.js"(exports) {
+    "src/client/lib/qos/probe.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.beginProbe = beginProbe;
@@ -16596,9 +17011,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/sampler.js
+  // src/client/lib/qos/sampler.js
   var require_sampler = __commonJS({
-    "lib/qos/sampler.js"(exports) {
+    "src/client/lib/qos/sampler.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.IntervalQosSampler = void 0;
@@ -16684,9 +17099,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/signals.js
+  // src/client/lib/qos/signals.js
   var require_signals = __commonJS({
-    "lib/qos/signals.js"(exports) {
+    "src/client/lib/qos/signals.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.computeCounterDelta = computeCounterDelta;
@@ -16826,9 +17241,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/stateMachine.js
+  // src/client/lib/qos/stateMachine.js
   var require_stateMachine = __commonJS({
-    "lib/qos/stateMachine.js"(exports) {
+    "src/client/lib/qos/stateMachine.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.createInitialQosStateMachineContext = createInitialQosStateMachineContext;
@@ -16972,9 +17387,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/trace.js
+  // src/client/lib/qos/trace.js
   var require_trace = __commonJS({
-    "lib/qos/trace.js"(exports) {
+    "src/client/lib/qos/trace.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.QosTraceBuffer = void 0;
@@ -17020,9 +17435,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/profiles.js
+  // src/client/lib/qos/profiles.js
   var require_profiles = __commonJS({
-    "lib/qos/profiles.js"(exports) {
+    "src/client/lib/qos/profiles.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.getDefaultCameraProfile = getDefaultCameraProfile;
@@ -17290,9 +17705,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/controller.js
+  // src/client/lib/qos/controller.js
   var require_controller = __commonJS({
-    "lib/qos/controller.js"(exports) {
+    "src/client/lib/qos/controller.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.PublisherQosController = void 0;
@@ -17890,9 +18305,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/executor.js
+  // src/client/lib/qos/executor.js
   var require_executor = __commonJS({
-    "lib/qos/executor.js"(exports) {
+    "src/client/lib/qos/executor.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.QosActionExecutor = void 0;
@@ -17999,9 +18414,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/factory.js
+  // src/client/lib/qos/factory.js
   var require_factory = __commonJS({
-    "lib/qos/factory.js"(exports) {
+    "src/client/lib/qos/factory.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.createMediasoupProducerQosController = createMediasoupProducerQosController;
@@ -18157,17 +18572,17 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/qos/types.js
+  // src/client/lib/qos/types.js
   var require_types2 = __commonJS({
-    "lib/qos/types.js"(exports) {
+    "src/client/lib/qos/types.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
     }
   });
 
-  // lib/qos/index.js
+  // src/client/lib/qos/index.js
   var require_qos = __commonJS({
-    "lib/qos/index.js"(exports) {
+    "src/client/lib/qos/index.js"(exports) {
       "use strict";
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
@@ -18209,9 +18624,9 @@ var mediasoupClient = (() => {
     }
   });
 
-  // lib/index.js
+  // src/client/lib/index.js
   var require_index = __commonJS({
-    "lib/index.js"(exports) {
+    "src/client/lib/index.js"(exports) {
       var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
         if (k2 === void 0) k2 = k;
         var desc = Object.getOwnPropertyDescriptor(m, k);
