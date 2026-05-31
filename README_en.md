@@ -112,6 +112,12 @@ cmake -S . -B build-slim -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF
 cmake --build build-slim --target mediasoup-sfu -j$(nproc)
 ```
 
+Default pressure-test convention:
+
+- unless otherwise specified, use
+  `node tests/qos_harness/multi_process_pressure.mjs`
+  for multi-process pressure testing.
+
 ## Local Runtime Architecture
 
 ```text
@@ -143,7 +149,6 @@ This repo now includes:
   - client-side publisher QoS state machine and ladder control
   - server-side `clientStats` ingestion, validation, aggregation, and automatic override generation
   - browser/node harnesses for publish / stale-seq / policy-update / automatic override / manual clear
-  - browser loopback weak-network matrix execution and case-by-case reporting
 - a downlink QoS path across:
   - subscriber-side `downlinkClientStats` ingestion, validation, storage, and controller execution
   - server-side hidden/pinned/size-based allocation, health-driven degrade/recovery, and priority handling
@@ -157,7 +162,6 @@ Current downlink scope is subscriber receive control plus zero-demand publisher 
 
 Current repo docs and generated artifacts show:
 
-- browser uplink matrix: original `43 / 43 PASS` main gate (`2026-04-13`) plus `GD1-GD12` targeted PASS; current total scope is `55 case`
 - server QoS unit tests, integration tests, and browser harnesses remain the current regression surface.
 - the root native WebRTC QoS plain push/play client has been removed; its P2/P3 reports and acceptance scripts are no longer active paths.
 
@@ -171,12 +175,8 @@ Current scope note:
 Source-of-truth links:
 
 - QoS overall status: [docs/qos-status.md](./docs/qos-status.md)
-- final summary: [docs/uplink-qos-final-report.md](./docs/uplink-qos-final-report.md)
-- result summary: [docs/uplink-qos-test-results-summary.md](./docs/uplink-qos-test-results-summary.md)
-- per-case final result: [docs/uplink-qos-case-results.md](./docs/uplink-qos-case-results.md)
 - downlink current status: [docs/downlink-qos-status.md](./docs/downlink-qos-status.md)
 - test coverage map: [docs/qos-test-coverage_cn.md](./docs/qos-test-coverage_cn.md)
-- generated matrix artifact: [docs/generated/uplink-qos-matrix-report.json](./docs/generated/uplink-qos-matrix-report.json)
 
 ## Core Runtime Model
 
@@ -607,7 +607,7 @@ cmake --build build -j$(nproc)
 For QoS-specific validation, use the unified script:
 
 ```bash
-cd /root/mediasoup-cpp
+cd /root/workspace/mediasoup-cpp
 
 # full QoS run
 ./scripts/run_qos_tests.sh
@@ -621,15 +621,6 @@ cd /root/mediasoup-cpp
 # run selected groups
 ./scripts/run_qos_tests.sh client-js cpp-unit
 
-# default browser matrix gate
-node tests/qos_harness/run_matrix.mjs
-
-# extended browser matrix (adds the remaining extended baseline cases)
-node tests/qos_harness/run_matrix.mjs --include-extended
-
-# targeted blind-spot rerun
-node tests/qos_harness/run_matrix.mjs --cases=T9,T10,T11
-
 # multi-room capacity ramp:
 # each room has exactly 2 peers: 1 publisher sending 1080p, 1 subscriber receiving it
 node tests/qos_harness/browser_capacity_rooms.mjs --workers=1 --step=5 --max-rooms=50
@@ -640,10 +631,6 @@ Behavior:
 - default mode runs all default QoS groups, including server QoS, browser harnesses, and browser/downlink matrices; it continues even if one group fails
 - failures are recorded to `tests/qos_harness/artifacts/last-failures.txt`
 - `--resume` reruns only the last failed precise tasks
-- if `matrix` is executed, the script also regenerates the per-case report:
-  [docs/uplink-qos-case-results.md](./docs/uplink-qos-case-results.md)
-- the default matrix now includes the blind-spot transition cases `T9/T10/T11`; the remaining `extended` set is currently the higher-bandwidth baseline calibration cases and can be added with `--include-extended`, or targeted explicitly via `--cases=...`
-
 ### Troubleshooting
 
 - `Cannot find source file ... third_party/ip2region/binding/c/xdb_searcher.c`  

@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn, execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { ensureSignalingTlsFiles } from './prepare_signaling_tls.mjs';
+import { resolveChromiumExecutable } from './browser_runtime_helpers.mjs';
 import {
   acquireNetemGuard,
   preflightNetemGuard,
@@ -30,8 +31,8 @@ const puppeteer = require('puppeteer-core');
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..', '..');
-const chromiumPath = '/usr/lib64/chromium-browser/headless_shell';
 let signalingPort = 0;
+let webRtcServerPort = 0;
 const forceClearLiveNetemGuards = process.env.QOS_FORCE_CLEAR_NETEM_GUARDS === '1';
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -68,7 +69,7 @@ function buildBundle(tmpDir) {
   const outfile = path.join(tmpDir, 'bundle.js');
   esbuild.buildSync({
     entryPoints: [path.join(__dirname, 'browser', 'downlink-priority-entry.js')],
-    outfile, bundle: true, platform: 'browser', format: 'iife', target: ['chrome120'],
+    outfile, bundle: true, nodePaths: [path.join(__dirname, 'node_modules')], platform: 'browser', format: 'iife', target: ['chrome120'],
   });
   return outfile;
 }
@@ -79,7 +80,7 @@ function startSfu() {
   ensureSignalingTlsFiles();
   const child = spawn(
     path.join(repoRoot, 'build', 'mediasoup-sfu'),
-    ['--nodaemon', `--port=${signalingPort}`, '--workers=1', '--workerBin=./mediasoup-worker'],
+    ['--nodaemon', `--port=${signalingPort}`, '--listenIp=127.0.0.1', `--webRtcServerPort=${webRtcServerPort}`, '--workers=1', '--workerBin=./mediasoup-worker'],
     { cwd: repoRoot, stdio: ['ignore', 'pipe', 'pipe'] },
   );
   child.stdout.on('data', () => {});
@@ -250,12 +251,13 @@ async function run() {
 
   try {
     signalingPort = await allocatePort();
+    webRtcServerPort = await allocatePort();
     sfu = startSfu();
     await waitForPort(signalingPort);
     console.log(`[info] SFU listening on ${signalingPort}`);
     browser = await puppeteer.launch({
-      executablePath: chromiumPath, headless: true, protocolTimeout: 120000, pipe: true,
-      args: ['--no-sandbox', '--autoplay-policy=no-user-gesture-required',
+      executablePath: resolveChromiumExecutable(), headless: true, protocolTimeout: 120000, pipe: true,
+      args: ['--no-sandbox', '--ignore-certificate-errors', '--allow-insecure-localhost', '--autoplay-policy=no-user-gesture-required',
              '--use-fake-device-for-media-stream'],
     });
     console.log('[info] browser launched');

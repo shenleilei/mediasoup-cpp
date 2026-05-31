@@ -4,16 +4,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLIENT_DIR="$ROOT_DIR/src/client"
 BUILD_DIR="$ROOT_DIR/build"
-JEST_BIN="$CLIENT_DIR/node_modules/.bin/jest"
-CASE_REPORT_SCRIPT="$ROOT_DIR/tests/qos_harness/render_case_report.mjs"
+HARNESS_DIR="$ROOT_DIR/tests/qos_harness"
+JEST_BIN=""
 ARTIFACTS_DIR="$ROOT_DIR/tests/qos_harness/artifacts"
 FAILURES_FILE="$ARTIFACTS_DIR/last-failures.txt"
 DOWNLINK_SUMMARY_FILE="$ROOT_DIR/docs/downlink-qos-test-results-summary.md"
-GENERATE_CASE_REPORT=0
 GENERATE_DOWNLINK_CASE_REPORT=0
 GENERATE_DOWNLINK_SUMMARY=1
-MATRIX_INCLUDE_EXTENDED=0
-MATRIX_CASES=""
 
 DEFAULT_GROUPS=(
   client-js
@@ -22,7 +19,6 @@ DEFAULT_GROUPS=(
   cpp-accuracy
   node-harness
   browser-harness
-  matrix
   downlink-matrix
 )
 OPTIONAL_GROUPS=()
@@ -30,12 +26,12 @@ ALL_GROUPS=("${DEFAULT_GROUPS[@]}" "${OPTIONAL_GROUPS[@]}")
 
 SELECTED_GROUPS=()
 SKIP_BROWSER=0
-SKIP_MATRIX=0
 FAILED_GROUPS=()
 FAILED_TASKS=()
 declare -A TASK_RESULTS=()
 declare -A TASK_DURATIONS=()
 RESUME_MODE=0
+MATRIX_CASES=""
 
 mkdir -p "$ARTIFACTS_DIR"
 
@@ -48,11 +44,7 @@ Usage:
   scripts/run_qos_tests.sh --resume
 
 Options:
-  --skip-browser    跳过 browser harness 和 matrix
-  --skip-matrix     跳过 matrix
-  --matrix-include-extended
-                    matrix 额外包含剩余 extended 场景（当前主要是高带宽 baseline）
-  --matrix-cases=... 只跑指定 matrix case，例如 T9,T10,T11
+  --skip-browser    跳过 browser harness
   --resume          只重跑上次失败的精确任务
   --list            列出可用分组
   -h, --help        显示帮助
@@ -63,18 +55,12 @@ Available groups:
   cpp-integration   服务端 QoS 集成测试（包含 uplink/downlink QoS 集成测试）
   cpp-accuracy      QoS accuracy 测试
   node-harness      Node QoS harness 场景
-  browser-harness   browser_server_signal + browser_loopback + downlink browser harnesses
-  matrix            browser loopback full matrix（run_matrix.mjs）
+  browser-harness   browser_server_signal + downlink browser harnesses
   downlink-matrix   browser downlink weak-network matrix（run_downlink_matrix.mjs）
 
 Notes:
   - 默认会顺序执行所有分组；单个任务失败后会继续执行其余选中项，最后统一汇总失败。
-  - matrix 运行时间最长，并且依赖浏览器 / netem 环境。
-  - 可用环境变量 QOS_MATRIX_SPEED 调整 matrix 用时。
-  - 默认 matrix 已包含 `T9/T10/T11`；`--matrix-include-extended` 会额外加入剩余 extended 场景。
-  - `--matrix-cases=...` 会把 matrix 切为 targeted 运行，并产出 targeted 报告。
   - 失败任务会记录到 tests/qos_harness/artifacts/last-failures.txt
-  - full matrix 当前主报告写入 docs/generated/ 和 docs/；每次新结果都会按生成时间归档到 docs/archive/uplink-qos-runs/
 EOF
 }
 
@@ -150,13 +136,11 @@ cleanup_test_processes_fallback() {
     "mediasoup_qos_integration_tests"
     "tests/qos_harness/run.mjs"
     "tests/qos_harness/browser_server_signal.mjs"
-    "tests/qos_harness/browser_loopback.mjs"
     "tests/qos_harness/browser_downlink_controls.mjs"
     "tests/qos_harness/browser_downlink_e2e.mjs"
     "tests/qos_harness/browser_downlink_priority.mjs"
     "tests/qos_harness/browser_downlink_v2.mjs"
     "tests/qos_harness/browser_downlink_v3.mjs"
-    "tests/qos_harness/run_matrix.mjs"
     "headless_shell .*puppeteer_dev_chrome_profile-"
   )
 
@@ -206,6 +190,97 @@ require_port_available() {
 require_file() {
   local path="$1"
   [[ -e "$path" ]] || fail "required file not found: $path"
+}
+
+ensure_harness_node_modules() {
+  local required_bins=(
+    "$HARNESS_DIR/node_modules/.bin/esbuild"
+  )
+  local required_modules=(
+    "$HARNESS_DIR/node_modules/awaitqueue"
+    "$HARNESS_DIR/node_modules/debug"
+    "$HARNESS_DIR/node_modules/h264-profile-level-id"
+    "$HARNESS_DIR/node_modules/npm-events-package"
+    "$HARNESS_DIR/node_modules/puppeteer-core"
+    "$HARNESS_DIR/node_modules/queue-microtask"
+    "$HARNESS_DIR/node_modules/sdp-transform"
+    "$HARNESS_DIR/node_modules/ua-parser-js"
+  )
+  local path
+
+  for path in "${required_bins[@]}" "${required_modules[@]}"; do
+    if [[ ! -e "$path" ]]; then
+      command -v npm >/dev/null 2>&1 || fail "npm is required to install qos_harness dependencies"
+      require_file "$HARNESS_DIR/package.json"
+      echo "info: restoring qos_harness npm dependencies" >&2
+      (
+        cd "$HARNESS_DIR"
+        npm install
+      )
+      return 0
+    fi
+  done
+}
+
+require_browser_runtime() {
+  ensure_harness_node_modules
+  command -v node >/dev/null 2>&1 || fail "node is required for browser QoS harnesses"
+
+  local helper_path="$ROOT_DIR/tests/qos_harness/browser_runtime_helpers.mjs"
+  require_file "$helper_path"
+
+  local output
+  if ! output="$(
+    node --input-type=module -e "
+      import { resolveChromiumExecutable } from '${helper_path}';
+      console.log(resolveChromiumExecutable());
+    " 2>&1
+  )"; then
+    fail "$output"
+  fi
+
+  [[ -n "$output" ]] || fail "browser runtime resolver returned empty executable path"
+}
+
+ensure_client_js_runtime() {
+  ensure_harness_node_modules
+  local candidates=(
+    "$CLIENT_DIR/node_modules/.bin/jest"
+    "$HARNESS_DIR/node_modules/.bin/jest"
+  )
+  local candidate
+  local have_jest=0
+  local have_fake_track=0
+
+  for candidate in "${candidates[@]}"; do
+    if [[ -x "$candidate" ]]; then
+      JEST_BIN="$candidate"
+      have_jest=1
+      break
+    fi
+  done
+
+  if [[ -d "$HARNESS_DIR/node_modules/fake-mediastreamtrack" ]]; then
+    have_fake_track=1
+  fi
+
+  if ((have_jest && have_fake_track)); then
+    return 0
+  fi
+
+  command -v npm >/dev/null 2>&1 || fail "npm is required to install client QoS JS test dependencies"
+  require_file "$HARNESS_DIR/package.json"
+
+  echo "info: installing temporary client QoS JS test dependencies into tests/qos_harness" >&2
+  (
+    cd "$HARNESS_DIR"
+    npm install --no-save jest fake-mediastreamtrack
+  )
+
+  JEST_BIN="$HARNESS_DIR/node_modules/.bin/jest"
+  [[ -x "$JEST_BIN" ]] || fail "unable to provision Jest for client QoS JS tests"
+  [[ -d "$HARNESS_DIR/node_modules/fake-mediastreamtrack" ]] || \
+    fail "unable to provision fake-mediastreamtrack for client QoS JS tests"
 }
 
 ensure_target_built() {
@@ -308,7 +383,7 @@ log_system_snapshot() {
     ps -eo pid,ppid,rss,stat,comm,args --sort=-rss | head -n 12 || true
     echo "browser_and_runner_processes:"
     ps -eo pid,ppid,rss,stat,comm,args | awk '
-      NR == 1 || /headless_shell|esbuild|cc1plus|mediasoup-sfu|run_matrix\.mjs|run_qos_tests\.sh|browser_downlink|browser_loopback/
+      NR == 1 || /headless_shell|esbuild|cc1plus|mediasoup-sfu|run_qos_tests\.sh|browser_downlink/
     ' || true
   fi
 }
@@ -562,14 +637,7 @@ normalize_groups() {
   if ((SKIP_BROWSER)); then
     local filtered=()
     for group in "${requested[@]}"; do
-      [[ "$group" == "browser-harness" || "$group" == browser-harness:* || "$group" == "matrix" || "$group" == "downlink-matrix" ]] && continue
-      filtered+=("$group")
-    done
-    requested=("${filtered[@]}")
-  elif ((SKIP_MATRIX)); then
-    local filtered=()
-    for group in "${requested[@]}"; do
-      [[ "$group" == "matrix" || "$group" == "downlink-matrix" ]] && continue
+      [[ "$group" == "browser-harness" || "$group" == browser-harness:* || "$group" == "downlink-matrix" ]] && continue
       filtered+=("$group")
     done
     requested=("${filtered[@]}")
@@ -579,7 +647,7 @@ normalize_groups() {
 }
 
 run_client_js() {
-  require_file "$JEST_BIN"
+  ensure_client_js_runtime
 
   local tests=(
     "$CLIENT_DIR/lib/test/test.qos.controller.js"
@@ -611,7 +679,7 @@ run_client_js() {
     --cwd "$ROOT_DIR" \
     bash \
     -lc \
-    "cd '$CLIENT_DIR' && '$JEST_BIN' --runTestsByPath ${tests[*]@Q} --runInBand --testRegex '.*'"
+    "cd '$ROOT_DIR' && NODE_PATH='$HARNESS_DIR/node_modules' '$JEST_BIN' --config '{\"rootDir\":\"$ROOT_DIR\",\"testEnvironment\":\"node\",\"moduleDirectories\":[\"node_modules\",\"$HARNESS_DIR/node_modules\"],\"modulePathIgnorePatterns\":[\"<rootDir>/third_party/flatbuffers\",\"<rootDir>/src/mediasoup-worker-src/worker/subprojects/flatbuffers-24.3.6\"]}' --runTestsByPath ${tests[*]@Q} --runInBand --testRegex '.*'"
 }
 
 run_cpp_unit() {
@@ -692,6 +760,7 @@ run_node_harness() {
 }
 
 run_browser_harness() {
+  require_browser_runtime
   prepare_test_port 14012 "QoS browser harness SFU port 14012"
   prepare_test_port 14013 "Downlink control harness SFU port 14013"
   prepare_test_port 14014 "Downlink E2E harness SFU port 14014"
@@ -709,13 +778,6 @@ run_browser_harness() {
     "browser-harness:server-signal" \
     --cwd "$ROOT_DIR" \
     node "$ROOT_DIR/tests/qos_harness/browser_server_signal.mjs"; then
-    failed=1
-  fi
-
-  if ! run_cmd \
-    "browser-harness:loopback" \
-    --cwd "$ROOT_DIR" \
-    node "$ROOT_DIR/tests/qos_harness/browser_loopback.mjs"; then
     failed=1
   fi
 
@@ -757,33 +819,8 @@ run_browser_harness() {
   return "$failed"
 }
 
-run_matrix() {
-  prepare_test_port 14011 "QoS matrix loopback port 14011"
-  clear_loopback_root_qdisc
-  if ! run_loopback_netem_preflight "matrix:netem-preflight"; then
-    clear_loopback_root_qdisc
-    return 1
-  fi
-  local matrix_args=()
-  if ((MATRIX_INCLUDE_EXTENDED)); then
-    matrix_args+=("--include-extended")
-  fi
-  if [[ -n "$MATRIX_CASES" ]]; then
-    matrix_args+=("--cases=$MATRIX_CASES")
-  fi
-  log_system_snapshot "pre-matrix"
-  local rc=0
-  if ! run_cmd \
-    "matrix" \
-    --cwd "$ROOT_DIR" \
-    node "$ROOT_DIR/tests/qos_harness/run_matrix.mjs" "${matrix_args[@]}"; then
-    rc=1
-  fi
-  clear_loopback_root_qdisc
-  return "$rc"
-}
-
 run_downlink_matrix() {
+  require_browser_runtime
   prepare_test_port 14018 "Downlink matrix SFU port 14018"
   local dl_args=()
   if [[ -n "$MATRIX_CASES" ]]; then
@@ -805,7 +842,6 @@ run_group() {
     cpp-accuracy) run_cpp_accuracy ;;
     node-harness) run_node_harness ;;
     browser-harness) run_browser_harness ;;
-    matrix) run_matrix ;;
     downlink-matrix) run_downlink_matrix ;;
     *) fail "internal error: unsupported group '$group'" ;;
   esac
@@ -814,7 +850,7 @@ run_group() {
 run_target() {
   local target="$1"
   case "$target" in
-    client-js|cpp-unit|cpp-integration|cpp-accuracy|node-harness|browser-harness|matrix|downlink-matrix)
+    client-js|cpp-unit|cpp-integration|cpp-accuracy|node-harness|browser-harness|downlink-matrix)
       run_group "$target"
       ;;
     node-harness:*)
@@ -833,26 +869,15 @@ run_target() {
       fi
       ;;
     browser-harness:server-signal)
+      require_browser_runtime
       prepare_test_port 14012 "QoS browser harness SFU port 14012"
       run_cmd \
         "$target" \
         --cwd "$ROOT_DIR" \
         node "$ROOT_DIR/tests/qos_harness/browser_server_signal.mjs"
       ;;
-    browser-harness:loopback)
-      prepare_test_port 14012 "QoS browser harness SFU port 14012"
-      clear_loopback_root_qdisc
-      local rc=0
-      if ! run_cmd \
-        "$target" \
-        --cwd "$ROOT_DIR" \
-        node "$ROOT_DIR/tests/qos_harness/browser_loopback.mjs"; then
-        rc=1
-      fi
-      clear_loopback_root_qdisc
-      return "$rc"
-      ;;
     browser-harness:downlink-controls)
+      require_browser_runtime
       prepare_test_port 14013 "Downlink control harness SFU port 14013"
       run_cmd \
         "$target" \
@@ -860,6 +885,7 @@ run_target() {
         node "$ROOT_DIR/tests/qos_harness/browser_downlink_controls.mjs"
       ;;
     browser-harness:downlink-e2e)
+      require_browser_runtime
       prepare_test_port 14014 "Downlink E2E harness SFU port 14014"
       run_cmd \
         "$target" \
@@ -867,6 +893,7 @@ run_target() {
         node "$ROOT_DIR/tests/qos_harness/browser_downlink_e2e.mjs"
       ;;
     browser-harness:downlink-priority)
+      require_browser_runtime
       prepare_test_port 14015 "Downlink priority harness SFU port 14015"
       clear_loopback_root_qdisc
       local rc=0
@@ -880,6 +907,7 @@ run_target() {
       return "$rc"
       ;;
     browser-harness:downlink-v2)
+      require_browser_runtime
       prepare_test_port 14016 "Downlink v2 harness SFU port 14016"
       run_cmd \
         "$target" \
@@ -887,6 +915,7 @@ run_target() {
         node "$ROOT_DIR/tests/qos_harness/browser_downlink_v2.mjs"
       ;;
     browser-harness:downlink-v3)
+      require_browser_runtime
       prepare_test_port 14017 "Downlink v3 harness SFU port 14017"
       run_cmd \
         "$target" \
@@ -903,16 +932,6 @@ while (($# > 0)); do
   case "$1" in
     --skip-browser)
       SKIP_BROWSER=1
-      ;;
-    --skip-matrix)
-      SKIP_MATRIX=1
-      ;;
-    --matrix-include-extended)
-      MATRIX_INCLUDE_EXTENDED=1
-      ;;
-    --matrix-cases=*)
-      MATRIX_CASES="${1#--matrix-cases=}"
-      [[ -n "$MATRIX_CASES" ]] || fail "matrix cases cannot be empty"
       ;;
     --resume)
       RESUME_MODE=1
@@ -935,9 +954,6 @@ done
 mapfile -t GROUPS_TO_RUN < <(normalize_groups)
 ((${#GROUPS_TO_RUN[@]} > 0)) || fail "no groups selected after applying options"
 for group in "${GROUPS_TO_RUN[@]}"; do
-  if [[ "$group" == "matrix" ]]; then
-    GENERATE_CASE_REPORT=1
-  fi
   if [[ "$group" == "downlink-matrix" ]]; then
     GENERATE_DOWNLINK_CASE_REPORT=1
   fi
@@ -975,41 +991,10 @@ done
   fi
 } > "$FAILURES_FILE"
 
-if ((GENERATE_CASE_REPORT)) && [[ -f "$CASE_REPORT_SCRIPT" ]]; then
-  if [[ -n "$MATRIX_CASES" ]]; then
-    CASE_REPORT_JSON="$ROOT_DIR/docs/generated/uplink-qos-matrix-report.targeted.json"
-    CASE_REPORT_OUTPUT="$ROOT_DIR/docs/generated/uplink-qos-case-results.targeted.md"
-  else
-    CASE_REPORT_JSON="$ROOT_DIR/docs/generated/uplink-qos-matrix-report.json"
-    CASE_REPORT_OUTPUT="$ROOT_DIR/docs/uplink-qos-case-results.md"
-  fi
-
-  if [[ ! -f "$CASE_REPORT_JSON" ]]; then
-    echo
-    echo "<== [case-report] WARN (matrix json not found: $CASE_REPORT_JSON)" >&2
-  else
-  echo
-  echo "==> [case-report]"
-  if node \
-    "$CASE_REPORT_SCRIPT" \
-    "--input=$CASE_REPORT_JSON" \
-    "--output=$CASE_REPORT_OUTPUT"; then
-    echo "<== [case-report] PASS"
-  else
-    echo "<== [case-report] WARN (generation failed)" >&2
-  fi
-  fi
-fi
-
 DOWNLINK_CASE_REPORT_SCRIPT="$ROOT_DIR/tests/qos_harness/render_downlink_case_report.mjs"
 if ((GENERATE_DOWNLINK_CASE_REPORT)) && [[ -f "$DOWNLINK_CASE_REPORT_SCRIPT" ]]; then
-  if [[ -n "$MATRIX_CASES" ]]; then
-    DL_CASE_REPORT_JSON="$ROOT_DIR/docs/generated/downlink-qos-matrix-report.targeted.json"
-    DL_CASE_REPORT_OUTPUT="$ROOT_DIR/docs/generated/downlink-qos-case-results.targeted.md"
-  else
-    DL_CASE_REPORT_JSON="$ROOT_DIR/docs/generated/downlink-qos-matrix-report.json"
-    DL_CASE_REPORT_OUTPUT="$ROOT_DIR/docs/downlink-qos-case-results.md"
-  fi
+  DL_CASE_REPORT_JSON="$ROOT_DIR/docs/generated/downlink-qos-matrix-report.json"
+  DL_CASE_REPORT_OUTPUT="$ROOT_DIR/docs/downlink-qos-case-results.md"
 
   if [[ ! -f "$DL_CASE_REPORT_JSON" ]]; then
     echo

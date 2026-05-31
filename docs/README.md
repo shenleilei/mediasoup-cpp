@@ -18,9 +18,11 @@
 | 做仓库全量回归 | [README.md](../README.md) → [DEVELOPMENT.md](./DEVELOPMENT.md) → [run_all_tests.sh](../scripts/run_all_tests.sh) → [full-regression-test-results.md](./full-regression-test-results.md) |
 | 配 nightly 全量回归邮件 | [nightly-full-regression.md](./nightly-full-regression.md) → [run_all_tests.sh](../scripts/run_all_tests.sh) → [full-regression-test-results.md](./full-regression-test-results.md) |
 | 做线上排障 | [troubleshooting_cn.md](./troubleshooting_cn.md) → [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) |
+| 做双机 PlainTransport 压测改造 | [plain-auto-return-pressure-design_cn.md](./plain-auto-return-pressure-design_cn.md) |
 | 做 QoS 改动 | [qos-status.md](./qos-status.md) → [uplink-qos-design_cn.md](./uplink-qos-design_cn.md) → [downlink-qos-design_cn.md](./downlink-qos-design_cn.md) → [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md) → [downlink-qos-v3-design_cn.md](./downlink-qos-v3-design_cn.md) → [downlink-qos-v3-implementation-plan_cn.md](./downlink-qos-v3-implementation-plan_cn.md) → [run_qos_tests.sh](../scripts/run_qos_tests.sh) |
+| 查 IPC/FlatBuffers 再生成规则 | [ipc-regeneration-runbook_cn.md](./ipc-regeneration-runbook_cn.md) |
 | 查 worker 架构 | [mediasoup-worker-architecture-analysis_cn.md](./mediasoup-worker-architecture-analysis_cn.md) |
-| 查 QoS 详细 case 结果 | [uplink-qos-case-analysis.md](./uplink-qos-case-analysis.md) |
+| 查 QoS 详细 case 结果 | [downlink-qos-case-results.md](./downlink-qos-case-results.md) |
 | 查 QoS 测试覆盖地图 | [qos-test-coverage_cn.md](./qos-test-coverage_cn.md) |
 | 做上线 / 运维准备 | [PRODUCTION_CHECKLIST.md](./PRODUCTION_CHECKLIST.md) → [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) |
 
@@ -37,37 +39,31 @@
 | [downlink-qos-status.md](./downlink-qos-status.md) | downlink QoS 当前状态摘要，说明当前范围、当前结果入口和后续边界。 |
 | [troubleshooting_cn.md](./troubleshooting_cn.md) | 运行时排障手册；其中 Redis/录制章节属于历史实现说明。 |
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | 项目开发主文档，包含架构、线程模型、构建与测试入口。 |
-| [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) | 监控、告警与值班处理流程。 |
+| [MONITORING_RUNBOOK.md](./MONITORING_RUNBOOK.md) | 监控架构、部署、告警、验收与值班处理流程。 |
 | [PRODUCTION_CHECKLIST.md](./PRODUCTION_CHECKLIST.md) | 上线前检查项。 |
 | [mediasoup-worker-architecture-analysis_cn.md](./mediasoup-worker-architecture-analysis_cn.md) | 基于 `mediasoup-worker 3.14.6` 源码的架构与模块分析，从进程入口到 `Router/Transport/Producer/Consumer/BWE`。 |
 | [REDIS_KEY_GUIDELINES.md](./REDIS_KEY_GUIDELINES.md) | 历史 Redis key 设计说明，当前 local-only 运行路径不再使用。 |
+| [plain-auto-return-pressure-design_cn.md](./plain-auto-return-pressure-design_cn.md) | 双机内网 PlainTransport 压测 auto-return 设计，定义 subscriber socket 发送 `conn` 首包并由服务端学习回流 tuple 的方案。 |
+| [ipc-regeneration-runbook_cn.md](./ipc-regeneration-runbook_cn.md) | IPC/FlatBuffers 再生成与回归规则，定义哪些改动必须触发“再生成 + 重编 + 单入口回归”。 |
 
 ## 3. QoS 专项文档
 
 推荐阅读顺序：
 
 1. [qos-status.md](./qos-status.md)
-2. [uplink-qos-final-report.md](./uplink-qos-final-report.md)
-3. [uplink-qos-test-results-summary.md](./uplink-qos-test-results-summary.md)
-4. [uplink-qos-case-results.md](./uplink-qos-case-results.md)
-5. [downlink-qos-status.md](./downlink-qos-status.md)
-6. [downlink-qos-test-results-summary.md](./downlink-qos-test-results-summary.md)
-7. [downlink-qos-case-results.md](./downlink-qos-case-results.md)
-8. [uplink-qos-design_cn.md](./uplink-qos-design_cn.md)
-9. [downlink-qos-design_cn.md](./downlink-qos-design_cn.md)
-10. [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md)
-11. [downlink-qos-v2-implementation-plan_cn.md](./downlink-qos-v2-implementation-plan_cn.md)
-12. [downlink-qos-worker-validation_cn.md](./downlink-qos-worker-validation_cn.md)
-13. [downlink-qos-implementation-plan_cn.md](./downlink-qos-implementation-plan_cn.md)
-14. [downlink-qos-v3-design_cn.md](./downlink-qos-v3-design_cn.md)
-15. [downlink-qos-v3-implementation-plan_cn.md](./downlink-qos-v3-implementation-plan_cn.md)
-16. [uplink-qos-boundaries.md](./uplink-qos-boundaries.md)
-17. [uplink-qos-briefing.md](./uplink-qos-briefing.md)
-18. [uplink-qos-case-analysis.md](./uplink-qos-case-analysis.md)
-19. [uplink-qos-blind-spot-scenario.md](./uplink-qos-blind-spot-scenario.md)
-20. [uplink-qos-loopback-boundary-investigation.md](./uplink-qos-loopback-boundary-investigation.md)
-21. [uplink-qos-test-execution-checklist.md](./uplink-qos-test-execution-checklist.md)
-22. [qos-test-coverage_cn.md](./qos-test-coverage_cn.md)
+2. [downlink-qos-status.md](./downlink-qos-status.md)
+3. [downlink-qos-test-results-summary.md](./downlink-qos-test-results-summary.md)
+4. [downlink-qos-case-results.md](./downlink-qos-case-results.md)
+5. [uplink-qos-design_cn.md](./uplink-qos-design_cn.md)
+6. [downlink-qos-design_cn.md](./downlink-qos-design_cn.md)
+7. [downlink-qos-v2-design_cn.md](./downlink-qos-v2-design_cn.md)
+8. [downlink-qos-v2-implementation-plan_cn.md](./downlink-qos-v2-implementation-plan_cn.md)
+9. [downlink-qos-worker-validation_cn.md](./downlink-qos-worker-validation_cn.md)
+10. [downlink-qos-implementation-plan_cn.md](./downlink-qos-implementation-plan_cn.md)
+11. [downlink-qos-v3-design_cn.md](./downlink-qos-v3-design_cn.md)
+12. [downlink-qos-v3-implementation-plan_cn.md](./downlink-qos-v3-implementation-plan_cn.md)
+13. [uplink-qos-boundaries.md](./uplink-qos-boundaries.md)
+14. [qos-test-coverage_cn.md](./qos-test-coverage_cn.md)
 
 说明：
 
@@ -82,12 +78,7 @@
 - [downlink-qos-implementation-plan_cn.md](./downlink-qos-implementation-plan_cn.md) 用中文给出 `downlink QoS v1` 的分阶段实施计划。
 - [downlink-qos-status.md](./downlink-qos-status.md) 是当前 downlink 范围和结果入口摘要。
 - 当前签收口径，以 [qos-status.md](./qos-status.md) 为总入口，并按各分支状态页下钻。
-- [uplink-qos-boundaries.md](./uplink-qos-boundaries.md) 用来说明“底层 WebRTC 自动能力”和“本仓库 uplink QoS 策略能力”的职责边界。
 - [qos-test-coverage_cn.md](./qos-test-coverage_cn.md) 用来回答“上下行 QoS 现在分别测了哪些场景、在哪一层验证”。
-- [uplink-qos-blind-spot-scenario.md](./uplink-qos-blind-spot-scenario.md) 用来汇总“高质量网络突入长时盲区再恢复”这一类极端转场场景的理论时序和实测结果。
-- [uplink-qos-loopback-boundary-investigation.md](./uplink-qos-loopback-boundary-investigation.md) 用来记录 `BW2` 一类 loopback 边界 case 的专项排查结论、runner 特性和后续治理方向。
-- full matrix 当前机器结果在 [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json)。
-- targeted rerun 结果由脚本生成到 `docs/generated/uplink-qos-case-results.targeted.md` 和 `docs/generated/uplink-qos-matrix-report.targeted.json`；当前仓库不保留这类临时 targeted 结果。
 - 根目录原生 WebRTC QoS plain push/play client 及其 P2/P3 报告已经移除；当前 QoS 回归以 browser/server 路径为主。
 - downlink 当前状态摘要在 [downlink-qos-status.md](./downlink-qos-status.md)。
 - 一次性过程稿、历史 review、商业化排期和旧归档快照不再保留在 `docs/` 中；如需追历史判断，请直接看 git 历史。
@@ -101,12 +92,17 @@
 常用命令：
 
 ```bash
-cd /root/mediasoup-cpp
+cd /root/workspace/mediasoup-cpp
 ./scripts/run_qos_tests.sh
 ./scripts/run_qos_tests.sh --skip-browser
 ./scripts/run_qos_tests.sh client-js cpp-unit
 ./scripts/run_qos_tests.sh --list
 ```
+
+压测约定：
+
+- 如果没有额外说明，默认压测入口是
+  `node tests/qos_harness/multi_process_pressure.mjs`。
 
 分组说明：
 
@@ -115,8 +111,7 @@ cd /root/mediasoup-cpp
 - `cpp-integration`: 服务端 QoS 集成测试
 - `cpp-accuracy`: QoS 统计精度测试
 - `node-harness`: Node QoS harness
-- `browser-harness`: browser signaling / loopback
-- `matrix`: browser loopback 弱网矩阵
+- `browser-harness`: browser signaling / downlink harness
 - `downlink-matrix`: browser downlink 弱网矩阵
 
 ## 5. 运维 / 缺陷专题

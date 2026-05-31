@@ -11,7 +11,7 @@
 
 说明：
 
-- 这里的“case”优先指**场景驱动的 harness / matrix case**。
+- 这里的“case”优先指**当前仍保留的场景驱动 harness / matrix case**。
 - `client-js` / `cpp-unit` / `cpp-integration` 这类底层测试粒度较细，本文按**能力簇**总结，不逐条抄所有断言。
 - 最新一次运行通过/失败状态，仍以 case report / generated JSON / CI artifact 为准。
 
@@ -24,7 +24,7 @@
 | client JS / Node 逻辑层 | 验证纯逻辑、状态机、协议和控制器行为 | `src/client/lib/test/test.qos.*.js` |
 | C++ 服务端层 | 验证 ingest / validate / aggregate / override / allocator / cleanup | `mediasoup_qos_unit_tests` / `mediasoup_qos_integration_tests` |
 | browser harness 层 | 验证真实浏览器中的 signaling / WebRTC / consumer-producer 控制链路 | `tests/qos_harness/browser_*.mjs` |
-| matrix 层 | 验证弱网矩阵、恢复路径、边界场景和趋势分析 | `run_matrix.mjs` / `run_downlink_matrix.mjs` |
+| matrix 层 | 验证当前仍保留的下行弱网矩阵、恢复路径和边界场景 | `run_downlink_matrix.mjs` |
 
 ## 2. Uplink QoS
 
@@ -144,40 +144,14 @@ uplink 相关能力覆盖：
 | auto override trigger | 验证浏览器端发差网络 snapshot 后能收到 automatic override | 在浏览器里 publish 差网络 snapshot，等待 `server_auto_poor/server_auto_lost/server_room_pressure` | 没收到说明 server 自动 override 主链路断；收到错误 reason 说明判定口径漂移 |
 | clear override trigger | 验证恢复 snapshot 后 automatic clear 能回到浏览器端 | 再发健康 raw snapshot，等待 `server_auto_clear/server_room_pressure_clear` | 没 clear 说明恢复检测或 clear 派发有问题 |
 
-#### `browser_loopback.mjs`
-
-| 子场景 | 测试目的 | 测试方法 | 结果分析口径 |
-|---|---|---|---|
-| degrade under netem | 验证真实浏览器 loopback + UDP netem 下，uplink QoS 会感知到退化 | 启动浏览器 loopback；对 `lo` 注入 delay/loss；采集 trace 和 state | 如果没有明显退化，优先看 browser stats、sampler 或 planner 是否没吃到弱网条件 |
-| recover after netem removal | 验证移除 netem 后状态能恢复到 baseline 水平 | 清掉 netem，继续采样，比较 `bestRecovered` 和 baseline | 如果恢复慢或不恢复，优先看 recovery path / probe / fast-path 逻辑 |
-
-### 2.5 uplink browser matrix
-
-这组 case 由 [sweep_cases.json](../tests/qos_harness/scenarios/sweep_cases.json) 定义，由 `run_matrix.mjs` 驱动。
-
-当前默认 non-extended gate 已包含：
-
-- baseline
-- bw_sweep
-- loss_sweep
-- rtt_sweep
-- jitter_sweep
-- transition
-- burst
-- gcc_degrade
-
-统一测试方法：
-
-- browser loopback synthetic/hybrid 弱网场景
-- 每个 case 都跑 `baseline -> impairment -> recovery`
-- 主要分析三个量：
-  - impairment 期间的 `peak` 状态
-  - recovery 期间的 `best` 状态
-  - timing / trace 中的状态迁移和 level 变化
-
-统一结果分析口径：
-
-- `state` 看 QoS 状态强弱：`stable < early_warning < recovering < congested`
+- 这组 uplink loopback / matrix case 已废弃并从默认回归中移除。
+- 当前 uplink QoS 保留的自动化入口主要是：
+  - `client-js`
+  - `cpp-unit`
+  - `cpp-integration`
+  - `cpp-accuracy`
+  - `node-harness`
+  - `browser_server_signal`
 - `level` 越大表示降级越重
 - `maxLevel` / `minLevel` 是允许的判定区间，不是唯一固定值
 - transition / burst case 额外关注 recovery 是否回到 baseline 附近
@@ -444,7 +418,6 @@ downlink 相关能力覆盖：
 ./scripts/run_qos_tests.sh client-js cpp-unit cpp-integration
 node tests/qos_harness/browser_downlink_v3.mjs
 node tests/qos_harness/run_downlink_matrix.mjs --cases=D7,D8
-node tests/qos_harness/run_matrix.mjs --cases=T9,T10,T11
 ```
 
 ## 6. 相关阅读

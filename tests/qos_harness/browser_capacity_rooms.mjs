@@ -191,6 +191,7 @@ function startSfu({ port, workers }) {
     [
       '--nodaemon',
       `--port=${port}`,
+      '--listenIp=127.0.0.1',
       `--workers=${workers}`,
       '--workerBin=./mediasoup-worker'
     ],

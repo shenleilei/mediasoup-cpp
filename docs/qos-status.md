@@ -30,9 +30,6 @@
   [uplink-qos-final-report.md](./uplink-qos-final-report.md)
 - 结果汇总：
   [uplink-qos-test-results-summary.md](./uplink-qos-test-results-summary.md)
-- 逐 case：
-  [uplink-qos-case-results.md](./uplink-qos-case-results.md)
-
 ### 2.2 server QoS / PlainTransport
 
 - 测试覆盖地图：

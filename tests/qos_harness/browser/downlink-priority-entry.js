@@ -67,19 +67,19 @@ function createCanvasTrack(label, fps = 30) {
 
 // ── publisher helper ──
 
-async function setupPublisher(wsUrl, roomId, peerId, ssrc) {
+async function setupPublisherPair(wsUrl, roomId, peerId = 'pub') {
+  const device = new Device();
+  const publisherHandler = device._handlerFactory();
+  const nativeRtpCapabilities = await publisherHandler.getNativeRtpCapabilities();
+  publisherHandler.close();
   const ws = new WsClient(wsUrl);
   await ws.connect();
   const join = await ws.request('join', {
     roomId, peerId, displayName: peerId,
-    rtpCapabilities: { codecs: [
-      { mimeType: 'audio/opus', kind: 'audio', clockRate: 48000, channels: 2, preferredPayloadType: 100 },
-      { mimeType: 'video/VP8', kind: 'video', clockRate: 90000, preferredPayloadType: 101 },
-    ], headerExtensions: [] },
+    rtpCapabilities: nativeRtpCapabilities,
   });
   if (!join.ok) throw new Error(`${peerId} join failed`);
 
-  const device = new Device();
   await device.load({ routerRtpCapabilities: join.data.routerRtpCapabilities });
 
   const tData = await ws.request('createWebRtcTransport', { producing: true, consuming: false });
@@ -97,9 +97,20 @@ async function setupPublisher(wsUrl, roomId, peerId, ssrc) {
     } catch (e) { eb(e); }
   });
 
-  const track = createCanvasTrack(peerId);
-  const producer = await transport.produce({ track });
-  return { ws, device, transport, producer, producerId: producer.id };
+  const track1 = createCanvasTrack(`${peerId}-1`);
+  const track2 = createCanvasTrack(`${peerId}-2`);
+  const producer1 = await transport.produce({ track: track1 });
+  const producer2 = await transport.produce({ track: track2 });
+
+  return {
+    ws,
+    device,
+    transport,
+    producers: [
+      { producer: producer1, producerId: producer1.id },
+      { producer: producer2, producerId: producer2.id },
+    ],
+  };
 }
 
 // ── main harness ──
@@ -113,27 +124,43 @@ window.__priorityHarness = {
   subPeerId: 'sub',
   seq: 0,
 
+  async reset() {
+    try { this.recvTransport?.close?.(); } catch {}
+    try { this._pub?.transport?.close?.(); } catch {}
+    try { this._pub?.ws?.ws?.close?.(); } catch {}
+    try { this.sub?.ws?.close?.(); } catch {}
+    this.recvTransport = null;
+    this.subDevice = null;
+    this.sampler = null;
+    this.consumers = [];
+    this._pub = null;
+    this.sub = null;
+  },
+
   async init(wsUrl, roomId) {
+    await this.reset();
     this.seq = 0;
     this.consumers = [];
+    const consumedIds = new Set();
 
-    // Publishers
-    this._pub1 = await setupPublisher(wsUrl, roomId, 'pub1', 99990001);
-    this._pub2 = await setupPublisher(wsUrl, roomId, 'pub2', 99990002);
+    // Single publisher peer with two producers so WebRTC mids stay unique
+    // (`0`/`1`) inside one RTCPeerConnection and do not collide on subscriber
+    // re-negotiation.
+    this._pub = await setupPublisherPair(wsUrl, roomId, 'pub');
 
     // Subscriber
     this.sub = new WsClient(wsUrl);
     await this.sub.connect();
+    this.subDevice = new Device();
+    const subscriberHandler = this.subDevice._handlerFactory();
+    const nativeRtpCapabilities = await subscriberHandler.getNativeRtpCapabilities();
+    subscriberHandler.close();
     const join = await this.sub.request('join', {
       roomId, peerId: this.subPeerId, displayName: 'sub',
-      rtpCapabilities: { codecs: [
-        { mimeType: 'audio/opus', kind: 'audio', clockRate: 48000, channels: 2, preferredPayloadType: 100 },
-        { mimeType: 'video/VP8', kind: 'video', clockRate: 90000, preferredPayloadType: 101 },
-      ], headerExtensions: [] },
+      rtpCapabilities: nativeRtpCapabilities,
     });
     if (!join.ok) throw new Error('sub join failed');
 
-    this.subDevice = new Device();
     await this.subDevice.load({ routerRtpCapabilities: join.data.routerRtpCapabilities });
 
     const tData = await this.sub.request('createWebRtcTransport', { producing: false, consuming: true });
@@ -149,13 +176,17 @@ window.__priorityHarness = {
 
     // Consume pre-created consumers from transport response
     for (const c of (tData.data.consumers || [])) {
+      if (consumedIds.has(c.id)) continue;
       await this._consumeOne(c);
+      consumedIds.add(c.id);
     }
     // Consume any newConsumer notifications
     for (let i = 0; i < 10; i++) {
       const n = await this.sub.waitNotif('newConsumer', 1000);
       if (!n) break;
+      if (consumedIds.has(n.data.id)) continue;
       await this._consumeOne(n.data);
+      consumedIds.add(n.data.id);
     }
 
     if (this.consumers.length < 2) throw new Error(`expected 2 consumers, got ${this.consumers.length}`);

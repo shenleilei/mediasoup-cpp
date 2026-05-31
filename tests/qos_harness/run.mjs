@@ -14,6 +14,7 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..', '..');
 const host = '127.0.0.1';
 const port = 14011;
+const webRtcServerPort = 24011;
 
 class WsJsonClient {
   constructor(hostname, port, pathName = '/ws') {
@@ -290,25 +291,21 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function waitForPort(hostname, port, timeoutMs = 5000) {
+async function waitForSignalingReady(hostname, port, timeoutMs = 5000) {
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
     try {
-      await new Promise((resolve, reject) => {
-        const socket = net.createConnection({ host: hostname, port }, () => {
-          socket.destroy();
-          resolve();
-        });
-        socket.once('error', reject);
-      });
+      const client = new WsJsonClient(hostname, port);
+      await client.connect();
+      client.close();
       return;
     } catch {
       await sleep(100);
     }
   }
 
-  throw new Error(`port ${port} did not become ready`);
+  throw new Error(`signaling endpoint ${hostname}:${port} did not become ready`);
 }
 
 function startSfu() {
@@ -317,6 +314,8 @@ function startSfu() {
     [
       '--nodaemon',
       `--port=${port}`,
+      '--listenIp=127.0.0.1',
+      `--webRtcServerPort=${webRtcServerPort}`,
       '--workers=1',
       '--workerBin=./mediasoup-worker'
     ],
@@ -799,7 +798,7 @@ async function main() {
   const child = startSfu();
 
   try {
-    await waitForPort(host, port, 7000);
+    await waitForSignalingReady(host, port, 7000);
 
     if (scenario === 'quick' || scenario === 'publish_snapshot') {
       await runPublishSnapshotScenario();

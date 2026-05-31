@@ -18,6 +18,7 @@ import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { pruneTimestampedArchiveDirs } from './report_artifacts.mjs';
 import { ensureSignalingTlsFiles } from './prepare_signaling_tls.mjs';
+import { resolveChromiumExecutable } from './browser_runtime_helpers.mjs';
 
 const require = createRequire(import.meta.url);
 const esbuild = require('esbuild');
@@ -26,8 +27,8 @@ const puppeteer = require('puppeteer-core');
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..', '..');
-const chromiumPath = '/usr/lib64/chromium-browser/headless_shell';
 let signalingPort = 0;
+let webRtcServerPort = 0;
 
 const args = process.argv.slice(2);
 const caseArg = args.find(a => a.startsWith('--cases='));
@@ -77,6 +78,7 @@ function buildBundle(tmpDir) {
     entryPoints: [path.join(__dirname, 'browser', 'downlink-v3-entry.js')],
     outfile,
     bundle: true,
+    nodePaths: [path.join(__dirname, 'node_modules')],
     platform: 'browser',
     format: 'iife',
     target: ['chrome120'],
@@ -104,6 +106,8 @@ function startSfu() {
     path.join(repoRoot, 'build', 'mediasoup-sfu'),
     [
       '--nodaemon', `--port=${signalingPort}`,
+      '--listenIp=127.0.0.1',
+      `--webRtcServerPort=${webRtcServerPort}`,
       '--workers=1', '--workerBin=./mediasoup-worker'
     ],
     { cwd: repoRoot, stdio: ['ignore', 'pipe', 'pipe'] },
@@ -613,13 +617,14 @@ async function runMatrix() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qos-dl-matrix-'));
   const bundlePath = buildBundle(tmpDir);
   signalingPort = await allocatePort();
+  webRtcServerPort = await allocatePort();
   const staticServer = await startStaticServer(bundlePath);
   const sfu = startSfu();
   const browser = await puppeteer.launch({
-    executablePath: chromiumPath,
+    executablePath: resolveChromiumExecutable(),
     headless: true,
     protocolTimeout: 120000,
-    args: ['--no-sandbox'],
+    args: ['--no-sandbox', '--ignore-certificate-errors', '--allow-insecure-localhost'],
   });
 
   const results = [];

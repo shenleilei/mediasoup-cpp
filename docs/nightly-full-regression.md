@@ -46,7 +46,6 @@ Older timestamped run directories are pruned automatically after new runs so tha
 When these files exist after the run, the runner snapshots and attaches them:
 
 - `docs/full-regression-test-results.md`
-- `docs/uplink-qos-case-results.md`
 - `docs/downlink-qos-test-results-summary.md`
 - `docs/downlink-qos-case-results.md`
 
@@ -57,7 +56,7 @@ Missing files are reported in the email body and `summary.json`.
 Copy the example file and edit the local runtime values:
 
 ```bash
-cd /root/mediasoup-cpp
+cd /root/workspace/mediasoup-cpp
 cp .nightly-full-regression.env.example .nightly-full-regression.env
 ```
 
@@ -78,7 +77,7 @@ Important keys:
 Safe local verification without launching a new full regression:
 
 ```bash
-cd /root/mediasoup-cpp
+cd /root/workspace/mediasoup-cpp
 ./scripts/nightly_full_regression.py run \
   --skip-tests \
   --source-log /var/log/run_all_tests.log \
@@ -92,7 +91,7 @@ cd /root/mediasoup-cpp
 Install or refresh the managed cron entry:
 
 ```bash
-cd /root/mediasoup-cpp
+cd /root/workspace/mediasoup-cpp
 ./scripts/install_nightly_full_regression_cron.sh
 ```
 
@@ -106,7 +105,7 @@ The installed job defaults to:
 
 - schedule: `0 3 * * *`
 - cron launcher log: `/var/log/mediasoup-cpp-nightly-cron.log`
-- runner config: `/root/mediasoup-cpp/.nightly-full-regression.env`
+- runner config: `/root/workspace/mediasoup-cpp/.nightly-full-regression.env`
 
 ## Notes
 

@@ -32,6 +32,12 @@ const opts = {
     perfOutputDir: '',
     perfFrequency: 99,
     perfPercentLimit: 1,
+    serviceNetInterface: '',
+    plainAutoReturn: false,
+    testRounds: 1,
+    interRoundIdleMs: 15000,
+    postStopSamples: 0,
+    postStopIntervalMs: 10000,
   };
 
   for (const arg of argv) {
@@ -58,6 +64,12 @@ const opts = {
       case 'perf-output-dir': opts.perfOutputDir = rawValue || opts.perfOutputDir; break;
       case 'perf-frequency': opts.perfFrequency = Math.max(1, int(rawValue)); break;
       case 'perf-percent-limit': opts.perfPercentLimit = Math.max(0, Number.parseFloat(rawValue)); break;
+      case 'service-net-interface': opts.serviceNetInterface = rawValue || opts.serviceNetInterface; break;
+      case 'plain-auto-return': opts.plainAutoReturn = true; break;
+      case 'test-rounds': opts.testRounds = Math.max(1, int(rawValue)); break;
+      case 'inter-round-idle-ms': opts.interRoundIdleMs = Math.max(0, int(rawValue)); break;
+      case 'post-stop-samples': opts.postStopSamples = Math.max(0, int(rawValue)); break;
+      case 'post-stop-interval-ms': opts.postStopIntervalMs = Math.max(1, int(rawValue)); break;
       default:
         throw new Error(`unknown option: --${key}`);
     }
@@ -105,6 +117,10 @@ function spawnShard(index, opts, runState) {
     `--round-ms=${opts.roundMs}`,
     ...(opts.steadyRoundMs ? [`--steady-round-ms=${opts.steadyRoundMs}`] : []),
     `--recv-ratio=${opts.recvRatio}`,
+    ...(opts.serviceNetInterface ? [`--service-net-interface=${opts.serviceNetInterface}`] : []),
+    ...(opts.plainAutoReturn ? ['--plain-auto-return'] : []),
+    ...(opts.postStopSamples ? [`--post-stop-samples=${opts.postStopSamples}`] : []),
+    ...(opts.postStopIntervalMs ? [`--post-stop-interval-ms=${opts.postStopIntervalMs}`] : []),
     '--hold-after-max',
     `--steady-rounds=${opts.steadyRounds}`,
     `--room-prefix=${roomPrefix}`,
@@ -126,6 +142,10 @@ function compactTimestamp(date = new Date()) {
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}`;
 }
 
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\"'\"'`)}'`;
+}
+
 async function runCommand(command, args, options = {}) {
   return await new Promise(resolve => {
     const child = spawn(command, args, {
@@ -141,8 +161,25 @@ async function runCommand(command, args, options = {}) {
   });
 }
 
-async function findWorkerHostPid(container) {
-  const result = await runCommand('docker', ['top', container, '-eo', 'pid,comm,args']);
+async function runSampleHostCommand(sampleHost, script) {
+  if (sampleHost && sampleHost !== 'local') {
+    return await runCommand('ssh', ['-T', '-o', 'BatchMode=yes', sampleHost, `bash --noprofile --norc -lc ${shellQuote(script)}`]);
+  }
+  return await runCommand('sh', ['-lc', script]);
+}
+
+async function ensureSampleOutputDir(sampleHost, dir) {
+  const result = await runSampleHostCommand(sampleHost, `mkdir -p ${shellQuote(dir)}`);
+  if (result.code !== 0) {
+    throw new Error(`mkdir failed: ${result.stderr.trim() || result.stdout.trim()}`);
+  }
+}
+
+async function findWorkerHostPid(container, sampleHost) {
+  const result = await runSampleHostCommand(
+    sampleHost,
+    `docker top ${shellQuote(container)} -eo pid,comm,args`
+  );
   if (result.code !== 0) {
     throw new Error(`docker top failed: ${result.stderr.trim() || result.stdout.trim()}`);
   }
@@ -159,6 +196,7 @@ async function findWorkerHostPid(container) {
 
 function snapshotRunState(runState) {
   return {
+    round: runState.round,
     children: runState.children,
     phase: runState.phase,
     lastRooms: runState.lastRooms,
@@ -167,9 +205,11 @@ function snapshotRunState(runState) {
   };
 }
 
-async function sampleNodeRooms(httpUrl) {
+async function sampleNodeRooms(httpUrl, sampleHost = '') {
   const url = new URL('/api/node-load', httpUrl);
-  const result = await runCommand('curl', ['-fsS', url.toString()]);
+  const result = sampleHost && sampleHost !== 'local'
+    ? await runSampleHostCommand(sampleHost, `curl -kfsS ${shellQuote(url.toString())}`)
+    : await runCommand('curl', ['-kfsS', url.toString()]);
   if (result.code !== 0) {
     return { error: result.stderr.trim() || result.stdout.trim() };
   }
@@ -203,15 +243,17 @@ async function recordPerfSample(opts, outputDir, runState) {
   const dataPath = `${basePath}.data`;
   const reportPath = `${basePath}.report`;
   const metaPath = `${basePath}.meta`;
-  const workerPid = await findWorkerHostPid(opts.container);
+  const workerPid = await findWorkerHostPid(opts.container, opts.sampleHost);
   const stateBefore = snapshotRunState(runState);
-  const nodeBefore = await sampleNodeRooms(opts.httpUrl);
+  const nodeBefore = await sampleNodeRooms(opts.httpUrl, opts.sampleHost);
 
+  await ensureSampleOutputDir(opts.sampleHost, outputDir);
   await fs.writeFile(
     metaPath,
     [
       `startedAt=${startedAt.toISOString()}`,
       `container=${opts.container}`,
+      `sampleHost=${opts.sampleHost || 'local'}`,
       `workerHostPid=${workerPid}`,
       `frequency=${opts.perfFrequency}`,
       `durationMs=${opts.perfIntervalMs}`,
@@ -230,18 +272,21 @@ async function recordPerfSample(opts, outputDir, runState) {
   );
 
   const seconds = Math.max(1, Math.ceil(opts.perfIntervalMs / 1000));
-  const record = await runCommand('perf', [
-    'record',
-    '-F', String(opts.perfFrequency),
-    '-g',
-    '-p', workerPid,
-    '-o', dataPath,
-    '--',
-    'sleep', String(seconds),
-  ]);
+  const record = await runSampleHostCommand(
+    opts.sampleHost,
+    [
+      'perf record',
+      '-F', String(opts.perfFrequency),
+      '-g',
+      '-p', workerPid,
+      '-o', shellQuote(dataPath),
+      '--',
+      'sleep', String(seconds),
+    ].join(' ')
+  );
   const endedAt = new Date();
   const stateAfter = snapshotRunState(runState);
-  const nodeAfter = await sampleNodeRooms(opts.httpUrl);
+  const nodeAfter = await sampleNodeRooms(opts.httpUrl, opts.sampleHost);
   await appendMeta(metaPath, {
     endedAt: endedAt.toISOString(),
     stateAfter,
@@ -250,15 +295,18 @@ async function recordPerfSample(opts, outputDir, runState) {
     recordStderr: record.stderr,
   });
 
-  const report = await runCommand('perf', [
-    'report',
-    '-i', dataPath,
-    '--stdio',
-    '--percent-limit', String(opts.perfPercentLimit),
-    '--sort', 'symbol,dso',
-    '--no-children',
-  ]);
-  await fs.writeFile(reportPath, report.stdout + report.stderr);
+  const report = await runSampleHostCommand(
+    opts.sampleHost,
+    [
+      'perf report',
+      '-i', shellQuote(dataPath),
+      '--stdio',
+      '--percent-limit', String(opts.perfPercentLimit),
+      '--sort', 'symbol,dso',
+      '--no-children',
+      `> ${shellQuote(reportPath)}`,
+    ].join(' ')
+  );
   await appendMeta(metaPath, {
     reportExit: report.code,
     reportStderr: report.stderr,
@@ -275,6 +323,7 @@ async function recordPerfSample(opts, outputDir, runState) {
 async function runPerfLoop(opts, shouldStop, runState) {
   const outputDir = opts.perfOutputDir || `/tmp/mediasoup-perf-${compactTimestamp()}`;
   await fs.mkdir(outputDir, { recursive: true });
+  await ensureSampleOutputDir(opts.sampleHost, outputDir);
   console.log(`[perf] enabled intervalMs=${opts.perfIntervalMs} outputDir=${outputDir}`);
 
   while (!shouldStop()) {
@@ -287,85 +336,146 @@ async function runPerfLoop(opts, shouldStop, runState) {
   }
 }
 
+async function waitForNodeDrain(httpUrl, timeoutMs = 30000, sampleHost = '') {
+  const deadline = Date.now() + timeoutMs;
+  let last = null;
+  while (Date.now() < deadline) {
+    last = await sampleNodeRooms(httpUrl, sampleHost);
+    if (!last.error && last.rooms === 0 && last.dispatchRooms === 0) return last;
+    await sleep(1000);
+  }
+  return last;
+}
+
+function parseRssSummaryLine(line) {
+  if (!line.includes('rssSummary ')) return null;
+  const entries = {};
+  for (const token of line.split(/\s+/)) {
+    const idx = token.indexOf('=');
+    if (idx === -1) continue;
+    entries[token.slice(0, idx)] = token.slice(idx + 1);
+  }
+  return entries;
+}
+
+function summarizeRound(roundIndex, logs) {
+  const summary = { round: roundIndex, rss: [] };
+  for (const line of logs) {
+    if (line.includes('rssSummary ')) {
+      summary.rss.push(line);
+    }
+  }
+  return summary;
+}
+
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   console.log(`ws=${opts.wsUrl}`);
   console.log(`http=${opts.httpUrl}`);
   console.log(`container=${opts.container}`);
   console.log(`sampleHost=${opts.sampleHost || 'local'}`);
-  console.log(`config roomsPerProcess=${opts.roomsPerProcess} step=${opts.step} roundMs=${opts.roundMs} steadyRoundMs=${opts.steadyRoundMs ?? opts.roundMs} spawnIntervalMs=${opts.spawnIntervalMs} steadyRounds=${opts.steadyRounds} recvRatio=${opts.recvRatio} maxProcesses=${opts.maxProcesses || 'unbounded'}`);
+  console.log(`plainAutoReturn=${opts.plainAutoReturn}`);
+  console.log(`config roomsPerProcess=${opts.roomsPerProcess} step=${opts.step} roundMs=${opts.roundMs} steadyRoundMs=${opts.steadyRoundMs ?? opts.roundMs} spawnIntervalMs=${opts.spawnIntervalMs} steadyRounds=${opts.steadyRounds} recvRatio=${opts.recvRatio} maxProcesses=${opts.maxProcesses || 'unbounded'} testRounds=${opts.testRounds} interRoundIdleMs=${opts.interRoundIdleMs}`);
 
-  const children = [];
-  let nextIndex = 1;
-  let stopping = false;
-  let perfLoop = null;
-  const runState = {
-    children: 0,
-    lastPressureLine: '',
-    lastRooms: null,
-    lastShardRooms: new Map(),
-    phase: 'init',
-  };
+  for (let round = 1; round <= opts.testRounds; ++round) {
+    const roundPrefix = `${opts.prefix}_r${round}`;
+    const children = [];
+    let nextIndex = 1;
+    let stopping = false;
+    let perfLoop = null;
+    const roundLogLines = [];
+    const runState = {
+      round,
+      children: 0,
+      lastPressureLine: '',
+      lastRooms: null,
+      lastShardRooms: new Map(),
+      phase: 'init',
+    };
 
-  const stopAll = async () => {
-    if (stopping) return;
-    stopping = true;
-    for (const child of children) {
-      if (!child.pid || child.exitCode !== null) continue;
-      try { child.kill('SIGTERM'); } catch {}
-    }
-    await sleep(2000);
-    for (const child of children) {
-      if (!child.pid || child.exitCode !== null) continue;
-      try { child.kill('SIGKILL'); } catch {}
-    }
-  };
+    const stopAll = async () => {
+      if (stopping) return;
+      stopping = true;
+      for (const child of children) {
+        if (!child.pid || child.exitCode !== null) continue;
+        try { child.kill('SIGTERM'); } catch {}
+      }
+      await sleep(2000);
+      for (const child of children) {
+        if (!child.pid || child.exitCode !== null) continue;
+        try { child.kill('SIGKILL'); } catch {}
+      }
+    };
 
-  process.on('SIGINT', () => { void stopAll(); });
-  process.on('SIGTERM', () => { void stopAll(); });
+    process.on('SIGINT', () => { void stopAll(); });
+    process.on('SIGTERM', () => { void stopAll(); });
 
-  const waitForExit = child => new Promise(resolve => child.once('exit', (code, signal) => resolve({ code, signal })));
+    const waitForExit = child => new Promise(resolve => child.once('exit', (code, signal) => resolve({ code, signal })));
+    const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+    const originalStderrWrite = process.stderr.write.bind(process.stderr);
+    const captureWrite = writer => (chunk, encoding, cb) => {
+      const text = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
+      for (const line of text.split('\n')) {
+        if (line.trim()) roundLogLines.push(line.trim());
+      }
+      return writer(chunk, encoding, cb);
+    };
 
-  try {
-    if (opts.perf) {
-      perfLoop = runPerfLoop(opts, () => stopping, runState);
-    }
+    process.stdout.write = captureWrite(originalStdoutWrite);
+    process.stderr.write = captureWrite(originalStderrWrite);
 
-    while (!stopping && (opts.maxProcesses === 0 || children.length < opts.maxProcesses)) {
-      runState.phase = 'spawn';
-      const child = spawnShard(nextIndex++, opts, runState);
-      children.push(child);
-      runState.children = children.length;
-      console.log(`spawned shard pid=${child.pid} total=${children.length}`);
-
-      child.once('exit', async (code, signal) => {
-        if (stopping) return;
-        console.error(`shard pid=${child.pid} exited code=${code} signal=${signal ?? 'none'}`);
-        await stopAll();
-        process.exitCode = code === 0 ? 1 : code || 1;
-      });
-
-      if (opts.maxProcesses !== 0 && children.length >= opts.maxProcesses) {
-        break;
+    try {
+      if (opts.perf) {
+        perfLoop = runPerfLoop(opts, () => stopping, runState);
       }
 
-      await sleep(opts.spawnIntervalMs);
-    }
+      while (!stopping && (opts.maxProcesses === 0 || children.length < opts.maxProcesses)) {
+        runState.phase = 'spawn';
+        const child = spawnShard(nextIndex++, { ...opts, prefix: roundPrefix }, runState);
+        children.push(child);
+        runState.children = children.length;
+        console.log(`round#${round} spawned shard pid=${child.pid} total=${children.length}`);
 
-    if (!stopping) {
-      runState.phase = 'steady';
-      console.log(`spawn phase complete, children=${children.length}`);
-      const exits = children.map(child => waitForExit(child));
-      const result = await Promise.race(exits);
+        child.once('exit', async (code, signal) => {
+          if (stopping) return;
+          console.error(`round#${round} shard pid=${child.pid} exited code=${code} signal=${signal ?? 'none'}`);
+          await stopAll();
+          process.exitCode = code === 0 ? 1 : code || 1;
+        });
+
+        if (opts.maxProcesses !== 0 && children.length >= opts.maxProcesses) {
+          break;
+        }
+
+        await sleep(opts.spawnIntervalMs);
+      }
+
       if (!stopping) {
-        console.error(`pressure run ended: code=${result.code} signal=${result.signal ?? 'none'}`);
-        process.exitCode = result.code === 0 ? 1 : result.code || 1;
+        runState.phase = 'steady';
+        console.log(`round#${round} spawn phase complete, children=${children.length}`);
+        const exits = children.map(child => waitForExit(child));
+        const result = await Promise.race(exits);
+        if (!stopping) {
+          console.error(`round#${round} pressure run ended: code=${result.code} signal=${result.signal ?? 'none'}`);
+          process.exitCode = code === 0 ? 1 : code || 1;
+        }
       }
-    }
-  } finally {
-    await stopAll();
-    if (perfLoop) {
-      await perfLoop;
+    } finally {
+      await stopAll();
+      if (perfLoop) {
+        await perfLoop;
+      }
+      process.stdout.write = originalStdoutWrite;
+      process.stderr.write = originalStderrWrite;
+      const drained = await waitForNodeDrain(opts.httpUrl, Math.max(opts.interRoundIdleMs, 30000), opts.sampleHost);
+      const summary = summarizeRound(round, roundLogLines);
+      console.log(`round#${round} summary rssLines=${summary.rss.length} drainRooms=${drained?.rooms ?? 'n/a'} drainDispatchRooms=${drained?.dispatchRooms ?? 'n/a'}`);
+      for (const line of summary.rss) {
+        console.log(`round#${round} ${line}`);
+      }
+      if (round < opts.testRounds) {
+        await sleep(opts.interRoundIdleMs);
+      }
     }
   }
 }

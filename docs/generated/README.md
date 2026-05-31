@@ -4,7 +4,6 @@
 
 当前收录：
 
-- [uplink-qos-matrix-report.json](./uplink-qos-matrix-report.json)
 - downlink-qos-matrix-report.json（由 `run_downlink_matrix.mjs` 生成）
 
 说明：

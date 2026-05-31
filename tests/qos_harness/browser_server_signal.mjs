@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { ensureSignalingTlsFiles } from './prepare_signaling_tls.mjs';
+import { resolveChromiumExecutable } from './browser_runtime_helpers.mjs';
 
 const require = createRequire(import.meta.url);
 const esbuild = require('esbuild');
@@ -15,14 +16,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..', '..');
 let signalingPort = 0;
+let webRtcServerPort = 0;
 const PUPPETEER_PROTOCOL_TIMEOUT_MS = 10 * 60 * 1000;
-const chromiumCandidates = [
-  process.env.CHROME_BIN,
-  '/usr/lib64/chromium-browser/headless_shell',
-  '/usr/bin/chromium-browser',
-  '/usr/bin/chromium',
-  '/usr/bin/google-chrome'
-    ].filter(Boolean);
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -46,6 +41,7 @@ function buildBundle(tmpDir) {
     entryPoints: [path.join(__dirname, 'browser', 'server-signaling-entry.js')],
     outfile,
     bundle: true,
+    nodePaths: [path.join(__dirname, 'node_modules')],
     platform: 'browser',
     format: 'iife',
     target: ['chrome120'],
@@ -82,6 +78,8 @@ function startSfu() {
     [
       '--nodaemon',
       `--port=${signalingPort}`,
+      '--listenIp=127.0.0.1',
+      `--webRtcServerPort=${webRtcServerPort}`,
       '--workers=1',
       '--workerBin=./mediasoup-worker'
     ],
@@ -134,15 +132,12 @@ async function waitForPort(port, timeoutMs = 7000) {
 }
 
 async function launchBrowser() {
-  const executablePath = chromiumCandidates.find(candidate => fs.existsSync(candidate));
-  if (!executablePath) {
-    throw new Error(`Browser was not found. Checked: ${chromiumCandidates.join(', ')}`);
-  }
+  const executablePath = resolveChromiumExecutable();
   return puppeteer.launch({
     executablePath,
     headless: true,
     protocolTimeout: PUPPETEER_PROTOCOL_TIMEOUT_MS,
-    args: ['--no-sandbox'],
+    args: ['--no-sandbox', '--ignore-certificate-errors', '--allow-insecure-localhost'],
   });
 }
 
@@ -150,6 +145,7 @@ async function runScenario() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qos-server-browser-'));
   const bundlePath = buildBundle(tmpDir);
   signalingPort = await allocatePort();
+  webRtcServerPort = await allocatePort();
   const staticServer = await startStaticServer(bundlePath);
   const sfu = startSfu();
   const browser = await launchBrowser();

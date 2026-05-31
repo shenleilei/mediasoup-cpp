@@ -309,6 +309,12 @@ cmake --build build-test -j$(nproc)
 
 浏览器弱网 harness 依赖 Chrome / Chromium、Node 依赖和 `tc`/netem 权限；缺少这些环境时应记录为环境不足，而不是服务端构建失败。
 
+默认压测入口约定：
+
+- 如果没有额外说明，默认使用
+  `node tests/qos_harness/multi_process_pressure.mjs`
+  做多进程压测。
+
 ## 本地运行时架构 (Local Runtime Architecture)
 
 ```text
@@ -340,7 +346,6 @@ SignalingServer
   - 客户端 Publisher QoS 状态机和阶梯控制
   - 服务端对 `clientStats` 的接收、校验、聚合以及自动 Override 生成
   - 针对推流、陈旧序列号 (stale-seq)、策略更新、自动 Override、手动清除的浏览器/Node 测试套件
-  - 浏览器回环弱网矩阵 (weak-network matrix) 执行及逐 Case 的结果报告
 - 完整的下行 (Downlink) QoS 链路，覆盖：
   - 订阅者侧对 `downlinkClientStats` 的接收、校验、存储以及控制器执行
   - 服务端基于隐藏 (hidden) / 驻留 (pinned) / 尺寸的带宽分配、基于健康度的降级/恢复，以及优先级处理
@@ -354,7 +359,6 @@ SignalingServer
 
 当前仓库文档和生成的制品显示：
 
-- 浏览器上行矩阵：原 `43 / 43 PASS` 主 gate (`2026-04-13`) + `GD1-GD12` targeted PASS，当前总口径为 `55 case`
 - 服务端 QoS 单测、集成测试和浏览器 harness 仍是当前回归入口。
 - 根目录原生 WebRTC QoS plain push/play client 已移除；相关 P2/P3 报告和验收脚本不再属于活跃路径。
 
@@ -368,12 +372,8 @@ SignalingServer
 事实来源链接 (Source-of-truth links)：
 
 - QoS 整体状态：[docs/qos-status.md](./docs/qos-status.md)
-- 最终总结：[docs/uplink-qos-final-report.md](./docs/uplink-qos-final-report.md)
-- 结果总结：[docs/uplink-qos-test-results-summary.md](./docs/uplink-qos-test-results-summary.md)
-- 逐 Case 最终结果：[docs/uplink-qos-case-results.md](./docs/uplink-qos-case-results.md)
 - 下行当前状态：[docs/downlink-qos-status.md](./docs/downlink-qos-status.md)
 - 测试覆盖地图：[docs/qos-test-coverage_cn.md](./docs/qos-test-coverage_cn.md)
-- 生成的矩阵制品：[docs/generated/uplink-qos-matrix-report.json](./docs/generated/uplink-qos-matrix-report.json)
 
 ## 核心运行时模型 (Core Runtime Model)
 
@@ -802,7 +802,7 @@ cmake --build build -j$(nproc)
 对于 QoS 特定的验证，请使用统一脚本：
 
 ```bash
-cd /root/mediasoup-cpp
+cd /root/workspace/mediasoup-cpp
 
 # 全量 QoS 运行
 ./scripts/run_qos_tests.sh
@@ -816,15 +816,6 @@ cd /root/mediasoup-cpp
 # 运行指定的组
 ./scripts/run_qos_tests.sh client-js cpp-unit
 
-# 默认浏览器矩阵关卡
-node tests/qos_harness/run_matrix.mjs
-
-# 扩展的浏览器矩阵 (追加剩余的基线用例)
-node tests/qos_harness/run_matrix.mjs --include-extended
-
-# 针对性重跑盲点
-node tests/qos_harness/run_matrix.mjs --cases=T9,T10,T11
-
 # 多房间容量压力测试:
 # 每个房间有刚好 2 个 peer：1 个 publisher 发送 1080p，1 个 subscriber 接收
 node tests/qos_harness/browser_capacity_rooms.mjs --workers=1 --step=5 --max-rooms=50
@@ -835,10 +826,6 @@ node tests/qos_harness/browser_capacity_rooms.mjs --workers=1 --step=5 --max-roo
 - 默认模式会运行所有默认 QoS 组，包括服务端 QoS、browser harness 和 browser/downlink 矩阵；即使某个组失败也会继续执行
 - 失败会记录到 `tests/qos_harness/artifacts/last-failures.txt`
 - `--resume` 仅会重新运行上一次失败的精确任务
-- 如果执行了 `matrix`，脚本还会重新生成逐 Case 的报告：
-  [docs/uplink-qos-case-results.md](./docs/uplink-qos-case-results.md)
-- 默认矩阵现在包含盲点过渡用例 `T9/T10/T11`；剩余的 `extended` 集合是目前更高带宽的基线校准用例，可以通过 `--include-extended` 追加，或者通过 `--cases=...` 明确指定运行
-
 ### 排障 (Troubleshooting)
 
 - `Cannot find source file ... third_party/ip2region/binding/c/xdb_searcher.c`  

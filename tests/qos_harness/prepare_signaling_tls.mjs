@@ -9,21 +9,26 @@ const keyPath = path.join(certDir, 'tls.key');
 const repoCertPath = path.join(repoRoot, 'docker', '_.zelostech.com.cn.pem');
 const repoKeyPath = path.join(repoRoot, 'docker', '_.zelostech.com.cn.key');
 
-export function ensureSignalingTlsFiles() {
-  fs.mkdirSync(certDir, { recursive: true });
+function certificateSupportsLocalhost(certFile) {
+  try {
+    const output = execFileSync('openssl', [
+      'x509',
+      '-in',
+      certFile,
+      '-noout',
+      '-ext',
+      'subjectAltName',
+    ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
 
-  if (fs.existsSync(repoCertPath) && fs.existsSync(repoKeyPath)) {
-    fs.copyFileSync(repoCertPath, certPath);
-    fs.copyFileSync(repoKeyPath, keyPath);
-    fs.chmodSync(certPath, 0o644);
-    fs.chmodSync(keyPath, 0o600);
-    return;
+    return output.includes('IP Address:127.0.0.1') ||
+      output.includes('IP:127.0.0.1') ||
+      output.includes('DNS:localhost');
+  } catch {
+    return false;
   }
+}
 
-  if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
-    return;
-  }
-
+function generateLocalhostCertificate() {
   execFileSync('openssl', [
     'req',
     '-x509',
@@ -42,4 +47,17 @@ export function ensureSignalingTlsFiles() {
     '-out',
     certPath,
   ], { stdio: 'ignore' });
+}
+
+export function ensureSignalingTlsFiles() {
+  fs.mkdirSync(certDir, { recursive: true });
+
+  if (fs.existsSync(certPath) && fs.existsSync(keyPath) && certificateSupportsLocalhost(certPath)) {
+    return;
+  }
+
+  generateLocalhostCertificate();
+
+  fs.chmodSync(certPath, 0o644);
+  fs.chmodSync(keyPath, 0o600);
 }
