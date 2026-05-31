@@ -35,6 +35,61 @@ groups:
           summary: "{{ $labels.host }} 检测到 worker 崩溃"
           description: "{{ $labels.host }} 出现 worker crash 相关日志"
 
+      - alert: JoinFailuresInLog
+        expr: sum by (host) (count_over_time({job="mediasoup-sfu"} |= "[join-failed]" [5m])) > 0
+        for: 0m
+        labels:
+          severity: P2
+          team: rtc
+          scope: host
+        annotations:
+          summary: "{{ $labels.host }} 检测到 join 失败"
+          description: "{{ $labels.host }} 在过去5分钟内出现了 {{ $value }} 条 join-failed 日志"
+
+      - alert: PlainPublishFailuresInLog
+        expr: sum by (host) (count_over_time({job="mediasoup-sfu"} |~ "plainPublish.*failed" [5m])) > 0
+        for: 0m
+        labels:
+          severity: P2
+          team: rtc
+          scope: host
+        annotations:
+          summary: "{{ $labels.host }} 检测到 plainPublish 失败"
+          description: "{{ $labels.host }} 在过去5分钟内出现了 {{ $value }} 条 plainPublish 失败日志"
+
+      - alert: PlainSubscribeFailuresInLog
+        expr: sum by (host) (count_over_time({job="mediasoup-sfu"} |~ "plainSubscribe.*failed" [5m])) > 0
+        for: 0m
+        labels:
+          severity: P2
+          team: rtc
+          scope: host
+        annotations:
+          summary: "{{ $labels.host }} 检测到 plainSubscribe 失败"
+          description: "{{ $labels.host }} 在过去5分钟内出现了 {{ $value }} 条 plainSubscribe 失败日志"
+
+      - alert: WebSocketCloseRateHigh
+        expr: sum by (host) (count_over_time({job="mediasoup-sfu"} |= "[ws-close]" [5m])) > 100
+        for: 1m
+        labels:
+          severity: P2
+          team: rtc
+          scope: host
+        annotations:
+          summary: "{{ $labels.host }} websocket close 频率过高"
+          description: "{{ $labels.host }} 在过去5分钟内出现了 {{ $value }} 条 ws-close 日志"
+
+      - alert: MalformedWebSocketMessagesInLog
+        expr: sum by (host) (count_over_time({job="mediasoup-sfu"} |= "dropping malformed websocket message" [5m])) > 10
+        for: 1m
+        labels:
+          severity: P2
+          team: rtc
+          scope: host
+        annotations:
+          summary: "{{ $labels.host }} malformed websocket 消息过多"
+          description: "{{ $labels.host }} 在过去5分钟内丢弃了 {{ $value }} 条 malformed websocket message"
+
   # 集群维度
   - name: log-alerts-cluster
     rules:

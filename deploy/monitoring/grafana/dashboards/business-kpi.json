@@ -2,37 +2,114 @@
   "uid": "mediasoup-business-kpi",
   "title": "Business KPI",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
   "panels": [
     {
-      "type": "text",
-      "title": "KPI Integration TODO",
-      "gridPos": { "h": 5, "w": 24, "x": 0, "y": 0 },
-      "options": {
-        "mode": "markdown",
-        "content": "接入业务指标后将此面板替换为真实查询：\\n- 活跃房间数\\n- 会话成功率\\n- 平均通话时长\\n- 失败原因分布"
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Session Success Rate (placeholder)",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "type": "stat",
+      "title": "Active Rooms",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
       "targets": [
         {
-          "expr": "vector(0)",
-          "legendFormat": "replace with real metric"
+          "expr": "sum(mediasoup_sfu_rooms)",
+          "legendFormat": "rooms"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Workers",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(mediasoup_sfu_workers)",
+          "legendFormat": "workers"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Available Worker Threads",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(mediasoup_sfu_available_worker_threads)",
+          "legendFormat": "available"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "WebSocket Disconnects (5m)",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(increase(mediasoup_sfu_ws_disconnects_total[5m]))",
+          "legendFormat": "disconnects"
         }
       ]
     },
     {
       "type": "timeseries",
-      "title": "Active Rooms (placeholder)",
+      "title": "Rooms / Capacity",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "targets": [
+        {
+          "expr": "sum by (instance) (mediasoup_sfu_rooms)",
+          "legendFormat": "rooms {{instance}}"
+        },
+        {
+          "expr": "sum by (instance) (mediasoup_sfu_max_rooms)",
+          "legendFormat": "max {{instance}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Join / Plain Request Failures",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
       "targets": [
         {
-          "expr": "vector(0)",
-          "legendFormat": "replace with real metric"
+          "expr": "sum by (instance) (increase(mediasoup_sfu_join_failures_total[5m]))",
+          "legendFormat": "join {{instance}}"
+        },
+        {
+          "expr": "sum by (instance) (increase(mediasoup_sfu_plain_publish_failures_total[5m]))",
+          "legendFormat": "plainPublish {{instance}}"
+        },
+        {
+          "expr": "sum by (instance) (increase(mediasoup_sfu_plain_subscribe_failures_total[5m]))",
+          "legendFormat": "plainSubscribe {{instance}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Worker Death / Respawn Events",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "targets": [
+        {
+          "expr": "sum by (instance) (increase(mediasoup_sfu_worker_deaths_total[5m]))",
+          "legendFormat": "deaths {{instance}}"
+        },
+        {
+          "expr": "sum by (instance) (increase(mediasoup_sfu_worker_respawns_total[5m]))",
+          "legendFormat": "respawns {{instance}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Malformed WebSocket / Stale Request Signals",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "targets": [
+        {
+          "expr": "sum by (instance) (increase(mediasoup_sfu_malformed_ws_messages_total[5m]))",
+          "legendFormat": "malformed ws {{instance}}"
+        },
+        {
+          "expr": "sum by (instance) (increase(mediasoup_sfu_stale_request_drops_total[5m]))",
+          "legendFormat": "stale request {{instance}}"
         }
       ]
     }

@@ -121,7 +121,7 @@
 在正确目录操作：
 
 ```bash
-cd /root/mediasoup-cpp
+cd /root/workspace/mediasoup-cpp
 git status --short --branch
 ```
 

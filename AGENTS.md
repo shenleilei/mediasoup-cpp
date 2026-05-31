@@ -33,6 +33,8 @@ Read before planning or coding:
 - Minimize new dependencies, indirection, and hidden coupling; add a new abstraction or library only when existing code cannot reasonably cover the need
 - When downloading third-party build dependencies or toolchain prerequisites, prefer Alibaba Cloud (`Aliyun`) mirrors first and only fall back to upstream when the mirror is missing the required artifact
 - Run unit tests, integration tests, and required checks before claiming completion
+- For any code change, default to running both unit tests and integration tests that cover the touched behavior. If one layer cannot be run, call that out explicitly with the blocking reason and residual risk.
+- Before committing code, run the full unit test suite and the full integration test suite for this repo. Do not treat a change as commit-ready without that full test pass unless the user explicitly accepts the gap.
 - Use `docs/aicoding/DELIVERY_CHECKLIST.md` before merge or handoff
 - Keep tool-specific instruction files aligned with `docs/aicoding/`
 

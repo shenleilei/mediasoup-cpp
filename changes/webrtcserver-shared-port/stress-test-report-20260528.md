@@ -94,6 +94,126 @@ YYYYMMDD-HH-MM-SS.meta
 
 `.meta` 记录采样时的 phase、rooms、node-load、worker PID、data/report 路径，方便把动作和结果关联。
 
+### 4.4 本轮实际测试方法
+
+本轮实际执行时，统一按下面的方法跑，不把“加到某个房间数就退出”当成压测完成：
+
+1. 先确认目标实例是压测专用的 `9000` 端口实例，而不是常规测试/对外服务用的 `8000` 端口实例。
+2. 启动前先检查 `mediasoup-9000` 是否已经存在，并确认只有它占用了本轮压测的 `9000/TCP + 9000/UDP`。
+3. 用多进程脚本按“每 10 秒增加 10 个房间”的节奏逐步加房。
+4. 达到目标房间数后停止继续加房，但保持已有房间持续收发 RTP。
+5. 在整个测试过程中持续采集：
+   - `top` 中 worker 进程瞬时 CPU
+   - `/api/node-load`
+   - 压测脚本输出的 `send/recv/recvRatio`
+   - `nack/lost/reTx/subscriber loss`
+   - 每 20 秒一份 perf `data/report/meta`
+6. 如果接收率开始退化，不要立刻停测；先停止继续加房，保留现场流量和房间，再继续观察/采样瓶颈点。
+7. 收到足够多的稳态 perf 样本后，再停止压测脚本；停测时只清理本轮压测进程，不停止 `mediasoup-9000` 容器本身。
+
+具体执行约束：
+
+- `ps` 不用来判断 worker 瞬时 CPU，worker CPU 以容器内 `top` 结果为准。
+- perf 必须采样实际 worker host PID，不能采样到 SFU 主进程。
+- 停测后的 `[ws-close]` 清理日志不算运行中异常。
+- 结果判读以“达到目标房间后还能否持续稳定收发”优先，而不是只看加房阶段是否成功。
+
+本轮用于日常检查的命令主要是：
+
+```bash
+curl -sS http://127.0.0.1:9000/api/node-load
+docker exec mediasoup-9000 sh -lc "top -b -n 1 | head -n 14"
+tail -n 80 /tmp/pressure-450-perf.log
+find /tmp/perf-450-flow -maxdepth 1 -name "*.report" | wc -l
+docker logs --since 2m mediasoup-9000 2>&1 | grep -E "\[ws-close\]|disconnected"
+```
+
+### 4.5 多进程压测模型
+
+本轮不是用单个 Node 进程独自承担全部房间，而是使用：
+
+- 一个父进程：`tests/qos_harness/multi_process_pressure.mjs`
+- 多个子进程：`tests/qos_harness/single_worker_pressure.mjs`
+
+职责划分：
+
+- 父进程负责：
+  - 按节奏拉起子进程
+  - 维护全局目标房间数增长
+  - 采集 `/api/node-load`
+  - 持续执行 perf 采样
+  - 汇总各子进程输出
+- 每个子进程负责：
+  - 自己那一批房间的 `join`
+  - 自己那一批房间的 `plainPublish/plainSubscribe`
+  - 自己那一批房间的 RTP send/recv
+  - 输出本进程维度的 `send/recv/recvRatio/workerCpu`
+
+这样做的原因是：
+
+- 单个 Node 进程同时承担太多房间时，脚本自身会先变成瓶颈。
+- 多进程可以把“压测脚本自身 CPU”与“worker 真正的媒体转发瓶颈”分开一些。
+- 也更接近用户之前约定的测试模型：每个客户端进程只负责有限数量的房间。
+
+本轮采用的关键约束：
+
+- 每个子进程最多负责 `90` 个房间。
+- 父进程按 `--spawn-interval-ms=10000` 每 `10` 秒拉起一个新的子进程。
+- 每个子进程内部按 `--step=10 --round-ms=10000` 每 `10` 秒增加 `10` 个房间。
+- 达到该子进程自己的 `--max-rooms=90` 后，不再继续加房，但继续保持现有房间收发流量。
+
+450 房这一轮之所以是 `5` 个子进程，是因为：
+
+- 每进程上限 `90` 房
+- 总目标 `450` 房
+- 所以需要 `5` 个进程
+
+对应关系是：
+
+```text
+p1 -> 90 rooms
+p2 -> 90 rooms
+p3 -> 90 rooms
+p4 -> 90 rooms
+p5 -> 90 rooms
+total = 450 rooms
+```
+
+380 房验证时采用的是：
+
+- `4` 个子进程
+- 每进程 `95` 房
+- 总计 `380` 房
+
+日志中的 `p1/p2/p3/...` 就是这些子进程的 shard 标识。看到例如：
+
+```text
+[p4] steady#10 [rooms=90] ...
+```
+
+含义是：
+
+- `p4`：第 4 个子进程
+- `steady#10`：该子进程已经进入稳态第 10 轮
+- `[rooms=90]`：该子进程当前持有 `90` 个房间
+
+判读时要区分：
+
+- 单个子进程的 `[rooms=90]` 只是 shard 局部房间数
+- 全局总房间数要看 `/api/node-load` 里的 `rooms` / `dispatchRooms`
+
+例如 450 房稳态时典型状态应当同时满足：
+
+- 日志中多个 shard 都显示 `[rooms=90]`
+- `/api/node-load` 显示 `rooms=450`
+- `lastShardRooms` 类似：
+
+```json
+{"p1":90,"p2":90,"p3":90,"p4":90,"p5":90}
+```
+
+这说明 5 个子进程都已经顶满，且 worker 内部真实存在 450 个房间。
+
 ## 5. 380 房验证
 
 命令参数要点：

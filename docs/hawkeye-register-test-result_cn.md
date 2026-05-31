@@ -13,9 +13,9 @@
 
 ## 测试环境
 
-- 代码目录：`/root/mediasoup-cpp`
+- 代码目录：`/root/workspace/mediasoup-cpp`
 - 镜像构建：`./build_image.sh`
-- 本地 worker：使用仓库内置的 `/root/mediasoup-cpp/mediasoup-worker`
+- 本地 worker：使用仓库内置的 `/root/workspace/mediasoup-cpp/mediasoup-worker`
 - Hawkeye 注册临时服务：`python3 + websockets`
 - staging 联调环境：`172.31.4.40`
 - staging Hawkeye：
@@ -33,7 +33,7 @@
 执行：
 
 ```bash
-cd /root/mediasoup-cpp
+cd /root/workspace/mediasoup-cpp
 ./build_image.sh
 ```
 

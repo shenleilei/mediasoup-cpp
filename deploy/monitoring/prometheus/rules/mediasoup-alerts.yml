@@ -93,13 +93,115 @@ groups:
           description: "A mediasoup-worker process appears to have restarted on {{ $labels.instance }}."
           runbook: "docs/MONITORING_RUNBOOK.md"
 
-      - alert: RecordingDiskWillFillSoon
-        expr: predict_linear(node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}[6h], 4 * 3600) < 0
-        for: 10m
+      - alert: SfuReadyEndpointDown
+        expr: mediasoup_sfu_ready == 0
+        for: 1m
         labels:
-          severity: P3
+          severity: P1
+          team: rtc
+          escalation: immediate
+        annotations:
+          summary: "SFU readiness degraded"
+          description: "mediasoup_sfu_ready is 0 on {{ $labels.instance }} for >1m."
+          runbook: "docs/MONITORING_RUNBOOK.md"
+
+      - alert: SfuWorkerThreadCapacityLow
+        expr: mediasoup_sfu_available_worker_threads < 1
+        for: 1m
+        labels:
+          severity: P1
+          team: rtc
+          escalation: immediate
+        annotations:
+          summary: "SFU has no available worker threads"
+          description: "available worker threads dropped below 1 on {{ $labels.instance }} for >1m."
+          runbook: "docs/MONITORING_RUNBOOK.md"
+
+      - alert: SfuJoinFailuresDetected
+        expr: increase(mediasoup_sfu_join_failures_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: P2
           team: rtc
         annotations:
-          summary: "Disk may fill within 4 hours"
-          description: "Predicted available disk bytes becomes negative within 4h on {{ $labels.instance }}."
+          summary: "SFU join failures detected"
+          description: "{{ $labels.instance }} saw {{ $value }} join failures in the last 5m."
+          runbook: "docs/MONITORING_RUNBOOK.md"
+
+      - alert: SfuPlainPublishFailuresDetected
+        expr: increase(mediasoup_sfu_plain_publish_failures_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: P2
+          team: rtc
+        annotations:
+          summary: "SFU plainPublish failures detected"
+          description: "{{ $labels.instance }} saw {{ $value }} plainPublish failures in the last 5m."
+          runbook: "docs/MONITORING_RUNBOOK.md"
+
+      - alert: SfuPlainSubscribeFailuresDetected
+        expr: increase(mediasoup_sfu_plain_subscribe_failures_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: P2
+          team: rtc
+        annotations:
+          summary: "SFU plainSubscribe failures detected"
+          description: "{{ $labels.instance }} saw {{ $value }} plainSubscribe failures in the last 5m."
+          runbook: "docs/MONITORING_RUNBOOK.md"
+
+      - alert: SfuWorkerDeathsDetected
+        expr: increase(mediasoup_sfu_worker_deaths_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: P1
+          team: rtc
+          escalation: immediate
+        annotations:
+          summary: "SFU worker death detected"
+          description: "{{ $labels.instance }} saw {{ $value }} worker death events in the last 5m."
+          runbook: "docs/MONITORING_RUNBOOK.md"
+
+      - alert: SfuWorkerRespawnsDetected
+        expr: increase(mediasoup_sfu_worker_respawns_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: P2
+          team: rtc
+        annotations:
+          summary: "SFU worker respawn detected"
+          description: "{{ $labels.instance }} saw {{ $value }} worker respawn events in the last 5m."
+          runbook: "docs/MONITORING_RUNBOOK.md"
+
+      - alert: SfuMalformedWebSocketMessagesHigh
+        expr: increase(mediasoup_sfu_malformed_ws_messages_total[5m]) > 10
+        for: 1m
+        labels:
+          severity: P2
+          team: rtc
+        annotations:
+          summary: "Malformed websocket messages elevated"
+          description: "{{ $labels.instance }} dropped {{ $value }} malformed websocket messages in the last 5m."
+          runbook: "docs/MONITORING_RUNBOOK.md"
+
+      - alert: SfuWorkerThreadQueueDepthHigh
+        expr: mediasoup_sfu_worker_thread_queue_depth > 100
+        for: 5m
+        labels:
+          severity: P2
+          team: rtc
+        annotations:
+          summary: "SFU worker thread queue depth high"
+          description: "worker thread {{ $labels.thread_id }} queue depth stayed above 100 for >5m."
+          runbook: "docs/MONITORING_RUNBOOK.md"
+
+      - alert: SfuWorkerThreadTaskWaitHigh
+        expr: mediasoup_sfu_worker_thread_avg_task_wait_us > 50000
+        for: 5m
+        labels:
+          severity: P2
+          team: rtc
+        annotations:
+          summary: "SFU worker thread task wait high"
+          description: "worker thread {{ $labels.thread_id }} average task wait exceeded 50ms for >5m."
           runbook: "docs/MONITORING_RUNBOOK.md"

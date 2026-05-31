@@ -7,7 +7,7 @@ Path: `deploy/monitoring` (relative to repository root)
 - Prometheus + alert rules (`prometheus/`)
 - Alertmanager routing (`alertmanager/`)
 - Grafana provisioning + dashboards (`grafana/`)
-- Loki + Promtail log pipeline (`loki/`, `promtail/`)
+- Loki + Alloy log pipeline (`loki/`, `alloy/`)
 - Node Exporter + Process Exporter + Blackbox Exporter
 
 ## Start

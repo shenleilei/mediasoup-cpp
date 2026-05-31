@@ -56,6 +56,7 @@ config.json
 /run_d1_test.sh
 /tests/qos_harness/artifacts/last-failures.txt
 /tests/qos_harness/chrome/
+/tests/qos_harness/.browsers/
 bwe_diff.patch
 *.tmp
 tmp.*

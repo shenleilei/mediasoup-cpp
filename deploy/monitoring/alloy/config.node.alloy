@@ -1,0 +1,40 @@
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+local.file_match "mediasoup_logs" {
+  path_targets = [
+    {
+      __path__ = "/var/log/mediasoup-cpp/*.log",
+      job      = "mediasoup-sfu",
+      host     = constants.hostname,
+    },
+  ]
+}
+
+local.file_match "docker_logs" {
+  path_targets = [
+    {
+      __path__ = "/var/lib/docker/containers/*/*.log",
+      job      = "docker",
+      host     = constants.hostname,
+    },
+  ]
+}
+
+loki.source.file "mediasoup_logs" {
+  targets    = local.file_match.mediasoup_logs.targets
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.source.file "docker_logs" {
+  targets    = local.file_match.docker_logs.targets
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://<MONITOR_CENTER_IP>:3100/loki/api/v1/push"
+  }
+}

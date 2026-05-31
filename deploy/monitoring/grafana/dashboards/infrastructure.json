@@ -2,7 +2,7 @@
   "uid": "mediasoup-infrastructure",
   "title": "Infrastructure",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
   "panels": [
     {
@@ -50,6 +50,60 @@
         {
           "expr": "rate(node_network_transmit_bytes_total{device!=\"lo\"}[5m])",
           "legendFormat": "tx {{instance}} {{device}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Worker Threads / Workers / Rooms",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "mediasoup_sfu_worker_threads",
+          "legendFormat": "worker threads {{instance}}"
+        },
+        {
+          "expr": "mediasoup_sfu_available_worker_threads",
+          "legendFormat": "available worker threads {{instance}}"
+        },
+        {
+          "expr": "mediasoup_sfu_workers",
+          "legendFormat": "workers {{instance}}"
+        },
+        {
+          "expr": "mediasoup_sfu_rooms",
+          "legendFormat": "rooms {{instance}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Control Plane Queue / Wait Signals",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "mediasoup_sfu_worker_thread_queue_depth",
+          "legendFormat": "queue depth thread {{thread_id}}"
+        },
+        {
+          "expr": "mediasoup_sfu_worker_thread_queue_peak_depth",
+          "legendFormat": "queue peak thread {{thread_id}}"
+        },
+        {
+          "expr": "mediasoup_sfu_worker_thread_avg_task_wait_us",
+          "legendFormat": "avg wait us thread {{thread_id}}"
+        },
+        {
+          "expr": "mediasoup_sfu_dispatch_rooms",
+          "legendFormat": "dispatch rooms {{instance}}"
+        },
+        {
+          "expr": "mediasoup_sfu_stale_request_drops_total",
+          "legendFormat": "stale requests total {{instance}}"
+        },
+        {
+          "expr": "mediasoup_sfu_rejected_client_stats_total",
+          "legendFormat": "rejected clientStats total {{instance}}"
         }
       ]
     }

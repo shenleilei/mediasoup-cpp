@@ -2,13 +2,13 @@
   "uid": "mediasoup-global-overview",
   "title": "Global Overview",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
   "panels": [
     {
       "type": "stat",
       "title": "API Availability",
-      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "gridPos": { "h": 5, "w": 4, "x": 0, "y": 0 },
       "targets": [
         {
           "expr": "avg(probe_success{job=\"blackbox-http\"}) * 100",
@@ -22,9 +22,64 @@
       }
     },
     {
+      "type": "stat",
+      "title": "Healthy Nodes",
+      "gridPos": { "h": 5, "w": 4, "x": 4, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(mediasoup_sfu_healthy)",
+          "legendFormat": "healthy"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Ready Nodes",
+      "gridPos": { "h": 5, "w": 4, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(mediasoup_sfu_ready)",
+          "legendFormat": "ready"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Workers",
+      "gridPos": { "h": 5, "w": 4, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(mediasoup_sfu_workers)",
+          "legendFormat": "workers"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Rooms",
+      "gridPos": { "h": 5, "w": 4, "x": 16, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(mediasoup_sfu_rooms)",
+          "legendFormat": "rooms"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Open Alerts",
+      "gridPos": { "h": 5, "w": 4, "x": 20, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(ALERTS{alertstate=\"firing\"})",
+          "legendFormat": "alerts"
+        }
+      ]
+    },
+    {
       "type": "timeseries",
       "title": "Endpoint Latency (blackbox)",
-      "gridPos": { "h": 8, "w": 18, "x": 6, "y": 0 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
       "targets": [
         {
           "expr": "probe_duration_seconds{job=\"blackbox-http\"}",
@@ -34,8 +89,69 @@
     },
     {
       "type": "timeseries",
+      "title": "Health / Ready / Worker Availability",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "targets": [
+        {
+          "expr": "mediasoup_sfu_healthy",
+          "legendFormat": "healthy {{instance}}"
+        },
+        {
+          "expr": "mediasoup_sfu_ready",
+          "legendFormat": "ready {{instance}}"
+        },
+        {
+          "expr": "mediasoup_sfu_has_available_workers",
+          "legendFormat": "workers {{instance}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Join / Plain Failure Rate (5m)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "targets": [
+        {
+          "expr": "sum by (instance) (increase(mediasoup_sfu_join_failures_total[5m]))",
+          "legendFormat": "join {{instance}}"
+        },
+        {
+          "expr": "sum by (instance) (increase(mediasoup_sfu_plain_publish_failures_total[5m]))",
+          "legendFormat": "plainPublish {{instance}}"
+        },
+        {
+          "expr": "sum by (instance) (increase(mediasoup_sfu_plain_subscribe_failures_total[5m]))",
+          "legendFormat": "plainSubscribe {{instance}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Worker / WebSocket Error Signals",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "targets": [
+        {
+          "expr": "sum by (instance) (increase(mediasoup_sfu_worker_deaths_total[5m]))",
+          "legendFormat": "worker deaths {{instance}}"
+        },
+        {
+          "expr": "sum by (instance) (increase(mediasoup_sfu_worker_respawns_total[5m]))",
+          "legendFormat": "worker respawns {{instance}}"
+        },
+        {
+          "expr": "sum by (instance) (increase(mediasoup_sfu_ws_disconnects_total[5m]))",
+          "legendFormat": "ws disconnects {{instance}}"
+        },
+        {
+          "expr": "sum by (instance) (increase(mediasoup_sfu_malformed_ws_messages_total[5m]))",
+          "legendFormat": "malformed ws {{instance}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
       "title": "Open Alerts by Severity",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 21 },
       "targets": [
         {
           "expr": "sum by (severity) (ALERTS{alertstate=\"firing\"})",

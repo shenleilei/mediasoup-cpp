@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [[ -z "${repo_root}" ]]; then
+  exit 0
+fi
+
+cd "$repo_root"
+
+if [[ ! -d ".codegraph" ]]; then
+  exit 0
+fi
+
+if ! command -v codegraph >/dev/null 2>&1; then
+  exit 0
+fi
+
+lock_dir=".git/.codegraph-sync.lock"
+if ! mkdir "$lock_dir" 2>/dev/null; then
+  exit 0
+fi
+
+cleanup() {
+  rmdir "$lock_dir" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+log_file=".git/codegraph-sync.log"
+timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
+
+{
+  echo "[$timestamp] codegraph sync start"
+  codegraph sync "$repo_root"
+  echo "[$timestamp] codegraph sync done"
+} >>"$log_file" 2>&1 || true

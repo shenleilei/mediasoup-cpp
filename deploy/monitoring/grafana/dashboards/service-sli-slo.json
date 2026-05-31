@@ -2,13 +2,13 @@
   "uid": "mediasoup-service-sli-slo",
   "title": "Service SLI/SLO",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
   "panels": [
     {
       "type": "stat",
-      "title": "SLO Availability (30d target: 99.9%)",
-      "gridPos": { "h": 5, "w": 8, "x": 0, "y": 0 },
+      "title": "HTTP Availability (30d)",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
       "targets": [
         {
           "expr": "avg_over_time(probe_success{job=\"blackbox-http\"}[30d]) * 100",
@@ -22,28 +22,113 @@
       }
     },
     {
-      "type": "timeseries",
-      "title": "Error Budget Burn (placeholder)",
-      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 0 },
+      "type": "stat",
+      "title": "Health Availability (24h)",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
       "targets": [
         {
-          "expr": "1 - avg_over_time(probe_success{job=\"blackbox-http\"}[1h])",
-          "legendFormat": "1h burn"
-        },
+          "expr": "avg_over_time(mediasoup_sfu_healthy[24h]) * 100",
+          "legendFormat": "healthy"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Ready Availability (24h)",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+      "targets": [
         {
-          "expr": "1 - avg_over_time(probe_success{job=\"blackbox-http\"}[6h])",
-          "legendFormat": "6h burn"
+          "expr": "avg_over_time(mediasoup_sfu_ready[24h]) * 100",
+          "legendFormat": "ready"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Has Available Workers",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(mediasoup_sfu_has_available_workers)",
+          "legendFormat": "workers"
         }
       ]
     },
     {
       "type": "timeseries",
-      "title": "Process Health",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "title": "Health / Ready / Worker Availability",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
       "targets": [
         {
-          "expr": "namedprocess_namegroup_num_procs{groupname=~\"mediasoup-sfu|mediasoup-worker\"}",
-          "legendFormat": "{{groupname}}"
+          "expr": "mediasoup_sfu_healthy",
+          "legendFormat": "healthy {{instance}}"
+        },
+        {
+          "expr": "mediasoup_sfu_ready",
+          "legendFormat": "ready {{instance}}"
+        },
+        {
+          "expr": "mediasoup_sfu_has_available_workers",
+          "legendFormat": "has workers {{instance}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Join / Plain Failure Rate (5m)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "targets": [
+        {
+          "expr": "sum by (instance) (increase(mediasoup_sfu_join_failures_total[5m]))",
+          "legendFormat": "join {{instance}}"
+        },
+        {
+          "expr": "sum by (instance) (increase(mediasoup_sfu_plain_publish_failures_total[5m]))",
+          "legendFormat": "plainPublish {{instance}}"
+        },
+        {
+          "expr": "sum by (instance) (increase(mediasoup_sfu_plain_subscribe_failures_total[5m]))",
+          "legendFormat": "plainSubscribe {{instance}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Worker Death / Respawn Burn",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "targets": [
+        {
+          "expr": "sum by (instance) (increase(mediasoup_sfu_worker_deaths_total[1h]))",
+          "legendFormat": "deaths 1h {{instance}}"
+        },
+        {
+          "expr": "sum by (instance) (increase(mediasoup_sfu_worker_respawns_total[1h]))",
+          "legendFormat": "respawns 1h {{instance}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Disconnect / Malformed Message Burn",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "targets": [
+        {
+          "expr": "sum by (instance) (increase(mediasoup_sfu_ws_disconnects_total[1h]))",
+          "legendFormat": "disconnects 1h {{instance}}"
+        },
+        {
+          "expr": "sum by (instance) (increase(mediasoup_sfu_malformed_ws_messages_total[1h]))",
+          "legendFormat": "malformed 1h {{instance}}"
         }
       ]
     }
