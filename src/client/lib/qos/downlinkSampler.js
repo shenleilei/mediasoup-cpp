@@ -18,6 +18,7 @@ class DownlinkSampler {
         this._hints = new Map();
         this._prevPacketsLost = new Map();
         this._prevPacketsReceived = new Map();
+        this._prevVideoFrameCounters = new Map();
         this._statsProvider =
             typeof options.statsProvider === 'function'
                 ? options.statsProvider
@@ -37,6 +38,7 @@ class DownlinkSampler {
         this._hints.delete(consumerId);
         this._prevPacketsLost.delete(consumerId);
         this._prevPacketsReceived.delete(consumerId);
+        this._prevVideoFrameCounters.delete(consumerId);
     }
 
     /**
@@ -78,6 +80,17 @@ class DownlinkSampler {
                 this._prevPacketsLost.set(consumerId, Number(stats.packetsLost) || 0);
                 this._prevPacketsReceived.set(consumerId, Number(stats.packetsReceived) || 0);
             }
+            const derivedFramesPerSecond = computeDerivedFramesPerSecond(
+                stats,
+                this._prevVideoFrameCounters.get(consumerId),
+            );
+            if (stats && hint.kind === 'video') {
+                this._prevVideoFrameCounters.set(consumerId, {
+                    timestampMs: Number(stats.timestamp) || 0,
+                    framesDecoded: Number(stats.framesDecoded) || 0,
+                    framesReceived: Number(stats.framesReceived) || 0,
+                });
+            }
 
             subscriptions.push({
                 consumerId,
@@ -91,7 +104,9 @@ class DownlinkSampler {
                 targetHeight: hint.targetHeight || 0,
                 packetsLost: lossPercent,
                 jitter: stats?.jitter || 0,
-                framesPerSecond: stats?.framesPerSecond || 0,
+                framesPerSecond: (stats?.framesPerSecond || 0) > 0
+                    ? stats.framesPerSecond
+                    : derivedFramesPerSecond,
                 frameWidth: stats?.frameWidth || 0,
                 frameHeight: stats?.frameHeight || 0,
                 freezeRate: computeFreezeRate(stats),
@@ -135,6 +150,34 @@ function computeJitterBufferDelayMs(stats) {
         return (totalDelay / emittedCount) * 1000;
     }
     return totalDelay * 1000;
+}
+
+function computeDerivedFramesPerSecond(stats, previous) {
+    if (!stats) return 0;
+    const timestampMs = Number(stats.timestamp);
+    if (!Number.isFinite(timestampMs) || !previous || !Number.isFinite(previous.timestampMs) || timestampMs <= previous.timestampMs) {
+        return 0;
+    }
+    const currentFramesDecoded = Number(stats.framesDecoded);
+    const currentFramesReceived = Number(stats.framesReceived);
+    const previousFramesDecoded = Number(previous.framesDecoded);
+    const previousFramesReceived = Number(previous.framesReceived);
+    const frameDeltaCandidates = [];
+    if (Number.isFinite(currentFramesDecoded) && Number.isFinite(previousFramesDecoded) && currentFramesDecoded >= previousFramesDecoded) {
+        frameDeltaCandidates.push(currentFramesDecoded - previousFramesDecoded);
+    }
+    if (Number.isFinite(currentFramesReceived) && Number.isFinite(previousFramesReceived) && currentFramesReceived >= previousFramesReceived) {
+        frameDeltaCandidates.push(currentFramesReceived - previousFramesReceived);
+    }
+    const frameDelta = frameDeltaCandidates.length > 0 ? Math.max(...frameDeltaCandidates) : 0;
+    if (frameDelta <= 0) {
+        return 0;
+    }
+    const elapsedSeconds = (timestampMs - previous.timestampMs) / 1000;
+    if (!(elapsedSeconds > 0)) {
+        return 0;
+    }
+    return frameDelta / elapsedSeconds;
 }
 
 function readOptionalNumber(stats, key) {

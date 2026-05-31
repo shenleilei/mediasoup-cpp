@@ -149,3 +149,55 @@ test('downlink sampler fallback keeps kind isolation without explicit ids', asyn
     expect(snapshot.subscriptions[0].kind).toBe('video');
     expect(snapshot.subscriptions[0].jitter).toBe(0.01);
 });
+
+test('downlink sampler derives video fps from frame deltas when stats.framesPerSecond is absent', async () => {
+    const reports = [
+        makeStatsReport({
+            id: 'video-1',
+            type: 'inbound-rtp',
+            kind: 'video',
+            mid: 'v0',
+            timestamp: 1000,
+            packetsLost: 0,
+            packetsReceived: 10,
+            jitter: 0.01,
+            framesDecoded: 10,
+            framesReceived: 10,
+            frameWidth: 64,
+            frameHeight: 64,
+        }),
+        makeStatsReport({
+            id: 'video-1',
+            type: 'inbound-rtp',
+            kind: 'video',
+            mid: 'v0',
+            timestamp: 3000,
+            packetsLost: 0,
+            packetsReceived: 14,
+            jitter: 0.02,
+            framesDecoded: 14,
+            framesReceived: 14,
+            frameWidth: 64,
+            frameHeight: 64,
+        }),
+    ];
+    let index = 0;
+    const sampler = new downlinkSampler_1.DownlinkSampler(null, {
+        statsProvider: async () => reports[index++],
+    });
+    sampler.setHints('consumer-video', {
+        producerId: 'producer-video',
+        kind: 'video',
+        mid: 'v0',
+        visible: true,
+        pinned: false,
+        activeSpeaker: false,
+        isScreenShare: false,
+        targetWidth: 640,
+        targetHeight: 360,
+    });
+    const first = await sampler.sample('alice');
+    expect(first.subscriptions[0].framesPerSecond).toBe(0);
+    const second = await sampler.sample('alice');
+    expect(second.subscriptions[0].framesPerSecond).toBeCloseTo(2, 6);
+});

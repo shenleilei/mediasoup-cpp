@@ -1,5 +1,5 @@
 (function () {
-  const qosMode = new URLSearchParams(location.search).get('qos');
+  const qosMode = new URLSearchParams(location.search).get('qos') || 'full';
   const useLegacyQos = qosMode === 'legacy';
   const useFullQos = qosMode === 'full';
   const publishAllCameras = new URLSearchParams(location.search).get('multicam') === '1';
@@ -134,7 +134,13 @@
     if (value === undefined || value === null) {
       return '-';
     }
-    return `${(value * scale).toFixed(0)} ms`;
+    const ms = value * scale;
+    const absMs = Math.abs(ms);
+    let digits = 0;
+    if (absMs > 0 && absMs < 1) {
+      digits = 2;
+    }
+    return `${ms.toFixed(digits)} ms`;
   }
 
   function asFiniteNumber(value) {
@@ -176,11 +182,57 @@
     return current >= previous ? current - previous : 0;
   }
 
+  function createConsumerDebugVideoStats() {
+    return {
+      jitter: 0,
+      packetsLost: 0,
+      packetsReceived: 0,
+      packetsLostDelta: 0,
+      framesPerSecond: 0,
+      frameWidth: 0,
+      frameHeight: 0,
+    };
+  }
+
+  function createConsumerVideoFreezeStats() {
+    return {
+      freezeCount: 0,
+      totalFreezesDuration: 0,
+      framesDropped: 0,
+      jitterBufferDelayMs: undefined,
+    };
+  }
+
+  function computeFrameRateDelta(currentTimestampMs, previousTimestampMs, currentFramesDecoded, previousFramesDecoded, currentFramesReceived, previousFramesReceived) {
+    if (!Number.isFinite(currentTimestampMs) || !Number.isFinite(previousTimestampMs) || currentTimestampMs <= previousTimestampMs) {
+      return 0;
+    }
+    const candidates = [];
+    if (Number.isFinite(currentFramesDecoded) && Number.isFinite(previousFramesDecoded) && currentFramesDecoded >= previousFramesDecoded) {
+      candidates.push(currentFramesDecoded - previousFramesDecoded);
+    }
+    if (Number.isFinite(currentFramesReceived) && Number.isFinite(previousFramesReceived) && currentFramesReceived >= previousFramesReceived) {
+      candidates.push(currentFramesReceived - previousFramesReceived);
+    }
+    const frameDelta = candidates.length > 0 ? Math.max(...candidates) : 0;
+    if (frameDelta <= 0) {
+      return 0;
+    }
+    return frameDelta / ((currentTimestampMs - previousTimestampMs) / 1000);
+  }
+
   function fmtConcealRate(concealedSamples, totalSamplesReceived) {
     if (!Number.isFinite(concealedSamples) || !Number.isFinite(totalSamplesReceived) || totalSamplesReceived <= 0) {
       return '-';
     }
     return `${((concealedSamples / totalSamplesReceived) * 100).toFixed(1)}%`;
+  }
+
+  function fmtOptionalMetric(value, unsupported = false, fallback = '-') {
+    if (unsupported) {
+      return 'n/a';
+    }
+    return fmtValue(value, fallback);
   }
 
   function fmtPercentValue(value, digits = 1) {
@@ -282,9 +334,14 @@
   }
 
   function remoteTrackTitle(entry) {
-    return entry.remoteTrack?.localTrackId
-      ? `Track ${entry.remoteTrack.localTrackId}`
-      : `Track #${entry.fallbackTrackOrdinal || 1}`;
+    if (entry.remoteTrack?.localTrackId) {
+      return `Track ${entry.remoteTrack.localTrackId}`;
+    }
+    const fallbackSsrc = Array.isArray(entry.remoteProducer?.ssrcs) ? entry.remoteProducer.ssrcs[0] : null;
+    if (fallbackSsrc) {
+      return `Track ssrc:${fallbackSsrc}`;
+    }
+    return `Track #${entry.fallbackTrackOrdinal || 1}`;
   }
 
   function remoteTrackSubtitle(entry) {
@@ -353,6 +410,49 @@
       return '-';
     }
     return fmtValue(scores[scores.length - 1]?.score, '-');
+  }
+
+  function latestProducerInboundStat(producerStats) {
+    const stats = Array.isArray(producerStats?.stats) ? producerStats.stats : [];
+    const inbound = stats.filter(item => item && item.type === 'inbound-rtp');
+    if (inbound.length === 0) {
+      return null;
+    }
+    return inbound[inbound.length - 1];
+  }
+
+  function firstFinite(...values) {
+    for (const value of values) {
+      if (Number.isFinite(value)) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  function firstPositive(...values) {
+    let fallback = null;
+    for (const value of values) {
+      if (!Number.isFinite(value)) {
+        continue;
+      }
+      if (fallback === null) {
+        fallback = value;
+      }
+      if (value > 0) {
+        return value;
+      }
+    }
+    return fallback;
+  }
+
+  function firstDefined(...values) {
+    for (const value of values) {
+      if (value !== undefined && value !== null) {
+        return value;
+      }
+    }
+    return null;
   }
 
   function createLocalVideoCard(entry, index) {
@@ -630,7 +730,16 @@
     entry.remoteProducer = entry.remotePeerStats?.producers?.[entry.producerId] || null;
 
     const serverSub = entry.serverSubscription || {};
+    const localHint = state.downlinkBundle?.hints?.get?.(entry.consumer?.id) || null;
+    const remoteProducerStat = latestProducerInboundStat(entry.remoteProducer);
     const recvRttMs = state.localDebugStats?.recv?.currentRoundTripTime;
+    const inboundVideo = entry.localDebugVideoStats || state.localDebugStats?.inboundVideo || {};
+    const videoFreeze = entry.localDebugVideoFreeze || state.localDebugStats?.videoFreeze || {};
+    const captureMetricsSupported =
+      remoteProducerStat &&
+      (remoteProducerStat.absCaptureTimestampMs !== undefined ||
+        remoteProducerStat.absCaptureReceiveDeltaMs !== undefined ||
+        remoteProducerStat.estimatedCaptureClockOffsetMs !== undefined);
 
     if (entry.titleEl) {
       entry.titleEl.textContent = remoteTrackTitle(entry);
@@ -645,24 +754,54 @@
     entry.metricsGridEl.innerHTML = [
       qosItem('Consumer', shortId(entry.consumer?.id)),
       qosItem('Producer', shortId(entry.producerId)),
-      qosItem('Track', fmtValue(entry.remoteTrack?.localTrackId, '-')),
+      qosItem('Track', fmtValue(
+        entry.remoteTrack?.localTrackId,
+        Array.isArray(entry.remoteProducer?.ssrcs) && entry.remoteProducer.ssrcs[0]
+          ? `ssrc:${entry.remoteProducer.ssrcs[0]}`
+          : '-'
+      )),
       qosItem('Source', prettyTrackSource(entry.remoteTrack?.source, entry.consumer?.kind)),
-      qosItem('Publisher QoS', fmtValue(entry.remotePeerStats?.qos?.quality, '-')),
-      qosItem('可见', fmtBool(serverSub.visible)),
-      qosItem('置顶', fmtBool(serverSub.pinned)),
-      qosItem('主讲', fmtBool(serverSub.activeSpeaker)),
-      qosItem('共享屏幕', fmtBool(serverSub.isScreenShare)),
-      qosItem('目标尺寸', fmtDimensions(serverSub.targetWidth, serverSub.targetHeight)),
-      qosItem('渲染尺寸', fmtDimensions(serverSub.frameWidth, serverSub.frameHeight)),
+      qosItem('Publisher QoS', fmtValue(entry.remotePeerStats?.qos?.quality, entry.remoteProducer ? 'server-only' : '-')),
+      qosItem('Producer Score', latestProducerScore(entry.remoteProducer)),
+      qosItem('Producer Bitrate', fmtBitrate(remoteProducerStat?.bitrate)),
+      qosItem('Producer Packets', fmtValue(remoteProducerStat?.packetCount)),
+      qosItem('Producer Retrans', fmtValue(remoteProducerStat?.packetsRetransmitted)),
+      qosItem('Producer RTT', fmtMs(remoteProducerStat?.roundTripTime)),
+      qosItem('Capture Ts', fmtOptionalMetric(remoteProducerStat?.absCaptureTimestampMs, remoteProducerStat && !captureMetricsSupported)),
+      qosItem('Capture Offset', captureMetricsSupported ? fmtMs(remoteProducerStat?.estimatedCaptureClockOffsetMs) : 'n/a'),
+      qosItem('Capture->SFU', captureMetricsSupported ? fmtMs(remoteProducerStat?.absCaptureReceiveDeltaMs) : 'n/a'),
+      qosItem('可见', fmtBool(firstDefined(serverSub.visible, localHint?.visible))),
+      qosItem('置顶', fmtBool(firstDefined(serverSub.pinned, localHint?.pinned))),
+      qosItem('主讲', fmtBool(firstDefined(serverSub.activeSpeaker, localHint?.activeSpeaker))),
+      qosItem('共享屏幕', fmtBool(firstDefined(serverSub.isScreenShare, localHint?.isScreenShare))),
+      qosItem('目标尺寸', fmtDimensions(
+        firstFinite(serverSub.targetWidth, localHint?.targetWidth),
+        firstFinite(serverSub.targetHeight, localHint?.targetHeight)
+      )),
+      qosItem('渲染尺寸', fmtDimensions(
+        firstFinite(serverSub.frameWidth, inboundVideo.frameWidth),
+        firstFinite(serverSub.frameHeight, inboundVideo.frameHeight)
+      )),
       qosItem('RTT', fmtMs(recvRttMs, 1000)),
-      qosItem('帧率', fmtValue(serverSub.framesPerSecond)),
+      qosItem('帧率', fmtValue(
+        firstPositive(
+          serverSub.framesPerSecond,
+          serverSub.frameRate,
+          inboundVideo.framesPerSecond
+        )
+      )),
       qosItem('丢包', fmtPercentValue(serverSub.packetsLost)),
-      qosItem('抖动', fmtMs(serverSub.jitter, 1000)),
+      qosItem('抖动', fmtMs(firstPositive(serverSub.jitter, inboundVideo.jitter), 1000)),
       qosItem('卡顿率', fmtPercentValue(asFiniteNumber(serverSub.freezeRate) * 100)),
-      qosItem('Freeze Count', fmtValue(serverSub.freezeCount)),
-      qosItem('Frames Dropped', fmtValue(serverSub.framesDropped)),
-      qosItem('JB Delay', fmtMs(serverSub.jitterBufferDelayMs)),
-      qosItem('Audio Conceal', fmtConcealRate(serverSub.concealedSamples, serverSub.totalSamplesReceived)),
+      qosItem('Freeze Count', fmtValue(firstFinite(serverSub.freezeCount, videoFreeze.freezeCount))),
+      qosItem('Frames Dropped', fmtValue(firstFinite(serverSub.framesDropped, videoFreeze.framesDropped))),
+      qosItem('JB Delay', fmtMs(firstPositive(serverSub.jitterBufferDelayMs, videoFreeze.jitterBufferDelayMs))),
+      qosItem(
+        'Audio Conceal',
+        entry.consumer?.kind === 'audio'
+          ? fmtConcealRate(serverSub.concealedSamples, serverSub.totalSamplesReceived)
+          : 'n/a'
+      ),
     ].join('');
   }
 
@@ -1236,6 +1375,7 @@
     }
 
     if (message.method === 'newProducer') {
+      removeRemoteVideoConsumersByProducerId(message.data.producerId);
       void consumeProducer(message.data.producerId, message.data.kind);
       return;
     }
@@ -1246,6 +1386,7 @@
     }
 
     if (message.method === 'peerLeft') {
+      removeRemoteVideoConsumersByPeer(message.data.peerId);
       log(`Peer left: ${message.data.peerId}`);
       return;
     }
@@ -1456,6 +1597,28 @@
     renderRemoteVideoGroups();
   }
 
+  function removeRemoteVideoConsumersByPeer(peerId) {
+    if (!peerId) {
+      return;
+    }
+    for (const [consumerId, entry] of state.remoteVideoConsumers.entries()) {
+      if (entry?.peerId === peerId) {
+        removeRemoteVideoConsumer(consumerId);
+      }
+    }
+  }
+
+  function removeRemoteVideoConsumersByProducerId(producerId) {
+    if (!producerId) {
+      return;
+    }
+    for (const [consumerId, entry] of state.remoteVideoConsumers.entries()) {
+      if (entry?.producerId === producerId) {
+        removeRemoteVideoConsumer(consumerId);
+      }
+    }
+  }
+
   function computeConsumerHint(entry) {
     const target = entry.hintTargetEl || entry.card || entry.element;
     const rect = target && typeof target.getBoundingClientRect === 'function'
@@ -1573,6 +1736,7 @@
     try {
       entry.consumer.on('transportclose', () => removeRemoteVideoConsumer(entry.consumer.id));
       entry.consumer.on('trackended', () => removeRemoteVideoConsumer(entry.consumer.id));
+      entry.consumer.on('producerclose', () => removeRemoteVideoConsumer(entry.consumer.id));
     } catch {
       // Ignore consumer event binding failures.
     }
@@ -1588,6 +1752,8 @@
 
   async function collectLocalDebugStats() {
     const debug = {};
+    const consumerDebugVideoStats = new Map();
+    const consumerVideoFreezeStats = new Map();
 
     if (state.sendTransport && typeof state.sendTransport.getStats === 'function') {
       const stats = await state.sendTransport.getStats();
@@ -1653,12 +1819,28 @@
           nextVideoCounters[counterKey] = {
             packetsLost: currentLost,
             packetsReceived: currentReceived,
+            timestampMs: asFiniteOrZero(report.timestamp),
+            framesDecoded: asFiniteOrZero(report.framesDecoded),
+            framesReceived: asFiniteOrZero(report.framesReceived),
           };
           inboundVideo.jitter = Math.max(inboundVideo.jitter, asFiniteOrZero(report.jitter));
           inboundVideo.packetsLost += currentLost;
           inboundVideo.packetsReceived += currentReceived;
           inboundVideo.packetsLostDelta += computeCounterDelta(currentLost, previous?.packetsLost);
-          inboundVideo.framesPerSecond = Math.max(inboundVideo.framesPerSecond, asFiniteOrZero(report.framesPerSecond));
+          const reportedFramesPerSecond = asFiniteOrZero(report.framesPerSecond);
+          const derivedFramesPerSecond = computeFrameRateDelta(
+            asFiniteOrZero(report.timestamp),
+            previous?.timestampMs,
+            asFiniteOrZero(report.framesDecoded),
+            previous?.framesDecoded,
+            asFiniteOrZero(report.framesReceived),
+            previous?.framesReceived,
+          );
+          inboundVideo.framesPerSecond = Math.max(
+            inboundVideo.framesPerSecond,
+            reportedFramesPerSecond,
+            derivedFramesPerSecond,
+          );
           inboundVideo.frameWidth = Math.max(inboundVideo.frameWidth, asFiniteOrZero(report.frameWidth));
           inboundVideo.frameHeight = Math.max(inboundVideo.frameHeight, asFiniteOrZero(report.frameHeight));
           videoFreeze.freezeCount += asFiniteOrZero(report.freezeCount);
@@ -1666,6 +1848,36 @@
           videoFreeze.framesDropped += asFiniteOrZero(report.framesDropped);
           totalVideoJitterBufferDelay += asFiniteOrZero(report.jitterBufferDelay);
           totalVideoJitterBufferCount += asFiniteOrZero(report.jitterBufferEmittedCount);
+
+          const trackIdentifier = typeof report.trackIdentifier === 'string' ? report.trackIdentifier : null;
+          if (trackIdentifier) {
+            const consumerStat = consumerDebugVideoStats.get(trackIdentifier) || createConsumerDebugVideoStats();
+            consumerStat.jitter = Math.max(consumerStat.jitter, asFiniteOrZero(report.jitter));
+            consumerStat.packetsLost += currentLost;
+            consumerStat.packetsReceived += currentReceived;
+            consumerStat.packetsLostDelta += computeCounterDelta(currentLost, previous?.packetsLost);
+            consumerStat.framesPerSecond = Math.max(
+              consumerStat.framesPerSecond,
+              reportedFramesPerSecond,
+              derivedFramesPerSecond,
+            );
+            consumerStat.frameWidth = Math.max(consumerStat.frameWidth, asFiniteOrZero(report.frameWidth));
+            consumerStat.frameHeight = Math.max(consumerStat.frameHeight, asFiniteOrZero(report.frameHeight));
+            consumerDebugVideoStats.set(trackIdentifier, consumerStat);
+
+            const freezeStat = consumerVideoFreezeStats.get(trackIdentifier) || createConsumerVideoFreezeStats();
+            freezeStat.freezeCount += asFiniteOrZero(report.freezeCount);
+            freezeStat.totalFreezesDuration += asFiniteOrZero(report.totalFreezesDuration);
+            freezeStat.framesDropped += asFiniteOrZero(report.framesDropped);
+            const emittedCount = asFiniteOrZero(report.jitterBufferEmittedCount);
+            const totalDelay = asFiniteOrZero(report.jitterBufferDelay);
+            if (emittedCount > 0) {
+              freezeStat.jitterBufferDelayMs = (totalDelay / emittedCount) * 1000;
+            } else if (totalDelay > 0) {
+              freezeStat.jitterBufferDelayMs = totalDelay * 1000;
+            }
+            consumerVideoFreezeStats.set(trackIdentifier, freezeStat);
+          }
         }
         if (report.type === 'inbound-rtp' && report.kind === 'audio') {
           sawAudio = true;
@@ -1715,6 +1927,12 @@
     }
 
     state.localDebugStats = debug;
+
+    for (const entry of state.remoteVideoConsumers.values()) {
+      const trackIdentifier = entry.consumer?.track?.id;
+      entry.localDebugVideoStats = trackIdentifier ? consumerDebugVideoStats?.get(trackIdentifier) || null : null;
+      entry.localDebugVideoFreeze = trackIdentifier ? consumerVideoFreezeStats?.get(trackIdentifier) || null : null;
+    }
   }
 
   function startDebugStatsTimer() {
@@ -1725,6 +1943,9 @@
     state.debugStatsTimer = setInterval(async () => {
       try {
         await collectLocalDebugStats();
+        for (const entry of state.remoteVideoConsumers.values()) {
+          updateRemoteCardUI(entry);
+        }
         renderQosPanel();
       } catch {
         // Ignore debug polling errors.
