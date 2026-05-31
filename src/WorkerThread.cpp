@@ -447,6 +447,7 @@ void WorkerThread::onGcTimer()
 void WorkerThread::onWorkerDied(std::shared_ptr<Worker> worker)
 {
 	MS_ERROR(logger_, "WorkerThread {} worker died [pid:{}], attempting respawn", id_, worker->pid());
+	if (onWorkerDied_) onWorkerDied_();
 
 	uint16_t webRtcServerPort = 0;
 	auto portIt = workerWebRtcServerPorts_.find(worker.get());
@@ -499,14 +500,15 @@ void WorkerThread::onWorkerDied(std::shared_ptr<Worker> worker)
 			return;
 		}
 
-		workers_.push_back(newWorker);
-		fdToWorker_[fd] = newWorker;
-		workerWebRtcServerPorts_[newWorker.get()] = webRtcServerPort;
-		workerManager_->addExistingWorker(newWorker);
-		MS_WARN(logger_, "WorkerThread {} respawned worker [pid:{}]", id_, newWorker->pid());
-	} catch (const std::exception& e) {
-		MS_ERROR(logger_, "WorkerThread {} failed to respawn worker: {}", id_, e.what());
-	}
+			workers_.push_back(newWorker);
+			fdToWorker_[fd] = newWorker;
+			workerWebRtcServerPorts_[newWorker.get()] = webRtcServerPort;
+			workerManager_->addExistingWorker(newWorker);
+			MS_WARN(logger_, "WorkerThread {} respawned worker [pid:{}]", id_, newWorker->pid());
+			if (onWorkerRespawned_) onWorkerRespawned_();
+		} catch (const std::exception& e) {
+			MS_ERROR(logger_, "WorkerThread {} failed to respawn worker: {}", id_, e.what());
+		}
 
 	workerCount_.store(workers_.size(), std::memory_order_relaxed);
 }

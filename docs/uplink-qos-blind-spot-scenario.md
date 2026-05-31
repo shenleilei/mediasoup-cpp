@@ -316,8 +316,7 @@
 
 当前 targeted 结果见：
 
-- `docs/generated/uplink-qos-case-results.targeted.md`
-- `docs/generated/uplink-qos-matrix-report.targeted.json`
+- 当时生成的 targeted case report / matrix JSON（当前仓库已不再保留，需查看 git 历史）
 
 历史通过快照不再保留在当前文档树；当前状态以 `docs/generated/` 下的 targeted 报告为准。
 
@@ -392,14 +391,12 @@
 本轮重新执行 `T9` targeted 的命令是：
 
 ```bash
-node tests/qos_harness/run_matrix.mjs --cases=T9
-node tests/qos_harness/render_case_report.mjs --input=docs/generated/uplink-qos-matrix-report.json --output=docs/uplink-qos-case-results.md
+当时使用的是 `run_matrix.mjs` 和对应 report renderer；当前仓库已不再保留这条执行链。
 ```
 
 latest targeted artifact 为：
 
-- `docs/generated/uplink-qos-case-results.targeted.md`
-- `docs/generated/uplink-qos-matrix-report.targeted.json`
+- 当时生成的 targeted case report / matrix JSON（当前仓库已不再保留，需查看 git 历史）
 
 这次的关键结果变成：
 
@@ -439,8 +436,7 @@ latest targeted artifact 为：
 
 对应 artifact 为：
 
-- `docs/generated/uplink-qos-case-results.targeted.md`
-- `docs/generated/uplink-qos-matrix-report.targeted.json`
+- 当时生成的 targeted case report / matrix JSON（当前仓库已不再保留，需查看 git 历史）
 
 这轮的关键信息是：
 
@@ -484,8 +480,7 @@ blind-spot 三个 case 的恢复时间大致是：
 又单独执行了一轮 targeted rerun：
 
 ```bash
-node tests/qos_harness/run_matrix.mjs --cases=T10,T11,J3,J4,J5
-node tests/qos_harness/render_case_report.mjs --input=docs/generated/uplink-qos-matrix-report.json --output=docs/uplink-qos-case-results.md
+当时使用的是 `run_matrix.mjs` 和对应 report renderer；当前仓库已不再保留这条执行链。
 ```
 
 这轮 artifact 的 `generatedAt` 为：
@@ -535,8 +530,7 @@ node tests/qos_harness/render_case_report.mjs --input=docs/generated/uplink-qos-
 
 对应 artifact 为：
 
-- `docs/generated/uplink-qos-case-results.targeted.md`
-- `docs/generated/uplink-qos-matrix-report.targeted.json`
+- 当时生成的 targeted case report / matrix JSON（当前仓库已不再保留，需查看 git 历史）
 
 这轮的关键信息是：
 

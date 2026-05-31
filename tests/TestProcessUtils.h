@@ -78,6 +78,21 @@ inline bool isTcpPortBindable(int port) {
 	return bindable;
 }
 
+inline bool isUdpPortBindable(int port) {
+	int fd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (fd < 0) return false;
+
+	sockaddr_in addr{};
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(port);
+	addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	int opt = 1;
+	setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+	const bool bindable = (bind(fd, (sockaddr*)&addr, sizeof(addr)) == 0);
+	::close(fd);
+	return bindable;
+}
+
 inline bool waitForTcpPortFree(int port, int polls = 40, int sleepUs = 50000) {
 	for (int i = 0; i < polls; ++i) {
 		if (isTcpPortBindable(port)) return true;
@@ -117,8 +132,20 @@ inline int allocateUniqueTestPort(int base = 18000, int span = 2000) {
 	return -1;
 }
 
+inline int allocateUniqueUdpPort(int base = 50000, int span = 10000) {
+	static std::atomic<int> nextOffset{0};
+	for (int attempt = 0; attempt < span * 2; ++attempt) {
+		const int offset = nextOffset.fetch_add(1);
+		const int port = base + (offset % span);
+		if (isUdpPortBindable(port)) return port;
+	}
+	return -1;
+}
+
 inline int testWebRtcServerPortForSignalingPort(int signalingPort) {
-	return 30000 + (signalingPort % 2000) * 8;
+	(void)signalingPort;
+	const int port = allocateUniqueUdpPort();
+	return port > 0 ? port : 50000;
 }
 
 inline bool ensureTestSignalingTlsFiles() {
@@ -221,15 +248,17 @@ public:
 		stop();
 		port_ = port;
 		logPath_ = logPath;
+		webRtcServerPort_ = testWebRtcServerPortForSignalingPort(port_);
 
 		if (!waitForTcpPortFree(port_)) return false;
+		if (webRtcServerPort_ <= 0 || !isUdpPortBindable(webRtcServerPort_)) return false;
 		if (!ensureTestSignalingTlsFiles()) return false;
 
 		std::vector<std::string> args = {
 			testSfuBinaryPath(),
 			"--nodaemon",
 			"--port=" + std::to_string(port_),
-			"--webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(port_)),
+			"--webRtcServerPort=" + std::to_string(webRtcServerPort_),
 			"--workers=1",
 			"--workerBin=" + testWorkerBinaryPath(),
 		};
@@ -276,26 +305,32 @@ public:
 	}
 
 	bool stop(int portReleasePolls = 40, int sleepUs = 50000) {
-		if (pid_ <= 0 && port_ <= 0) return true;
+		if (pid_ <= 0 && port_ <= 0 && webRtcServerPort_ <= 0) return true;
 
 		const pid_t pid = pid_;
 		const int port = port_;
+		const int webRtcServerPort = webRtcServerPort_;
 		pid_ = -1;
 		port_ = -1;
+		webRtcServerPort_ = -1;
 
 		if (pid > 0) terminateSfuProcess(pid, 40, sleepUs);
-		return port > 0 ? waitForTcpPortFree(port, portReleasePolls, sleepUs) : true;
+		const bool tcpFree = port > 0 ? waitForTcpPortFree(port, portReleasePolls, sleepUs) : true;
+		const bool udpFree = webRtcServerPort > 0 ? isUdpPortBindable(webRtcServerPort) : true;
+		return tcpFree && udpFree;
 	}
 
 	~TestSfuProcess() { stop(); }
 
 	pid_t pid() const { return pid_; }
 	int port() const { return port_; }
+	int webRtcServerPort() const { return webRtcServerPort_; }
 	const std::string& logPath() const { return logPath_; }
 
 private:
 	pid_t pid_ = -1;
 	int port_ = -1;
+	int webRtcServerPort_ = -1;
 	std::string logPath_;
 };
 

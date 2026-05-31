@@ -91,6 +91,10 @@ public:
 	void setDownlinkSnapshotApplied(RoomService::DownlinkSnapshotAppliedFn fn) {
 		downlinkSnapshotAppliedFn_ = std::move(fn);
 	}
+	void setWorkerEventHooks(std::function<void()> onWorkerDied, std::function<void()> onWorkerRespawned) {
+		onWorkerDied_ = std::move(onWorkerDied);
+		onWorkerRespawned_ = std::move(onWorkerRespawned);
+	}
 
 	void updateRoomCount();
 
@@ -163,6 +167,8 @@ private:
 	RoomService::RegistryTaskFn registryTaskFn_;
 	RoomService::TaskPosterFn taskPosterFn_;
 	RoomService::DownlinkSnapshotAppliedFn downlinkSnapshotAppliedFn_;
+	std::function<void()> onWorkerDied_;
+	std::function<void()> onWorkerRespawned_;
 
 	std::shared_ptr<spdlog::logger> logger_;
 };

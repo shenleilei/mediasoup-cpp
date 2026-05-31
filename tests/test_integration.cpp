@@ -12,7 +12,7 @@ static const std::string HOST = "127.0.0.1";
 
 class IntegrationTest : public ::testing::Test {
 protected:
-	pid_t sfuPid_ = -1;
+	TestSfuProcess sfu_;
 	std::string testRoom_; // unique room per test to avoid Redis conflicts
 
 	json defaultRtpCapabilities() const {
@@ -35,57 +35,13 @@ protected:
 		testRoom_ = "room_" + std::to_string(getpid()) + "_" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 
-		// Start SFU as a detached background process (avoids fork fd inheritance issues)
-		ASSERT_TRUE(ensureTestSignalingTlsFiles());
-		std::string cmd = "./build/mediasoup-sfu --nodaemon"
-			" --port=" + std::to_string(SFU_PORT) +
-			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(SFU_PORT)) +
-			" --workers=1"
-			" --workerBin=./mediasoup-worker"
-			" > /dev/null 2>&1 & echo $!";
-		FILE* fp = popen(cmd.c_str(), "r");
-		ASSERT_NE(fp, nullptr);
-		char buf[64]{};
-		fgets(buf, sizeof(buf), fp);
-		pclose(fp);
-		sfuPid_ = atoi(buf);
-		ASSERT_GT(sfuPid_, 0) << "Failed to start SFU";
-
-		// Wait for SFU to accept WebSocket connections
-		for (int i = 0; i < 50; ++i) {
-			usleep(100000); // 100ms
-			int fd = socket(AF_INET, SOCK_STREAM, 0);
-			sockaddr_in addr{};
-			addr.sin_family = AF_INET;
-			addr.sin_port = htons(SFU_PORT);
-			inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
-			if (::connect(fd, (sockaddr*)&addr, sizeof(addr)) == 0) {
-				::close(fd);
-				usleep(200000); // 200ms extra for uWS event loop to fully start
-				return;
-			}
-			::close(fd);
-		}
-		FAIL() << "SFU did not start within 5 seconds";
+		ASSERT_TRUE(sfu_.start(SFU_PORT, {}, makeTestSfuLogPath("sfu_integration", SFU_PORT)))
+			<< "failed to start integration SFU on port " << SFU_PORT
+			<< ", log: " << sfu_.logPath();
 	}
 
 	void TearDown() override {
-		if (sfuPid_ > 0) {
-			terminateSfuProcess(sfuPid_);
-			for (int i = 0; i < 20; ++i) {
-				usleep(50000); // 50ms
-				int fd = socket(AF_INET, SOCK_STREAM, 0);
-				sockaddr_in addr{};
-				addr.sin_family = AF_INET;
-				addr.sin_port = htons(SFU_PORT);
-				addr.sin_addr.s_addr = htonl(INADDR_ANY);
-				int opt = 1;
-				setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-				bool free = (bind(fd, (sockaddr*)&addr, sizeof(addr)) == 0);
-				::close(fd);
-				if (free) return;
-			}
-		}
+		(void)sfu_.stop();
 	}
 
 	// Helper: connect a client and join a room
@@ -101,7 +57,7 @@ protected:
 		c.roomId = roomId;
 		c.peerId = peerId;
 		c.ws = std::make_unique<TestWsClient>();
-		EXPECT_TRUE(c.ws->connect(HOST, SFU_PORT));
+		EXPECT_TRUE(c.ws->connect(HOST, sfu_.port()));
 
 		json rtpCaps = defaultRtpCapabilities();
 
@@ -120,7 +76,7 @@ protected:
 		c.roomId = roomId;
 		c.peerId = peerId;
 		c.ws = std::make_unique<TestWsClient>();
-		EXPECT_TRUE(c.ws->connect(HOST, SFU_PORT));
+		EXPECT_TRUE(c.ws->connect(HOST, sfu_.port()));
 
 		auto resp = c.ws->request("join", {
 			{"roomId", roomId}, {"peerId", peerId},
@@ -137,7 +93,7 @@ protected:
 		int attempt = 0;
 		while (std::chrono::steady_clock::now() < deadline) {
 			TestWsClient ws;
-			if (!ws.connect(HOST, SFU_PORT)) {
+			if (!ws.connect(HOST, sfu_.port())) {
 				usleep(100000);
 				continue;
 			}
@@ -225,12 +181,12 @@ TEST_F(IntegrationTest, CreateTransportRejectsAmbiguousDirection) {
 
 TEST_F(IntegrationTest, MalformedWebSocketRequestDoesNotCrashServer) {
 	TestWsClient ws;
-	ASSERT_TRUE(ws.connect(HOST, SFU_PORT));
+	ASSERT_TRUE(ws.connect(HOST, sfu_.port()));
 
 	ws.sendRawText(R"({"request":1,"id":7,"method":"join","data":{}})");
 	usleep(200000);
 
-	EXPECT_TRUE(isSfuProcessAlive(sfuPid_)) << "SFU crashed after malformed request";
+	EXPECT_TRUE(isSfuProcessAlive(sfu_.pid())) << "SFU crashed after malformed request";
 
 	auto joinResp = ws.request("join", {
 		{"roomId", testRoom_},
@@ -468,10 +424,10 @@ TEST_F(IntegrationTest, PauseResumeMissingProducerFailsExplicitly) {
 TEST_F(IntegrationTest, ParticipantsList) {
 	// Join 4 peers sequentially, each should see all previous peers
 	TestWsClient ws1, ws2, ws3, ws4;
-	ASSERT_TRUE(ws1.connect(HOST, SFU_PORT));
-	ASSERT_TRUE(ws2.connect(HOST, SFU_PORT));
-	ASSERT_TRUE(ws3.connect(HOST, SFU_PORT));
-	ASSERT_TRUE(ws4.connect(HOST, SFU_PORT));
+	ASSERT_TRUE(ws1.connect(HOST, sfu_.port()));
+	ASSERT_TRUE(ws2.connect(HOST, sfu_.port()));
+	ASSERT_TRUE(ws3.connect(HOST, sfu_.port()));
+	ASSERT_TRUE(ws4.connect(HOST, sfu_.port()));
 
 	auto r1 = ws1.request("join", {{"roomId", testRoom_}, {"peerId", "p1"}, {"displayName", "p1"}});
 	ASSERT_TRUE(r1.value("ok", false)) << r1.dump();
@@ -597,7 +553,7 @@ TEST_F(IntegrationTest, WorkerCrashSendsServerRestart) {
 
 	// Kill only mediasoup-worker children of our test SFU (avoid killing production workers)
 	{
-		std::string cmd = "pgrep -P " + std::to_string(sfuPid_) + " 2>/dev/null";
+		std::string cmd = "pgrep -P " + std::to_string(sfu_.pid()) + " 2>/dev/null";
 		FILE* fp = popen(cmd.c_str(), "r");
 		char buf[64]{};
 		while (fgets(buf, sizeof(buf), fp)) {
@@ -625,7 +581,7 @@ TEST_F(IntegrationTest, WorkerRespawnAllowsNewRooms) {
 
 	// Kill only mediasoup-worker children of our test SFU
 	{
-		std::string cmd = "pgrep -P " + std::to_string(sfuPid_) + " 2>/dev/null";
+		std::string cmd = "pgrep -P " + std::to_string(sfu_.pid()) + " 2>/dev/null";
 		FILE* fp = popen(cmd.c_str(), "r");
 		char buf[64]{};
 		while (fgets(buf, sizeof(buf), fp)) {

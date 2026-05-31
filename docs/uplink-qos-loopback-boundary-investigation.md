@@ -136,7 +136,7 @@ loopback source 的真实发送目标大约在 `0.8 ~ 0.9Mbps`。
 
 已落地：
 
-- `loopback_runner.mjs` 中 `netem` 改为一次性下发完整 `qdisc replace`
+- 当时的 `loopback_runner.mjs` 中，`netem` 改为一次性下发完整 `qdisc replace`
 - 不再先下发 delay/loss 再二次 replace 带 rate，减少 phase 切换时的附加尖峰
 
 ### 4.3 文档层修正

@@ -4,9 +4,10 @@
 
 > **文档性质**
 >
-> 这是对外/对上汇报的一页摘要版，不包含完整证据链。
-> 需要完整测试范围、结果和边界时，请看 [uplink-qos-final-report.md](./uplink-qos-final-report.md)；
-> 需要内部技术边界说明时，请看 [uplink-qos-boundaries.md](./uplink-qos-boundaries.md)。
+> 这是历史对外/对上汇报摘要，保留 `2026-04-13` 当时的 uplink 签收口径。
+> 当前仓库已不再保留 browser uplink loopback matrix 的执行入口和产物；
+> 如需当前仍有效的回归入口，请看 [qos-status.md](./qos-status.md)
+> 和 [qos-test-coverage_cn.md](./qos-test-coverage_cn.md)。
 
 ## 一句话结论
 

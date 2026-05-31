@@ -82,6 +82,9 @@ void SignalingServerWs::ConfigureWorkerCallbacks(
 		wt->setTaskPoster([wtRaw](std::function<void()> task) {
 			wtRaw->post(std::move(task));
 		});
+		wt->setWorkerEventHooks(
+			[&server]() { server.onWorkerDiedEvent(); },
+			[&server]() { server.onWorkerRespawnedEvent(); });
 		wt->setDownlinkSnapshotApplied([loop, downlinkStatsRateLimit](
 			const std::string& roomId, const std::string& peerId, uint64_t seq) {
 			const auto mapKey = WsMap::key(roomId, peerId);
@@ -147,15 +150,15 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 				auto requestIt = req.find("request");
 				if (requestIt == req.end() || !requestIt->is_boolean() || !requestIt->get<bool>()) return;
 
-			auto* sd = ws->getUserData();
-			if (!sd->alive->load()) return;
+				auto* sd = ws->getUserData();
+				if (!sd->alive->load()) return;
 
-			std::string method = req.value("method", "");
-			uint64_t id = req.value("id", 0);
-			json data = req.value("data", json::object());
-			std::string roomId = sd->roomId;
-			std::string peerId = sd->peerId;
-			uint64_t sessionId = sd->sessionId;
+				std::string method = req.value("method", "");
+				uint64_t id = req.value("id", 0);
+				json data = req.value("data", json::object());
+				std::string roomId = sd->roomId;
+				std::string peerId = sd->peerId;
+				uint64_t sessionId = sd->sessionId;
 
 				if (method != "clientStats") {
 					spdlog::debug("[{} {}] {} id={}", roomId, peerId, method, id);
@@ -179,8 +182,13 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 							sd->pendingSessionId,
 							hasMappedSession ? "true" : "false",
 							std::string(ws->getRemoteAddressAsText()));
-						json resp = {{"response", true}, {"id", id}, {"ok", false},
-							{"error", "already joined on this connection"}};
+						server.joinFailures_.fetch_add(1, std::memory_order_relaxed);
+						json resp = {
+							{"response", true},
+							{"id", id},
+							{"ok", false},
+							{"error", "already joined on this connection"}
+						};
 						ws->send(resp.dump(), uWS::OpCode::TEXT);
 						return;
 					}
@@ -189,99 +197,135 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 				if (method == "clientStats") {
 					if (roomId.empty() || peerId.empty() || sessionId == kInvalidSessionId) {
 						server.rejectedClientStats_.fetch_add(1, std::memory_order_relaxed);
-					json resp = {{"response", true}, {"id", id}, {"ok", false},
-						{"error", "clientStats requires joined session"}};
-					ws->send(resp.dump(), uWS::OpCode::TEXT);
-					return;
-				}
-				bool validSession = HasMappedSession(wsMap, ws, roomId, peerId, sessionId);
-				if (!validSession) {
-					server.staleRequestDrops_.fetch_add(1, std::memory_order_relaxed);
-					json resp = {{"response", true}, {"id", id}, {"ok", false},
-						{"error", "stale session"}};
-					ws->send(resp.dump(), uWS::OpCode::TEXT);
-					return;
-				}
-				auto* wt = server.getWorkerThread(roomId, false);
-				if (!wt || !wt->roomService()) {
-					server.rejectedClientStats_.fetch_add(1, std::memory_order_relaxed);
-					json resp = {{"response", true}, {"id", id}, {"ok", false},
-						{"error", "room not assigned"}};
-					ws->send(resp.dump(), uWS::OpCode::TEXT);
-					return;
-				}
-				auto qosParse = qos::QosValidator::ParseClientSnapshot(data);
-				if (!qosParse.ok) {
-					server.rejectedClientStats_.fetch_add(1, std::memory_order_relaxed);
-					json resp = {{"response", true}, {"id", id}, {"ok", false},
-						{"error", "invalid clientStats: " + qosParse.error}};
-					ws->send(resp.dump(), uWS::OpCode::TEXT);
-					return;
-				}
-				auto alive = sd->alive;
-				wt->post([wt, ws, alive, loop, id, roomId, peerId,
-					snapshot = std::move(qosParse.value)]() mutable {
-					RoomService::Result result;
-					try {
-						auto* rs = wt->roomService();
-						if (!rs) {
-							result = {false, json::object(), "", "worker not ready"};
-						} else {
-							result = rs->setClientStats(roomId, peerId, std::move(snapshot));
-						}
-					} catch (const std::exception& e) {
-						spdlog::error("[{} {}] clientStats error: {}", roomId, peerId, e.what());
-						result = {false, json::object(), "", e.what()};
-					} catch (...) {
-						spdlog::error("[{} {}] clientStats error: unknown error", roomId, peerId);
-						result = {false, json::object(), "", "unknown clientStats error"};
-					}
-
-					std::string respStr = BuildWorkerCompletedResponse(id, result).dump();
-					loop->defer([ws, alive, respStr = std::move(respStr)] {
-						if (!alive->load(std::memory_order_relaxed)) return;
-						ws->send(respStr, uWS::OpCode::TEXT);
-					});
-				});
-				return;
-			}
-
-			if (method == "downlinkClientStats") {
-				static constexpr int64_t kMinDownlinkStatsIntervalMs = 100;
-				if (roomId.empty() || peerId.empty() || sessionId == kInvalidSessionId) {
-					json resp = {{"response", true}, {"id", id}, {"ok", false},
-						{"error", "downlinkClientStats requires joined session"}};
-					ws->send(resp.dump(), uWS::OpCode::TEXT);
-					return;
-				}
-				{
-					bool validSession = HasMappedSession(wsMap, ws, roomId, peerId, sessionId);
-					if (!validSession) {
-						server.staleRequestDrops_.fetch_add(1, std::memory_order_relaxed);
-						json resp = {{"response", true}, {"id", id}, {"ok", false},
-							{"error", "stale session"}};
+						json resp = {
+							{"response", true},
+							{"id", id},
+							{"ok", false},
+							{"error", "clientStats requires joined session"}
+						};
 						ws->send(resp.dump(), uWS::OpCode::TEXT);
 						return;
 					}
-				}
-				auto dlParse = qos::QosValidator::ParseDownlinkSnapshot(data);
-				if (!dlParse.ok) {
-					json resp = {{"response", true}, {"id", id}, {"ok", false},
-						{"error", "invalid downlinkClientStats: " + dlParse.error}};
-					ws->send(resp.dump(), uWS::OpCode::TEXT);
-					return;
-				}
-				auto* wt = server.getWorkerThread(roomId, false);
-				if (!wt || !wt->roomService()) {
-					json resp = {{"response", true}, {"id", id}, {"ok", false},
-						{"error", "room not assigned"}};
-					ws->send(resp.dump(), uWS::OpCode::TEXT);
+
+					bool validSession = HasMappedSession(wsMap, ws, roomId, peerId, sessionId);
+					if (!validSession) {
+						server.staleRequestDrops_.fetch_add(1, std::memory_order_relaxed);
+						json resp = {
+							{"response", true},
+							{"id", id},
+							{"ok", false},
+							{"error", "stale session"}
+						};
+						ws->send(resp.dump(), uWS::OpCode::TEXT);
+						return;
+					}
+
+					auto* wt = server.getWorkerThread(roomId, false);
+					if (!wt || !wt->roomService()) {
+						server.rejectedClientStats_.fetch_add(1, std::memory_order_relaxed);
+						json resp = {
+							{"response", true},
+							{"id", id},
+							{"ok", false},
+							{"error", "room not assigned"}
+						};
+						ws->send(resp.dump(), uWS::OpCode::TEXT);
+						return;
+					}
+
+					auto qosParse = qos::QosValidator::ParseClientSnapshot(data);
+					if (!qosParse.ok) {
+						server.rejectedClientStats_.fetch_add(1, std::memory_order_relaxed);
+						json resp = {
+							{"response", true},
+							{"id", id},
+							{"ok", false},
+							{"error", "invalid clientStats: " + qosParse.error}
+						};
+						ws->send(resp.dump(), uWS::OpCode::TEXT);
+						return;
+					}
+
+					auto alive = sd->alive;
+					wt->post([wt, ws, alive, loop, id, roomId, peerId,
+						snapshot = std::move(qosParse.value)]() mutable {
+						RoomService::Result result;
+						try {
+							auto* rs = wt->roomService();
+							if (!rs) {
+								result = {false, json::object(), "", "worker not ready"};
+							} else {
+								result = rs->setClientStats(roomId, peerId, std::move(snapshot));
+							}
+						} catch (const std::exception& e) {
+							spdlog::error("[{} {}] clientStats error: {}", roomId, peerId, e.what());
+							result = {false, json::object(), "", e.what()};
+						} catch (...) {
+							spdlog::error("[{} {}] clientStats error: unknown error", roomId, peerId);
+							result = {false, json::object(), "", "unknown clientStats error"};
+						}
+
+						std::string respStr = BuildWorkerCompletedResponse(id, result).dump();
+						loop->defer([ws, alive, respStr = std::move(respStr)] {
+							if (!alive->load(std::memory_order_relaxed)) return;
+							ws->send(respStr, uWS::OpCode::TEXT);
+						});
+					});
 					return;
 				}
 
-				const auto seq = dlParse.value.seq;
-				const auto mapKey = WsMap::key(roomId, peerId);
-				{
+				if (method == "downlinkClientStats") {
+					static constexpr int64_t kMinDownlinkStatsIntervalMs = 100;
+					if (roomId.empty() || peerId.empty() || sessionId == kInvalidSessionId) {
+						json resp = {
+							{"response", true},
+							{"id", id},
+							{"ok", false},
+							{"error", "downlinkClientStats requires joined session"}
+						};
+						ws->send(resp.dump(), uWS::OpCode::TEXT);
+						return;
+					}
+
+					bool validSession = HasMappedSession(wsMap, ws, roomId, peerId, sessionId);
+					if (!validSession) {
+						server.staleRequestDrops_.fetch_add(1, std::memory_order_relaxed);
+						json resp = {
+							{"response", true},
+							{"id", id},
+							{"ok", false},
+							{"error", "stale session"}
+						};
+						ws->send(resp.dump(), uWS::OpCode::TEXT);
+						return;
+					}
+
+					auto dlParse = qos::QosValidator::ParseDownlinkSnapshot(data);
+					if (!dlParse.ok) {
+						json resp = {
+							{"response", true},
+							{"id", id},
+							{"ok", false},
+							{"error", "invalid downlinkClientStats: " + dlParse.error}
+						};
+						ws->send(resp.dump(), uWS::OpCode::TEXT);
+						return;
+					}
+
+					auto* wt = server.getWorkerThread(roomId, false);
+					if (!wt || !wt->roomService()) {
+						json resp = {
+							{"response", true},
+							{"id", id},
+							{"ok", false},
+							{"error", "room not assigned"}
+						};
+						ws->send(resp.dump(), uWS::OpCode::TEXT);
+						return;
+					}
+
+					const auto seq = dlParse.value.seq;
+					const auto mapKey = WsMap::key(roomId, peerId);
 					const auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
 						std::chrono::steady_clock::now().time_since_epoch()).count();
 					auto& state = (*downlinkStatsRateLimit)[mapKey];
@@ -290,8 +334,12 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 						state.pending &&
 						nowMs - state.pendingSinceMs <= kMinDownlinkStatsIntervalMs) {
 						server.rejectedClientStats_.fetch_add(1, std::memory_order_relaxed);
-						json resp = {{"response", true}, {"id", id}, {"ok", false},
-							{"error", "downlinkClientStats rate limited"}};
+						json resp = {
+							{"response", true},
+							{"id", id},
+							{"ok", false},
+							{"error", "downlinkClientStats rate limited"}
+						};
 						ws->send(resp.dump(), uWS::OpCode::TEXT);
 						return;
 					}
@@ -300,79 +348,91 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 						state.pendingSinceMs = nowMs;
 						state.pendingSeq = seq;
 					}
-				}
-				auto alive = sd->alive;
-				wt->post([wt, ws, alive, loop, downlinkStatsRateLimit, id, roomId, peerId, mapKey, seq,
-					snapshot = std::move(dlParse.value)]() mutable {
-					RoomService::Result result;
-					try {
-						auto* rs = wt->roomService();
-						if (!rs) {
-							result = {false, json::object(), "", "worker not ready"};
-						} else {
-							result = rs->setDownlinkClientStats(roomId, peerId, std::move(snapshot));
-						}
-					} catch (const std::exception& e) {
-						spdlog::error("[{} {}] downlinkClientStats error: {}", roomId, peerId, e.what());
-						result = {false, json::object(), "", e.what()};
-					} catch (...) {
-						spdlog::error("[{} {}] downlinkClientStats error: unknown error", roomId, peerId);
-						result = {false, json::object(), "", "unknown downlinkClientStats error"};
-					}
 
-					const bool stored = result.ok && result.data.value("stored", false);
-					std::string respStr = BuildWorkerCompletedResponse(id, result).dump();
-					loop->defer([ws, alive, downlinkStatsRateLimit, mapKey, seq, stored,
-						respStr = std::move(respStr)] {
-						auto it = downlinkStatsRateLimit->find(mapKey);
-						if (it != downlinkStatsRateLimit->end()) {
-							if (stored) {
-								MarkAcceptedDownlinkSeq(it->second, seq);
+					auto alive = sd->alive;
+					wt->post([wt, ws, alive, loop, downlinkStatsRateLimit, id, roomId, peerId, mapKey, seq,
+						snapshot = std::move(dlParse.value)]() mutable {
+						RoomService::Result result;
+						try {
+							auto* rs = wt->roomService();
+							if (!rs) {
+								result = {false, json::object(), "", "worker not ready"};
 							} else {
-								ClearPendingDownlinkSeqIfMatches(it->second, seq);
+								result = rs->setDownlinkClientStats(roomId, peerId, std::move(snapshot));
 							}
+						} catch (const std::exception& e) {
+							spdlog::error("[{} {}] downlinkClientStats error: {}", roomId, peerId, e.what());
+							result = {false, json::object(), "", e.what()};
+						} catch (...) {
+							spdlog::error("[{} {}] downlinkClientStats error: unknown error", roomId, peerId);
+							result = {false, json::object(), "", "unknown downlinkClientStats error"};
 						}
-						if (!alive->load(std::memory_order_relaxed)) return;
-						ws->send(respStr, uWS::OpCode::TEXT);
-					});
-				});
-				return;
-			}
 
-			signaldispatch::JoinRequestContext joinRequest;
-			if (method == "join") {
-				std::string joinError;
-				if (!signaldispatch::BuildJoinRequestContext(
-					data,
-					std::string(ws->getRemoteAddressAsText()),
-					joinRequest,
-					joinError)) {
-					json resp = {{"response", true}, {"id", id}, {"ok", false},
-						{"error", joinError}};
-					ws->send(resp.dump(), uWS::OpCode::TEXT);
+						const bool stored = result.ok && result.data.value("stored", false);
+						std::string respStr = BuildWorkerCompletedResponse(id, result).dump();
+						loop->defer([ws, alive, downlinkStatsRateLimit, mapKey, seq, stored,
+							respStr = std::move(respStr)] {
+							auto it = downlinkStatsRateLimit->find(mapKey);
+							if (it != downlinkStatsRateLimit->end()) {
+								if (stored) {
+									MarkAcceptedDownlinkSeq(it->second, seq);
+								} else {
+									ClearPendingDownlinkSeqIfMatches(it->second, seq);
+								}
+							}
+							if (!alive->load(std::memory_order_relaxed)) return;
+							ws->send(respStr, uWS::OpCode::TEXT);
+						});
+					});
 					return;
 				}
-			}
 
-			auto alive = sd->alive;
-			uint64_t newSessionId = kInvalidSessionId;
-			if (method == "join") newSessionId = g_nextSessionId++;
-
-			std::string targetRoomId = (method == "join") ? joinRequest.roomId : roomId;
-			WorkerThread* wt = nullptr;
-			if (method == "join") {
-				bool destroyed = (server.destroyedRooms_.find(targetRoomId) != server.destroyedRooms_.end());
-				wt = destroyed ? nullptr : server.getWorkerThread(targetRoomId, false);
-				if (!wt) {
-					wt = server.pickLeastLoadedWorkerThread();
-					if (wt) server.assignRoom(targetRoomId, wt);
+				signaldispatch::JoinRequestContext joinRequest;
+				if (method == "join") {
+					std::string joinError;
+					if (!signaldispatch::BuildJoinRequestContext(
+						data,
+						std::string(ws->getRemoteAddressAsText()),
+						joinRequest,
+						joinError)) {
+						server.joinFailures_.fetch_add(1, std::memory_order_relaxed);
+						json resp = {
+							{"response", true},
+							{"id", id},
+							{"ok", false},
+							{"error", joinError}
+						};
+						ws->send(resp.dump(), uWS::OpCode::TEXT);
+						return;
+					}
 				}
-			} else {
-				wt = server.getWorkerThread(targetRoomId, false);
-			}
+
+				auto alive = sd->alive;
+				uint64_t newSessionId = kInvalidSessionId;
+				if (method == "join") newSessionId = g_nextSessionId++;
+
+				std::string targetRoomId = (method == "join") ? joinRequest.roomId : roomId;
+				WorkerThread* wt = nullptr;
+				if (method == "join") {
+					bool destroyed = (server.destroyedRooms_.find(targetRoomId) != server.destroyedRooms_.end());
+					wt = destroyed ? nullptr : server.getWorkerThread(targetRoomId, false);
+					if (!wt) {
+						wt = server.pickLeastLoadedWorkerThread();
+						if (wt) server.assignRoom(targetRoomId, wt);
+					}
+				} else {
+					wt = server.getWorkerThread(targetRoomId, false);
+				}
 				if (!wt) {
-					json resp = {{"response", true}, {"id", id}, {"ok", false},
-						{"error", method == "join" ? "no available worker thread" : "room not assigned"}};
+					if (method == "join") {
+						server.joinFailures_.fetch_add(1, std::memory_order_relaxed);
+					}
+					json resp = {
+						{"response", true},
+						{"id", id},
+						{"ok", false},
+						{"error", method == "join" ? "no available worker thread" : "room not assigned"}
+					};
 					ws->send(resp.dump(), uWS::OpCode::TEXT);
 					return;
 				}
@@ -387,72 +447,106 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 					if (!rs) {
 						loop->defer([&server, ws, alive, id, method, newSessionId, targetRoomId] {
 							if (method == "join") {
+								server.joinFailures_.fetch_add(1, std::memory_order_relaxed);
 								server.unassignRoom(targetRoomId);
 							}
 							if (!alive->load(std::memory_order_relaxed)) return;
 							if (method == "join") {
 								ClearPendingSocketJoinIfMatches(ws->getUserData(), newSessionId);
 							}
-							json resp = {{"response", true}, {"id", id}, {"ok", false},
-								{"error", "worker not ready"}};
+							json resp = {
+								{"response", true},
+								{"id", id},
+								{"ok", false},
+								{"error", "worker not ready"}
+							};
 							ws->send(resp.dump(), uWS::OpCode::TEXT);
+							return;
 						});
 						return;
 					}
 
-				if (method != "join" && sessionId != kInvalidSessionId) {
-					auto room = rs->getRoom(roomId);
-					if (room) {
-						auto peer = room->getPeer(peerId);
-						if (peer && peer->sessionId != 0 && peer->sessionId != sessionId) {
-							spdlog::warn("[{} {}] dropping stale {} (session:{} current:{})",
-								roomId, peerId, method, sessionId, peer->sessionId);
-							loop->defer([ws, alive, id] {
-								if (!alive->load()) return;
-								json resp = {{"response", true}, {"id", id}, {"ok", false},
-									{"error", "remote login"}};
-								ws->send(resp.dump(), uWS::OpCode::TEXT);
-							});
-							return;
+					if (method != "join" && sessionId != kInvalidSessionId) {
+						auto room = rs->getRoom(roomId);
+						if (room) {
+							auto peer = room->getPeer(peerId);
+							if (peer && peer->sessionId != 0 && peer->sessionId != sessionId) {
+								spdlog::warn("[{} {}] dropping stale {} (session:{} current:{})",
+									roomId, peerId, method, sessionId, peer->sessionId);
+								loop->defer([ws, alive, id] {
+									if (!alive->load()) return;
+									json resp = {
+										{"response", true},
+										{"id", id},
+										{"ok", false},
+										{"error", "remote login"}
+									};
+									ws->send(resp.dump(), uWS::OpCode::TEXT);
+								});
+								return;
+							}
 						}
 					}
-				}
 
-				RoomService::Result result;
-				try {
-					result = signaldispatch::DispatchRoomServiceRequest(
-						*rs,
-						method,
-						roomId,
-						peerId,
-						data,
-						method == "join" ? &joinRequest : nullptr,
-						newSessionId);
-				} catch (const std::exception& e) {
-					spdlog::error("[{} {}] {} error: {}", targetRoomId, peerId, method, e.what());
-					result = {false, {}, "", e.what()};
-				}
+					RoomService::Result result;
+					try {
+						result = signaldispatch::DispatchRoomServiceRequest(
+							*rs,
+							method,
+							roomId,
+							peerId,
+							data,
+							method == "join" ? &joinRequest : nullptr,
+							newSessionId);
+					} catch (const std::exception& e) {
+						spdlog::error("[{} {}] {} error: {}", targetRoomId, peerId, method, e.what());
+						result = {false, {}, "", e.what()};
+					}
 
-				wt->updateRoomCount();
+					wt->updateRoomCount();
 
-				json resp;
-				if (!result.redirect.empty()) {
-					resp = {{"response", true}, {"id", id}, {"ok", false},
-						{"redirect", result.redirect}};
-				} else if (result.ok) {
-					resp = {{"response", true}, {"id", id}, {"ok", true}, {"data", result.data}};
-				} else {
-					resp = {{"response", true}, {"id", id}, {"ok", false}, {"error", result.error}};
-				}
-				std::string respStr = resp.dump();
+					json resp;
+					if (!result.redirect.empty()) {
+						resp = {
+							{"response", true},
+							{"id", id},
+							{"ok", false},
+							{"redirect", result.redirect}
+						};
+					} else if (result.ok) {
+						resp = {
+							{"response", true},
+							{"id", id},
+							{"ok", true},
+							{"data", result.data}
+						};
+					} else {
+						resp = {
+							{"response", true},
+							{"id", id},
+							{"ok", false},
+							{"error", result.error}
+						};
+					}
+					if (!result.ok) {
+						if (method == "join") {
+							server.joinFailures_.fetch_add(1, std::memory_order_relaxed);
+						} else if (method == "plainPublish") {
+							server.plainPublishFailures_.fetch_add(1, std::memory_order_relaxed);
+						} else if (method == "plainSubscribe") {
+							server.plainSubscribeFailures_.fetch_add(1, std::memory_order_relaxed);
+						}
+					}
+					std::string respStr = resp.dump();
 
-				bool joinOk = (method == "join" && result.ok && result.redirect.empty());
-				bool joinFailed = (method == "join" && !joinOk);
-				std::string jRoomId = joinRequest.roomId, jPeerId = joinRequest.peerId;
-				json joinQosPolicy = json::object();
-				if (joinOk && wt->roomService()) {
-					joinQosPolicy = wt->roomService()->getDefaultQosPolicy();
-				}
+					bool joinOk = (method == "join" && result.ok && result.redirect.empty());
+					bool joinFailed = (method == "join" && !joinOk);
+					std::string jRoomId = joinRequest.roomId;
+					std::string jPeerId = joinRequest.peerId;
+					json joinQosPolicy = json::object();
+					if (joinOk && wt->roomService()) {
+						joinQosPolicy = wt->roomService()->getDefaultQosPolicy();
+					}
 
 					const int workerThreadId = wt ? wt->id() : -1;
 					loop->defer([&server, id, workerThreadId, wsMap, ws, alive, respStr = std::move(respStr),
@@ -474,20 +568,20 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 							if (!deferredWt) {
 								return;
 							}
-								deferredWt->post([deferredWt, jRoomId, jPeerId, newSessionId] {
-									try {
-										auto* rs = deferredWt->roomService();
-										if (!rs) return;
-										rs->leaveIfSessionMatches(jRoomId, jPeerId, newSessionId);
-									} catch (const std::exception& e) {
-										spdlog::error("[{} {}] rollback leave failed: {}", jRoomId, jPeerId, e.what());
-									} catch (...) {
-										spdlog::error("[{} {}] rollback leave failed: unknown error", jRoomId, jPeerId);
-									}
-									deferredWt->updateRoomCount();
-								});
-								return;
-							}
+							deferredWt->post([deferredWt, jRoomId, jPeerId, newSessionId] {
+								try {
+									auto* rs = deferredWt->roomService();
+									if (!rs) return;
+									rs->leaveIfSessionMatches(jRoomId, jPeerId, newSessionId);
+								} catch (const std::exception& e) {
+									spdlog::error("[{} {}] rollback leave failed: {}", jRoomId, jPeerId, e.what());
+								} catch (...) {
+									spdlog::error("[{} {}] rollback leave failed: unknown error", jRoomId, jPeerId);
+								}
+								deferredWt->updateRoomCount();
+							});
+							return;
+						}
 
 						if (!socketAlive) {
 							return;
@@ -502,6 +596,7 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 								socketData,
 								newSessionId,
 								deferredWt != nullptr && deferredWt->roomService() != nullptr)) {
+								server.joinFailures_.fetch_add(1, std::memory_order_relaxed);
 								server.unassignRoom(jRoomId);
 								json joinResp = {
 									{"response", true},
@@ -535,8 +630,9 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 							ws->send(msg.dump(), uWS::OpCode::TEXT);
 						}
 					});
-			});
+				});
 			} catch (const json::exception& e) {
+				server.malformedWsMessages_.fetch_add(1, std::memory_order_relaxed);
 				spdlog::warn("dropping malformed websocket message: {}", e.what());
 			} catch (const std::exception& e) {
 				spdlog::error("websocket message handler failed: {}", e.what());
@@ -545,65 +641,66 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 			}
 		},
 
-			.close = [&server, wsMap, downlinkStatsRateLimit](auto* ws, int, std::string_view) {
-				auto* sd = ws->getUserData();
-				sd->alive->store(false);
+		.close = [&server, wsMap, downlinkStatsRateLimit](auto* ws, int, std::string_view) {
+			auto* sd = ws->getUserData();
+			sd->alive->store(false);
 
-				std::string roomId = sd->roomId;
-				std::string peerId = sd->peerId;
-				uint64_t sessionId = sd->sessionId;
-				uint64_t pendingSessionId = sd->pendingSessionId;
-				if (sessionId == kInvalidSessionId && sd->pendingSessionId != kInvalidSessionId) {
-					roomId = sd->pendingRoomId;
-					peerId = sd->pendingPeerId;
-					sessionId = pendingSessionId;
-				}
+			std::string roomId = sd->roomId;
+			std::string peerId = sd->peerId;
+			uint64_t sessionId = sd->sessionId;
+			uint64_t pendingSessionId = sd->pendingSessionId;
+			if (sessionId == kInvalidSessionId && sd->pendingSessionId != kInvalidSessionId) {
+				roomId = sd->pendingRoomId;
+				peerId = sd->pendingPeerId;
+				sessionId = pendingSessionId;
+			}
 
-				if (!peerId.empty()) {
-					spdlog::info("[{} {}] disconnected (session:{})", roomId, peerId, sessionId);
-				}
+			if (!peerId.empty()) {
+				spdlog::info("[{} {}] disconnected (session:{})", roomId, peerId, sessionId);
+			}
+			server.wsDisconnects_.fetch_add(1, std::memory_order_relaxed);
 
-				if (sd->sessionId != kInvalidSessionId && !sd->peerId.empty()) {
-					std::string mapKey = WsMap::key(sd->roomId, sd->peerId);
-					bool erased = UnregisterSocketSession(wsMap, ws, sd->roomId, sd->peerId);
-					if (erased) downlinkStatsRateLimit->erase(mapKey);
-				}
+			if (sd->sessionId != kInvalidSessionId && !sd->peerId.empty()) {
+				std::string mapKey = WsMap::key(sd->roomId, sd->peerId);
+				bool erased = UnregisterSocketSession(wsMap, ws, sd->roomId, sd->peerId);
+				if (erased) downlinkStatsRateLimit->erase(mapKey);
+			}
 
-				if (!roomId.empty() && sessionId != kInvalidSessionId) {
-					auto* wt = server.getWorkerThread(roomId, false);
-					if (wt) {
-						wt->post([wt, roomId, peerId, sessionId, pendingSessionId] {
-							bool leaveApplied = false;
-							try {
-								if (wt->roomService())
-									leaveApplied = wt->roomService()->leaveIfSessionMatches(roomId, peerId, sessionId);
-							} catch (const std::exception& e) {
-								spdlog::error("[{} {}] leave failed: {}", roomId, peerId, e.what());
-							} catch (...) {
-								spdlog::error("[{} {}] leave failed: unknown error", roomId, peerId);
-							}
-							spdlog::info(
-								"[ws-close] room={} peer={} session={} pending={} leave_applied={}",
-								roomId,
-								peerId,
-								sessionId,
-								pendingSessionId,
-								leaveApplied ? "true" : "false");
-							wt->updateRoomCount();
-						});
-					} else {
+			if (!roomId.empty() && sessionId != kInvalidSessionId) {
+				auto* wt = server.getWorkerThread(roomId, false);
+				if (wt) {
+					wt->post([wt, roomId, peerId, sessionId, pendingSessionId] {
+						bool leaveApplied = false;
+						try {
+							if (wt->roomService())
+								leaveApplied = wt->roomService()->leaveIfSessionMatches(roomId, peerId, sessionId);
+						} catch (const std::exception& e) {
+							spdlog::error("[{} {}] leave failed: {}", roomId, peerId, e.what());
+						} catch (...) {
+							spdlog::error("[{} {}] leave failed: unknown error", roomId, peerId);
+						}
 						spdlog::info(
-							"[ws-close] room={} peer={} session={} pending={} leave_applied=false worker_present=false",
+							"[ws-close] room={} peer={} session={} pending={} leave_applied={}",
 							roomId,
 							peerId,
 							sessionId,
-							pendingSessionId);
-					}
+							pendingSessionId,
+							leaveApplied ? "true" : "false");
+						wt->updateRoomCount();
+					});
+				} else {
+					spdlog::info(
+						"[ws-close] room={} peer={} session={} pending={} leave_applied=false worker_present=false",
+						roomId,
+						peerId,
+						sessionId,
+						pendingSessionId);
 				}
-
-				ClearPendingSocketJoin(sd);
 			}
-		});
-	}
+
+			ClearPendingSocketJoin(sd);
+		}
+	});
+}
 
 } // namespace mediasoup

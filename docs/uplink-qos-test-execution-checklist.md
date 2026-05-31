@@ -11,7 +11,7 @@
 常用命令：
 
 ```bash
-cd /root/mediasoup-cpp
+cd /root/workspace/mediasoup-cpp
 ./scripts/run_qos_tests.sh
 ./scripts/run_qos_tests.sh --skip-browser
 ./scripts/run_qos_tests.sh client-js cpp-unit
@@ -41,7 +41,7 @@ cd /root/mediasoup-cpp
   范围：`browser_server_signal`
 
 - [x] browser loopback 固定弱网回归通过
-  范围：`browser_loopback`
+  范围：历史 `browser_loopback`
 
 - [x] browser matrix 基线组通过
   范围：`B1-B3`
@@ -67,6 +67,14 @@ cd /root/mediasoup-cpp
 - [x] `BW2` 已隔离为 extended targeted sentinel
   范围：`BW2`
   说明：继续保留 strict default expectation；不纳入默认 blocking gate
+
+## 说明
+
+- 本文档保留的是历史 uplink 执行清单。
+- 当前仓库已不再保留 `browser_loopback` / `run_matrix.mjs` 及其生成产物；
+  若要看现在仍有效的 QoS 回归入口，请改看：
+  - [qos-status.md](./qos-status.md)
+  - [qos-test-coverage_cn.md](./qos-test-coverage_cn.md)
 
 ## 2. 本轮关闭的问题类型
 

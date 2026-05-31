@@ -4,10 +4,10 @@
 
 > **文档性质**
 >
-> 这是结果汇总版，适合快速看覆盖面和最终口径。
-> 如果只想先看总口径和各分支入口，先看 [qos-status.md](./qos-status.md)。
-> 若需要正式汇报结论，请看 [uplink-qos-final-report.md](./uplink-qos-final-report.md)；
-> 若需要逐 case 明细，请看 [uplink-qos-case-results.md](./uplink-qos-case-results.md)。
+> 这是历史结果汇总版，保留 `2026-04-13` 当时的签收口径。
+> 当前仓库已不再保留旧的 browser uplink loopback matrix runner 和对应产物；
+> 如果只想看现在仍有效的入口，请先看 [qos-status.md](./qos-status.md)
+> 和 [qos-test-coverage_cn.md](./qos-test-coverage_cn.md)。
 
 ## 1. 结论
 
@@ -27,8 +27,8 @@
 | 服务端集成测试 | `clientStats / qosPolicy / qosOverride / automatic poor/lost/clear / room pressure / connectionQuality` | `12 / 12 PASS` |
 | client JS 单测 | `controller / signals / stateMachine` | `27 / 27 PASS` |
 | Node harness | `publish_snapshot / stale_seq / policy_update / auto_override_poor / override_force_audio_only / manual_clear` | `6 / 6 PASS` |
-| browser harness | `browser_server_signal / browser_loopback` | `2 / 2 PASS` |
-| browser matrix 主 gate | `B1-B3 / BW1 / BW3-BW7 / L1-L8 / R1-R6 / J1-J5 / T1-T11 / S1-S4 / GD1-GD12` | `55 case`；当前增量验证：原 `43 case` 主 gate `PASS` + `GD1-GD12` targeted `PASS` |
+| browser harness | `browser_server_signal / browser_loopback` | `2 / 2 PASS`（历史口径） |
+| browser matrix 主 gate | `B1-B3 / BW1 / BW3-BW7 / L1-L8 / R1-R6 / J1-J5 / T1-T11 / S1-S4 / GD1-GD12` | `55 case`（历史口径） |
 | browser matrix 扩展哨兵 | `BW2` | `观察中（historical mixed, non-blocking）` |
 
 ## 3. browser matrix 覆盖情况
@@ -46,9 +46,10 @@
 
 补充说明：
 
-- latest full matrix `generatedAt=2026-04-13T03:34:38.058Z`，当前重渲染结果见 [uplink-qos-case-results.md](./uplink-qos-case-results.md)。
-- latest targeted 组合回归结果由脚本生成到 `docs/generated/uplink-qos-case-results.targeted.md`；当前仓库不保留这类临时 targeted 结果。
-- full matrix 原始机器 artifact 保留在 [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json)；targeted artifact 由脚本按需生成到 `docs/generated/uplink-qos-matrix-report.targeted.json`。
+- 这里的 full matrix / targeted regression 都是历史执行结果说明。
+- 当前仓库已不再保留 `uplink-qos-case-results.md` 和
+  `generated/uplink-qos-matrix-report.json` 这类旧产物。
+- 如需追溯当时的原始结果，请直接查看 git 历史。
 - 新增 `GD1-GD12` 的 gate 扩张验证采用 targeted rerun；当前 browser targeted 结果为 `12 / 12 PASS`。
 - latest 组合 targeted regression 覆盖：
   `T9,T10,T11,J3,J4,J5,BW2,T1,S4`

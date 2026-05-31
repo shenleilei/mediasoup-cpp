@@ -160,7 +160,7 @@
 优先参考现有 browser harness：
 
 - [loopback-entry.js](../tests/qos_harness/browser/loopback-entry.js)
-- [browser_loopback.mjs](../tests/qos_harness/browser_loopback.mjs)
+- 历史 browser loopback harness（当前仓库已移除）
 - [browser_server_signal.mjs](../tests/qos_harness/browser_server_signal.mjs)
 
 ### 5.4 页面里要模拟的角色

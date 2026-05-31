@@ -11,14 +11,16 @@
 - PASS/FAIL 的判定依据
 - 需要特别说明的口径差异
 
-最新 targeted rerun 机器数据由脚本生成到 `docs/generated/uplink-qos-matrix-report.targeted.json`；当前仓库不保留这类临时 targeted 结果。
+最新 targeted rerun 机器数据在当时是由脚本生成到对应的
+targeted matrix artifact；
+当前仓库已不再保留这类临时 targeted 结果。
 历史 targeted / full matrix 快照不再保留在当前文档树；需要追溯时直接查看 git 历史。
 
 注意：
 
 - 最新 targeted rerun 目前只剩 `BW2` 一个 strict boundary sentinel；
 - 本文件保留的是 `2026-04-12` 较早一次 targeted 详细分析快照，用于解释 `T4 / T6 / T7 / T8 / S1 / S2 / S3 / S4` 的 case-level 判定；
-- 如果要看当前最新 targeted 状态，请先运行 targeted rerun，再查看生成的 `docs/generated/uplink-qos-case-results.targeted.md`。
+- 如果要追溯当时的 targeted 状态，请直接查看 git 历史中的对应生成产物。
 
 本文件当前覆盖的历史 targeted 集合是 `8` 个 case：
 

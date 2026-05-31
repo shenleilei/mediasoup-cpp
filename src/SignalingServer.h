@@ -55,6 +55,13 @@ private:
 		size_t dispatchRooms = 0;
 		uint64_t staleRequestDrops = 0;
 		uint64_t rejectedClientStats = 0;
+		uint64_t joinFailures = 0;
+		uint64_t plainPublishFailures = 0;
+		uint64_t plainSubscribeFailures = 0;
+		uint64_t workerDeaths = 0;
+		uint64_t workerRespawns = 0;
+		uint64_t wsDisconnects = 0;
+		uint64_t malformedWsMessages = 0;
 		bool startupSucceeded = false;
 		bool shutdownRequested = false;
 		json workerQueues = json::array();
@@ -79,6 +86,8 @@ private:
 	void unassignRoom(const std::string& roomId);
 	void startRegistryWorker();
 	void enqueueRegistryTask(std::function<void()> task, std::string label = "registry.task");
+	void onWorkerDiedEvent();
+	void onWorkerRespawnedEvent();
 
 	int port_;
 	std::vector<std::unique_ptr<WorkerThread>>& workerThreads_;
@@ -102,6 +111,13 @@ private:
 
 	std::atomic<uint64_t> staleRequestDrops_{0};
 	std::atomic<uint64_t> rejectedClientStats_{0};
+	std::atomic<uint64_t> joinFailures_{0};
+	std::atomic<uint64_t> plainPublishFailures_{0};
+	std::atomic<uint64_t> plainSubscribeFailures_{0};
+	std::atomic<uint64_t> workerDeaths_{0};
+	std::atomic<uint64_t> workerRespawns_{0};
+	std::atomic<uint64_t> wsDisconnects_{0};
+	std::atomic<uint64_t> malformedWsMessages_{0};
 };
 
 } // namespace mediasoup

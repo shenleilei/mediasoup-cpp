@@ -4,10 +4,10 @@
 
 > **文档性质**
 >
-> 这是当前 QoS 自动化验证的主结论文档。
-> 如果只想先看总口径和各分支入口，先看 [qos-status.md](./qos-status.md)。
-> 若需要说明“底层 WebRTC 自动能力”和“本仓库 uplink QoS 策略能力”的边界，请继续查看 [uplink-qos-boundaries.md](./uplink-qos-boundaries.md)。
-> 若需要逐 case 明细，请继续查看 [uplink-qos-case-results.md](./uplink-qos-case-results.md)。
+> 这是历史 QoS 自动化验证的主结论文档，保留 `2026-04-13` 时的 uplink 签收口径。
+> 当前仓库已不再保留 browser uplink loopback matrix 的执行入口和对应产物。
+> 如果只想看现在仍有效的入口，请先看 [qos-status.md](./qos-status.md)；
+> 如需区分历史 uplink 口径和当前 downlink / server 路径，请结合 [qos-test-coverage_cn.md](./qos-test-coverage_cn.md) 一起看。
 
 ## 1. 执行结论
 
@@ -19,13 +19,13 @@
 
 这里的“主 gate 通过”指的是：
 
-- latest historical full matrix artifact [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json) 的 `generatedAt=2026-04-13T03:34:38.058Z`
+- latest historical full matrix artifact 的 `generatedAt=2026-04-13T03:34:38.058Z`
 - 原 `43 case` 主集仍保持 `PASS`
 - 新增 `GD1-GD12` 已通过 browser targeted expansion validation（`12 / 12 PASS`）
 
 这里的“BW2 仍保留观察”指的是：
 
-- 历史 dedicated strict targeted artifact [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json) 在 `generatedAt=2026-04-12T15:33:19.265Z` 时曾明确显示 `BW2 FAIL`
+- 历史 dedicated strict targeted artifact 在 `generatedAt=2026-04-12T15:33:19.265Z` 时曾明确显示 `BW2 FAIL`
 - latest 组合 targeted regression 在 `generatedAt=2026-04-13T00:31:10.077Z` 时，对 `T9,T10,T11,J3,J4,J5,BW2,T1,S4` 这 `9` 个 case 得到 `9 / 9 PASS`
 - 由于 `BW2` 仍然存在跨轮次波动，当前更合理的口径是“历史证据混合，继续作为 extended sentinel 观察”，而不是直接回退进默认 blocking gate
 
@@ -46,7 +46,7 @@
 | 服务端单元测试 | 协议解析、校验、registry、aggregate、room aggregate、override builder |
 | 服务端集成测试 | `clientStats` 聚合、`qosPolicy`、`qosOverride`、automatic poor/lost/clear、room pressure、connection quality |
 | client JS 单测 | `signals`、`stateMachine`、`controller` |
-| Node/browser harness | `publish_snapshot`、`stale_seq`、`policy_update`、`auto_override_poor`、`override_force_audio_only`、`manual_clear`、`browser_server_signal`、`browser_loopback` |
+| Node/browser harness | `publish_snapshot`、`stale_seq`、`policy_update`、`auto_override_poor`、`override_force_audio_only`、`manual_clear`、`browser_server_signal`（以及历史 `browser_loopback`） |
 | browser matrix 主 gate | `B1-B3`、`BW1`、`BW3-BW7`、`L1-L8`、`R1-R6`、`J1-J5`、`T1-T11`、`S1-S4` |
 | browser matrix 扩展哨兵 | `BW2`（targeted rerun 保留） |
 
@@ -94,7 +94,7 @@
 
 2. loopback runner 在 phase 切换时额外制造 netem 尖峰
    处理：
-   `loopback_runner.mjs` 改为一次性完整下发 `qdisc replace`，不再拆步切换 rate / delay / loss。
+   当时的 `loopback_runner.mjs` 改为一次性完整下发 `qdisc replace`，不再拆步切换 rate / delay / loss。
 
 3. `bw_sweep` 被 recovery 规则误伤
    现象：
@@ -155,13 +155,12 @@
 - 服务端 QoS 集成测试实际执行结果：`12 / 12 PASS`
 - client JS 单测实际执行结果：`27 / 27 PASS`
 - Node/browser harness 实际执行结果：全部通过
-- full matrix 主 gate 当前重渲染结果：[uplink-qos-case-results.md](./uplink-qos-case-results.md)
-- latest targeted 组合回归结果由脚本生成到 `docs/generated/uplink-qos-case-results.targeted.md`；当前仓库不保留这类临时 targeted 结果。
+- full matrix 主 gate 和 latest targeted 组合回归结果，当前都只作为历史说明保留。
 
 补充说明：
 
-- full matrix 原始机器输出保留在 [generated/uplink-qos-matrix-report.json](./generated/uplink-qos-matrix-report.json)。
-- targeted rerun 原始机器输出由脚本生成到 `docs/generated/uplink-qos-matrix-report.targeted.json`；当前仓库不保留这类临时 targeted 结果。
+- full matrix / targeted rerun 原始机器输出当前已不再保留在仓库里。
+- 如需追溯当时的具体 artifact，请直接查看 git 历史。
 - 历史报告快照不再保留在当前文档树；需要追溯旧矩阵结果时直接查看 git 历史。
 - `T1 / S4` 的边界波动依据，来自至少两份不同 full matrix 快照的对比。
 - `BW2` 的边界结论来自 dedicated strict targeted fail、latest 组合 targeted regression pass，以及 [uplink-qos-loopback-boundary-investigation.md](./uplink-qos-loopback-boundary-investigation.md) 中的专项排查。

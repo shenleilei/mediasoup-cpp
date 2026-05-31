@@ -56,61 +56,20 @@ static json makeVideoRtpParams(uint32_t ssrc) {
 
 class E2EPubSubTest : public ::testing::Test {
 protected:
-	pid_t sfuPid_ = -1;
+	TestSfuProcess sfu_;
 	std::string room_;
 
 	void SetUp() override {
 		room_ = "e2e_" + std::to_string(getpid()) + "_" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 
-		ASSERT_TRUE(ensureTestSignalingTlsFiles());
-		std::string cmd = "./build/mediasoup-sfu --nodaemon"
-			" --port=" + std::to_string(PORT) +
-			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(PORT)) +
-			" --workers=2 --workerBin=./mediasoup-worker"
-			" > /dev/null 2>&1 & echo $!";
-		FILE* fp = popen(cmd.c_str(), "r");
-		ASSERT_NE(fp, nullptr);
-		char buf[64]{};
-		fgets(buf, sizeof(buf), fp);
-		pclose(fp);
-		sfuPid_ = atoi(buf);
-		ASSERT_GT(sfuPid_, 0);
-
-		for (int i = 0; i < 50; ++i) {
-			usleep(100000);
-			int fd = socket(AF_INET, SOCK_STREAM, 0);
-			sockaddr_in addr{};
-			addr.sin_family = AF_INET;
-			addr.sin_port = htons(PORT);
-			inet_pton(AF_INET, HOST.c_str(), &addr.sin_addr);
-			if (::connect(fd, (sockaddr*)&addr, sizeof(addr)) == 0) {
-				::close(fd);
-				usleep(200000);
-				return;
-			}
-			::close(fd);
-		}
-		FAIL() << "SFU did not start within 5s";
+		ASSERT_TRUE(sfu_.start(PORT, {"--workers=2"}, makeTestSfuLogPath("sfu_e2e", PORT)))
+			<< "failed to start e2e SFU on port " << PORT
+			<< ", log: " << sfu_.logPath();
 	}
 
-		void TearDown() override {
-			if (sfuPid_ > 0) {
-				terminateSfuProcess(sfuPid_);
-				for (int i = 0; i < 20; ++i) {
-				usleep(50000);
-				int fd = socket(AF_INET, SOCK_STREAM, 0);
-				sockaddr_in addr{};
-				addr.sin_family = AF_INET;
-				addr.sin_port = htons(PORT);
-				addr.sin_addr.s_addr = htonl(INADDR_ANY);
-				int opt = 1;
-				setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-				bool free = (bind(fd, (sockaddr*)&addr, sizeof(addr)) == 0);
-				::close(fd);
-				if (free) return;
-			}
-		}
+	void TearDown() override {
+		(void)sfu_.stop();
 	}
 
 	struct Client {
@@ -126,7 +85,7 @@ protected:
 		Client c;
 		c.peerId = peerId;
 		c.ws = std::make_unique<TestWsClient>();
-		EXPECT_TRUE(c.ws->connect(HOST, PORT));
+		EXPECT_TRUE(c.ws->connect(HOST, sfu_.port()));
 
 		auto joinResp = c.ws->request("join", {
 			{"roomId", room_}, {"peerId", peerId},
