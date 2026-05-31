@@ -39,19 +39,20 @@ public:
 		std::vector<uint8_t> data;
 		const FBS::Response::Response* response() const {
 			if (data.empty()) return nullptr;
-			{
-				flatbuffers::Verifier verifier(data.data(), data.size());
-				if (FBS::Message::VerifyMessageBuffer(verifier)) {
-					auto* msg = FBS::Message::GetMessage(data.data());
-					if (msg) return msg->data_as_Response();
+			flatbuffers::Verifier responseVerifier(data.data(), data.size());
+			if (responseVerifier.VerifySizePrefixedBuffer<FBS::Response::Response>(nullptr)) {
+				return flatbuffers::GetSizePrefixedRoot<FBS::Response::Response>(data.data());
+			}
+			flatbuffers::Verifier messageVerifier(data.data(), data.size());
+			if (messageVerifier.VerifySizePrefixedBuffer<FBS::Message::Message>(nullptr)) {
+				const auto* message = flatbuffers::GetSizePrefixedRoot<FBS::Message::Message>(data.data());
+				if (message && message->data_type() == FBS::Message::Body::Response) {
+					return message->data_as_Response();
 				}
 			}
-			{
-				flatbuffers::Verifier verifier(data.data(), data.size());
-				if (FBS::Message::VerifySizePrefixedMessageBuffer(verifier)) {
-					auto* msg = FBS::Message::GetSizePrefixedMessage(data.data());
-					if (msg) return msg->data_as_Response();
-				}
+			auto* resp = flatbuffers::GetRoot<FBS::Response::Response>(data.data());
+			if (resp && resp->Verify(responseVerifier)) {
+				return resp;
 			}
 			return nullptr;
 		}
@@ -62,19 +63,20 @@ public:
 		FBS::Notification::Event event = FBS::Notification::Event::WORKER_RUNNING;
 		const FBS::Notification::Notification* notification() const {
 			if (data.empty()) return nullptr;
-			{
-				flatbuffers::Verifier verifier(data.data(), data.size());
-				if (FBS::Message::VerifyMessageBuffer(verifier)) {
-					auto* msg = FBS::Message::GetMessage(data.data());
-					if (msg) return msg->data_as_Notification();
+			flatbuffers::Verifier notificationVerifier(data.data(), data.size());
+			if (notificationVerifier.VerifySizePrefixedBuffer<FBS::Notification::Notification>(nullptr)) {
+				return flatbuffers::GetSizePrefixedRoot<FBS::Notification::Notification>(data.data());
+			}
+			flatbuffers::Verifier messageVerifier(data.data(), data.size());
+			if (messageVerifier.VerifySizePrefixedBuffer<FBS::Message::Message>(nullptr)) {
+				const auto* message = flatbuffers::GetSizePrefixedRoot<FBS::Message::Message>(data.data());
+				if (message && message->data_type() == FBS::Message::Body::Notification) {
+					return message->data_as_Notification();
 				}
 			}
-			{
-				flatbuffers::Verifier verifier(data.data(), data.size());
-				if (FBS::Message::VerifySizePrefixedMessageBuffer(verifier)) {
-					auto* msg = FBS::Message::GetSizePrefixedMessage(data.data());
-					if (msg) return msg->data_as_Notification();
-				}
+			auto* notif = flatbuffers::GetRoot<FBS::Notification::Notification>(data.data());
+			if (notif && notif->Verify(notificationVerifier)) {
+				return notif;
 			}
 			return nullptr;
 		}

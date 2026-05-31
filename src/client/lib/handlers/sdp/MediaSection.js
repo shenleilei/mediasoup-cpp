@@ -212,13 +212,13 @@ class AnswerMediaSection extends MediaSection {
                 this._mediaObject.ext = [];
                 for (const ext of answerRtpParameters.headerExtensions) {
                     // Don't add a header extension if not present in the offer.
-                    const found = (offerMediaObject.ext ?? []).some((localExt) => localExt.uri === ext.uri);
-                    if (!found) {
+                    const localExt = (offerMediaObject.ext ?? []).find((localExt) => localExt.uri === ext.uri);
+                    if (!localExt) {
                         continue;
                     }
                     this._mediaObject.ext.push({
                         uri: ext.uri,
-                        value: ext.id,
+                        value: localExt.value,
                     });
                 }
                 // Allow both 1 byte and 2 bytes length header extensions.
@@ -359,7 +359,12 @@ class OfferMediaSection extends MediaSection {
                 this._mediaObject.rtcpFb = [];
                 this._mediaObject.fmtp = [];
                 if (!this._planB) {
-                    this._mediaObject.msid = `${streamId ?? '-'} ${trackId}`;
+                    this._mediaObject.msid = [
+                        {
+                            id: streamId ?? '-',
+                            appdata: trackId,
+                        },
+                    ];
                 }
                 for (const codec of offerRtpParameters.codecs) {
                     const rtp = {

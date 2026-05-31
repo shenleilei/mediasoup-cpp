@@ -135,10 +135,15 @@ function deriveSignals(current, previous, previousSignals, options = {}) {
         : asFiniteOrZero(previousSignals?.jitterEwma);
     const qualityReason = current.qualityLimitationReason ?? 'unknown';
     const cpuLimited = qualityReason === 'cpu';
-    // Browsers may report "bandwidth" after our own local bitrate cap changes.
-    // Treat it as a real network-pressure signal only when utilization is also low.
+    const lossWarn = lossEwma >= DEFAULT_NETWORK_WARN_LOSS_RATE;
+    const rttWarn = rttEwma >= DEFAULT_NETWORK_WARN_RTT_MS;
+    const severeUtilizationDrop = bitrateUtilization < 0.5;
+    // Browsers may report "bandwidth" transiently after local sender parameter
+    // changes or BWE settling. Only treat it as a hard network-pressure signal
+    // when the utilization drop is severe or another network signal also agrees.
     const bandwidthLimited = qualityReason === 'bandwidth' &&
-        bitrateUtilization < DEFAULT_NETWORK_CONGESTED_UTILIZATION;
+        bitrateUtilization < DEFAULT_NETWORK_CONGESTED_UTILIZATION &&
+        (severeUtilizationDrop || lossWarn || rttWarn);
     const reason = classifyReason({
         bandwidthLimited,
         cpuLimited,

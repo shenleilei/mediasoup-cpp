@@ -423,28 +423,28 @@ bool Channel::processAvailableData() {
 
 	bool ok = true;
 	while (recvBufDispatchOffset_ + 4 <= recvBuf_.size()) {
-		uint32_t msgLen;
-		std::memcpy(&msgLen, recvBuf_.data() + recvBufDispatchOffset_, 4);
-		if (msgLen == 0 || msgLen > MESSAGE_MAX_LEN) {
+		uint32_t payloadLen;
+		std::memcpy(&payloadLen, recvBuf_.data() + recvBufDispatchOffset_, 4);
+		uint32_t frameLen = payloadLen + 4;
+		if (payloadLen == 0 || frameLen > MESSAGE_MAX_LEN) {
 			MS_WARN(logger_,
-				"invalid frame length [pid:{} msgLen:{} max:{}], closing channel",
-				pid_, msgLen, MESSAGE_MAX_LEN);
+				"invalid frame length [pid:{} payloadLen:{} frameLen:{} max:{}], closing channel",
+				pid_, payloadLen, frameLen, MESSAGE_MAX_LEN);
 			close();
 			ok = false;
 			break;
 		}
-		if (recvBufDispatchOffset_ + 4 + msgLen > recvBuf_.size()) break;
+		if (recvBufDispatchOffset_ + frameLen > recvBuf_.size()) break;
 
-		const size_t payloadOffset = recvBufDispatchOffset_ + 4;
 		std::vector<uint8_t> message(
-			recvBuf_.begin() + static_cast<ptrdiff_t>(payloadOffset),
-			recvBuf_.begin() + static_cast<ptrdiff_t>(payloadOffset + msgLen));
+			recvBuf_.begin() + static_cast<ptrdiff_t>(recvBufDispatchOffset_),
+			recvBuf_.begin() + static_cast<ptrdiff_t>(recvBufDispatchOffset_ + frameLen));
 		// Advance the shared offset before dispatch so re-entrant callbacks do not replay
 		// already-consumed buffered messages.
-		recvBufDispatchOffset_ += 4 + msgLen;
+		recvBufDispatchOffset_ += frameLen;
 
-		if (!processMessage(message.data(), msgLen)) {
-			MS_WARN(logger_, "invalid FlatBuffers message [pid:{} len:{}], closing channel", pid_, msgLen);
+		if (!processMessage(message.data(), frameLen)) {
+			MS_WARN(logger_, "invalid FlatBuffers message [pid:{} len:{}], closing channel", pid_, frameLen);
 			close();
 			ok = false;
 			break;
@@ -544,25 +544,26 @@ void Channel::readLoop() {
 
 			size_t offset = 0;
 			while (offset + 4 <= recvBuf.size()) {
-				uint32_t msgLen;
-				std::memcpy(&msgLen, recvBuf.data() + offset, 4);
-				if (msgLen == 0 || msgLen > MESSAGE_MAX_LEN) {
+				uint32_t payloadLen;
+				std::memcpy(&payloadLen, recvBuf.data() + offset, 4);
+				uint32_t frameLen = payloadLen + 4;
+				if (payloadLen == 0 || frameLen > MESSAGE_MAX_LEN) {
 					MS_WARN(logger_,
-						"invalid frame length [pid:{} msgLen:{} max:{}], closing channel",
-						pid_, msgLen, MESSAGE_MAX_LEN);
+						"invalid frame length [pid:{} payloadLen:{} frameLen:{} max:{}], closing channel",
+						pid_, payloadLen, frameLen, MESSAGE_MAX_LEN);
 					close();
 					offset = recvBuf.size();
 					break;
 				}
-				if (offset + 4 + msgLen > recvBuf.size()) break;
+				if (offset + frameLen > recvBuf.size()) break;
 
-				if (!processMessage(recvBuf.data() + offset + 4, msgLen)) {
-					MS_WARN(logger_, "invalid FlatBuffers message [pid:{} len:{}], closing channel", pid_, msgLen);
+				if (!processMessage(recvBuf.data() + offset, frameLen)) {
+					MS_WARN(logger_, "invalid FlatBuffers message [pid:{} len:{}], closing channel", pid_, frameLen);
 					close();
 					offset = recvBuf.size();
 					break;
 				}
-				offset += 4 + msgLen;
+				offset += frameLen;
 			}
 
 			if (offset > 0) {
@@ -577,50 +578,75 @@ void Channel::readLoop() {
 }
 
 bool Channel::processMessage(const uint8_t* data, size_t len) {
-	auto msg = FBS::Message::GetMessage(data);
-	if (!msg) return false;
+	auto handleResponse = [this, data, len](const FBS::Response::Response* response) {
+		if (!response) return true;
+		uint32_t id = response->id();
 
-	switch (msg->data_type()) {
-		case FBS::Message::Body::Response: {
-			auto response = msg->data_as_Response();
-			if (!response) return true;
-			uint32_t id = response->id();
-
-			std::shared_ptr<PendingSent> sent;
-			{
-				std::lock_guard<std::mutex> lock(sentsMutex_);
-				auto it = sents_.find(id);
-				if (it == sents_.end()) {
-					MS_ERROR(logger_, "response does not match any request [id:{}]", id);
-					return true;
-				}
-				sent = it->second;
-				sents_.erase(it);
+		std::shared_ptr<PendingSent> sent;
+		{
+			std::lock_guard<std::mutex> lock(sentsMutex_);
+			auto it = sents_.find(id);
+			if (it == sents_.end()) {
+				MS_ERROR(logger_, "response does not match any request [id:{}]", id);
+				return true;
 			}
-
-			if (response->accepted()) {
-				// Copy the raw message data into OwnedResponse by value
-				OwnedResponse ownedResp;
-				ownedResp.data.assign(data, data + len);
-				sent->promise.set_value(std::move(ownedResp));
-			} else {
-				std::string reason = response->reason() ? response->reason()->str() : "unknown error";
-				sent->promise.set_exception(
-					std::make_exception_ptr(std::runtime_error(reason)));
-			}
-			break;
+			sent = it->second;
+			sents_.erase(it);
 		}
-		case FBS::Message::Body::Notification:
-			processNotification(data, len, msg->data_as_Notification());
-			break;
-		case FBS::Message::Body::Log:
-			processLog(msg->data_as_Log());
-			break;
-		default:
-			MS_WARN(logger_, "unexpected message type");
-			break;
+
+		if (response->accepted()) {
+			OwnedResponse ownedResp;
+			ownedResp.data.assign(data, data + len);
+			sent->promise.set_value(std::move(ownedResp));
+		} else {
+			std::string reason = response->reason() ? response->reason()->str() : "unknown error";
+			sent->promise.set_exception(
+				std::make_exception_ptr(std::runtime_error(reason)));
+		}
+		return true;
+	};
+
+	{
+		flatbuffers::Verifier verifier(data, len);
+		if (FBS::Message::VerifySizePrefixedMessageBuffer(verifier)) {
+			const auto* msg = FBS::Message::GetSizePrefixedMessage(data);
+			if (!msg) return false;
+
+			switch (msg->data_type()) {
+				case FBS::Message::Body::Response:
+					return handleResponse(msg->data_as_Response());
+				case FBS::Message::Body::Notification:
+					processNotification(data, len, msg->data_as_Notification());
+					return true;
+				case FBS::Message::Body::Log:
+					processLog(msg->data_as_Log());
+					return true;
+				default:
+					MS_WARN(logger_, "unexpected message type");
+					return true;
+			}
+		}
 	}
-	return true;
+
+	{
+		flatbuffers::Verifier verifier(data, len);
+		if (verifier.VerifySizePrefixedBuffer<FBS::Notification::Notification>(nullptr)) {
+			processNotification(
+				data,
+				len,
+				flatbuffers::GetSizePrefixedRoot<FBS::Notification::Notification>(data));
+			return true;
+		}
+	}
+
+	{
+		flatbuffers::Verifier verifier(data, len);
+		if (verifier.VerifySizePrefixedBuffer<FBS::Response::Response>(nullptr)) {
+			return handleResponse(flatbuffers::GetSizePrefixedRoot<FBS::Response::Response>(data));
+		}
+	}
+
+	return false;
 }
 
 void Channel::processNotification(const uint8_t* data, size_t len,

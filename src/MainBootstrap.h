@@ -16,6 +16,7 @@ struct RuntimeOptions {
 	int numWorkerThreads{ 0 };
 	int signalingPort{ 3000 };
 	std::string listenIp{ "0.0.0.0" };
+	bool listenIpExplicit{ false };
 	std::string announcedIp;
 	std::string workerBin;
 	int webRtcServerPort{ 0 };

@@ -214,10 +214,16 @@ inline RoomService::Result DispatchRoomServiceRequest(
 			data.value("senderPort", 0u));
 	}
 	if (method == "plainSubscribe") {
+		const bool autoReturn = data.value("autoReturn", false);
+		std::optional<std::string> recvIp;
+		std::optional<uint16_t> recvPort;
+		if (data.contains("recvIp")) recvIp = data.at("recvIp").get<std::string>();
+		if (data.contains("recvPort")) recvPort = data.at("recvPort").get<uint16_t>();
 		return roomService.plainSubscribe(
 			roomId, peerId,
-			data.at("recvIp").get<std::string>(),
-			data.at("recvPort").get<uint16_t>());
+			recvIp,
+			recvPort,
+			autoReturn);
 	}
 
 	return { false, {}, "", "unknown method: " + method };

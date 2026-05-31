@@ -67,12 +67,19 @@ void SignalingServerHttp::RegisterHttpRoutes(uWS::SSLApp& app, SignalingServer& 
 			{"shutdownRequested", snapshot.shutdownRequested},
 			{"healthy", server.isHealthy(snapshot)},
 			{"ready", server.isReady(snapshot)},
-			{"dispatchRooms", snapshot.dispatchRooms},
-			{"staleRequestDrops", snapshot.staleRequestDrops},
-			{"rejectedClientStats", snapshot.rejectedClientStats},
-			{"workerQueueStats", snapshot.workerQueues},
-			{"roomOwnership", snapshot.roomOwnership}
-		};
+				{"dispatchRooms", snapshot.dispatchRooms},
+				{"staleRequestDrops", snapshot.staleRequestDrops},
+				{"rejectedClientStats", snapshot.rejectedClientStats},
+				{"joinFailures", snapshot.joinFailures},
+				{"plainPublishFailures", snapshot.plainPublishFailures},
+				{"plainSubscribeFailures", snapshot.plainSubscribeFailures},
+				{"workerDeaths", snapshot.workerDeaths},
+				{"workerRespawns", snapshot.workerRespawns},
+				{"wsDisconnects", snapshot.wsDisconnects},
+				{"malformedWsMessages", snapshot.malformedWsMessages},
+				{"workerQueueStats", snapshot.workerQueues},
+				{"roomOwnership", snapshot.roomOwnership}
+			};
 		res->writeHeader("Content-Type", "application/json")
 			->writeHeader("Access-Control-Allow-Origin", "*")
 			->end(load.dump());

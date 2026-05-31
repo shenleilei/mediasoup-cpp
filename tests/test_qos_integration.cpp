@@ -68,19 +68,51 @@ static void sendPlainRtpWithAbsCaptureTime(
 	buf[12] = 0xBE;
 	buf[13] = 0xDE;
 	buf[14] = 0x00;
-	buf[15] = 0x03; // 12 bytes
-	buf[16] = static_cast<uint8_t>((absCaptureTimeExtId << 4) | 0x07); // len=8
+	buf[15] = 0x05; // 20-byte extension payload after BEDE header
+	buf[16] = static_cast<uint8_t>((absCaptureTimeExtId << 4) | 0x0F); // len=16
 	const uint64_t captureNtp64 = unixMsToNtp64(captureUnixMs);
 	for (size_t i = 0; i < 8; ++i) {
 		buf[17 + i] = static_cast<uint8_t>((captureNtp64 >> ((7 - i) * 8)) & 0xFF);
 	}
-	memset(buf + 28, 0xAB, 188);
+	// Zero estimated capture clock offset.
+	for (size_t i = 0; i < 8; ++i) {
+		buf[25 + i] = 0;
+	}
+	memset(buf + 40, 0xAB, 188);
 
 	sockaddr_in dest{};
 	dest.sin_family = AF_INET;
 	dest.sin_port = htons(port);
 	inet_pton(AF_INET, "127.0.0.1", &dest.sin_addr);
-	sendto(fd, buf, 216, 0, reinterpret_cast<sockaddr*>(&dest), sizeof(dest));
+	sendto(fd, buf, 228, 0, reinterpret_cast<sockaddr*>(&dest), sizeof(dest));
+}
+
+static void sendPlainBurstWithAbsCaptureTime(
+	int fd,
+	uint16_t port,
+	uint8_t payloadType,
+	uint32_t ssrc,
+	uint16_t seqBase,
+	uint32_t timestampBase,
+	uint8_t absCaptureTimeExtId,
+	uint64_t captureUnixMsBase,
+	size_t packetCount,
+	useconds_t intervalUs = 20000)
+{
+	for (size_t i = 0; i < packetCount; ++i) {
+		sendPlainRtpWithAbsCaptureTime(
+			fd,
+			port,
+			payloadType,
+			ssrc,
+			static_cast<uint16_t>(seqBase + i),
+			timestampBase + static_cast<uint32_t>(i * 3000u),
+			absCaptureTimeExtId,
+			captureUnixMsBase + static_cast<uint64_t>(i * 20u));
+		if (intervalUs > 0 && i + 1 < packetCount) {
+			usleep(intervalUs);
+		}
+	}
 }
 
 class QosIntegrationTest : public ::testing::Test {
@@ -1060,7 +1092,8 @@ TEST_F(QosIntegrationTest, PlainPublishAbsCaptureTimeAppearsInStats) {
 		std::chrono::duration_cast<std::chrono::milliseconds>(
 			std::chrono::system_clock::now().time_since_epoch()).count()) - 120u;
 
-	sendPlainRtpWithAbsCaptureTime(
+	usleep(100000);
+	sendPlainBurstWithAbsCaptureTime(
 		senderFd,
 		resp["data"]["port"].get<uint16_t>(),
 		payloadType,
@@ -1068,25 +1101,8 @@ TEST_F(QosIntegrationTest, PlainPublishAbsCaptureTimeAppearsInStats) {
 		1u,
 		3000u,
 		absCaptureTimeExtId,
-		captureMs);
-	sendPlainRtpWithAbsCaptureTime(
-		senderFd,
-		resp["data"]["port"].get<uint16_t>(),
-		payloadType,
-		11111111u,
-		2u,
-		6000u,
-		absCaptureTimeExtId,
-		captureMs + 20u);
-	sendPlainRtpWithAbsCaptureTime(
-		senderFd,
-		resp["data"]["port"].get<uint16_t>(),
-		payloadType,
-		11111111u,
-		3u,
-		9000u,
-		absCaptureTimeExtId,
-		captureMs + 40u);
+		captureMs,
+		12);
 	::close(senderFd);
 
 	json statsResp = waitForPeerStats(
@@ -1117,7 +1133,7 @@ TEST_F(QosIntegrationTest, PlainPublishAbsCaptureTimeAppearsInStats) {
 			found = true;
 			const auto observedCaptureMs = stat["absCaptureTimestampMs"].get<uint64_t>();
 			EXPECT_GE(observedCaptureMs, captureMs);
-			EXPECT_LE(observedCaptureMs, captureMs + 40u);
+			EXPECT_LE(observedCaptureMs, captureMs + 300u);
 			EXPECT_TRUE(stat.contains("absCaptureReceiveDeltaMs"));
 			EXPECT_GE(stat["absCaptureReceiveDeltaMs"].get<int64_t>(), 0);
 		}

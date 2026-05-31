@@ -341,8 +341,14 @@ inline RtpParameters getConsumerRtpParameters(
 	// Header extensions - match by URI and negotiated id.
 	for (auto& ext : consumableParams.headerExtensions) {
 		for (auto& remoteExt : remoteRtpCapabilities.headerExtensions) {
-			if (ext.uri == remoteExt.uri && ext.id == remoteExt.preferredId) {
-				consumer.headerExtensions.push_back(ext);
+			if (ext.uri == remoteExt.uri) {
+				auto mappedExt = ext;
+				// Use the remote endpoint's negotiated ext ID so repeated
+				// consume/re-negotiate cycles on the same RTCPeerConnection keep a
+				// stable extmap assignment.
+				mappedExt.id = remoteExt.preferredId;
+				mappedExt.encrypt = remoteExt.preferredEncrypt;
+				consumer.headerExtensions.push_back(std::move(mappedExt));
 				break;
 			}
 		}

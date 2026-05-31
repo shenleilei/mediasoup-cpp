@@ -7,7 +7,6 @@
 #include "Producer.h"
 #include "Consumer.h"
 #include "Utils.h"
-#include "PublicIpResolver.h"
 #include "router_generated.h"
 #include "worker_generated.h"
 #include "request_generated.h"
@@ -127,14 +126,8 @@ std::shared_ptr<WebRtcTransport> Router::createWebRtcTransport(
 					IceCandidate cand;
 					cand.foundation = ic->foundation()->str();
 					cand.priority = ic->priority();
-					auto resolvedIp = ResolvePublicIpv4Address(ic->address()->str());
-					if (!resolvedIp) {
-						MS_ERROR(logger_, "WebRtcTransport ICE candidate address is not a public IPv4 [address:{} transportId:{}]",
-							ic->address()->str(), transportId);
-						throw std::runtime_error("invalid ICE candidate public IP");
-					}
-					cand.ip = *resolvedIp;
 					cand.address = ic->address()->str();
+					cand.ip = cand.address;
 					cand.protocol = (ic->protocol() == FBS::Transport::Protocol::UDP) ? "udp" : "tcp";
 					cand.port = ic->port();
 					cand.type = "host";
