@@ -1,10 +1,84 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EnhancedEventEmitter = void 0;
-const npm_events_package_1 = require("npm-events-package");
 const Logger_1 = require("./Logger");
 const enhancedEventEmitterLogger = new Logger_1.Logger('EnhancedEventEmitter');
-class EnhancedEventEmitter extends npm_events_package_1.EventEmitter {
+class BaseEventEmitter {
+    constructor() {
+        this._events = new Map();
+        this._maxListeners = Infinity;
+    }
+    setMaxListeners(value) {
+        this._maxListeners = value;
+        return this;
+    }
+    emit(eventName, ...args) {
+        const listeners = this._events.get(eventName);
+        if (!listeners || listeners.length === 0) {
+            return false;
+        }
+        for (const listener of [...listeners]) {
+            listener.apply(this, args);
+        }
+        return true;
+    }
+    on(eventName, listener) {
+        const listeners = this._events.get(eventName) ?? [];
+        listeners.push(listener);
+        this._events.set(eventName, listeners);
+        return this;
+    }
+    off(eventName, listener) {
+        const listeners = this._events.get(eventName);
+        if (!listeners) {
+            return this;
+        }
+        this._events.set(eventName, listeners.filter(item => item !== listener));
+        return this;
+    }
+    prependListener(eventName, listener) {
+        const listeners = this._events.get(eventName) ?? [];
+        listeners.unshift(listener);
+        this._events.set(eventName, listeners);
+        return this;
+    }
+    once(eventName, listener) {
+        const wrapped = (...args) => {
+            this.off(eventName, wrapped);
+            listener(...args);
+        };
+        return this.on(eventName, wrapped);
+    }
+    prependOnceListener(eventName, listener) {
+        const wrapped = (...args) => {
+            this.off(eventName, wrapped);
+            listener(...args);
+        };
+        return this.prependListener(eventName, wrapped);
+    }
+    removeListener(eventName, listener) {
+        return this.off(eventName, listener);
+    }
+    removeAllListeners(eventName) {
+        if (typeof eventName === 'undefined') {
+            this._events.clear();
+        }
+        else {
+            this._events.delete(eventName);
+        }
+        return this;
+    }
+    listenerCount(eventName) {
+        return (this._events.get(eventName) ?? []).length;
+    }
+    listeners(eventName) {
+        return [...(this._events.get(eventName) ?? [])];
+    }
+    rawListeners(eventName) {
+        return this.listeners(eventName);
+    }
+}
+class EnhancedEventEmitter extends BaseEventEmitter {
     constructor() {
         super();
         this.setMaxListeners(Infinity);

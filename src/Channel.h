@@ -39,10 +39,21 @@ public:
 		std::vector<uint8_t> data;
 		const FBS::Response::Response* response() const {
 			if (data.empty()) return nullptr;
-			flatbuffers::Verifier verifier(data.data(), data.size());
-			if (!FBS::Message::VerifyMessageBuffer(verifier)) return nullptr;
-			auto* msg = FBS::Message::GetMessage(data.data());
-			return msg ? msg->data_as_Response() : nullptr;
+			{
+				flatbuffers::Verifier verifier(data.data(), data.size());
+				if (FBS::Message::VerifyMessageBuffer(verifier)) {
+					auto* msg = FBS::Message::GetMessage(data.data());
+					if (msg) return msg->data_as_Response();
+				}
+			}
+			{
+				flatbuffers::Verifier verifier(data.data(), data.size());
+				if (FBS::Message::VerifySizePrefixedMessageBuffer(verifier)) {
+					auto* msg = FBS::Message::GetSizePrefixedMessage(data.data());
+					if (msg) return msg->data_as_Response();
+				}
+			}
+			return nullptr;
 		}
 	};
 
@@ -51,10 +62,21 @@ public:
 		FBS::Notification::Event event = FBS::Notification::Event::WORKER_RUNNING;
 		const FBS::Notification::Notification* notification() const {
 			if (data.empty()) return nullptr;
-			flatbuffers::Verifier verifier(data.data(), data.size());
-			if (!FBS::Message::VerifyMessageBuffer(verifier)) return nullptr;
-			auto* msg = FBS::Message::GetMessage(data.data());
-			return msg ? msg->data_as_Notification() : nullptr;
+			{
+				flatbuffers::Verifier verifier(data.data(), data.size());
+				if (FBS::Message::VerifyMessageBuffer(verifier)) {
+					auto* msg = FBS::Message::GetMessage(data.data());
+					if (msg) return msg->data_as_Notification();
+				}
+			}
+			{
+				flatbuffers::Verifier verifier(data.data(), data.size());
+				if (FBS::Message::VerifySizePrefixedMessageBuffer(verifier)) {
+					auto* msg = FBS::Message::GetSizePrefixedMessage(data.data());
+					if (msg) return msg->data_as_Notification();
+				}
+			}
+			return nullptr;
 		}
 	};
 
