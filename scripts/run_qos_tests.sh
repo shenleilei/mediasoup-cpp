@@ -20,6 +20,7 @@ DEFAULT_GROUPS=(
   node-harness
   browser-harness
   downlink-matrix
+  remote-harness
 )
 OPTIONAL_GROUPS=()
 ALL_GROUPS=("${DEFAULT_GROUPS[@]}" "${OPTIONAL_GROUPS[@]}")
@@ -57,6 +58,7 @@ Available groups:
   node-harness      Node QoS harness 场景
   browser-harness   browser_server_signal + downlink browser harnesses
   downlink-matrix   browser downlink weak-network matrix（run_downlink_matrix.mjs）
+  remote-harness    先构建并部署测试机镜像，再跑远端 smoke + mediasoup-9000 有限压力 smoke
 
 Notes:
   - 默认会顺序执行所有分组；单个任务失败后会继续执行其余选中项，最后统一汇总失败。
@@ -618,7 +620,7 @@ normalize_groups() {
         requested=("${DEFAULT_GROUPS[@]}")
         break
       fi
-      if [[ "$group" == node-harness:* || "$group" == browser-harness:* ]]; then
+      if [[ "$group" == node-harness:* || "$group" == browser-harness:* || "$group" == remote-harness:* ]]; then
         requested+=("$group")
         continue
       fi
@@ -637,7 +639,7 @@ normalize_groups() {
   if ((SKIP_BROWSER)); then
     local filtered=()
     for group in "${requested[@]}"; do
-      [[ "$group" == "browser-harness" || "$group" == browser-harness:* || "$group" == "downlink-matrix" ]] && continue
+      [[ "$group" == "browser-harness" || "$group" == browser-harness:* || "$group" == "downlink-matrix" || "$group" == "remote-harness" || "$group" == remote-harness:* ]] && continue
       filtered+=("$group")
     done
     requested=("${filtered[@]}")
@@ -833,6 +835,34 @@ run_downlink_matrix() {
     node "$ROOT_DIR/tests/qos_harness/run_downlink_matrix.mjs" "${dl_args[@]}"
 }
 
+run_remote_harness() {
+  require_browser_runtime
+  local failed=0
+
+  if ! run_cmd \
+    "remote-harness:deploy" \
+    --cwd "$ROOT_DIR" \
+    "$ROOT_DIR/scripts/deploy_remote_test_machine.sh"; then
+    return 1
+  fi
+
+  if ! run_cmd \
+    "remote-harness:browser-smokes" \
+    --cwd "$ROOT_DIR" \
+    "$ROOT_DIR/scripts/run_remote_qos_smokes.sh"; then
+    return 1
+  fi
+
+  if ! run_cmd \
+    "remote-harness:pressure-smoke" \
+    --cwd "$ROOT_DIR" \
+    "$ROOT_DIR/scripts/run_remote_pressure_smoke.sh"; then
+    failed=1
+  fi
+
+  return "$failed"
+}
+
 run_group() {
   local group="$1"
   case "$group" in
@@ -843,6 +873,7 @@ run_group() {
     node-harness) run_node_harness ;;
     browser-harness) run_browser_harness ;;
     downlink-matrix) run_downlink_matrix ;;
+    remote-harness) run_remote_harness ;;
     *) fail "internal error: unsupported group '$group'" ;;
   esac
 }
@@ -850,7 +881,7 @@ run_group() {
 run_target() {
   local target="$1"
   case "$target" in
-    client-js|cpp-unit|cpp-integration|cpp-accuracy|node-harness|browser-harness|downlink-matrix)
+    client-js|cpp-unit|cpp-integration|cpp-accuracy|node-harness|browser-harness|downlink-matrix|remote-harness)
       run_group "$target"
       ;;
     node-harness:*)
@@ -921,6 +952,25 @@ run_target() {
         "$target" \
         --cwd "$ROOT_DIR" \
         node "$ROOT_DIR/tests/qos_harness/browser_downlink_v3.mjs"
+      ;;
+    remote-harness:browser-smokes)
+      require_browser_runtime
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        "$ROOT_DIR/scripts/run_remote_qos_smokes.sh"
+      ;;
+    remote-harness:deploy)
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        "$ROOT_DIR/scripts/deploy_remote_test_machine.sh"
+      ;;
+    remote-harness:pressure-smoke)
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        "$ROOT_DIR/scripts/run_remote_pressure_smoke.sh"
       ;;
     *)
       fail "unknown target: $target"

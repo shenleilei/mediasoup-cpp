@@ -69,4 +69,21 @@ if [[ -n "${MEDIASOUP_LOG_LEVEL:-}" ]]; then
   args+=("--logLevel=${MEDIASOUP_LOG_LEVEL}")
 fi
 
+if [[ -n "${MEDIASOUP_LOG_DIR:-}" ]]; then
+  mkdir -p "${MEDIASOUP_LOG_DIR}"
+
+  rotate_hours="${MEDIASOUP_LOG_ROTATE_HOURS:-3}"
+  if [[ "$rotate_hours" =~ ^[0-9]+$ ]] && (( rotate_hours > 0 )); then
+    current_hour="$(date +%H)"
+    bucket_hour=$((10#$current_hour / rotate_hours * rotate_hours))
+  else
+    bucket_hour="$(date +%H)"
+  fi
+  bucket_day="$(date +%Y%m%d)"
+  log_prefix="${MEDIASOUP_LOG_PREFIX:-mediasoup-sfu}"
+  log_file="${MEDIASOUP_LOG_DIR}/${log_prefix}_${bucket_day}$(printf '%02d' "${bucket_hour}")_1.log"
+  touch "${log_file}"
+  exec >>"${log_file}" 2>&1
+fi
+
 exec ./mediasoup-sfu "${args[@]}" "$@"

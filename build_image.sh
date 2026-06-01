@@ -79,6 +79,7 @@ repository="${DOCKER_REPOSITORY:-harbor-volc.zelostech.com.cn:5443/arch/${image_
 apt_mirror="${APT_MIRROR:-http://mirrors.aliyun.com/ubuntu}"
 push_image=0
 push_latest=0
+skip_ipc_release_guard="${SKIP_IPC_RELEASE_GUARD:-0}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -117,7 +118,11 @@ if [[ ! -f "$dockerfile" ]]; then
   exit 1
 fi
 
-python3 "$repo_root/scripts/ipc_contract_guard.py" verify-release-readiness
+if [[ "$skip_ipc_release_guard" != "1" ]]; then
+  python3 "$repo_root/scripts/ipc_contract_guard.py" verify-release-readiness
+else
+  warn "skipping IPC release-readiness guard because SKIP_IPC_RELEASE_GUARD=1"
+fi
 
 ensure_build_context_deps
 
