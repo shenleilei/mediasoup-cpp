@@ -1,73 +1,28 @@
 // Black-box integration tests for the 5 code review fixes (2026-04-08).
-// Requires a running mediasoup-sfu + mediasoup-worker.
 #include <gtest/gtest.h>
 #include "TestHttpsClient.h"
 #include "TestWsClient.h"
 #include "TestProcessUtils.h"
-#include <signal.h>
-#include <sys/wait.h>
 
 static const int SFU_PORT = 14002;
 static const std::string HOST = "127.0.0.1";
 
 class ReviewFixIntegration : public ::testing::Test {
 protected:
-	pid_t sfuPid_ = -1;
+	TestSfuProcess sfu_;
 	std::string testRoom_;
 
 	void SetUp() override {
 		testRoom_ = "fix_" + std::to_string(getpid()) + "_" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 
-		ASSERT_TRUE(ensureTestSignalingTlsFiles());
-		std::string cmd = "./build/mediasoup-sfu --nodaemon"
-			" --port=" + std::to_string(SFU_PORT) +
-			" --webRtcServerPort=" + std::to_string(testWebRtcServerPortForSignalingPort(SFU_PORT)) +
-			" --workers=1"
-			" --workerBin=./mediasoup-worker"
-			" > /dev/null 2>&1 & echo $!";
-		FILE* fp = popen(cmd.c_str(), "r");
-		ASSERT_NE(fp, nullptr);
-		char buf[64]{};
-		fgets(buf, sizeof(buf), fp);
-		pclose(fp);
-		sfuPid_ = atoi(buf);
-		ASSERT_GT(sfuPid_, 0);
-
-		for (int i = 0; i < 50; ++i) {
-			usleep(100000);
-			int fd = socket(AF_INET, SOCK_STREAM, 0);
-			sockaddr_in addr{};
-			addr.sin_family = AF_INET;
-			addr.sin_port = htons(SFU_PORT);
-			inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
-			if (::connect(fd, (sockaddr*)&addr, sizeof(addr)) == 0) {
-				::close(fd);
-				usleep(200000);
-				return;
-			}
-			::close(fd);
-		}
-		FAIL() << "SFU did not start within 5 seconds";
+		ASSERT_TRUE(sfu_.start(SFU_PORT, {}, makeTestSfuLogPath("sfu_review_fix", SFU_PORT)))
+			<< "failed to start review-fix SFU on port " << SFU_PORT
+			<< ", log: " << sfu_.logPath();
 	}
 
 	void TearDown() override {
-		if (sfuPid_ > 0) {
-			terminateSfuProcess(sfuPid_);
-			for (int i = 0; i < 20; ++i) {
-				usleep(50000);
-				int fd = socket(AF_INET, SOCK_STREAM, 0);
-				sockaddr_in addr{};
-				addr.sin_family = AF_INET;
-				addr.sin_port = htons(SFU_PORT);
-				addr.sin_addr.s_addr = htonl(INADDR_ANY);
-				int opt = 1;
-				setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-				bool free = (bind(fd, (sockaddr*)&addr, sizeof(addr)) == 0);
-				::close(fd);
-				if (free) return;
-			}
-		}
+		(void)sfu_.stop();
 	}
 
 	static json rtpCaps() {

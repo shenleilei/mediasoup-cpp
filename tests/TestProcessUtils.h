@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <arpa/inet.h>
 #include <atomic>
 #include <cerrno>
@@ -101,6 +102,14 @@ inline bool waitForTcpPortFree(int port, int polls = 40, int sleepUs = 50000) {
 	return isTcpPortBindable(port);
 }
 
+inline bool waitForUdpPortFree(int port, int polls = 40, int sleepUs = 50000) {
+	for (int i = 0; i < polls; ++i) {
+		if (isUdpPortBindable(port)) return true;
+		usleep(sleepUs);
+	}
+	return isUdpPortBindable(port);
+}
+
 inline bool waitForTcpPortListening(int port, int polls = 70, int sleepUs = 100000) {
 	for (int i = 0; i < polls; ++i) {
 		usleep(sleepUs);
@@ -132,20 +141,13 @@ inline int allocateUniqueTestPort(int base = 18000, int span = 2000) {
 	return -1;
 }
 
-inline int allocateUniqueUdpPort(int base = 50000, int span = 10000) {
-	static std::atomic<int> nextOffset{0};
-	for (int attempt = 0; attempt < span * 2; ++attempt) {
-		const int offset = nextOffset.fetch_add(1);
-		const int port = base + (offset % span);
-		if (isUdpPortBindable(port)) return port;
-	}
-	return -1;
-}
-
 inline int testWebRtcServerPortForSignalingPort(int signalingPort) {
-	(void)signalingPort;
-	const int port = allocateUniqueUdpPort();
-	return port > 0 ? port : 50000;
+	if (signalingPort > 0) {
+		const int base = 50000;
+		const int candidate = base + (signalingPort - 14000);
+		if (candidate >= base && candidate < 60000) return candidate;
+	}
+	return 50000;
 }
 
 inline bool ensureTestSignalingTlsFiles() {
@@ -242,6 +244,45 @@ inline void terminateSfuProcess(pid_t pid, int gracefulPolls = 40, int sleepUs =
 	(void)waitForDirectChildExit(pid, 10, sleepUs);
 }
 
+inline void cleanupFixedTestPortProcesses(int tcpPort)
+{
+	if (tcpPort <= 0) return;
+
+	for (int i = 0; i < 3; ++i) {
+		if (isTcpPortBindable(tcpPort)) return;
+
+		std::vector<pid_t> victims;
+		for (const auto& entry : std::filesystem::directory_iterator("/proc")) {
+			if (!entry.is_directory()) continue;
+			const auto name = entry.path().filename().string();
+			if (name.empty() ||
+				!std::all_of(name.begin(), name.end(), [](unsigned char ch) { return std::isdigit(ch) != 0; }))
+				continue;
+			const pid_t pid = static_cast<pid_t>(std::atoi(name.c_str()));
+			if (pid <= 0) continue;
+			if (!isSfuProcessAlive(pid)) continue;
+
+			std::ifstream cmdline(entry.path() / "cmdline", std::ios::binary);
+			if (!cmdline.is_open()) continue;
+			std::string cmd((std::istreambuf_iterator<char>(cmdline)), std::istreambuf_iterator<char>());
+			const std::string portArg = "--port=" + std::to_string(tcpPort);
+			if (cmd.find(portArg) != std::string::npos) {
+				victims.push_back(pid);
+			}
+		}
+
+		if (victims.empty()) {
+			return;
+		}
+
+		for (const auto pid : victims) {
+			terminateSfuProcess(pid);
+		}
+
+		usleep(100000);
+	}
+}
+
 class TestSfuProcess {
 public:
 	bool start(int port, const std::vector<std::string>& extraArgs = {}, const std::string& logPath = "/dev/null") {
@@ -250,6 +291,7 @@ public:
 		logPath_ = logPath;
 		webRtcServerPort_ = testWebRtcServerPortForSignalingPort(port_);
 
+		cleanupFixedTestPortProcesses(port_);
 		if (!waitForTcpPortFree(port_)) return false;
 		if (webRtcServerPort_ <= 0 || !isUdpPortBindable(webRtcServerPort_)) return false;
 		if (!ensureTestSignalingTlsFiles()) return false;
@@ -316,7 +358,7 @@ public:
 
 		if (pid > 0) terminateSfuProcess(pid, 40, sleepUs);
 		const bool tcpFree = port > 0 ? waitForTcpPortFree(port, portReleasePolls, sleepUs) : true;
-		const bool udpFree = webRtcServerPort > 0 ? isUdpPortBindable(webRtcServerPort) : true;
+		const bool udpFree = webRtcServerPort > 0 ? waitForUdpPortFree(webRtcServerPort, portReleasePolls, sleepUs) : true;
 		return tcpFree && udpFree;
 	}
 
