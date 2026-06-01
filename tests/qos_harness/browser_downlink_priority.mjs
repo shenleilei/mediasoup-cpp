@@ -80,7 +80,7 @@ function startSfu() {
   ensureSignalingTlsFiles();
   const child = spawn(
     path.join(repoRoot, 'build', 'mediasoup-sfu'),
-    ['--nodaemon', `--port=${signalingPort}`, '--listenIp=127.0.0.1', `--webRtcServerPort=${webRtcServerPort}`, '--workers=1', '--workerBin=./mediasoup-worker'],
+    ['--nodaemon', `--port=${signalingPort}`, '--localOnly', `--webRtcServerPort=${webRtcServerPort}`, '--workers=1', '--workerBin=./mediasoup-worker'],
     { cwd: repoRoot, stdio: ['ignore', 'pipe', 'pipe'] },
   );
   child.stdout.on('data', () => {});

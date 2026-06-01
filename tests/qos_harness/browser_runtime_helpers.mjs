@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 
 const helperDir = path.dirname(new URL(import.meta.url).pathname);
 const localBrowserCacheRoot = path.join(helperDir, '.browsers');
+const bundledChromeRoot = path.join(helperDir, 'chrome');
 
 function findLocalBrowserCacheCandidates() {
   const candidates = [];
@@ -40,9 +41,39 @@ function findLocalBrowserCacheCandidates() {
   return candidates;
 }
 
+function findBundledChromeCandidates() {
+  const candidates = [];
+
+  if (!fs.existsSync(bundledChromeRoot)) {
+    return candidates;
+  }
+
+  const browserRoots = fs.readdirSync(bundledChromeRoot, { withFileTypes: true })
+    .filter(entry => entry.isDirectory())
+    .map(entry => path.join(bundledChromeRoot, entry.name));
+
+  for (const browserRoot of browserRoots) {
+    const knownCandidates = [
+      path.join(browserRoot, 'chrome-linux64', 'chrome'),
+      path.join(browserRoot, 'chrome-linux', 'chrome'),
+      path.join(browserRoot, 'headless_shell-linux64', 'headless_shell'),
+      path.join(browserRoot, 'headless_shell-linux', 'headless_shell'),
+    ];
+
+    for (const candidate of knownCandidates) {
+      if (fs.existsSync(candidate)) {
+        candidates.push(candidate);
+      }
+    }
+  }
+
+  return candidates;
+}
+
 const DEFAULT_CHROMIUM_CANDIDATES = [
   process.env.CHROME_BIN,
   ...findLocalBrowserCacheCandidates(),
+  ...findBundledChromeCandidates(),
   '/usr/lib64/chromium-browser/headless_shell',
   '/usr/bin/chromium-browser',
   '/usr/bin/chromium',

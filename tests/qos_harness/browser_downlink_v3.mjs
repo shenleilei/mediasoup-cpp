@@ -78,7 +78,7 @@ function startSfu() {
     path.join(repoRoot, 'build', 'mediasoup-sfu'),
     [
       '--nodaemon', `--port=${signalingPort}`,
-      '--listenIp=127.0.0.1',
+      '--localOnly',
       `--webRtcServerPort=${webRtcServerPort}`,
       '--workers=1', '--workerBin=./mediasoup-worker'
     ],

@@ -314,7 +314,7 @@ function startSfu() {
     [
       '--nodaemon',
       `--port=${port}`,
-      '--listenIp=127.0.0.1',
+      '--localOnly',
       `--webRtcServerPort=${webRtcServerPort}`,
       '--workers=1',
       '--workerBin=./mediasoup-worker'

@@ -21,6 +21,9 @@ const defaultRemoteUrl = 'https://volcvideo3.zelostech.com.cn:1770/';
 const baseUrlArg = args[argOffset] || defaultRemoteUrl;
 const roomId = args[argOffset + 1] || `plain_abs_capture_${Date.now()}`;
 const chromiumPath = args[argOffset + 2] || resolveChromiumExecutable();
+const expectedPlainSsrc = 11111111;
+const maxExpectedCaptureToSfuMs = 1000;
+const maxExpectedCaptureAgeMs = 10000;
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -95,7 +98,7 @@ function startLocalSfu(signalingPort, webRtcServerPort) {
     [
       '--nodaemon',
       `--port=${signalingPort}`,
-      '--listenIp=127.0.0.1',
+      '--localOnly',
       `--webRtcServerPort=${webRtcServerPort}`,
       '--workers=1',
       '--workerBin=./mediasoup-worker',
@@ -186,37 +189,72 @@ async function waitForCaptureMetrics(page, timeoutMs = 15000) {
       const recvTransport = state?.recvTransport || null;
       return {
         remoteVideoConsumers: state?.remoteVideoConsumers?.size ?? 0,
+        remotePeerId: remotePeer?.peerId || null,
         producerId,
         remoteProducerStat,
+        trackText: byLabel['Track'] || null,
+        publisherQosText: byLabel['Publisher QoS'] || null,
         captureTsText: byLabel['Capture Ts'] || null,
         captureOffsetText: byLabel['Capture Offset'] || null,
         captureToSfuText: byLabel['Capture->SFU'] || null,
         renderSizeText: byLabel['渲染尺寸'] || null,
         fpsText: byLabel['帧率'] || null,
+        audioConcealText: byLabel['Audio Conceal'] || null,
         recvTransportState: recvTransport?.connectionState || null,
         videos,
       };
     });
 
+    const captureTs = Number.parseInt(sample.captureTsText ?? '', 10);
+    const captureToSfu = Number.parseInt((sample.captureToSfuText ?? '').replace(/\s*ms$/i, ''), 10);
+    const fps = Number.parseFloat(sample.fpsText ?? '');
+    const captureAgeMs = Number.isInteger(captureTs)
+      ? Math.abs(Date.now() - captureTs)
+      : Number.POSITIVE_INFINITY;
     const hasRenderableVideo = sample.videos.some(video =>
-      video.readyState >= 2 &&
+      video.readyState >= 4 &&
       video.width > 0 &&
-      video.height > 0
+      video.height > 0 &&
+      video.currentTime > 0 &&
+      video.tracks.some(track =>
+        track.kind === 'video' &&
+        track.readyState === 'live' &&
+        track.muted === false
+      )
     );
 
     if (
-      sample.remoteVideoConsumers > 0 &&
+      sample.remoteVideoConsumers === 1 &&
+      sample.remotePeerId === 'plain-publisher' &&
+      sample.trackText === `ssrc:${expectedPlainSsrc}` &&
+      sample.publisherQosText === 'server-only' &&
       sample.remoteProducerStat?.absCaptureTimestampMs !== undefined &&
       sample.remoteProducerStat?.absCaptureReceiveDeltaMs !== undefined &&
+      sample.remoteProducerStat?.estimatedCaptureClockOffsetMs === 0 &&
+      sample.remoteProducerStat?.ssrc === expectedPlainSsrc &&
+      sample.remoteProducerStat?.score === 10 &&
+      sample.remoteProducerStat?.packetsLost === 0 &&
+      sample.remoteProducerStat?.packetCount > 0 &&
       sample.captureTsText &&
       sample.captureTsText !== '-' &&
+      Number.isInteger(captureTs) &&
+      sample.remoteProducerStat.absCaptureTimestampMs === captureTs &&
+      captureAgeMs <= maxExpectedCaptureAgeMs &&
+      sample.captureOffsetText === '0 ms' &&
       sample.captureToSfuText &&
       sample.captureToSfuText !== '-' &&
+      Number.isInteger(captureToSfu) &&
+      captureToSfu > 0 &&
+      captureToSfu <= maxExpectedCaptureToSfuMs &&
+      sample.remoteProducerStat.absCaptureReceiveDeltaMs === captureToSfu &&
       sample.renderSizeText &&
       sample.renderSizeText !== '-' &&
       sample.fpsText &&
       sample.fpsText !== '-' &&
       sample.fpsText !== '0' &&
+      Number.isFinite(fps) &&
+      fps > 0 &&
+      sample.audioConcealText === 'n/a' &&
       sample.recvTransportState === 'connected' &&
       hasRenderableVideo
     ) {
