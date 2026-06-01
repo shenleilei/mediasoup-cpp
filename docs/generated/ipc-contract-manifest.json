@@ -1,6 +1,6 @@
 {
-  "generatedAtUtc": "2026-05-31T15:59:26Z",
-  "ipcContractFingerprint": "c654b73c056793f5c0b62e1174f3e4b82ef307af62bda5f82fbbcb42509e30c9",
+  "generatedAtUtc": "2026-06-01T13:24:18Z",
+  "ipcContractFingerprint": "ffa1027aa57d89932bcd6c2734aa62b539ee4bb9b42d05039ca63377ea9d5c77",
   "ipcSensitiveFiles": [
     {
       "path": "CMakeLists.txt",
@@ -244,7 +244,7 @@
     },
     {
       "path": "src/Channel.cpp",
-      "sha256": "6c9e39a9fe7c8946eb559548fe1bea219e89ec9cd5f7b374e0a852b8a464809e"
+      "sha256": "f98b55740a9cd7e2046b5a6f3415ff1b281c9a51cbb017466cd56879bfc89995"
     },
     {
       "path": "src/Channel.h",
@@ -436,11 +436,11 @@
     },
     {
       "path": "src/mediasoup-worker-src/worker/include/RTC/DataConsumer.hpp",
-      "sha256": "11e8033b64cb154cfba5d7be4df89744c0809351ad612e14b1abaae526d2b280"
+      "sha256": "669b54c8ff470ce2ac391b236086dc05f26fa1e21b2ff4d9fe025514e5280e27"
     },
     {
       "path": "src/mediasoup-worker-src/worker/include/RTC/DataProducer.hpp",
-      "sha256": "42217410631d57bf2f0d80b8dd540d39417adf7c3f372759b8c76df9c5ef5d67"
+      "sha256": "333eed19c5d72f16179bc993838a0ba003726fdf7831c94de28fec37f6b1c7e2"
     },
     {
       "path": "src/mediasoup-worker-src/worker/include/RTC/DirectTransport.hpp",
@@ -796,11 +796,11 @@
     },
     {
       "path": "src/mediasoup-worker-src/worker/src/RTC/DataConsumer.cpp",
-      "sha256": "0a15920e705bb79b14721b7ec70135a490e4c5599e29d1b66b9d9b38e237273f"
+      "sha256": "4ba2c11d6d5e8b6acd7ebc38be6c7b8c22556b4ba407342fca5e72acd604b368"
     },
     {
       "path": "src/mediasoup-worker-src/worker/src/RTC/DataProducer.cpp",
-      "sha256": "0264a587c30b2ea09b36ef8002e2b0142344c6c9ad119abab3928941e1f3b662"
+      "sha256": "75f9dd12a1fac454f79aeaee24d6c723d0da71b66aa9531e2b102e6a336f52a0"
     },
     {
       "path": "src/mediasoup-worker-src/worker/src/RTC/DirectTransport.cpp",
@@ -824,7 +824,7 @@
     },
     {
       "path": "src/mediasoup-worker-src/worker/src/RTC/NackGenerator.cpp",
-      "sha256": "273faf515a9093ed430dda114d18153574e6771dffc85df60e93dfffacc19d74"
+      "sha256": "9a64093da7836897a3cd147894fbc2ed5d7989af8a76fd89c30e7f18a0151a78"
     },
     {
       "path": "src/mediasoup-worker-src/worker/src/RTC/PipeConsumer.cpp",
@@ -1036,7 +1036,7 @@
     },
     {
       "path": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamRecv.cpp",
-      "sha256": "dc3124ca6854cfcccdc05eac96981bcab39c90a7d81a4453dff4755cb43d21bf"
+      "sha256": "a82f216c019fee4729b6dc75d41d7763bfde640e32d749058471e955c18cb773"
     },
     {
       "path": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamSend.cpp",
@@ -1072,7 +1072,7 @@
     },
     {
       "path": "src/mediasoup-worker-src/worker/src/RTC/SimpleConsumer.cpp",
-      "sha256": "b713f5fc681c4933803563a7ef4398ef86b723a18005b25234c7852042c371bc"
+      "sha256": "8cb792ca039f4fff268f83705903fafc68162a81b31d7f6ea0f3f71d95ba88fb"
     },
     {
       "path": "src/mediasoup-worker-src/worker/src/RTC/SimulcastConsumer.cpp",
@@ -1100,7 +1100,7 @@
     },
     {
       "path": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
-      "sha256": "9adc47c3c075b47bc613ea10861f592ea3fc6b007373f832ea70300be2b1ccb2"
+      "sha256": "a852ee72c2b99b2fb2092626196a5d9e5c4dffdbc8865bbb7ca47436463fcb67"
     },
     {
       "path": "src/mediasoup-worker-src/worker/src/RTC/TransportCongestionControlClient.cpp",

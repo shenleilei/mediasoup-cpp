@@ -1,0 +1,5378 @@
+[
+  {
+    "file": "src/RoomServiceLifecycle.cpp",
+    "line": 17,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"[{} {}] local node at capacity ({}/{})\", roomId, peerId,",
+    "module": "RoomServiceLifecycle.cpp"
+  },
+  {
+    "file": "src/RoomServiceLifecycle.cpp",
+    "line": 24,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"[{} {}] join validation failed: invalid rtpCapabilities type\", roomId, peerId);",
+    "module": "RoomServiceLifecycle.cpp"
+  },
+  {
+    "file": "src/RoomServiceLifecycle.cpp",
+    "line": 153,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"checkRoomHealth: found {} dead rooms\", deadRooms.size());",
+    "module": "RoomServiceLifecycle.cpp"
+  },
+  {
+    "file": "src/RoomServiceLifecycle.cpp",
+    "line": 158,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"Room {} has dead router, notifying {} peers to reconnect\",",
+    "module": "RoomServiceLifecycle.cpp"
+  },
+  {
+    "file": "src/Transport.cpp",
+    "line": 40,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"{} notification args empty [id:{}]\", owner, id);",
+    "module": "Transport.cpp"
+  },
+  {
+    "file": "src/Transport.cpp",
+    "line": 54,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"produce validation failed [transportId:{}]: invalid rtpParameters\", id_);",
+    "module": "Transport.cpp"
+  },
+  {
+    "file": "src/Transport.cpp",
+    "line": 58,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"produce validation failed [transportId:{}]: invalid routerRtpCapabilities\", id_);",
+    "module": "Transport.cpp"
+  },
+  {
+    "file": "src/Transport.cpp",
+    "line": 62,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"produce validation failed [transportId:{}]: invalid appData\", id_);",
+    "module": "Transport.cpp"
+  },
+  {
+    "file": "src/Transport.cpp",
+    "line": 67,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"produce validation failed [transportId:{} kind:{}]\", id_, kind);",
+    "module": "Transport.cpp"
+  },
+  {
+    "file": "src/Transport.cpp",
+    "line": 120,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"Producer notification cast failed [id:{}]: {}\", producer->id(), e.what());",
+    "module": "Transport.cpp"
+  },
+  {
+    "file": "src/Transport.cpp",
+    "line": 122,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"Producer notification dropped [id:{}]: {}\", producer->id(), e.what());",
+    "module": "Transport.cpp"
+  },
+  {
+    "file": "src/Transport.cpp",
+    "line": 124,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"Producer notification dropped [id:{}]: unknown error\", producer->id());",
+    "module": "Transport.cpp"
+  },
+  {
+    "file": "src/Transport.cpp",
+    "line": 135,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"consume validation failed [transportId:{}]: invalid rtpCapabilities\", id_);",
+    "module": "Transport.cpp"
+  },
+  {
+    "file": "src/Transport.cpp",
+    "line": 139,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"consume validation failed [transportId:{}]: invalid consumableRtpParameters\", id_);",
+    "module": "Transport.cpp"
+  },
+  {
+    "file": "src/Transport.cpp",
+    "line": 148,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"consume validation failed [transportId:{}]: empty codecs\", id_);",
+    "module": "Transport.cpp"
+  },
+  {
+    "file": "src/Transport.cpp",
+    "line": 152,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"consume validation failed [transportId:{}]: empty codecs[0].mimeType\", id_);",
+    "module": "Transport.cpp"
+  },
+  {
+    "file": "src/Transport.cpp",
+    "line": 220,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"Consumer notification cast failed [id:{}]: {}\", consumer->id(), e.what());",
+    "module": "Transport.cpp"
+  },
+  {
+    "file": "src/Transport.cpp",
+    "line": 222,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"Consumer notification dropped [id:{}]: {}\", consumer->id(), e.what());",
+    "module": "Transport.cpp"
+  },
+  {
+    "file": "src/Transport.cpp",
+    "line": 224,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"Consumer notification dropped [id:{}]: unknown error\", consumer->id());",
+    "module": "Transport.cpp"
+  },
+  {
+    "file": "src/Transport.cpp",
+    "line": 441,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"Transport::close() request failed [id:{}]: {}\", id_, e.what());",
+    "module": "Transport.cpp"
+  },
+  {
+    "file": "src/Transport.cpp",
+    "line": 443,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"Transport::close() request failed [id:{}]: unknown error\", id_);",
+    "module": "Transport.cpp"
+  },
+  {
+    "file": "src/RoomStatsQosHelpers.h",
+    "line": 188,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger, \"[{} {}] producer {} getStats failed: {}\",",
+    "module": "RoomStatsQosHelpers.h"
+  },
+  {
+    "file": "src/RoomStatsQosHelpers.h",
+    "line": 192,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger, \"[{} {}] producer {} getStats failed: unknown error\",",
+    "module": "RoomStatsQosHelpers.h"
+  },
+  {
+    "file": "src/RoomStatsQosHelpers.h",
+    "line": 264,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger, \"[{} {}] consumer {} getStats failed: {}\",",
+    "module": "RoomStatsQosHelpers.h"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 49,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 72,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 96,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"trace close waiting for read thread [pid:{}]\", pid_);",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 102,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 123,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"trace close done [pid:{}]\", pid_);",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 135,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"duplicate worker pipe fd failed: {}\", strerror(errno));",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 159,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"write to worker pipe failed: {}\", strerror(error));",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 165,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"write to worker pipe returned 0 bytes\");",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 200,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"notification too big\");",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 384,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"processAvailableData called in threaded mode [pid:{}], rejecting\", pid_);",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 394,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_,",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 430,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_,",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 447,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"invalid FlatBuffers message [pid:{} len:{}], closing channel\", pid_, frameLen);",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 473,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"trace readLoop start [pid:{} consumerFd:{}]\", pid_, consumerFd_);",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 485,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 498,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 511,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 524,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 538,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_,",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 551,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_,",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 561,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"invalid FlatBuffers message [pid:{} len:{}], closing channel\", pid_, frameLen);",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 576,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"trace readLoop exit [pid:{} closed:{}]\", pid_, closed_.load() ? 1 : 0);",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 590,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"response does not match any request [id:{}]\", id);",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 625,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"unexpected message type\");",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 677,
+    "kind": "MS_WARN",
+    "text": "case 'W': MS_WARN(workerLogger, \"[pid:{}] {}\", pid_, msg); break;",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 678,
+    "kind": "MS_ERROR",
+    "text": "case 'E': MS_ERROR(workerLogger, \"[pid:{}] {}\", pid_, msg); break;",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Channel.cpp",
+    "line": 679,
+    "kind": "SPDLOG_INFO",
+    "text": "default: spdlog::info(msg); break;",
+    "module": "Channel.cpp"
+  },
+  {
+    "file": "src/Logger.h",
+    "line": 81,
+    "kind": "MS_INFO",
+    "text": "#define MS_INFO(logger, ...)  (logger)->log(spdlog::source_loc{__FILE__, __LINE__, __FUNCTION__}, spdlog::level::info, __VA_ARGS__)",
+    "module": "Logger.h"
+  },
+  {
+    "file": "src/Logger.h",
+    "line": 82,
+    "kind": "MS_WARN",
+    "text": "#define MS_WARN(logger, ...)  (logger)->log(spdlog::source_loc{__FILE__, __LINE__, __FUNCTION__}, spdlog::level::warn, __VA_ARGS__)",
+    "module": "Logger.h"
+  },
+  {
+    "file": "src/Logger.h",
+    "line": 83,
+    "kind": "MS_ERROR",
+    "text": "#define MS_ERROR(logger, ...) (logger)->log(spdlog::source_loc{__FILE__, __LINE__, __FUNCTION__}, spdlog::level::err, __VA_ARGS__)",
+    "module": "Logger.h"
+  },
+  {
+    "file": "src/Logger.h",
+    "line": 86,
+    "kind": "MS_SPDLOG_INFO",
+    "text": "#define MS_SPDLOG_INFO(...)  spdlog::default_logger_raw()->log(spdlog::source_loc{__FILE__, __LINE__, __FUNCTION__}, spdlog::level::info, __VA_ARGS__)",
+    "module": "Logger.h"
+  },
+  {
+    "file": "src/Logger.h",
+    "line": 87,
+    "kind": "MS_SPDLOG_WARN",
+    "text": "#define MS_SPDLOG_WARN(...)  spdlog::default_logger_raw()->log(spdlog::source_loc{__FILE__, __LINE__, __FUNCTION__}, spdlog::level::warn, __VA_ARGS__)",
+    "module": "Logger.h"
+  },
+  {
+    "file": "src/Logger.h",
+    "line": 88,
+    "kind": "MS_SPDLOG_ERROR",
+    "text": "#define MS_SPDLOG_ERROR(...) spdlog::default_logger_raw()->log(spdlog::source_loc{__FILE__, __LINE__, __FUNCTION__}, spdlog::level::err, __VA_ARGS__)",
+    "module": "Logger.h"
+  },
+  {
+    "file": "src/GeoRouter.h",
+    "line": 35,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"Failed to load xdb from {}\", xdbPath);",
+    "module": "GeoRouter.h"
+  },
+  {
+    "file": "src/GeoRouter.h",
+    "line": 40,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"Failed to create xdb searcher: {}\", err);",
+    "module": "GeoRouter.h"
+  },
+  {
+    "file": "src/main.cpp",
+    "line": 55,
+    "kind": "MS_SPDLOG_INFO",
+    "text": "MS_SPDLOG_INFO(\"mediasoup-cpp SFU starting (new architecture: WorkerThread pool)...\");",
+    "module": "main.cpp"
+  },
+  {
+    "file": "src/main.cpp",
+    "line": 70,
+    "kind": "MS_SPDLOG_ERROR",
+    "text": "MS_SPDLOG_ERROR(\"Signaling TLS validation failed: {}\", tlsError);",
+    "module": "main.cpp"
+  },
+  {
+    "file": "src/main.cpp",
+    "line": 83,
+    "kind": "MS_SPDLOG_ERROR",
+    "text": "MS_SPDLOG_ERROR(\"No WorkerThreads created, exiting\");",
+    "module": "main.cpp"
+  },
+  {
+    "file": "src/main.cpp",
+    "line": 99,
+    "kind": "MS_SPDLOG_INFO",
+    "text": "MS_SPDLOG_INFO(\"mediasoup-cpp SFU ready - {} WorkerThreads, {} total workers, signaling on port {}, nodeId={}\",",
+    "module": "main.cpp"
+  },
+  {
+    "file": "src/main.cpp",
+    "line": 107,
+    "kind": "MS_SPDLOG_INFO",
+    "text": "MS_SPDLOG_INFO(\"Shutting down...\");",
+    "module": "main.cpp"
+  },
+  {
+    "file": "src/main.cpp",
+    "line": 117,
+    "kind": "MS_SPDLOG_INFO",
+    "text": "MS_SPDLOG_INFO(\"Shutdown complete\");",
+    "module": "main.cpp"
+  },
+  {
+    "file": "src/RoomService.h",
+    "line": 67,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"postRegistryTask inline fallback failed: {}\", e.what());",
+    "module": "RoomService.h"
+  },
+  {
+    "file": "src/RoomService.h",
+    "line": 69,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"postRegistryTask inline fallback failed: unknown error\");",
+    "module": "RoomService.h"
+  },
+  {
+    "file": "src/Router.cpp",
+    "line": 27,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"{} notification args empty [id:{}]\", owner, id);",
+    "module": "Router.cpp"
+  },
+  {
+    "file": "src/Router.cpp",
+    "line": 66,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"createWebRtcTransport failed: listenInfos is empty [routerId:{}]\", id_);",
+    "module": "Router.cpp"
+  },
+  {
+    "file": "src/Router.cpp",
+    "line": 172,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"WebRtcTransport notification cast failed [id:{}]: {}\", transport->id(), e.what());",
+    "module": "Router.cpp"
+  },
+  {
+    "file": "src/Router.cpp",
+    "line": 174,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"WebRtcTransport notification dropped [id:{}]: {}\", transport->id(), e.what());",
+    "module": "Router.cpp"
+  },
+  {
+    "file": "src/Router.cpp",
+    "line": 176,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"WebRtcTransport notification dropped [id:{}]: unknown error\", transport->id());",
+    "module": "Router.cpp"
+  },
+  {
+    "file": "src/Router.cpp",
+    "line": 189,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"createPlainTransport failed: listenInfos is empty [routerId:{}]\", id_);",
+    "module": "Router.cpp"
+  },
+  {
+    "file": "src/Router.cpp",
+    "line": 286,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"Router::close() request failed [id:{}]: {}\", id_, e.what());",
+    "module": "Router.cpp"
+  },
+  {
+    "file": "src/Router.cpp",
+    "line": 288,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"Router::close() request failed [id:{}]: unknown error\", id_);",
+    "module": "Router.cpp"
+  },
+  {
+    "file": "src/RoomMediaHelpers.h",
+    "line": 168,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger, \"[{} {}] keyframe request failed for existing producer {}: {}\",",
+    "module": "RoomMediaHelpers.h"
+  },
+  {
+    "file": "src/RoomMediaHelpers.h",
+    "line": 171,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger, \"[{} {}] keyframe request failed for existing producer {}: unknown error\",",
+    "module": "RoomMediaHelpers.h"
+  },
+  {
+    "file": "src/RoomMediaHelpers.h",
+    "line": 181,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger, \"[{} {}] {} FAILED for producer {}: {}\",",
+    "module": "RoomMediaHelpers.h"
+  },
+  {
+    "file": "src/RoomMediaHelpers.h",
+    "line": 243,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger, \"[{} {}] keyframe request failed for {}: {}\",",
+    "module": "RoomMediaHelpers.h"
+  },
+  {
+    "file": "src/RoomMediaHelpers.h",
+    "line": 246,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger, \"[{} {}] keyframe request failed for {}: unknown error\",",
+    "module": "RoomMediaHelpers.h"
+  },
+  {
+    "file": "src/RoomMediaHelpers.h",
+    "line": 259,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger, \"[{} {}] auto-subscribe FAILED for {}: {}\",",
+    "module": "RoomMediaHelpers.h"
+  },
+  {
+    "file": "src/WorkerManager.h",
+    "line": 119,
+    "kind": "SPDLOG_ERROR",
+    "text": "spdlog::error(\"Worker respawn rate limit hit ({} in {}s), not respawning\",",
+    "module": "WorkerManager.h"
+  },
+  {
+    "file": "src/WorkerManager.h",
+    "line": 139,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"Worker respawned\");",
+    "module": "WorkerManager.h"
+  },
+  {
+    "file": "src/WorkerManager.h",
+    "line": 141,
+    "kind": "SPDLOG_ERROR",
+    "text": "spdlog::error(\"Failed to respawn worker: {}\", e.what());",
+    "module": "WorkerManager.h"
+  },
+  {
+    "file": "src/SignalingServerHttp.cpp",
+    "line": 170,
+    "kind": "SPDLOG_ERROR",
+    "text": "spdlog::error(\"broadcastStats exception: {}\", e.what());",
+    "module": "SignalingServerHttp.cpp"
+  },
+  {
+    "file": "src/Producer.cpp",
+    "line": 45,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"Producer::close() request failed [id:{}]: {}\", id_, e.what());",
+    "module": "Producer.cpp"
+  },
+  {
+    "file": "src/Producer.cpp",
+    "line": 47,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"Producer::close() request failed [id:{}]: unknown error\", id_);",
+    "module": "Producer.cpp"
+  },
+  {
+    "file": "src/SignalingServerWs.cpp",
+    "line": 119,
+    "kind": "SPDLOG_ERROR",
+    "text": "spdlog::error(\"No mediasoup workers available, refusing to listen\");",
+    "module": "SignalingServerWs.cpp"
+  },
+  {
+    "file": "src/SignalingServerWs.cpp",
+    "line": 176,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(",
+    "module": "SignalingServerWs.cpp"
+  },
+  {
+    "file": "src/SignalingServerWs.cpp",
+    "line": 261,
+    "kind": "SPDLOG_ERROR",
+    "text": "spdlog::error(\"[{} {}] clientStats error: {}\", roomId, peerId, e.what());",
+    "module": "SignalingServerWs.cpp"
+  },
+  {
+    "file": "src/SignalingServerWs.cpp",
+    "line": 264,
+    "kind": "SPDLOG_ERROR",
+    "text": "spdlog::error(\"[{} {}] clientStats error: unknown error\", roomId, peerId);",
+    "module": "SignalingServerWs.cpp"
+  },
+  {
+    "file": "src/SignalingServerWs.cpp",
+    "line": 364,
+    "kind": "SPDLOG_ERROR",
+    "text": "spdlog::error(\"[{} {}] downlinkClientStats error: {}\", roomId, peerId, e.what());",
+    "module": "SignalingServerWs.cpp"
+  },
+  {
+    "file": "src/SignalingServerWs.cpp",
+    "line": 367,
+    "kind": "SPDLOG_ERROR",
+    "text": "spdlog::error(\"[{} {}] downlinkClientStats error: unknown error\", roomId, peerId);",
+    "module": "SignalingServerWs.cpp"
+  },
+  {
+    "file": "src/SignalingServerWs.cpp",
+    "line": 474,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"[{} {}] dropping stale {} (session:{} current:{})\",",
+    "module": "SignalingServerWs.cpp"
+  },
+  {
+    "file": "src/SignalingServerWs.cpp",
+    "line": 502,
+    "kind": "SPDLOG_ERROR",
+    "text": "spdlog::error(\"[{} {}] {} error: {}\", targetRoomId, peerId, method, e.what());",
+    "module": "SignalingServerWs.cpp"
+  },
+  {
+    "file": "src/SignalingServerWs.cpp",
+    "line": 577,
+    "kind": "SPDLOG_ERROR",
+    "text": "spdlog::error(\"[{} {}] rollback leave failed: {}\", jRoomId, jPeerId, e.what());",
+    "module": "SignalingServerWs.cpp"
+  },
+  {
+    "file": "src/SignalingServerWs.cpp",
+    "line": 579,
+    "kind": "SPDLOG_ERROR",
+    "text": "spdlog::error(\"[{} {}] rollback leave failed: unknown error\", jRoomId, jPeerId);",
+    "module": "SignalingServerWs.cpp"
+  },
+  {
+    "file": "src/SignalingServerWs.cpp",
+    "line": 612,
+    "kind": "SPDLOG_INFO",
+    "text": "spdlog::info(",
+    "module": "SignalingServerWs.cpp"
+  },
+  {
+    "file": "src/SignalingServerWs.cpp",
+    "line": 619,
+    "kind": "SPDLOG_INFO",
+    "text": "spdlog::info(\"[{} {}] kicking old connection (new session:{})\", jRoomId, jPeerId, newSessionId);",
+    "module": "SignalingServerWs.cpp"
+  },
+  {
+    "file": "src/SignalingServerWs.cpp",
+    "line": 636,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"dropping malformed websocket message: {}\", e.what());",
+    "module": "SignalingServerWs.cpp"
+  },
+  {
+    "file": "src/SignalingServerWs.cpp",
+    "line": 638,
+    "kind": "SPDLOG_ERROR",
+    "text": "spdlog::error(\"websocket message handler failed: {}\", e.what());",
+    "module": "SignalingServerWs.cpp"
+  },
+  {
+    "file": "src/SignalingServerWs.cpp",
+    "line": 640,
+    "kind": "SPDLOG_ERROR",
+    "text": "spdlog::error(\"websocket message handler failed: unknown error\");",
+    "module": "SignalingServerWs.cpp"
+  },
+  {
+    "file": "src/SignalingServerWs.cpp",
+    "line": 659,
+    "kind": "SPDLOG_INFO",
+    "text": "spdlog::info(\"[{} {}] disconnected (session:{})\", roomId, peerId, sessionId);",
+    "module": "SignalingServerWs.cpp"
+  },
+  {
+    "file": "src/SignalingServerWs.cpp",
+    "line": 678,
+    "kind": "SPDLOG_ERROR",
+    "text": "spdlog::error(\"[{} {}] leave failed: {}\", roomId, peerId, e.what());",
+    "module": "SignalingServerWs.cpp"
+  },
+  {
+    "file": "src/SignalingServerWs.cpp",
+    "line": 680,
+    "kind": "SPDLOG_ERROR",
+    "text": "spdlog::error(\"[{} {}] leave failed: unknown error\", roomId, peerId);",
+    "module": "SignalingServerWs.cpp"
+  },
+  {
+    "file": "src/SignalingServerWs.cpp",
+    "line": 682,
+    "kind": "SPDLOG_INFO",
+    "text": "spdlog::info(",
+    "module": "SignalingServerWs.cpp"
+  },
+  {
+    "file": "src/SignalingServerWs.cpp",
+    "line": 692,
+    "kind": "SPDLOG_INFO",
+    "text": "spdlog::info(",
+    "module": "SignalingServerWs.cpp"
+  },
+  {
+    "file": "src/WebRtcServer.cpp",
+    "line": 97,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"WebRtcServer::close() request failed [id:{}]: {}\", id_, e.what());",
+    "module": "WebRtcServer.cpp"
+  },
+  {
+    "file": "src/WebRtcServer.cpp",
+    "line": 99,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"WebRtcServer::close() request failed [id:{}]: unknown error\", id_);",
+    "module": "WebRtcServer.cpp"
+  },
+  {
+    "file": "src/WorkerThread.cpp",
+    "line": 114,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"WorkerThread {} fatal: {}\", id_, e.what());",
+    "module": "WorkerThread.cpp"
+  },
+  {
+    "file": "src/WorkerThread.cpp",
+    "line": 169,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"WorkerThread {} eventfd write failed: {}\", id_, strerror(errno));",
+    "module": "WorkerThread.cpp"
+  },
+  {
+    "file": "src/WorkerThread.cpp",
+    "line": 229,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"WorkerThread {} worker {} has invalid channel fd\", id_, i);",
+    "module": "WorkerThread.cpp"
+  },
+  {
+    "file": "src/WorkerThread.cpp",
+    "line": 238,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_,",
+    "module": "WorkerThread.cpp"
+  },
+  {
+    "file": "src/WorkerThread.cpp",
+    "line": 253,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"WorkerThread {} failed to create worker {}: {}\", id_, i, e.what());",
+    "module": "WorkerThread.cpp"
+  },
+  {
+    "file": "src/WorkerThread.cpp",
+    "line": 260,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"WorkerThread {} has no workers!\", id_);",
+    "module": "WorkerThread.cpp"
+  },
+  {
+    "file": "src/WorkerThread.cpp",
+    "line": 295,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"WorkerThread {} epoll_wait failed: {}\", id_, strerror(waitErr));",
+    "module": "WorkerThread.cpp"
+  },
+  {
+    "file": "src/WorkerThread.cpp",
+    "line": 328,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_,",
+    "module": "WorkerThread.cpp"
+  },
+  {
+    "file": "src/WorkerThread.cpp",
+    "line": 365,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"WorkerThread {} task exception: {}\", id_, e.what());",
+    "module": "WorkerThread.cpp"
+  },
+  {
+    "file": "src/WorkerThread.cpp",
+    "line": 367,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"WorkerThread {} task unknown exception\", id_);",
+    "module": "WorkerThread.cpp"
+  },
+  {
+    "file": "src/WorkerThread.cpp",
+    "line": 396,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"WorkerThread {} delayed task exception: {}\", id_, e.what());",
+    "module": "WorkerThread.cpp"
+  },
+  {
+    "file": "src/WorkerThread.cpp",
+    "line": 398,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"WorkerThread {} delayed task unknown exception\", id_);",
+    "module": "WorkerThread.cpp"
+  },
+  {
+    "file": "src/WorkerThread.cpp",
+    "line": 421,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"WorkerThread {} timerfd_settime failed: {}\", id_, strerror(errno));",
+    "module": "WorkerThread.cpp"
+  },
+  {
+    "file": "src/WorkerThread.cpp",
+    "line": 431,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"WorkerThread {} checkRoomHealth exception: {}\", id_, e.what());",
+    "module": "WorkerThread.cpp"
+  },
+  {
+    "file": "src/WorkerThread.cpp",
+    "line": 442,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"WorkerThread {} cleanIdleRooms exception: {}\", id_, e.what());",
+    "module": "WorkerThread.cpp"
+  },
+  {
+    "file": "src/WorkerThread.cpp",
+    "line": 449,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"WorkerThread {} worker died [pid:{}], attempting respawn\", id_, worker->pid());",
+    "module": "WorkerThread.cpp"
+  },
+  {
+    "file": "src/WorkerThread.cpp",
+    "line": 469,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"WorkerThread {} respawn rate exceeded ({}x in 10s), giving up\",",
+    "module": "WorkerThread.cpp"
+  },
+  {
+    "file": "src/WorkerThread.cpp",
+    "line": 483,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"WorkerThread {} respawned worker has invalid channel fd\", id_);",
+    "module": "WorkerThread.cpp"
+  },
+  {
+    "file": "src/WorkerThread.cpp",
+    "line": 493,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_,",
+    "module": "WorkerThread.cpp"
+  },
+  {
+    "file": "src/WorkerThread.cpp",
+    "line": 507,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"WorkerThread {} respawned worker [pid:{}]\", id_, newWorker->pid());",
+    "module": "WorkerThread.cpp"
+  },
+  {
+    "file": "src/WorkerThread.cpp",
+    "line": 510,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"WorkerThread {} failed to respawn worker: {}\", id_, e.what());",
+    "module": "WorkerThread.cpp"
+  },
+  {
+    "file": "src/Consumer.cpp",
+    "line": 77,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"Consumer::close() skipped close request due to null channel [id:{}]\", id_);",
+    "module": "Consumer.cpp"
+  },
+  {
+    "file": "src/Consumer.cpp",
+    "line": 80,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"Consumer::close() request failed [id:{}]: {}\", id_, e.what());",
+    "module": "Consumer.cpp"
+  },
+  {
+    "file": "src/Consumer.cpp",
+    "line": 82,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"Consumer::close() request failed [id:{}]: unknown error\", id_);",
+    "module": "Consumer.cpp"
+  },
+  {
+    "file": "src/RoomServiceQos.cpp",
+    "line": 98,
+    "kind": "MS_INFO",
+    "text": "MS_INFO(",
+    "module": "RoomServiceQos.cpp"
+  },
+  {
+    "file": "src/RoomServiceQos.cpp",
+    "line": 127,
+    "kind": "MS_INFO",
+    "text": "MS_INFO(",
+    "module": "RoomServiceQos.cpp"
+  },
+  {
+    "file": "src/Worker.cpp",
+    "line": 277,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"worker running notification args empty [pid:{}]\", pid_);",
+    "module": "Worker.cpp"
+  },
+  {
+    "file": "src/Worker.cpp",
+    "line": 286,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"worker notification cast failed [pid:{}]: {}\", pid_, e.what());",
+    "module": "Worker.cpp"
+  },
+  {
+    "file": "src/Worker.cpp",
+    "line": 288,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"worker notification failed [pid:{}]: {}\", pid_, e.what());",
+    "module": "Worker.cpp"
+  },
+  {
+    "file": "src/Worker.cpp",
+    "line": 290,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"worker notification failed [pid:{}]: unknown error\", pid_);",
+    "module": "Worker.cpp"
+  },
+  {
+    "file": "src/Worker.cpp",
+    "line": 338,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"Worker::close() WORKER_CLOSE request failed [pid:{}]: {}\", pid_, e.what());",
+    "module": "Worker.cpp"
+  },
+  {
+    "file": "src/Worker.cpp",
+    "line": 340,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"Worker::close() WORKER_CLOSE request failed [pid:{}]: unknown error\", pid_);",
+    "module": "Worker.cpp"
+  },
+  {
+    "file": "src/Worker.cpp",
+    "line": 372,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"worker died [pid:{}]: {}\", pid_, reason);",
+    "module": "Worker.cpp"
+  },
+  {
+    "file": "src/Worker.cpp",
+    "line": 410,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(logger_, \"handleWorkerDeath() called in threaded mode [pid:{}], ignoring pipe-close reaper path\", pid_);",
+    "module": "Worker.cpp"
+  },
+  {
+    "file": "src/Worker.cpp",
+    "line": 414,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"worker pipe closed [pid:{}], delegating to detached reaper\", pid_);",
+    "module": "Worker.cpp"
+  },
+  {
+    "file": "src/Worker.cpp",
+    "line": 423,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(l, \"worker process [pid:{}] killed by signal {}\", p, WTERMSIG(status));",
+    "module": "Worker.cpp"
+  },
+  {
+    "file": "src/Worker.cpp",
+    "line": 425,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(l, \"worker process [pid:{}] exited with code {}\", p, WEXITSTATUS(status));",
+    "module": "Worker.cpp"
+  },
+  {
+    "file": "src/Worker.cpp",
+    "line": 427,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(l, \"worker process [pid:{}] exited with unknown status {}\", p, status);",
+    "module": "Worker.cpp"
+  },
+  {
+    "file": "src/RoomServiceDownlink.cpp",
+    "line": 70,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"[{} {}] downlink subscriberPeerId mismatch: {}\", roomId, peerId, stats.subscriberPeerId);",
+    "module": "RoomServiceDownlink.cpp"
+  },
+  {
+    "file": "src/RoomServiceDownlink.cpp",
+    "line": 76,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_,",
+    "module": "RoomServiceDownlink.cpp"
+  },
+  {
+    "file": "src/RoomServiceDownlink.cpp",
+    "line": 154,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"[{}] downlink planning failed: {}\", roomId, e.what());",
+    "module": "RoomServiceDownlink.cpp"
+  },
+  {
+    "file": "src/RoomServiceDownlink.cpp",
+    "line": 156,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"[{}] downlink planning failed: unknown error\", roomId);",
+    "module": "RoomServiceDownlink.cpp"
+  },
+  {
+    "file": "src/EventEmitter.h",
+    "line": 105,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"EventEmitter bad_any_cast in listener [event:{}]: {}\", event, e.what());",
+    "module": "EventEmitter.h"
+  },
+  {
+    "file": "src/EventEmitter.h",
+    "line": 108,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"EventEmitter listener exception [event:{}]: {}\", event, e.what());",
+    "module": "EventEmitter.h"
+  },
+  {
+    "file": "src/EventEmitter.h",
+    "line": 111,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"EventEmitter listener unknown exception [event:{}]\", event);",
+    "module": "EventEmitter.h"
+  },
+  {
+    "file": "src/RoomManager.h",
+    "line": 156,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"createRoom duplicate cleanup failed [roomId:{}]: {}\", roomId, e.what());",
+    "module": "RoomManager.h"
+  },
+  {
+    "file": "src/RoomManager.h",
+    "line": 158,
+    "kind": "SPDLOG_WARN",
+    "text": "spdlog::warn(\"createRoom duplicate cleanup failed [roomId:{}]: unknown error\", roomId);",
+    "module": "RoomManager.h"
+  },
+  {
+    "file": "src/MainBootstrap.cpp",
+    "line": 161,
+    "kind": "MS_SPDLOG_INFO",
+    "text": "MS_SPDLOG_INFO(\"Loaded config from {}\", options.configPath);",
+    "module": "MainBootstrap.cpp"
+  },
+  {
+    "file": "src/MainBootstrap.cpp",
+    "line": 163,
+    "kind": "MS_SPDLOG_WARN",
+    "text": "MS_SPDLOG_WARN(\"Failed to parse {}: {}\", options.configPath, e.what());",
+    "module": "MainBootstrap.cpp"
+  },
+  {
+    "file": "src/MainBootstrap.cpp",
+    "line": 225,
+    "kind": "MS_SPDLOG_ERROR",
+    "text": "MS_SPDLOG_ERROR(\"Runtime option parsing failed: {}\", options.loadError);",
+    "module": "MainBootstrap.cpp"
+  },
+  {
+    "file": "src/MainBootstrap.cpp",
+    "line": 241,
+    "kind": "MS_SPDLOG_INFO",
+    "text": "MS_SPDLOG_INFO(\"Loopback listenIp detected, skipping announced public IP detection\");",
+    "module": "MainBootstrap.cpp"
+  },
+  {
+    "file": "src/MainBootstrap.cpp",
+    "line": 245,
+    "kind": "MS_SPDLOG_INFO",
+    "text": "MS_SPDLOG_INFO(\"Auto-detected public IP: {}\", options.announcedIp);",
+    "module": "MainBootstrap.cpp"
+  },
+  {
+    "file": "src/MainBootstrap.cpp",
+    "line": 247,
+    "kind": "MS_SPDLOG_ERROR",
+    "text": "MS_SPDLOG_ERROR(\"Could not detect public IP, startup failed\");",
+    "module": "MainBootstrap.cpp"
+  },
+  {
+    "file": "src/MainBootstrap.cpp",
+    "line": 252,
+    "kind": "MS_SPDLOG_ERROR",
+    "text": "MS_SPDLOG_ERROR(\"Detected public IP must resolve to a public IPv4 address: {}\", options.announcedIp);",
+    "module": "MainBootstrap.cpp"
+  },
+  {
+    "file": "src/MainBootstrap.cpp",
+    "line": 256,
+    "kind": "MS_SPDLOG_INFO",
+    "text": "MS_SPDLOG_INFO(\"Resolved announcedIp {} to public IPv4 {}\", options.announcedIp, *announcedPublicIp);",
+    "module": "MainBootstrap.cpp"
+  },
+  {
+    "file": "src/MainBootstrap.cpp",
+    "line": 275,
+    "kind": "MS_SPDLOG_WARN",
+    "text": "MS_SPDLOG_WARN(\"gethostname() failed: {}\", std::strerror(errno));",
+    "module": "MainBootstrap.cpp"
+  },
+  {
+    "file": "src/MainBootstrap.cpp",
+    "line": 281,
+    "kind": "MS_SPDLOG_ERROR",
+    "text": "MS_SPDLOG_ERROR(\"Invalid nodeId '{}' (allowed: [A-Za-z0-9_-.:]{{1,128}})\", options.nodeId);",
+    "module": "MainBootstrap.cpp"
+  },
+  {
+    "file": "src/MainBootstrap.cpp",
+    "line": 286,
+    "kind": "MS_SPDLOG_INFO",
+    "text": "MS_SPDLOG_INFO(\"webRtcServerPort not provided, defaulting to 9000\");",
+    "module": "MainBootstrap.cpp"
+  },
+  {
+    "file": "src/MainBootstrap.cpp",
+    "line": 289,
+    "kind": "MS_SPDLOG_ERROR",
+    "text": "MS_SPDLOG_ERROR(\"Invalid WebRtcServer port: {}\", options.webRtcServerPort);",
+    "module": "MainBootstrap.cpp"
+  },
+  {
+    "file": "src/MainBootstrap.cpp",
+    "line": 296,
+    "kind": "MS_SPDLOG_WARN",
+    "text": "MS_SPDLOG_WARN(\"Could not determine local IP, nodeAddress will use 127.0.0.1 — multi-node routing will not work\");",
+    "module": "MainBootstrap.cpp"
+  },
+  {
+    "file": "src/MainBootstrap.cpp",
+    "line": 335,
+    "kind": "MS_SPDLOG_WARN",
+    "text": "MS_SPDLOG_WARN(\"GeoRouter DB not found (requested: {}). Searched: {}. Geo-routing disabled\",",
+    "module": "MainBootstrap.cpp"
+  },
+  {
+    "file": "src/MainBootstrap.cpp",
+    "line": 339,
+    "kind": "MS_SPDLOG_WARN",
+    "text": "MS_SPDLOG_WARN(\"GeoRouter DB {} not found, falling back to {}\",",
+    "module": "MainBootstrap.cpp"
+  },
+  {
+    "file": "src/MainBootstrap.cpp",
+    "line": 345,
+    "kind": "MS_SPDLOG_INFO",
+    "text": "MS_SPDLOG_INFO(\"GeoRouter initialized from {}\", options.geoDbPath);",
+    "module": "MainBootstrap.cpp"
+  },
+  {
+    "file": "src/MainBootstrap.cpp",
+    "line": 353,
+    "kind": "MS_SPDLOG_INFO",
+    "text": "MS_SPDLOG_INFO(\"Auto-detected node geo: {}/{} lat={} lng={} isp={} country={}\",",
+    "module": "MainBootstrap.cpp"
+  },
+  {
+    "file": "src/MainBootstrap.cpp",
+    "line": 358,
+    "kind": "MS_SPDLOG_WARN",
+    "text": "MS_SPDLOG_WARN(\"GeoRouter init failed ({}), geo-routing disabled\", options.geoDbPath);",
+    "module": "MainBootstrap.cpp"
+  },
+  {
+    "file": "src/MainBootstrap.cpp",
+    "line": 364,
+    "kind": "MS_SPDLOG_INFO",
+    "text": "MS_SPDLOG_INFO(\"Starting in local-only mode\");",
+    "module": "MainBootstrap.cpp"
+  },
+  {
+    "file": "src/MainBootstrap.cpp",
+    "line": 437,
+    "kind": "MS_SPDLOG_INFO",
+    "text": "MS_SPDLOG_INFO(\"WorkerThread {} created ({} workers)\", i, workersPerThread[i]);",
+    "module": "MainBootstrap.cpp"
+  },
+  {
+    "file": "src/MainBootstrap.cpp",
+    "line": 439,
+    "kind": "MS_SPDLOG_ERROR",
+    "text": "MS_SPDLOG_ERROR(\"Failed to create WorkerThread {}: {}\", i, e.what());",
+    "module": "MainBootstrap.cpp"
+  },
+  {
+    "file": "src/RoomServiceStats.cpp",
+    "line": 84,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"[{} {}] sendTransport getStats failed: {}\", roomId, peerId, e.what());",
+    "module": "RoomServiceStats.cpp"
+  },
+  {
+    "file": "src/RoomServiceStats.cpp",
+    "line": 87,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"[{} {}] sendTransport getStats failed: unknown error\", roomId, peerId);",
+    "module": "RoomServiceStats.cpp"
+  },
+  {
+    "file": "src/RoomServiceStats.cpp",
+    "line": 94,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"[{} {}] recvTransport getStats failed: {}\", roomId, peerId, e.what());",
+    "module": "RoomServiceStats.cpp"
+  },
+  {
+    "file": "src/RoomServiceStats.cpp",
+    "line": 97,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"[{} {}] recvTransport getStats failed: unknown error\", roomId, peerId);",
+    "module": "RoomServiceStats.cpp"
+  },
+  {
+    "file": "src/RoomServiceStats.cpp",
+    "line": 190,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"broadcastStats collectPeerStats failed [room:{} peer:{}]: {}\", roomId, peerId, e.what());",
+    "module": "RoomServiceStats.cpp"
+  },
+  {
+    "file": "src/RoomServiceStats.cpp",
+    "line": 193,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"broadcastStats collectPeerStats failed [room:{} peer:{}]: unknown error\", roomId, peerId);",
+    "module": "RoomServiceStats.cpp"
+  },
+  {
+    "file": "src/RoomServiceMedia.cpp",
+    "line": 144,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"[{} {}] createTransport validation failed: invalid rtpCapabilities type\",",
+    "module": "RoomServiceMedia.cpp"
+  },
+  {
+    "file": "src/RoomServiceMedia.cpp",
+    "line": 317,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"[{} {}] plainPublish explicit connect failed: {}\",",
+    "module": "RoomServiceMedia.cpp"
+  },
+  {
+    "file": "src/RoomServiceMedia.cpp",
+    "line": 323,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"[{} {}] plainPublish explicit connect failed: unknown error\",",
+    "module": "RoomServiceMedia.cpp"
+  },
+  {
+    "file": "src/RoomServiceMedia.cpp",
+    "line": 505,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"[{} {}] plainSubscribe failed: autoReturn cannot be combined with recvIp/recvPort\",",
+    "module": "RoomServiceMedia.cpp"
+  },
+  {
+    "file": "src/RoomServiceMedia.cpp",
+    "line": 511,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"[{} {}] plainSubscribe failed: recvIp/recvPort required\",",
+    "module": "RoomServiceMedia.cpp"
+  },
+  {
+    "file": "src/RoomServiceMedia.cpp",
+    "line": 534,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"[{} {}] plainSubscribe connect failed: {}\",",
+    "module": "RoomServiceMedia.cpp"
+  },
+  {
+    "file": "src/RoomServiceMedia.cpp",
+    "line": 540,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"[{} {}] plainSubscribe connect failed: unknown error\",",
+    "module": "RoomServiceMedia.cpp"
+  },
+  {
+    "file": "src/RoomServiceMedia.cpp",
+    "line": 572,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"[{} {}] produce validation failed: invalid kind '{}'\", roomId, peerId, kind);",
+    "module": "RoomServiceMedia.cpp"
+  },
+  {
+    "file": "src/RoomServiceMedia.cpp",
+    "line": 576,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"[{} {}] produce validation failed: invalid rtpParameters type\", roomId, peerId);",
+    "module": "RoomServiceMedia.cpp"
+  },
+  {
+    "file": "src/RoomServiceMedia.cpp",
+    "line": 580,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"[{} {}] produce validation failed: invalid appData type\", roomId, peerId);",
+    "module": "RoomServiceMedia.cpp"
+  },
+  {
+    "file": "src/RoomServiceMedia.cpp",
+    "line": 584,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"[{} {}] produce validation failed: invalid appData.source type\", roomId, peerId);",
+    "module": "RoomServiceMedia.cpp"
+  },
+  {
+    "file": "src/RoomServiceMedia.cpp",
+    "line": 617,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"[{} {}] consume validation failed: invalid rtpCapabilities type\", roomId, peerId);",
+    "module": "RoomServiceMedia.cpp"
+  },
+  {
+    "file": "src/SignalingServer.cpp",
+    "line": 132,
+    "kind": "MS_SPDLOG_INFO",
+    "text": "MS_SPDLOG_INFO(",
+    "module": "SignalingServer.cpp"
+  },
+  {
+    "file": "src/SignalingServer.cpp",
+    "line": 144,
+    "kind": "MS_SPDLOG_ERROR",
+    "text": "MS_SPDLOG_ERROR(\"SignalingServer failed to listen on port {}\", port_);",
+    "module": "SignalingServer.cpp"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/remote_bitrate_estimator/inter_arrival.cc",
+    "line": 42,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"timestamp_delta is null\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/remote_bitrate_estimator/inter_arrival.cc",
+    "line": 46,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"arrival_time_delta_ms is null\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/remote_bitrate_estimator/inter_arrival.cc",
+    "line": 50,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"packet_size_delta is null\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/remote_bitrate_estimator/inter_arrival.cc",
+    "line": 56,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(bwe, \"invalid arrival time %\" PRIi64, arrival_time_ms);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/remote_bitrate_estimator/inter_arrival.cc",
+    "line": 86,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(bwe,",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/remote_bitrate_estimator/inter_arrival.cc",
+    "line": 97,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(bwe,",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/remote_bitrate_estimator/inter_arrival.cc",
+    "line": 109,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"arrival_time_delta_ms is < 0\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/remote_bitrate_estimator/inter_arrival.cc",
+    "line": 180,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"current_timestamp_group_.complete_time_ms < 0 [current_timestamp_group_.complete_time_ms:%\" PRIi64 \"]\",",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/remote_bitrate_estimator/remote_bitrate_estimator_abs_send_time.cc",
+    "line": 98,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(bwe, \"RemoteBitrateEstimatorAbsSendTime: Instantiating.\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/remote_bitrate_estimator/remote_bitrate_estimator_abs_send_time.cc",
+    "line": 241,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"invalid sendTime24bits value\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/remote_bitrate_estimator/overuse_estimator.cc",
+    "line": 112,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"the over-use estimator's covariance matrix is no longer semi-definite\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/remote_bitrate_estimator/aimd_rate_control.cc",
+    "line": 52,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(bwe, \"Back-off factor must be less than 1.\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/remote_bitrate_estimator/aimd_rate_control.cc",
+    "line": 54,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(bwe, \"Back-off factor must be greater than 0.\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/remote_bitrate_estimator/aimd_rate_control.cc",
+    "line": 60,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(bwe, \"Failed to parse parameters for AimdRateControl experiment from field trial string. Using default.\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/remote_bitrate_estimator/aimd_rate_control.cc",
+    "line": 107,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(bwe, \"Using aimd rate control with initial back-off interval: %s\",",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/remote_bitrate_estimator/aimd_rate_control.cc",
+    "line": 110,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(bwe, \"Using aimd rate control with back off factor: %f \", beta_);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/pacing/bitrate_prober.cc",
+    "line": 91,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(bwe, \"Bandwidth probing enabled, set to inactive\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/pacing/bitrate_prober.cc",
+    "line": 95,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(bwe, \"Bandwidth probing disabled\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/pacing/bitrate_prober.cc",
+    "line": 127,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"probing disabled\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/pacing/bitrate_prober.cc",
+    "line": 131,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"bitrate must be > 0\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/pacing/bitrate_prober.cc",
+    "line": 151,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"cluster min bytes must be >= 0\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/pacing/bitrate_prober.cc",
+    "line": 193,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(bwe, \"probe delay too high [next_ms:%\" PRIi64 \", now_ms:%\" PRIi64 \"]\",",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/pacing/bitrate_prober.cc",
+    "line": 230,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"probing not active\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/pacing/bitrate_prober.cc",
+    "line": 234,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"bytes must be > 0\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/pacing/bitrate_prober.cc",
+    "line": 243,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"cluster started time must be -1\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/pacing/paced_sender.cc",
+    "line": 103,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"packet counter must be 0\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/pacing/paced_sender.cc",
+    "line": 114,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"pacing rate must be > 0\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/pacing/paced_sender.cc",
+    "line": 131,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"SetPacingRates() must be called before InsertPacket()\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/pacing/paced_sender.cc",
+    "line": 169,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(bwe, \"elapsed time (%\" PRIi64 \" ms) longer than expected,\"",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/rtp/send_time_history.cc",
+    "line": 51,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(bwe, \"ignoring untracked data for out of order packet\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/rtp/send_time_history.cc",
+    "line": 71,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(bwe,",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/rtp/transport_feedback_adapter.cc",
+    "line": 200,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"empty transport feedback packet received\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/rtp/transport_feedback_adapter.cc",
+    "line": 238,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"failed to lookup send time for %zu\"",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/rtp/control_handler.cc",
+    "line": 55,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(bwe, \"Bitrate estimate state changed, BWE: %s\",",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/goog_cc/goog_cc_network_control.cc",
+    "line": 218,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"Received REMB for packet feedback only GoogCC\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/goog_cc/goog_cc_network_control.cc",
+    "line": 323,
+    "kind": "MS_WARN_DEV",
+    "text": "// MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/goog_cc/goog_cc_network_control.cc",
+    "line": 338,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/goog_cc/goog_cc_network_control.cc",
+    "line": 344,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/goog_cc/probe_controller.cc",
+    "line": 255,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"network not available\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/goog_cc/probe_controller.cc",
+    "line": 258,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"state_ must be State::kInit\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/goog_cc/probe_controller.cc",
+    "line": 261,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"start_bitrate_bps_ must be > 0\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/goog_cc/probe_controller.cc",
+    "line": 348,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(bwe, \"detected big bandwidth drop, start probing\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/goog_cc/probe_controller.cc",
+    "line": 392,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(bwe, \"kWaitingForProbingResult: timeout\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/goog_cc/delay_based_bwe.cc",
+    "line": 89,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"very late feedback received\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/goog_cc/delay_based_bwe.cc",
+    "line": 256,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"ssrcs must be != null\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/goog_cc/delay_based_bwe.cc",
+    "line": 260,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"bitrate must be != null\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/goog_cc/probe_bitrate_estimator.cc",
+    "line": 68,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"cluster_id == kNotAProbe\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/goog_cc/probe_bitrate_estimator.cc",
+    "line": 98,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"probe_cluster_min_probes must be > 0\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/goog_cc/probe_bitrate_estimator.cc",
+    "line": 102,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"probe_cluster_min_bytes must be > 0\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/goog_cc/probe_bitrate_estimator.cc",
+    "line": 120,
+    "kind": "MS_WARN_DEV",
+    "text": "// MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/goog_cc/probe_bitrate_estimator.cc",
+    "line": 139,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/goog_cc/probe_bitrate_estimator.cc",
+    "line": 166,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/congestion_controller/goog_cc/alr_detector.cc",
+    "line": 123,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(bwe, \"large delta_time_ms: %\" PRIi64 \", forcing alr state change\",",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/bitrate_controller/send_side_bandwidth_estimation.cc",
+    "line": 96,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(bwe, \"Failed to parse parameters for BweLossExperiment \"",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/bitrate_controller/send_side_bandwidth_estimation.cc",
+    "line": 229,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(bwe,  \"Enabled BweLossExperiment with parameters %f, %f, %d\",",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/bitrate_controller/send_side_bandwidth_estimation.cc",
+    "line": 556,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(bwe, \"Feedback timed out (%s), reducint bitrate\",",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/bitrate_controller/send_side_bandwidth_estimation.cc",
+    "line": 621,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(bwe,\"Feedback timed out (%s), reducint bitrate\",",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/modules/bitrate_controller/send_side_bandwidth_estimation.cc",
+    "line": 658,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(bwe, \"Estimated available bandwidth %s\"",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/call/rtp_transport_controller_send.cc",
+    "line": 194,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"transport overhead exceeds: %zu\", kMaxOverheadBytes);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/rtc_base/experiments/field_trial_parser.cc",
+    "line": 78,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(bwe, \"Failed to read field with key: '%s' in trial: \\\"%s\\\"\",",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/rtc_base/experiments/field_trial_parser.cc",
+    "line": 83,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(bwe, \"Failed to read empty key field with value: '%s' in trial: \\\"%s\\\"\",",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/rtc_base/experiments/field_trial_parser.cc",
+    "line": 87,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(bwe, \"No field with key: '%s' (found in trial: \\\"%s\\\")\", key.c_str(), trial_string.c_str());",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/rtc_base/experiments/alr_experiment.cc",
+    "line": 82,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(bwe, \"Using ALR experiment settings: \"",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/rtc_base/experiments/alr_experiment.cc",
+    "line": 98,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(bwe, \"Failed to parse ALR experiment: %s\", experiment_name);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/deps/libwebrtc/libwebrtc/system_wrappers/source/field_trial.cc",
+    "line": 108,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(bwe, \"Setting field trial string: %s\", trials_string);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/include/Logger.hpp",
+    "line": 27,
+    "kind": "MS_DEBUG_TAG",
+    "text": "* MS_DEBUG_TAG(tag, ...)",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/include/Logger.hpp",
+    "line": 28,
+    "kind": "MS_WARN_TAG",
+    "text": "* MS_WARN_TAG(tag, ...)",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/include/Logger.hpp",
+    "line": 33,
+    "kind": "MS_WARN_TAG",
+    "text": "*     MS_WARN_TAG(ice, \"ICE failed\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/include/Logger.hpp",
+    "line": 52,
+    "kind": "MS_WARN_DEV",
+    "text": "* MS_WARN_DEV(...)",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/include/Logger.hpp",
+    "line": 58,
+    "kind": "MS_WARN_DEV",
+    "text": "* \t   MS_WARN_DEV(\"foo:%\" PRIu32, foo);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/include/Logger.hpp",
+    "line": 71,
+    "kind": "MS_ERROR",
+    "text": "* MS_ERROR(...)",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/include/Logger.hpp",
+    "line": 206,
+    "kind": "MS_DEBUG_TAG",
+    "text": "#define MS_DEBUG_TAG(tag, desc, ...) \\",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/include/Logger.hpp",
+    "line": 228,
+    "kind": "MS_WARN_TAG",
+    "text": "#define MS_WARN_TAG(tag, desc, ...) \\",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/include/Logger.hpp",
+    "line": 317,
+    "kind": "MS_WARN_DEV",
+    "text": "#define MS_WARN_DEV(desc, ...) \\",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/include/Logger.hpp",
+    "line": 333,
+    "kind": "MS_WARN_DEV",
+    "text": "#define MS_WARN_DEV(desc, ...) {}",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/include/Logger.hpp",
+    "line": 411,
+    "kind": "MS_ERROR",
+    "text": "#define MS_ERROR(desc, ...) \\",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/include/MediaSoupErrors.hpp",
+    "line": 32,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"throwing MediaSoupError: \" desc, ##__VA_ARGS__); \\",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/include/MediaSoupErrors.hpp",
+    "line": 48,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"throwing MediaSoupTypeError: \" desc, ##__VA_ARGS__); \\",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/lib.cpp",
+    "line": 101,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(info, \"starting mediasoup-worker process [version:%s]\", version);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/lib.cpp",
+    "line": 104,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(info, \"little-endian CPU detected\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/lib.cpp",
+    "line": 106,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(info, \"big-endian CPU detected\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/lib.cpp",
+    "line": 108,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(info, \"cannot determine whether little-endian or big-endian\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/lib.cpp",
+    "line": 112,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(info, \"32 bits architecture detected\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/lib.cpp",
+    "line": 114,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(info, \"64 bits architecture detected\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/lib.cpp",
+    "line": 116,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(info, \"cannot determine 32 or 64 bits architecture\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/DepOpenSSL.cpp",
+    "line": 24,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(info, \"openssl version: \\\"%s\\\"\", OpenSSL_version(OPENSSL_VERSION));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/DepOpenSSL.cpp",
+    "line": 25,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(info, \"openssl CPU info: \\\"%s\\\"\", OpenSSL_version(OPENSSL_CPU_INFO));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/DepLibUV.cpp",
+    "line": 88,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(info, \"libuv version: \\\"%s\\\"\", uv_version_string());",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/DepLibWebRTC.cpp",
+    "line": 20,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/DepLibUring.cpp",
+    "line": 130,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(info, \"kernel version: %s\", buffer.version);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/DepLibUring.cpp",
+    "line": 145,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(info, \"liburing version: \\\"%i.%i\\\"\", mayor, minor);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/DepLibUring.cpp",
+    "line": 151,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(info, \"liburing supported, enabled\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/DepLibUring.cpp",
+    "line": 155,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(info, \"liburing not supported, not enabled\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/DepLibUring.cpp",
+    "line": 338,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(info, \"getrlimit() failed: %s\", std::strerror(errno));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/DepLibUring.cpp",
+    "line": 339,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/DepLibUring.cpp",
+    "line": 346,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/DepLibUring.cpp",
+    "line": 596,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"io_uring_submit() failed: %s\", std::strerror(error));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/DepUsrSCTP.cpp",
+    "line": 28,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(sctp, \"no SctpAssociation found\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/DepUsrSCTP.cpp",
+    "line": 52,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(sctp, \"%s\", buffer);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/DepUsrSCTP.cpp",
+    "line": 70,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(info, \"usrsctp\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/DepUsrSCTP.cpp",
+    "line": 228,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(sctp, \"usrsctp periodic check started\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/DepUsrSCTP.cpp",
+    "line": 239,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(sctp, \"usrsctp periodic check stopped\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/Worker.cpp",
+    "line": 544,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"received a non handled signal [signum:%d]\", signum);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/DepLibSRTP.cpp",
+    "line": 57,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(info, \"libsrtp version: \\\"%s\\\"\", srtp_get_version_string());",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/Settings.cpp",
+    "line": 169,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/Settings.cpp",
+    "line": 310,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(info, \"<configuration>\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/Settings.cpp",
+    "line": 312,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/Settings.cpp",
+    "line": 314,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(info, \"  logTags: %s\", logTagsStream.str().c_str());",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/Settings.cpp",
+    "line": 315,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(info, \"  rtcPort: %\" PRIu16, Settings::configuration.rtcPort);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/Settings.cpp",
+    "line": 318,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/Settings.cpp",
+    "line": 320,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(info, \"  dtlsPrivateKeyFile: %s\", Settings::configuration.dtlsPrivateKeyFile.c_str());",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/Settings.cpp",
+    "line": 324,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/Settings.cpp",
+    "line": 329,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/Settings.cpp",
+    "line": 333,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/Settings.cpp",
+    "line": 339,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(info, \"</configuration>\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/UdpSocket.cpp",
+    "line": 55,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"no listener set\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 126,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 185,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 612,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring received packet of unknown type\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 663,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 689,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(dtls, \"running DTLS transport in local role 'client'\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 708,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(dtls, \"running DTLS transport in local role 'server'\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 737,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring RTP packet due to non sending SRTP session\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 783,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring RTCP packet due to non sending SRTP session\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 816,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"ignoring RTCP compound packet due to non sending SRTP session\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 847,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(sctp, \"DTLS not connected, cannot send SCTP data\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 905,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring received packet of unknown type\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 918,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring wrong STUN packet received\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 937,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(dtls, \"ignoring DTLS data coming from an invalid tuple\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 956,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(dtls, \"Transport is not 'connecting' or 'connected', ignoring received DTLS data\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 978,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(srtp, \"ignoring RTP packet due to non receiving SRTP session\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 986,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtp, \"ignoring RTP packet coming from an invalid tuple\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 998,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(srtp, \"DecryptSrtp() failed due to an invalid RTP packet\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 1002,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 1019,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtp, \"received data is not a valid RTP packet\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 1047,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(srtp, \"ignoring RTCP packet due to non receiving SRTP session\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 1055,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"ignoring RTCP packet coming from an invalid tuple\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 1070,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"received data is not a valid RTCP compound or single packet\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 1185,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(ice, \"ICE selected tuple\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 1205,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(ice, \"ICE connected\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 1231,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(ice, \"ICE completed\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 1257,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(ice, \"ICE disconnected\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 1281,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(dtls, \"DTLS connecting\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 1305,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(dtls, \"DTLS connected\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 1321,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"error creating SRTP sending session: %s\", error.what());",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 1346,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"error creating SRTP receiving session: %s\", error.what());",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 1357,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(dtls, \"DTLS failed\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 1374,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(dtls, \"DTLS remotely closed\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcTransport.cpp",
+    "line": 1397,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(dtls, \"no selected tuple set, cannot send DTLS packet\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 541,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(bwe, \"maximum incoming bitrate set to %\" PRIu32, this->maxIncomingBitrate);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 578,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(bwe, \"maximum outgoing bitrate set to %\" PRIu32, this->maxOutgoingBitrate);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 617,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(bwe, \"minimum outgoing bitrate set to %\" PRIu32, this->minOutgoingBitrate);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 751,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(bwe, \"enabling TransportCongestionControlServer with transport-cc\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 775,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(bwe, \"enabling TransportCongestionControlServer with REMB\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 931,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(bwe, \"enabling TransportCongestionControlClient with transport-cc\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 957,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(bwe, \"enabling TransportCongestionControlClient with REMB\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 1018,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(bwe, \"enabling SenderBandwidthEstimator\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 1461,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"unknown method\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 1474,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"unknown event '%s'\", notification->eventCStr);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 1613,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 1677,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(sctp, \"ignoring SCTP packet (SCTP not enabled)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 1821,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 1871,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 1881,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 1910,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 1921,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 1959,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 1973,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 2005,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 2021,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 2060,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 2085,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 2113,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtcp, \"ignoring received RTCP BYE\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 2146,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 2183,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 2698,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"ignoring key rame request (transport not connected)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
+    "line": 2960,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/IceServer.cpp",
+    "line": 88,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/IceServer.cpp",
+    "line": 97,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/IceServer.cpp",
+    "line": 181,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/IceServer.cpp",
+    "line": 320,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/IceServer.cpp",
+    "line": 339,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"STUN Binding request without FINGERPRINT attribute => 400\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/IceServer.cpp",
+    "line": 355,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"STUN Binding request without PRIORITY attribute => 400\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/IceServer.cpp",
+    "line": 375,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(ice, \"new ICE credentials applied\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/IceServer.cpp",
+    "line": 401,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(ice, \"using old ICE credentials\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/IceServer.cpp",
+    "line": 406,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"wrong authentication in STUN Binding request => 401\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/IceServer.cpp",
+    "line": 421,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"cannot check authentication in STUN Binding request => 400\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/IceServer.cpp",
+    "line": 438,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"peer indicates ICE-CONTROLLED in STUN Binding request => 487\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/IceServer.cpp",
+    "line": 532,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"cannot force selected tuple if not in state 'connected' or 'completed'\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/IceServer.cpp",
+    "line": 541,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"cannot force selected tuple if the given tuple was not already a valid one\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/IceServer.cpp",
+    "line": 563,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/IceServer.cpp",
+    "line": 590,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/IceServer.cpp",
+    "line": 625,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/IceServer.cpp",
+    "line": 652,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/IceServer.cpp",
+    "line": 695,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/IceServer.cpp",
+    "line": 795,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"too too many tuples, removing the oldest non selected one\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/IceServer.cpp",
+    "line": 928,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"ICE consent expired due to timeout, moving to 'disconnected' state\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/NackGenerator.cpp",
+    "line": 90,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/NackGenerator.cpp",
+    "line": 97,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/NackGenerator.cpp",
+    "line": 142,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/NackGenerator.cpp",
+    "line": 183,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/NackGenerator.cpp",
+    "line": 216,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/NackGenerator.cpp",
+    "line": 308,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/NackGenerator.cpp",
+    "line": 335,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimulcastConsumer.cpp",
+    "line": 367,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(simulcast, \"first SenderReport [ssrc:%\" PRIu32 \"]\", rtpStream->GetSsrc());",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimulcastConsumer.cpp",
+    "line": 803,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"sync key frame received\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimulcastConsumer.cpp",
+    "line": 881,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimulcastConsumer.cpp",
+    "line": 892,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimulcastConsumer.cpp",
+    "line": 915,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimulcastConsumer.cpp",
+    "line": 1035,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimulcastConsumer.cpp",
+    "line": 1063,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimulcastConsumer.cpp",
+    "line": 1282,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimulcastConsumer.cpp",
+    "line": 1299,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"in band FEC enabled\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimulcastConsumer.cpp",
+    "line": 1307,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"DTX enabled\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimulcastConsumer.cpp",
+    "line": 1315,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"DTX enabled\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimulcastConsumer.cpp",
+    "line": 1551,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimulcastConsumer.cpp",
+    "line": 1567,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimulcastConsumer.cpp",
+    "line": 1585,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DataConsumer.cpp",
+    "line": 584,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/TcpConnection.cpp",
+    "line": 140,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PipeTransport.cpp",
+    "line": 111,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PipeTransport.cpp",
+    "line": 644,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring received packet of unknown type\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PipeTransport.cpp",
+    "line": 664,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(srtp, \"DecryptSrtp() failed due to an invalid RTP packet\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PipeTransport.cpp",
+    "line": 668,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PipeTransport.cpp",
+    "line": 685,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtp, \"received data is not a valid RTP packet\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PipeTransport.cpp",
+    "line": 693,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"ignoring RTP packet from unknown IP:port\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PipeTransport.cpp",
+    "line": 726,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtcp, \"ignoring RTCP packet from unknown IP:port\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PipeTransport.cpp",
+    "line": 735,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"received data is not a valid RTCP compound or single packet\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PipeTransport.cpp",
+    "line": 757,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(sctp, \"ignoring SCTP packet from unknown IP:port\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimpleConsumer.cpp",
+    "line": 371,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimpleConsumer.cpp",
+    "line": 390,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimpleConsumer.cpp",
+    "line": 413,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimpleConsumer.cpp",
+    "line": 441,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimpleConsumer.cpp",
+    "line": 452,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimpleConsumer.cpp",
+    "line": 477,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"sync key frame received\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimpleConsumer.cpp",
+    "line": 556,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimpleConsumer.cpp",
+    "line": 586,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimpleConsumer.cpp",
+    "line": 782,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimpleConsumer.cpp",
+    "line": 797,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"in band FEC enabled\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimpleConsumer.cpp",
+    "line": 805,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"DTX enabled\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SimpleConsumer.cpp",
+    "line": 813,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"DTX enabled\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/TransportCongestionControlClient.cpp",
+    "line": 472,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/TransportCongestionControlClient.cpp",
+    "line": 484,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DataProducer.cpp",
+    "line": 242,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"unknown event '%s'\", notification->eventCStr);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Router.cpp",
+    "line": 526,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Router.cpp",
+    "line": 797,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Router.cpp",
+    "line": 809,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Router.cpp",
+    "line": 843,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpPacket.cpp",
+    "line": 42,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtp, \"not enough space for the announced CSRC list, packet discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpPacket.cpp",
+    "line": 58,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtp, \"not enough space for the announced header extension, packet discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpPacket.cpp",
+    "line": 72,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpPacket.cpp",
+    "line": 93,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtp, \"padding bit is set but no space for a padding byte, packet discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpPacket.cpp",
+    "line": 102,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtp, \"padding byte cannot be 0, packet discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpPacket.cpp",
+    "line": 109,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpPacket.cpp",
+    "line": 572,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpPacket.cpp",
+    "line": 595,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"cannot set extension length to 0\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpPacket.cpp",
+    "line": 950,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpPacket.cpp",
+    "line": 999,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpRetransmissionBuffer.cpp",
+    "line": 124,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpRetransmissionBuffer.cpp",
+    "line": 158,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpRetransmissionBuffer.cpp",
+    "line": 188,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpRetransmissionBuffer.cpp",
+    "line": 213,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpRetransmissionBuffer.cpp",
+    "line": 263,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpRetransmissionBuffer.cpp",
+    "line": 275,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpRetransmissionBuffer.cpp",
+    "line": 294,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpRetransmissionBuffer.cpp",
+    "line": 362,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpRetransmissionBuffer.cpp",
+    "line": 393,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Producer.cpp",
+    "line": 524,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtp, \"given RTP packet exceeds maximum size [len:%i]\", len);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Producer.cpp",
+    "line": 543,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtp, \"received data is not a valid RTP packet\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Producer.cpp",
+    "line": 556,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"unknown event '%s'\", notification->eventCStr);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Producer.cpp",
+    "line": 579,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtp, \"no stream found for received packet [ssrc:%\" PRIu32 \"]\", packet->GetSsrc());",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Producer.cpp",
+    "line": 639,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Producer.cpp",
+    "line": 726,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtcp, \"RtpStream not found [ssrc:%\" PRIu32 \"]\", report->GetSsrc());",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Producer.cpp",
+    "line": 737,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"RtpStream not found [ssrc:%\" PRIu32 \"]\", ssrcInfo->GetSsrc());",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Producer.cpp",
+    "line": 944,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Producer.cpp",
+    "line": 988,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtp, \"ignoring packet with unknown RID (RID lookup)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Producer.cpp",
+    "line": 1015,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Producer.cpp",
+    "line": 1079,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Producer.cpp",
+    "line": 1103,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtcp, \"in band FEC enabled\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Producer.cpp",
+    "line": 1111,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"DTX enabled\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Producer.cpp",
+    "line": 1119,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"DTX enabled\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Producer.cpp",
+    "line": 1208,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtp, \"unknown payload type [payloadType:%\" PRIu8 \"]\", payloadType);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/ProbeEgressAdapter.cpp",
+    "line": 63,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"probe egress socket() failed: %s\", std::strerror(errno));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/ProbeEgressAdapter.cpp",
+    "line": 121,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"probe egress sendto() failed: %s\", std::strerror(errno));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/ProbeEgressAdapter.cpp",
+    "line": 334,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PlainTransport.cpp",
+    "line": 958,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring received packet of unknown type\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PlainTransport.cpp",
+    "line": 979,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(srtp, \"DecryptSrtp() failed due to an invalid RTP packet\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PlainTransport.cpp",
+    "line": 983,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PlainTransport.cpp",
+    "line": 1000,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtp, \"received data is not a valid RTP packet\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PlainTransport.cpp",
+    "line": 1010,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"ignoring RTP packet while not connected\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PlainTransport.cpp",
+    "line": 1020,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"setting RTP tuple (comedia mode enabled)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PlainTransport.cpp",
+    "line": 1044,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"ignoring RTP packet from unknown IP:port\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PlainTransport.cpp",
+    "line": 1080,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtcp, \"ignoring RTCP packet while not connected\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PlainTransport.cpp",
+    "line": 1085,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"setting RTP tuple (comedia mode enabled)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PlainTransport.cpp",
+    "line": 1111,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtcp, \"ignoring RTCP packet while not connected\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PlainTransport.cpp",
+    "line": 1116,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtcp, \"setting RTCP tuple (comedia mode enabled)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PlainTransport.cpp",
+    "line": 1131,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtcp, \"ignoring RTCP packet from unknown IP:port\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PlainTransport.cpp",
+    "line": 1138,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtcp, \"ignoring RTCP packet from unknown IP:port\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PlainTransport.cpp",
+    "line": 1147,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"received data is not a valid RTCP compound or single packet\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PlainTransport.cpp",
+    "line": 1166,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(sctp, \"ignoring SCTP packet while not connected\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PlainTransport.cpp",
+    "line": 1171,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(sctp, \"setting RTP/SCTP tuple (comedia mode enabled)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PlainTransport.cpp",
+    "line": 1195,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(sctp, \"ignoring SCTP packet from unknown IP:port\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DirectTransport.cpp",
+    "line": 107,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtp, \"given RTCP packet exceeds maximum size [len:%i]\", len);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DirectTransport.cpp",
+    "line": 116,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"received data is not a valid RTCP compound or single packet\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DirectTransport.cpp",
+    "line": 147,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtp, \"cannot send RTP packet not associated to a Consumer\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SvcConsumer.cpp",
+    "line": 689,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"sync key frame received\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SvcConsumer.cpp",
+    "line": 751,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SvcConsumer.cpp",
+    "line": 772,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SvcConsumer.cpp",
+    "line": 979,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SvcConsumer.cpp",
+    "line": 996,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"in band FEC enabled\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SvcConsumer.cpp",
+    "line": 1004,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"DTX enabled\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SvcConsumer.cpp",
+    "line": 1012,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"DTX enabled\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SvcConsumer.cpp",
+    "line": 1186,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SvcConsumer.cpp",
+    "line": 1197,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+    "line": 54,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+    "line": 114,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"the attribute length exceeds the remaining size, packet discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+    "line": 123,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"attribute after FINGERPRINT is not allowed, packet discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+    "line": 132,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+    "line": 158,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"attribute PRIORITY must be 4 bytes length, packet discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+    "line": 174,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"attribute ICE-CONTROLLING must be 8 bytes length, packet discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+    "line": 190,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"attribute ICE-CONTROLLED must be 8 bytes length, packet discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+    "line": 206,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"attribute USE-CANDIDATE must be 0 bytes length, packet discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+    "line": 222,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"attribute NOMINATION must be 4 bytes length, packet discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+    "line": 239,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"attribute MESSAGE-INTEGRITY must be 20 bytes length, packet discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+    "line": 256,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"attribute FINGERPRINT must be 4 bytes length, packet discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+    "line": 275,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"attribute ERROR-CODE must be >= 4bytes length, packet discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+    "line": 295,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+    "line": 319,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"computed packet size does not match total size, packet discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+    "line": 336,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+    "line": 464,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"cannot set password for error responses\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+    "line": 485,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"usernameFragment1 not given, cannot authenticate request or indication\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+    "line": 493,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"missing USERNAME attribute, cannot authenticate request or indication\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+    "line": 501,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+    "line": 528,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"missing MESSAGE-INTEGRITY attribute, cannot authenticate response\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+    "line": 538,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/StunPacket.cpp",
+    "line": 679,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"invalid inet family in XOR-MAPPED-ADDRESS attribute\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamRecv.cpp",
+    "line": 274,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamRecv.cpp",
+    "line": 357,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtx, \"NACK not supported\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamRecv.cpp",
+    "line": 367,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamRecv.cpp",
+    "line": 382,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtx, \"RTX packet discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamRecv.cpp",
+    "line": 416,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamRecv.cpp",
+    "line": 479,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtcp, \"using worst remote fraction lost:%\" PRIu8, worstRemoteFractionLost);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamRecv.cpp",
+    "line": 523,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamRecv.cpp",
+    "line": 860,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamRecv.cpp",
+    "line": 867,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamRecv.cpp",
+    "line": 894,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamRecv.cpp",
+    "line": 940,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamRecv.cpp",
+    "line": 949,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamRecv.cpp",
+    "line": 993,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtx, \"cannot send RTCP NACK packet, size too big (%zu bytes)\", packet.GetSize());",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamRecv.cpp",
+    "line": 1011,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtx, \"requesting key frame [ssrc:%\" PRIu32 \"]\", this->params.ssrc);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PipeConsumer.cpp",
+    "line": 168,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PipeConsumer.cpp",
+    "line": 260,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PipeConsumer.cpp",
+    "line": 283,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"sync key frame received\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PipeConsumer.cpp",
+    "line": 286,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PipeConsumer.cpp",
+    "line": 312,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PipeConsumer.cpp",
+    "line": 338,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PipeConsumer.cpp",
+    "line": 360,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PipeConsumer.cpp",
+    "line": 563,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PipeConsumer.cpp",
+    "line": 606,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PipeConsumer.cpp",
+    "line": 635,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PipeConsumer.cpp",
+    "line": 653,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"in band FEC enabled\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PipeConsumer.cpp",
+    "line": 661,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"DTX enabled\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PipeConsumer.cpp",
+    "line": 669,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"DTX enabled\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamSend.cpp",
+    "line": 373,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamSend.cpp",
+    "line": 407,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtx, \"NACK not supported\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamSend.cpp",
+    "line": 465,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamSend.cpp",
+    "line": 520,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamSend.cpp",
+    "line": 597,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamSend.cpp",
+    "line": 604,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStreamSend.cpp",
+    "line": 629,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcServer.cpp",
+    "line": 134,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcServer.cpp",
+    "line": 183,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcServer.cpp",
+    "line": 412,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"ignoring wrong STUN packet received\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcServer.cpp",
+    "line": 437,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"ignoring received STUN packet with unknown remote ICE usernameFragment\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcServer.cpp",
+    "line": 460,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"ignoring received non STUN data from unknown tuple\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcServer.cpp",
+    "line": 532,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(ice, \"tuple hash already exists in the table\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/WebRtcServer.cpp",
+    "line": 547,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(ice, \"tuple hash not found in the table\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PortManager.cpp",
+    "line": 457,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PortManager.cpp",
+    "line": 479,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PortManager.cpp",
+    "line": 498,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/PortManager.cpp",
+    "line": 601,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"hash %\" PRIu64 \" doesn't exist in the map\", hash);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStream.cpp",
+    "line": 151,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStream.cpp",
+    "line": 228,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStream.cpp",
+    "line": 244,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStream.cpp",
+    "line": 313,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtpStream.cpp",
+    "line": 332,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtxStream.cpp",
+    "line": 62,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtxStream.cpp",
+    "line": 199,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RtxStream.cpp",
+    "line": 212,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SenderBandwidthEstimator.cpp",
+    "line": 106,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"received packet not present in sent infos [wideSeq:%\" PRIu16 \"]\", wideSeq);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SrtpSession.cpp",
+    "line": 77,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(srtp, \"SSRC collision occurred\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SrtpSession.cpp",
+    "line": 81,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(srtp, \"stream reached the soft key usage limit and will expire soon\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SrtpSession.cpp",
+    "line": 85,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(srtp, \"stream reached the hard key usage limit and has expired\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SrtpSession.cpp",
+    "line": 89,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(srtp, \"stream reached the hard packet limit (2^48 packets)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SrtpSession.cpp",
+    "line": 199,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(srtp, \"cannot encrypt RTP packet, size too big (%zu bytes)\", *len);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SrtpSession.cpp",
+    "line": 231,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(srtp, \"srtp_protect() failed: %s\", DepLibSRTP::GetErrorString(err));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SrtpSession.cpp",
+    "line": 250,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(srtp, \"srtp_unprotect() failed: %s\", DepLibSRTP::GetErrorString(err));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SrtpSession.cpp",
+    "line": 265,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(srtp, \"cannot encrypt RTCP packet, size too big (%zu bytes)\", *len);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SrtpSession.cpp",
+    "line": 276,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(srtp, \"srtp_protect_rtcp() failed: %s\", DepLibSRTP::GetErrorString(err));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SrtpSession.cpp",
+    "line": 295,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(srtp, \"srtp_unprotect_rtcp() failed: %s\", DepLibSRTP::GetErrorString(err));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 21,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"OpenSSL error [desc:'%s']\", desc); \\",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 28,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"OpenSSL error [desc:'%s', error:'%s']\", desc, ERR_error_string(err, nullptr)); \\",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 454,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"error reading DTLS certificate file: %s\", std::strerror(errno));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 474,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"error reading DTLS private key file: %s\", std::strerror(errno));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 606,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 682,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"X509_digest() failed\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 693,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(dtls, \"%-7s fingerprint: %s\", algorithmString.c_str(), hexFingerprint);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 890,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"same local DTLS role provided, doing nothing\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 900,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(dtls, \"resetting DTLS due to local role change\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 916,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(dtls, \"running [role:client]\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 927,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(dtls, \"running [role:server]\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 952,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(dtls, \"handshake already done, processing it right now\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 969,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"cannot process data while not running\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 980,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1009,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(dtls, \"ignoring application data received while DTLS handshake not done\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1028,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(dtls, \"cannot send application data while DTLS is not fully connected\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1035,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(dtls, \"ignoring 0 length data\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1055,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1081,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"BIO_reset() failed [ret:%d]\", ret);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1096,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(dtls, \"resetting DTLS transport\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1152,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(dtls, \"SSL status: SSL_ERROR_WANT_WRITE\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1158,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(dtls, \"SSL status: SSL_ERROR_WANT_X509_LOOKUP\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1175,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(dtls, \"SSL status: SSL_ERROR_WANT_CONNECT\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1181,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(dtls, \"SSL status: SSL_ERROR_WANT_ACCEPT\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1187,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(dtls, \"SSL status: unknown error\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1213,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(dtls, \"disconnected\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1223,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(dtls, \"connection failed\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1279,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(dtls, \"DTLS timeout too high (%\" PRIu64 \"ms), resetting DLTS\", timeoutMs);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1350,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(dtls, \"no certificate was provided by the peer\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1393,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"X509_digest() failed\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1409,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1420,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(dtls, \"valid remote fingerprint\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1626,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(dtls, \"[role:%s, action:'%s']\", role, SSL_state_string_long(this->ssl));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1654,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(dtls, \"received DTLS %s alert: %s\", alertType, SSL_alert_desc_string_long(ret));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1658,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(dtls, \"sending DTLS %s alert: %s\", alertType, SSL_alert_desc_string_long(ret));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1662,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(dtls, \"DTLS %s alert: %s\", alertType, SSL_alert_desc_string_long(ret));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1669,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(dtls, \"[role:%s, failed:'%s']\", role, SSL_state_string_long(this->ssl));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1673,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(dtls, \"role: %s, waiting:'%s']\", role, SSL_state_string_long(this->ssl));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1678,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(dtls, \"DTLS handshake start\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1682,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(dtls, \"DTLS handshake done\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/DtlsTransport.cpp",
+    "line": 1717,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(dtls, \"DTLSv1_handle_timeout() failed\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/TransportCongestionControlServer.cpp",
+    "line": 237,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"transport-cc feedback packet is exceeded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/TransportCongestionControlServer.cpp",
+    "line": 299,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"couldn't send feedback-cc packet because it is not serializable\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 47,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(sctp, \"no SctpAssociation found\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 65,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 92,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(sctp, \"no SctpAssociation found\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 471,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 561,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(sctp, \"stream reconfiguration not negotiated\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 568,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 599,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(sctp, \"SCTP_RESET_STREAMS sent [streamId:%\" PRIu16 \"]\", streamId);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 603,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(sctp, \"usrsctp_setsockopt(SCTP_RESET_STREAMS) failed: %s\", std::strerror(errno));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 626,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(sctp, \"cannot add more outgoing streams [OS:%\" PRIu16 \"]\", this->os);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 645,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(sctp, \"SCTP not connected, deferring OS increase\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 658,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(sctp, \"adding %\" PRIu16 \" outgoing streams\", additionalOs);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 665,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(sctp, \"usrsctp_setsockopt(SCTP_ADD_STREAMS) failed: %s\", std::strerror(errno));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 688,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(sctp, \"ignoring SCTP data with ppid:50 (WebRTC DataChannel Control)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 695,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 712,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 771,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 785,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 825,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(sctp, \"SCTP communication lost [info:%s]\", buffer);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 829,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(sctp, \"SCTP communication lost\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 843,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 869,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(sctp, \"SCTP association gracefully closed\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 896,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(sctp, \"SCTP setup failed: %s\", buffer);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 917,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(sctp, \"SCTP association reset event received\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 937,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 950,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(sctp, \"remote SCTP association shutdown\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 974,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 1029,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 1058,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 1067,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 1078,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/SctpAssociation.cpp",
+    "line": 1096,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/H264_SVC.cpp",
+    "line": 20,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring payload with length < 2\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/H264_SVC.cpp",
+    "line": 85,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring invalid payload (1)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/H264_SVC.cpp",
+    "line": 114,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring invalid payload (2)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/H264_SVC.cpp",
+    "line": 152,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring invalid payload (3)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/H264_SVC.cpp",
+    "line": 322,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/VP8.cpp",
+    "line": 24,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring empty payload\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/VP8.cpp",
+    "line": 41,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring invalid payload (1)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/VP8.cpp",
+    "line": 49,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring invalid payload (2)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/VP8.cpp",
+    "line": 66,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring invalid payload (3)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/VP8.cpp",
+    "line": 77,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring invalid payload (4)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/VP8.cpp",
+    "line": 99,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring invalid payload (5)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/VP8.cpp",
+    "line": 112,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring invalid payload (6)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/VP8.cpp",
+    "line": 234,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtp, \"casting pictureId value to one byte\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/VP8.cpp",
+    "line": 271,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"stream is supposed to have >1 temporal layers but does not have TlIndex field\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/Opus.cpp",
+    "line": 19,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring empty payload\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/Opus.cpp",
+    "line": 51,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring invalid payload (1)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/Opus.cpp",
+    "line": 72,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring invalid payload (2)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/VP9.cpp",
+    "line": 23,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring empty payload\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/VP9.cpp",
+    "line": 45,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring invalid payload (1)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/VP9.cpp",
+    "line": 56,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring invalid payload (2)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/VP9.cpp",
+    "line": 78,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring invalid payload (3)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/VP9.cpp",
+    "line": 94,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring invalid payload (4)\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/VP9.cpp",
+    "line": 216,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/H264.cpp",
+    "line": 21,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"ignoring payload with length < 2\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/Codecs/H264.cpp",
+    "line": 209,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"stream is supposed to have >1 temporal layers but does not have tid field\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/ReceiverReport.cpp",
+    "line": 25,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for receiver report, packet discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/ReceiverReport.cpp",
+    "line": 82,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for receiver report packet, packet discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/XrReceiverReferenceTime.cpp",
+    "line": 21,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for a extended RRT block, block discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/SenderReport.cpp",
+    "line": 24,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for sender report, packet discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpTmmb.cpp",
+    "line": 36,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"invalid TMMB bitrate value : %\" PRIu64 \" x 2^%\" PRIu8, mantissa, exponent);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpSrReq.cpp",
+    "line": 19,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for Feedback packet, discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpTransport.cpp",
+    "line": 38,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for Feedback packet, discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpTransport.cpp",
+    "line": 68,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"packet announced length exceeds the available buffer length, discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpTransport.cpp",
+    "line": 98,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for chunk\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpTransport.cpp",
+    "line": 110,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"invalid chunk\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpTransport.cpp",
+    "line": 127,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"provided packet status count does not match with content\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpTransport.cpp",
+    "line": 143,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for deltas\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpTransport.cpp",
+    "line": 158,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"received deltas does not match received status count\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpTransport.cpp",
+    "line": 319,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"RTP missing packet number exceeded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpTransport.cpp",
+    "line": 336,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpTransport.cpp",
+    "line": 365,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"maximum packet size exceeded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpTransport.cpp",
+    "line": 621,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for FeedbackRtpTransportPacket chunk, discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpTransport.cpp",
+    "line": 646,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"invalid status for a run length chunk\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpTransport.cpp",
+    "line": 694,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for small deltas\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpTransport.cpp",
+    "line": 711,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for large deltas\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpTransport.cpp",
+    "line": 810,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for small delta\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpTransport.cpp",
+    "line": 825,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"invalid status for one bit vector chunk\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpTransport.cpp",
+    "line": 939,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for small delta\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtpTransport.cpp",
+    "line": 956,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for large delta\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackPsRemb.cpp",
+    "line": 24,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for Feedback packet, discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackPsRemb.cpp",
+    "line": 49,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"packet announced length exceeds the available buffer length, discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackPsRemb.cpp",
+    "line": 64,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackPsRemb.cpp",
+    "line": 75,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"invalid unique indentifier in REMB packet\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackPsRemb.cpp",
+    "line": 90,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"invalid REMB bitrate value: %\" PRIu64 \" *2^%u\", mantissa, exponent);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/Packet.cpp",
+    "line": 52,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"data is not a RTCP packet\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/Packet.cpp",
+    "line": 62,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/Packet.cpp",
+    "line": 149,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"unknown RTCP packet type [packetType:%\" PRIu8 \"]\", header->packetType);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/Packet.cpp",
+    "line": 170,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"error parsing %s Packet\", packetType.c_str());",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/Sdes.cpp",
+    "line": 49,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for SDES item, discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/Sdes.cpp",
+    "line": 123,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for SDES chunk, discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/Sdes.cpp",
+    "line": 156,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"invalid SDES chunk (missing mandatory null octet), discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/Sdes.cpp",
+    "line": 176,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/Sdes.cpp",
+    "line": 193,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/Sdes.cpp",
+    "line": 284,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"RTCP count value doesn't match found number of chunks, discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackPsRpsi.cpp",
+    "line": 23,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"invalid Rpsi packet with fractional padding bytes value\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackPsRpsi.cpp",
+    "line": 32,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"invalid Rpsi packet with too many padding bytes\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackPs.cpp",
+    "line": 27,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for Feedback packet, discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/XR.cpp",
+    "line": 25,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for a extended report block, report discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/XR.cpp",
+    "line": 44,
+    "kind": "MS_DEBUG_TAG",
+    "text": "MS_DEBUG_TAG(rtcp, \"unknown RTCP XR block type [blockType:%\" PRIu8 \"]\", header->blockType);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/XR.cpp",
+    "line": 67,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for a extended report packet, packet discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/Bye.cpp",
+    "line": 29,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for SSRC in RTCP Bye message\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackRtp.cpp",
+    "line": 24,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for Feedback packet, discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackPsAfb.cpp",
+    "line": 22,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for Feedback packet, discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/Feedback.cpp",
+    "line": 125,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for Feedback packet, discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/Feedback.cpp",
+    "line": 178,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/Feedback.cpp",
+    "line": 216,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for Feedback packet, discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/Feedback.cpp",
+    "line": 264,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/XrDelaySinceLastRr.cpp",
+    "line": 21,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for a extended DSLR sub-block, sub-block discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/RTC/RTCP/FeedbackPsPli.cpp",
+    "line": 19,
+    "kind": "MS_WARN_TAG",
+    "text": "MS_WARN_TAG(rtcp, \"not enough space for Feedback packet, discarded\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/Channel/ChannelSocket.cpp",
+    "line": 232,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"notification failed: %s\", error.what());",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/Channel/ChannelSocket.cpp",
+    "line": 239,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"discarding wrong Channel data\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/Channel/ChannelSocket.cpp",
+    "line": 313,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"notification failed: %s\", error.what());",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/Channel/ChannelSocket.cpp",
+    "line": 320,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"discarding wrong Channel data\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/handles/UdpSocketHandle.cpp",
+    "line": 193,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"datagram truncated (just %d of %zu bytes were sent)\", sent, len);",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/handles/UdpSocketHandle.cpp",
+    "line": 209,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"uv_udp_try_send() failed, trying uv_udp_send(): %s\", uv_strerror(sent));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/handles/UdpSocketHandle.cpp",
+    "line": 227,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"uv_udp_send() failed: %s\", uv_strerror(err));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/handles/UdpSocketHandle.cpp",
+    "line": 353,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"uv_udp_getsockname() failed: %s\", uv_strerror(err));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/handles/UdpSocketHandle.cpp",
+    "line": 391,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"received datagram was truncated due to insufficient buffer, ignoring it\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/handles/TcpServerHandle.cpp",
+    "line": 234,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"uv_tcp_getsockname() failed: %s\", uv_strerror(err));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/handles/TcpServerHandle.cpp",
+    "line": 258,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"error while receiving a new TCP connection: %s\", uv_strerror(status));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/handles/TcpConnectionHandle.cpp",
+    "line": 276,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"uv_try_write() failed, trying uv_write(): %s\", uv_strerror(written));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/handles/TcpConnectionHandle.cpp",
+    "line": 316,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"uv_write() failed: %s\", uv_strerror(err));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/handles/TcpConnectionHandle.cpp",
+    "line": 399,
+    "kind": "MS_ERROR",
+    "text": "MS_ERROR(\"uv_tcp_getpeername() failed: %s\", uv_strerror(err));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/handles/TcpConnectionHandle.cpp",
+    "line": 434,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"no available space in the buffer\");",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/handles/TcpConnectionHandle.cpp",
+    "line": 475,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"read error, closing the connection: %s\", uv_strerror(nread));",
+    "module": "worker"
+  },
+  {
+    "file": "src/mediasoup-worker-src/worker/src/handles/TcpConnectionHandle.cpp",
+    "line": 507,
+    "kind": "MS_WARN_DEV",
+    "text": "MS_WARN_DEV(\"write error, closing the connection: %s\", uv_strerror(status));",
+    "module": "worker"
+  },
+  {
+    "file": "src/qos/SubscriberQosController.cpp",
+    "line": 75,
+    "kind": "MS_WARN",
+    "text": "MS_WARN(logger_, \"SubscriberQosController action failed [consumer:{}]: {}\",",
+    "module": "qos"
+  }
+]

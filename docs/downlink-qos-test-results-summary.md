@@ -1,6 +1,6 @@
 # 下行 QoS 测试结果汇总
 
-生成时间：`2026-05-31T15:59:26.035Z`
+生成时间：`2026-06-01T13:24:18.014Z`
 
 ## 1. 汇总
 
@@ -10,7 +10,7 @@
 - 失败：`0`
 - 未执行：`0`
 - 执行脚本：`scripts/run_qos_tests.sh`
-- 本次选择目标：`client-js`, `cpp-unit`, `cpp-integration`, `cpp-accuracy`, `node-harness`, `browser-harness`, `downlink-matrix`
+- 本次选择目标：`client-js`, `cpp-unit`, `cpp-integration`, `cpp-accuracy`, `node-harness`, `browser-harness`, `downlink-matrix`, `remote-harness`
 
 ### 1.1 失败任务
 
@@ -43,7 +43,7 @@
 | 类别 | `server` |
 | 说明 | 服务端 downlink QoS 集成测试（consumer state、publisher clamp、stale snapshot 回归） |
 | 状态 | `PASS` |
-| 耗时 | `224s` |
+| 耗时 | `225s` |
 | 对应命令 | `./build/mediasoup_qos_integration_tests` |
 
 ### browser-harness:downlink-controls
