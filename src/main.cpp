@@ -52,7 +52,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	Logger::Init(options.noDaemon ? "" : options.logDir, options.logLevel, options.noDaemon, options.logRotateHours, options.logPrefix, getpid());
-	spdlog::info("mediasoup-cpp SFU starting (new architecture: WorkerThread pool)...");
+	MS_SPDLOG_INFO("mediasoup-cpp SFU starting (new architecture: WorkerThread pool)...");
 
 	auto failExit = [&options]() {
 		NotifyDaemonStartupStatus(false);
@@ -67,7 +67,11 @@ int main(int argc, char* argv[]) {
 	SignalingTlsOptions tlsOptions;
 	std::string tlsError;
 	if (!ValidateSignalingTlsFiles(tlsOptions, tlsError)) {
-		spdlog::error("Signaling TLS validation failed: {}", tlsError);
+		MS_SPDLOG_ERROR(
+			"Signaling TLS validation failed: {} [cert:{} key:{}]",
+			tlsError,
+			tlsOptions.certFile,
+			tlsOptions.keyFile);
 		return failExit();
 	}
 
@@ -75,12 +79,13 @@ int main(int argc, char* argv[]) {
 	auto listenInfos = BuildListenInfos(options);
 	auto runtimeServices = CreateRuntimeServices(options);
 	if (!runtimeServices.startupError.empty()) {
+		MS_SPDLOG_ERROR("Runtime services startup failed: {}", runtimeServices.startupError);
 		return failExit();
 	}
 	auto workerThreads = CreateWorkerThreadPool(options, mediaCodecs, listenInfos);
 
 	if (workerThreads.empty()) {
-		spdlog::error("No WorkerThreads created, exiting");
+		MS_SPDLOG_ERROR("No WorkerThreads created, exiting");
 		return failExit();
 	}
 
@@ -96,7 +101,7 @@ int main(int argc, char* argv[]) {
 		workerThreads,
 		tlsOptions);
 
-	spdlog::info("mediasoup-cpp SFU ready - {} WorkerThreads, {} total workers, signaling on port {}, nodeId={}",
+	MS_SPDLOG_INFO("mediasoup-cpp SFU ready - {} WorkerThreads, {} total workers, signaling on port {}, nodeId={}",
 		workerThreads.size(), options.numWorkers, options.signalingPort, options.nodeId);
 
 	bool runOk = server.run([](bool ok) {
@@ -104,7 +109,7 @@ int main(int argc, char* argv[]) {
 	});
 
 	// Graceful shutdown (reached when g_shutdown causes uWS loop to stop)
-	spdlog::info("Shutting down...");
+	MS_SPDLOG_INFO("Shutting down...");
 	// Stop WorkerThreads first so room state and worker resources are released before exit.
 	for (auto& wt : workerThreads) {
 		wt->stop();
@@ -114,7 +119,7 @@ int main(int argc, char* argv[]) {
 	}
 	// Local-only runtime keeps this as a no-op compatibility hook.
 	server.stopRegistryWorker();
-	spdlog::info("Shutdown complete");
+	MS_SPDLOG_INFO("Shutdown complete");
 	if (!runOk) return failExit();
 	NotifyDaemonStartupStatus(true);
 	return 0;

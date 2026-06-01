@@ -77,10 +77,14 @@ std::string DetectPublicIp()
 
 bool IsValidNodeId(const std::string& nodeId)
 {
-	if (nodeId.empty() || nodeId.size() > 128) return false;
+	if (nodeId.empty() || nodeId.size() > 128) {
+		MS_SPDLOG_ERROR("Invalid nodeId length [value:{}]", nodeId);
+		return false;
+	}
 	for (char c : nodeId) {
 		if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
 			(c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.' || c == ':')) {
+			MS_SPDLOG_ERROR("Invalid nodeId character [value:{}]", nodeId);
 			return false;
 		}
 	}
@@ -128,6 +132,14 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 	for (int i = 1; i < argc; i++) {
 		std::string arg = argv[i];
 		if (arg.find("--config=") == 0) options.configPath = arg.substr(9);
+		if (arg.rfind("--", 0) == 0 &&
+			arg.find('=') == std::string::npos &&
+			arg != "--localOnly" &&
+			arg != "--countryIsolation" &&
+			arg != "--noCountryIsolation" &&
+			arg != "--nodaemon") {
+			AppendLoadError(options, "unsupported CLI flag '" + arg + "'");
+		}
 	}
 
 	{
@@ -158,9 +170,9 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 				if (cfg.contains("logLevel")) options.logLevel = cfg["logLevel"].get<std::string>();
 				if (cfg.contains("logRotateHours")) options.logRotateHours = cfg["logRotateHours"].get<int>();
 				if (cfg.contains("nodaemon")) options.noDaemon = cfg["nodaemon"].get<bool>();
-				spdlog::info("Loaded config from {}", options.configPath);
+				MS_SPDLOG_INFO("Loaded config from {}", options.configPath);
 			} catch (const std::exception& e) {
-				spdlog::warn("Failed to parse {}: {}", options.configPath, e.what());
+				MS_SPDLOG_WARN("Failed to parse {}: {}", options.configPath, e.what());
 			}
 		}
 	}
@@ -191,6 +203,8 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 			if (trySetInt("--port=", options.signalingPort)) {}
 			else if (trySetInt("--workers=", options.numWorkers)) {}
 			else if (trySetInt("--workerThreads=", options.numWorkerThreads)) {}
+		else if (arg == "--localOnly") options.localOnly = true;
+		else if (arg.find("--listenIp=") == 0) { options.listenIp = arg.substr(11); options.listenIpExplicit = true; }
 		else if (arg.find("--workerBin=") == 0) options.workerBin = arg.substr(12);
 		else if (trySetInt("--webRtcServerPort=", options.webRtcServerPort)) {}
 		else if (arg.find("--nodeId=") == 0) options.nodeId = arg.substr(9);
@@ -220,25 +234,40 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 bool FinalizeRuntimeOptions(RuntimeOptions& options)
 {
 	if (options.hasLoadError()) {
-		spdlog::error("Runtime option parsing failed: {}", options.loadError);
+		MS_SPDLOG_ERROR("Runtime option parsing failed: {}", options.loadError);
 		return false;
 	}
 
-	options.announcedIp = DetectPublicIp();
-	if (!options.announcedIp.empty()) {
-		spdlog::info("Auto-detected public IP: {}", options.announcedIp);
+	if (options.localOnly) {
+		options.listenIp = "127.0.0.1";
+		options.listenIpExplicit = true;
+		options.announcedIp.clear();
+	}
+
+	const bool localLoopbackMode =
+		(options.localOnly ||
+			(options.listenIpExplicit && (options.listenIp == "127.0.0.1" || options.listenIp == "::1"))) &&
+		options.announcedIp.empty();
+
+	if (localLoopbackMode) {
+		MS_SPDLOG_INFO("Loopback listenIp detected, skipping announced public IP detection");
 	} else {
-		spdlog::error("Could not detect public IP, startup failed");
-		return false;
-	}
-	auto announcedPublicIp = mediasoup::ResolvePublicIpv4Address(options.announcedIp);
-	if (!announcedPublicIp) {
-		spdlog::error("Detected public IP must resolve to a public IPv4 address: {}", options.announcedIp);
-		return false;
-	}
-	if (*announcedPublicIp != options.announcedIp) {
-		spdlog::info("Resolved announcedIp {} to public IPv4 {}", options.announcedIp, *announcedPublicIp);
-		options.announcedIp = *announcedPublicIp;
+		options.announcedIp = DetectPublicIp();
+		if (!options.announcedIp.empty()) {
+			MS_SPDLOG_INFO("Auto-detected public IP: {}", options.announcedIp);
+		} else {
+			MS_SPDLOG_ERROR("Could not detect public IP, startup failed");
+			return false;
+		}
+		auto announcedPublicIp = mediasoup::ResolvePublicIpv4Address(options.announcedIp);
+		if (!announcedPublicIp) {
+			MS_SPDLOG_ERROR("Detected public IP must resolve to a public IPv4 address: {}", options.announcedIp);
+			return false;
+		}
+		if (*announcedPublicIp != options.announcedIp) {
+			MS_SPDLOG_INFO("Resolved announcedIp {} to public IPv4 {}", options.announcedIp, *announcedPublicIp);
+			options.announcedIp = *announcedPublicIp;
+		}
 	}
 
 	if (options.hawkeyeRegisterUrl.empty()) {
@@ -255,28 +284,28 @@ bool FinalizeRuntimeOptions(RuntimeOptions& options)
 	if (options.nodeId.empty()) {
 		char hostname[256]{};
 		if (::gethostname(hostname, sizeof(hostname) - 1) != 0) {
-			spdlog::warn("gethostname() failed: {}", std::strerror(errno));
+			MS_SPDLOG_WARN("gethostname() failed: {}", std::strerror(errno));
 		}
 		hostname[sizeof(hostname) - 1] = '\0';
 		options.nodeId = std::string(hostname) + ":" + std::to_string(options.signalingPort);
 	}
 	if (!IsValidNodeId(options.nodeId)) {
-		spdlog::error("Invalid nodeId '{}' (allowed: [A-Za-z0-9_-.:]{{1,128}})", options.nodeId);
+		MS_SPDLOG_ERROR("Invalid nodeId '{}' (allowed: [A-Za-z0-9_-.:]{{1,128}})", options.nodeId);
 		return false;
 	}
 	if (options.webRtcServerPort <= 0) {
 		options.webRtcServerPort = 9000;
-		spdlog::info("webRtcServerPort not provided, defaulting to 9000");
+		MS_SPDLOG_INFO("webRtcServerPort not provided, defaulting to 9000");
 	}
 	if (options.webRtcServerPort <= 0) {
-		spdlog::error("Invalid WebRtcServer port: {}", options.webRtcServerPort);
+		MS_SPDLOG_ERROR("Invalid WebRtcServer port: {}", options.webRtcServerPort);
 		return false;
 	}
 
 	if (options.nodeAddress.empty()) {
 		auto ip = ResolveNodeAddressIp(options);
 		if (ip == "127.0.0.1" && options.listenIp == "0.0.0.0" && options.announcedIp.empty()) {
-			spdlog::warn("Could not determine local IP, nodeAddress will use 127.0.0.1 — multi-node routing will not work");
+			MS_SPDLOG_WARN("Could not determine local IP, nodeAddress will use 127.0.0.1 — multi-node routing will not work");
 		}
 		options.nodeAddress = "ws://" + ip + ":" + std::to_string(options.signalingPort) + "/ws";
 	}
@@ -315,17 +344,17 @@ RuntimeServices CreateRuntimeServices(RuntimeOptions& options)
 			if (i != 0) searched << ", ";
 			searched << geoDbResolution.candidates[i];
 		}
-		spdlog::warn("GeoRouter DB not found (requested: {}). Searched: {}. Geo-routing disabled",
+		MS_SPDLOG_WARN("GeoRouter DB not found (requested: {}). Searched: {}. Geo-routing disabled",
 			options.geoDbPath, searched.str());
 	} else {
 		if (geoDbResolution.usedFallback) {
-			spdlog::warn("GeoRouter DB {} not found, falling back to {}",
+			MS_SPDLOG_WARN("GeoRouter DB {} not found, falling back to {}",
 				options.geoDbPath, geoDbResolution.resolvedPath);
 		}
 		options.geoDbPath = geoDbResolution.resolvedPath;
 		services.geoRouter = std::make_unique<GeoRouter>();
 		if (services.geoRouter->init(options.geoDbPath)) {
-			spdlog::info("GeoRouter initialized from {}", options.geoDbPath);
+			MS_SPDLOG_INFO("GeoRouter initialized from {}", options.geoDbPath);
 			if (options.nodeLat == 0 && options.nodeLng == 0 && !options.announcedIp.empty()) {
 				auto info = services.geoRouter->lookup(options.announcedIp);
 				if (info.valid) {
@@ -333,18 +362,18 @@ RuntimeServices CreateRuntimeServices(RuntimeOptions& options)
 					options.nodeLng = info.lng;
 					if (options.nodeIsp.empty()) options.nodeIsp = info.isp;
 					if (options.nodeCountry.empty()) options.nodeCountry = info.country;
-					spdlog::info("Auto-detected node geo: {}/{} lat={} lng={} isp={} country={}",
+					MS_SPDLOG_INFO("Auto-detected node geo: {}/{} lat={} lng={} isp={} country={}",
 						info.province, info.city, options.nodeLat, options.nodeLng, options.nodeIsp, options.nodeCountry);
 				}
 			}
 		} else {
-			spdlog::warn("GeoRouter init failed ({}), geo-routing disabled", options.geoDbPath);
+			MS_SPDLOG_WARN("GeoRouter init failed ({}), geo-routing disabled", options.geoDbPath);
 			services.geoRouter.reset();
 		}
 	}
 
 	try {
-		spdlog::info("Starting in local-only mode");
+		MS_SPDLOG_INFO("Starting in local-only mode");
 	} catch (const std::exception& e) {
 		(void)e;
 	}
@@ -417,9 +446,9 @@ std::vector<std::unique_ptr<WorkerThread>> CreateWorkerThreadPool(
 				options.maxRoutersPerWorker > 0 ? static_cast<size_t>(options.maxRoutersPerWorker) : 0);
 			workerThreads.push_back(std::move(workerThread));
 			nextWebRtcServerPort += workersPerThread[i];
-			spdlog::info("WorkerThread {} created ({} workers)", i, workersPerThread[i]);
+			MS_SPDLOG_INFO("WorkerThread {} created ({} workers)", i, workersPerThread[i]);
 		} catch (const std::exception& e) {
-			spdlog::error("Failed to create WorkerThread {}: {}", i, e.what());
+			MS_SPDLOG_ERROR("Failed to create WorkerThread {}: {}", i, e.what());
 		}
 	}
 

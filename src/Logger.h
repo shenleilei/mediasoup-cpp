@@ -51,6 +51,7 @@ public:
 		defaultLogger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%n] [%^%l%$] [%s:%#] %v");
 		level_ = ParseLevel(level);
 		defaultLogger->set_level(level_);
+		defaultLogger->flush_on(level_);
 		spdlog::set_default_logger(defaultLogger);
 		sinks_ = sinks;
 	}
@@ -64,6 +65,7 @@ public:
 				logger = spdlog::stdout_color_mt(name);
 			logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%n] [%^%l%$] [%s:%#] %v");
 			logger->set_level(level_);
+			logger->flush_on(level_);
 			try { spdlog::register_logger(logger); } catch (...) {}
 		}
 		return logger;
@@ -79,5 +81,10 @@ private:
 #define MS_INFO(logger, ...)  (logger)->log(spdlog::source_loc{__FILE__, __LINE__, __FUNCTION__}, spdlog::level::info, __VA_ARGS__)
 #define MS_WARN(logger, ...)  (logger)->log(spdlog::source_loc{__FILE__, __LINE__, __FUNCTION__}, spdlog::level::warn, __VA_ARGS__)
 #define MS_ERROR(logger, ...) (logger)->log(spdlog::source_loc{__FILE__, __LINE__, __FUNCTION__}, spdlog::level::err, __VA_ARGS__)
+
+#define MS_SPDLOG_DEBUG(...) spdlog::default_logger_raw()->log(spdlog::source_loc{__FILE__, __LINE__, __FUNCTION__}, spdlog::level::debug, __VA_ARGS__)
+#define MS_SPDLOG_INFO(...)  spdlog::default_logger_raw()->log(spdlog::source_loc{__FILE__, __LINE__, __FUNCTION__}, spdlog::level::info, __VA_ARGS__)
+#define MS_SPDLOG_WARN(...)  spdlog::default_logger_raw()->log(spdlog::source_loc{__FILE__, __LINE__, __FUNCTION__}, spdlog::level::warn, __VA_ARGS__)
+#define MS_SPDLOG_ERROR(...) spdlog::default_logger_raw()->log(spdlog::source_loc{__FILE__, __LINE__, __FUNCTION__}, spdlog::level::err, __VA_ARGS__)
 
 } // namespace mediasoup

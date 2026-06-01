@@ -46,7 +46,7 @@ void Channel::init(int producerFd, int consumerFd, int pid, bool threaded) {
 		::fcntl(consumerFd_, F_SETFL, flags | O_NONBLOCK);
 
 	if (channelTraceEnabled()) {
-		MS_WARN(
+		MS_DEBUG(
 			logger_,
 			"trace init [pid:{} threaded:{} producerFd:{} consumerFd:{}]",
 			pid_,
@@ -69,7 +69,7 @@ void Channel::close() {
 
 	MS_DEBUG(logger_, "close()");
 	if (channelTraceEnabled()) {
-		MS_WARN(
+		MS_DEBUG(
 			logger_,
 			"trace close start [pid:{} threaded:{} producerFd:{} consumerFd:{} readThreadJoinable:{}]",
 			pid_,
@@ -93,13 +93,13 @@ void Channel::close() {
 		if (readThread_.get_id() != std::this_thread::get_id()) {
 			auto joinStart = std::chrono::steady_clock::now();
 			if (channelTraceEnabled()) {
-				MS_WARN(logger_, "trace close waiting for read thread [pid:{}]", pid_);
+				MS_DEBUG(logger_, "trace close waiting for read thread [pid:{}]", pid_);
 			}
 			readThread_.join();
 			if (channelTraceEnabled()) {
 				auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(
 					std::chrono::steady_clock::now() - joinStart).count();
-				MS_WARN(
+				MS_DEBUG(
 					logger_,
 					"trace close joined read thread [pid:{} waitMs:{}]",
 					pid_,
@@ -120,7 +120,7 @@ void Channel::close() {
 	if (consumerFd_ >= 0) { ::close(consumerFd_); consumerFd_ = -1; }
 
 	if (channelTraceEnabled()) {
-		MS_WARN(logger_, "trace close done [pid:{}]", pid_);
+		MS_DEBUG(logger_, "trace close done [pid:{}]", pid_);
 	}
 }
 
@@ -381,7 +381,7 @@ Channel::OwnedResponse Channel::waitForResponse(std::future<OwnedResponse>& fut,
 bool Channel::processAvailableData() {
 	if (closed_ || consumerFd_ < 0) return false;
 	if (threaded_) {
-		MS_WARN(logger_, "processAvailableData called in threaded mode [pid:{}], rejecting", pid_);
+		MS_DEBUG(logger_, "processAvailableData called in threaded mode [pid:{}], rejecting", pid_);
 		return false;
 	}
 
@@ -391,7 +391,7 @@ bool Channel::processAvailableData() {
 		if (n > 0) {
 			recvBuf_.insert(recvBuf_.end(), tmp, tmp + static_cast<size_t>(n));
 			if (recvBuf_.size() > RECV_BUFFER_MAX_LEN) {
-				MS_WARN(logger_,
+				MS_ERROR(logger_,
 					"recv buffer exceeded limit [pid:{} size:{} limit:{}], closing channel",
 					pid_, recvBuf_.size(), RECV_BUFFER_MAX_LEN);
 				close();
@@ -469,8 +469,8 @@ void Channel::readLoop() {
 	std::vector<uint8_t> recvBuf;
 	uint8_t tmp[kReadChunkSize];
 
-	if (channelTraceEnabled()) {
-		MS_WARN(logger_, "trace readLoop start [pid:{} consumerFd:{}]", pid_, consumerFd_);
+		if (channelTraceEnabled()) {
+			MS_DEBUG(logger_, "trace readLoop start [pid:{} consumerFd:{}]", pid_, consumerFd_);
 	}
 
 	while (!closed_) {
@@ -482,7 +482,7 @@ void Channel::readLoop() {
 		if (pollRet < 0) {
 			if (errno == EINTR) continue;
 			if (channelTraceEnabled()) {
-				MS_WARN(
+				MS_DEBUG(
 					logger_,
 					"trace readLoop poll returned [pid:{} ret:{} errno:{} closed:{}]",
 					pid_,
@@ -495,7 +495,7 @@ void Channel::readLoop() {
 		}
 
 		if (channelTraceEnabled()) {
-			MS_WARN(
+			MS_DEBUG(
 				logger_,
 				"trace readLoop wake [pid:{} consumerFd:{} revents:{} closed:{}]",
 				pid_,
@@ -508,7 +508,7 @@ void Channel::readLoop() {
 			ssize_t n = ::read(consumerFd_, tmp, sizeof(tmp));
 			if (n == 0) {
 				if (channelTraceEnabled()) {
-					MS_WARN(
+					MS_DEBUG(
 						logger_,
 						"trace readLoop EOF [pid:{} closed:{}]",
 						pid_,
@@ -521,7 +521,7 @@ void Channel::readLoop() {
 				if (errno == EAGAIN || errno == EWOULDBLOCK) break;
 				if (errno == EINTR) continue;
 				if (channelTraceEnabled()) {
-					MS_WARN(
+					MS_DEBUG(
 						logger_,
 						"trace readLoop read returned [pid:{} n:{} errno:{} closed:{}]",
 						pid_,
@@ -535,7 +535,7 @@ void Channel::readLoop() {
 
 			recvBuf.insert(recvBuf.end(), tmp, tmp + static_cast<size_t>(n));
 			if (recvBuf.size() > RECV_BUFFER_MAX_LEN) {
-				MS_WARN(logger_,
+				MS_ERROR(logger_,
 					"recv buffer exceeded limit [pid:{} size:{} limit:{}], closing channel",
 					pid_, recvBuf.size(), RECV_BUFFER_MAX_LEN);
 				close();
@@ -573,7 +573,7 @@ void Channel::readLoop() {
 	}
 
 	if (channelTraceEnabled()) {
-		MS_WARN(logger_, "trace readLoop exit [pid:{} closed:{}]", pid_, closed_.load() ? 1 : 0);
+		MS_DEBUG(logger_, "trace readLoop exit [pid:{} closed:{}]", pid_, closed_.load() ? 1 : 0);
 	}
 }
 
@@ -676,7 +676,7 @@ void Channel::processLog(const FBS::Log::Log* log) {
 		case 'D': MS_DEBUG(workerLogger, "[pid:{}] {}", pid_, msg); break;
 		case 'W': MS_WARN(workerLogger, "[pid:{}] {}", pid_, msg); break;
 		case 'E': MS_ERROR(workerLogger, "[pid:{}] {}", pid_, msg); break;
-		default: spdlog::info(msg); break;
+		default: MS_SPDLOG_INFO("{}", msg); break;
 	}
 }
 

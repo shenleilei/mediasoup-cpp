@@ -484,11 +484,13 @@ bool HawkeyeRegisterClient::parseUrl(const std::string& value, ParsedUrl& out, s
 	const auto schemeEnd = value.find("://");
 	if (schemeEnd == std::string::npos) {
 		error = "missing scheme";
+		logf("error", "parseUrl failed [url:%s error:%s]", value.c_str(), error.c_str());
 		return false;
 	}
 	const std::string scheme = toLowerCopy(value.substr(0, schemeEnd));
 	if (scheme != "ws" && scheme != "wss") {
 		error = "unsupported scheme";
+		logf("error", "parseUrl failed [url:%s error:%s]", value.c_str(), error.c_str());
 		return false;
 	}
 	out.secure = scheme == "wss";
@@ -504,6 +506,7 @@ bool HawkeyeRegisterClient::parseUrl(const std::string& value, ParsedUrl& out, s
 	const auto colonPos = authority.rfind(':');
 	if (authority.empty()) {
 		error = "missing host";
+		logf("error", "parseUrl failed [url:%s error:%s]", value.c_str(), error.c_str());
 		return false;
 	}
 	if (colonPos == std::string::npos) {
@@ -517,6 +520,7 @@ bool HawkeyeRegisterClient::parseUrl(const std::string& value, ParsedUrl& out, s
 	out.port = authority.substr(colonPos + 1);
 	if (out.host.empty() || out.port.empty()) {
 		error = "invalid authority";
+		logf("error", "parseUrl failed [url:%s error:%s]", value.c_str(), error.c_str());
 		return false;
 	}
 
@@ -524,10 +528,12 @@ bool HawkeyeRegisterClient::parseUrl(const std::string& value, ParsedUrl& out, s
 		out.portNumber = std::stoi(out.port);
 	} catch (...) {
 		error = "invalid port";
+		logf("error", "parseUrl failed [url:%s error:%s]", value.c_str(), error.c_str());
 		return false;
 	}
 	if (out.portNumber <= 0 || out.portNumber > 65535) {
 		error = "port out of range";
+		logf("error", "parseUrl failed [url:%s error:%s]", value.c_str(), error.c_str());
 		return false;
 	}
 	return true;

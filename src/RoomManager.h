@@ -10,6 +10,7 @@
 #include <chrono>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
+#include "Logger.h"
 
 namespace mediasoup {
 
@@ -153,9 +154,9 @@ public:
 					try {
 						room->close();
 					} catch (const std::exception& e) {
-						spdlog::warn("createRoom duplicate cleanup failed [roomId:{}]: {}", roomId, e.what());
+						MS_SPDLOG_WARN("createRoom duplicate cleanup failed [roomId:{}]: {}", roomId, e.what());
 					} catch (...) {
-						spdlog::warn("createRoom duplicate cleanup failed [roomId:{}]: unknown error", roomId);
+						MS_SPDLOG_WARN("createRoom duplicate cleanup failed [roomId:{}]: unknown error", roomId);
 					}
 					pending->promise.set_value(it->second);
 					return it->second;

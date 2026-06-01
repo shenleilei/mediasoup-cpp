@@ -24,7 +24,7 @@ static void validateNotificationArgs(const std::vector<std::any>& args,
 {
 	notif = nullptr;
 	if (args.empty()) {
-		spdlog::warn("{} notification args empty [id:{}]", owner, id);
+		MS_SPDLOG_WARN("{} notification args empty [id:{}]", owner, id);
 		throw std::invalid_argument("empty notification args");
 	}
 	event = std::any_cast<FBS::Notification::Event>(args[0]);
@@ -169,11 +169,11 @@ std::shared_ptr<WebRtcTransport> Router::createWebRtcTransport(
 			validateNotificationArgs(args, "WebRtcTransport", transport->id(), event, notif);
 			transport->handleNotification(event, notif);
 		} catch (const std::bad_any_cast& e) {
-			spdlog::warn("WebRtcTransport notification cast failed [id:{}]: {}", transport->id(), e.what());
+			MS_SPDLOG_WARN("WebRtcTransport notification cast failed [id:{}]: {}", transport->id(), e.what());
 		} catch (const std::exception& e) {
-			spdlog::warn("WebRtcTransport notification dropped [id:{}]: {}", transport->id(), e.what());
+			MS_SPDLOG_WARN("WebRtcTransport notification dropped [id:{}]: {}", transport->id(), e.what());
 		} catch (...) {
-			spdlog::warn("WebRtcTransport notification dropped [id:{}]: unknown error", transport->id());
+			MS_SPDLOG_WARN("WebRtcTransport notification dropped [id:{}]: unknown error", transport->id());
 		}
 	}));
 

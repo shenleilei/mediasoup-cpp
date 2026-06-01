@@ -9,6 +9,7 @@
 #include <mutex>
 #include <cstdint>
 #include <spdlog/spdlog.h>
+#include "Logger.h"
 
 namespace mediasoup {
 
@@ -102,13 +103,13 @@ private:
 			try {
 				entry.fn(args);
 			} catch (const std::bad_any_cast& e) {
-				spdlog::warn("EventEmitter bad_any_cast in listener [event:{}]: {}", event, e.what());
+				MS_SPDLOG_WARN("EventEmitter bad_any_cast in listener [event:{}]: {}", event, e.what());
 				if (!firstException) firstException = std::current_exception();
 			} catch (const std::exception& e) {
-				spdlog::warn("EventEmitter listener exception [event:{}]: {}", event, e.what());
+				MS_SPDLOG_WARN("EventEmitter listener exception [event:{}]: {}", event, e.what());
 				if (!firstException) firstException = std::current_exception();
 			} catch (...) {
-				spdlog::warn("EventEmitter listener unknown exception [event:{}]", event);
+				MS_SPDLOG_WARN("EventEmitter listener unknown exception [event:{}]", event);
 				if (!firstException) firstException = std::current_exception();
 			}
 		}

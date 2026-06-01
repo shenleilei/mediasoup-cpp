@@ -9,6 +9,7 @@ namespace mediasoup {
 
 void Consumer::pause() {
 	if (closed_) return;
+	MS_INFO(logger_, "{} pause()", logPrefix());
 	channel_->requestWait(FBS::Request::Method::CONSUMER_PAUSE,
 		FBS::Request::Body::NONE, 0, id_);
 	paused_ = true;
@@ -17,6 +18,7 @@ void Consumer::pause() {
 
 void Consumer::resume() {
 	if (closed_) return;
+	MS_INFO(logger_, "{} resume()", logPrefix());
 	channel_->requestWait(FBS::Request::Method::CONSUMER_RESUME,
 		FBS::Request::Body::NONE, 0, id_);
 	paused_ = false;
@@ -49,6 +51,7 @@ void Consumer::setPriority(uint8_t priority) {
 
 void Consumer::requestKeyFrame() {
 	if (closed_) return;
+	MS_INFO(logger_, "{} requestKeyFrame()", logPrefix());
 	channel_->requestWait(FBS::Request::Method::CONSUMER_REQUEST_KEY_FRAME,
 		FBS::Request::Body::NONE, 0, id_);
 }
@@ -56,6 +59,7 @@ void Consumer::requestKeyFrame() {
 void Consumer::close() {
 	if (closed_) return;
 	closed_ = true;
+	MS_INFO(logger_, "{} close()", logPrefix());
 
 	if (channel_) {
 		if (channelListenerId_ != 0) {
@@ -74,12 +78,12 @@ void Consumer::close() {
 					return reqOff.Union();
 				}, transportId_);
 		} else {
-			spdlog::warn("Consumer::close() skipped close request due to null channel [id:{}]", id_);
+			MS_SPDLOG_WARN("{} Consumer::close() skipped close request due to null channel", logPrefix());
 		}
 	} catch (const std::exception& e) {
-		spdlog::warn("Consumer::close() request failed [id:{}]: {}", id_, e.what());
+		MS_SPDLOG_WARN("{} Consumer::close() request failed: {}", logPrefix(), e.what());
 	} catch (...) {
-		spdlog::warn("Consumer::close() request failed [id:{}]: unknown error", id_);
+		MS_SPDLOG_WARN("{} Consumer::close() request failed: unknown error", logPrefix());
 	}
 
 	emitter_.emitChecked("@close", {std::any(std::string("close"))});
@@ -133,8 +137,8 @@ void Consumer::handleNotification(
 				if (body && body->score()) {
 					score_.score = body->score()->score();
 					score_.producerScore = body->score()->producer_score();
-					MS_DEBUG(logger_, "Consumer {} ({}) score={} producerScore={}",
-						id_, kind_, score_.score, score_.producerScore);
+					MS_DEBUG(logger_, "{} Consumer score={} producerScore={} kind={}",
+						logPrefix(), score_.score, score_.producerScore, kind_);
 					score_.producerScores.clear();
 					if (body->score()->producer_scores())
 						for (size_t i = 0; i < body->score()->producer_scores()->size(); i++)

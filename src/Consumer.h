@@ -36,6 +36,17 @@ public:
 	uint8_t priority() const { return priority_; }
 	EventEmitter& emitter() { return emitter_; }
 	void setChannelListenerId(uint64_t listenerId) { channelListenerId_ = listenerId; }
+	void setContext(std::string roomId, std::string peerId) {
+		roomId_ = std::move(roomId);
+		peerId_ = std::move(peerId);
+	}
+	const std::string& roomId() const { return roomId_; }
+	const std::string& peerId() const { return peerId_; }
+	std::string logPrefix() const {
+		if (roomId_.empty() && peerId_.empty()) return "[" + id_ + "]";
+		if (peerId_.empty()) return "[" + roomId_ + " " + id_ + "]";
+		return "[" + roomId_ + " " + peerId_ + " " + id_ + "]";
+	}
 
 	void pause();
 	void resume();
@@ -68,6 +79,8 @@ private:
 	std::string type_;
 	Channel* channel_;
 	std::string transportId_;
+	std::string roomId_;
+	std::string peerId_;
 	bool closed_ = false;
 	bool paused_ = false;
 	bool producerPaused_ = false;

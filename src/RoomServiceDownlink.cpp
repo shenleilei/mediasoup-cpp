@@ -151,9 +151,9 @@ void RoomService::continueDownlinkPlanning() {
 		try {
 			runDownlinkPlanningForRoom(roomId);
 		} catch (const std::exception& e) {
-			MS_WARN(logger_, "[{}] downlink planning failed: {}", roomId, e.what());
+			MS_WARN(logger_, "[{} system] downlink planning failed: {}", roomId, e.what());
 		} catch (...) {
-			MS_WARN(logger_, "[{}] downlink planning failed: unknown error", roomId);
+			MS_WARN(logger_, "[{} system] downlink planning failed: unknown error", roomId);
 		}
 
 		planState.lastPlannedAtMs = nowMs;
@@ -176,7 +176,10 @@ void RoomService::continueDownlinkPlanning() {
 
 void RoomService::runDownlinkPlanningForRoom(const std::string& roomId) {
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return;
+	if (!room) {
+		MS_DEBUG(logger_, "[{} system] downlink planning skipped: room not found", roomId);
+		return;
+	}
 
 	const int64_t nowMs = qos::NowMs();
 	auto planningInputs = roomdownlink::CollectPlanningInputs(

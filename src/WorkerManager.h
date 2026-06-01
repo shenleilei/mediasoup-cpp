@@ -1,6 +1,7 @@
 #pragma once
 #include "Worker.h"
 #include "Constants.h"
+#include "Logger.h"
 #include <vector>
 #include <memory>
 #include <mutex>
@@ -116,7 +117,7 @@ private:
 			   (now - respawnTimes_.front()) > std::chrono::seconds(kRespawnWindowSec))
 			respawnTimes_.erase(respawnTimes_.begin());
 		if (respawnTimes_.size() > kMaxRespawnsPerWindow) {
-			spdlog::error("Worker respawn rate limit hit ({} in {}s), not respawning",
+			MS_SPDLOG_ERROR("Worker respawn rate limit hit ({} in {}s), not respawning",
 				respawnTimes_.size(), kRespawnWindowSec);
 			return false;
 		}
@@ -136,9 +137,9 @@ private:
 				workers_.push_back(worker);
 			}
 			installDiedHandler(worker);
-			spdlog::warn("Worker respawned");
+			MS_SPDLOG_INFO("Worker respawned");
 		} catch (const std::exception& e) {
-			spdlog::error("Failed to respawn worker: {}", e.what());
+			MS_SPDLOG_ERROR("Failed to respawn worker: {}", e.what());
 		}
 	}
 

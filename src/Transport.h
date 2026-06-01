@@ -27,6 +27,17 @@ public:
 	const std::string& routerId() const { return routerId_; }
 	EventEmitter& emitter() { return emitter_; }
 	void setChannelListenerId(uint64_t listenerId) { channelListenerId_ = listenerId; }
+	void setContext(std::string roomId, std::string peerId) {
+		roomId_ = std::move(roomId);
+		peerId_ = std::move(peerId);
+	}
+	const std::string& roomId() const { return roomId_; }
+	const std::string& peerId() const { return peerId_; }
+	std::string logPrefix() const {
+		if (roomId_.empty() && peerId_.empty()) return "[" + id_ + "]";
+		if (peerId_.empty()) return "[" + roomId_ + " " + id_ + "]";
+		return "[" + roomId_ + " " + peerId_ + " " + id_ + "]";
+	}
 
 	std::shared_ptr<Producer> produce(const json& options);
 	std::shared_ptr<Consumer> consume(const json& options);
@@ -46,6 +57,8 @@ protected:
 	std::string id_;
 	Channel* channel_;
 	std::string routerId_;
+	std::string roomId_;
+	std::string peerId_;
 	bool closed_ = false;
 	EventEmitter emitter_;
 	std::unordered_map<std::string, std::shared_ptr<Producer>> producers_;

@@ -60,12 +60,16 @@ RoomService::Result RoomService::setClientStats(
 	qos::ClientQosSnapshot stats)
 {
 	auto room = roomManager_.getRoom(roomId);
-	if (!room)
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] clientStats failed: room not found", roomId, peerId);
 		return {false, json::object(), "", "room missing during clientStats"};
+	}
 
 	auto peer = room->getPeer(peerId);
-	if (!peer)
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] clientStats failed: peer not found", roomId, peerId);
 		return {false, json::object(), "", "peer missing during clientStats"};
+	}
 
 	std::string rejectReason;
 	if (!qosRegistry_.Upsert(roomId, peerId, stats, qos::NowMs(), &rejectReason)) {
@@ -74,8 +78,10 @@ RoomService::Result RoomService::setClientStats(
 	}
 
 	auto qosEntry = qosRegistry_.Get(roomId, peerId);
-	if (!qosEntry)
+	if (!qosEntry) {
+		MS_WARN(logger_, "[{} {}] clientStats failed: stored entry missing", roomId, peerId);
 		return {false, json::object(), "", "clientStats stored entry missing"};
+	}
 
 	auto aggregate = qos::QosAggregator::Aggregate(qosEntry, qos::NowMs());
 	maybeNotifyConnectionQuality(roomId, peerId, aggregate);
@@ -92,6 +98,8 @@ void RoomService::maybeSendAutomaticQosOverride(
 	auto automatic = qos::QosOverrideBuilder::BuildForAggregate(aggregate);
 	const std::string key = roomstatsqos::MakePeerKey(roomId, peerId);
 	if (!automatic.has_value()) {
+		MS_DEBUG(logger_, "[{} {}] automatic QoS override skipped: no candidate [{}]",
+			roomId, peerId, SummarizePeerQosAggregate(aggregate));
 		auto it = autoQosOverrideRecords_.find(key);
 		if (it != autoQosOverrideRecords_.end()) {
 			if (notify_) {
@@ -154,7 +162,14 @@ void RoomService::maybeNotifyConnectionQuality(
 	const std::string& roomId, const std::string& peerId,
 	const qos::PeerQosAggregate& aggregate)
 {
-	if (!notify_ || !aggregate.hasSnapshot) return;
+	if (!aggregate.hasSnapshot) {
+		MS_DEBUG(logger_, "[{} {}] connection quality skipped: no snapshot", roomId, peerId);
+		return;
+	}
+	if (!notify_) {
+		MS_DEBUG(logger_, "[{} {}] connection quality skipped: notify disabled", roomId, peerId);
+		return;
+	}
 
 	const std::string key = roomstatsqos::MakePeerKey(roomId, peerId);
 	const json payload = roomstatsqos::BuildConnectionQualityPayload(aggregate);
@@ -172,9 +187,15 @@ void RoomService::maybeNotifyConnectionQuality(
 
 void RoomService::maybeBroadcastRoomQosState(const std::string& roomId)
 {
-	if (!broadcast_) return;
+	if (!broadcast_) {
+		MS_DEBUG(logger_, "[{} system] qos room state skipped: broadcast disabled", roomId);
+		return;
+	}
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return;
+	if (!room) {
+		MS_DEBUG(logger_, "[{} system] qos room state skipped: room not found", roomId);
+		return;
+	}
 
 	std::vector<qos::PeerQosAggregate> peers;
 	for (auto& peerId : room->getPeerIds()) {
@@ -183,6 +204,7 @@ void RoomService::maybeBroadcastRoomQosState(const std::string& roomId)
 	}
 	auto roomAggregate = qos::QosRoomAggregator::Aggregate(peers);
 	if (!roomAggregate.hasQos) {
+		MS_DEBUG(logger_, "[{} system] qos room state skipped: no qos data", roomId);
 		lastRoomQosStateSignatures_.erase(roomId);
 		return;
 	}
@@ -205,12 +227,20 @@ void RoomService::maybeSendRoomPressureOverrides(
 	const std::string& roomId, const qos::RoomQosAggregate& aggregate)
 {
 	auto room = roomManager_.getRoom(roomId);
-	if (!room || !notify_) return;
+	if (!room) {
+		MS_DEBUG(logger_, "[{} system] room pressure overrides skipped: room not found", roomId);
+		return;
+	}
+	if (!notify_) {
+		MS_DEBUG(logger_, "[{} system] room pressure overrides skipped: notify disabled", roomId);
+		return;
+	}
 
 	auto roomAutomatic = qos::QosOverrideBuilder::BuildForRoomAggregate(aggregate);
 	for (auto& peerId : room->getPeerIds()) {
 		const std::string key = roomstatsqos::MakeRoomPressureKey(roomId, peerId);
 		if (!roomAutomatic.has_value()) {
+			MS_DEBUG(logger_, "[{} {}] room pressure override skipped: no candidate", roomId, peerId);
 			auto it = autoQosOverrideRecords_.find(key);
 			if (it != autoQosOverrideRecords_.end()) {
 				notify_(roomId, peerId, {

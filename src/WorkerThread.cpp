@@ -324,11 +324,11 @@ void WorkerThread::loop()
 				if (it != fdToWorker_.end()) {
 						if (!it->second->processChannelData()) {
 							auto worker = it->second;
-							if (::epoll_ctl(epollFd_, EPOLL_CTL_DEL, fd, nullptr) != 0) {
-								MS_WARN(logger_,
-									"WorkerThread {} failed to remove worker fd {} from epoll: {}",
-									id_,
-									fd,
+			if (::epoll_ctl(epollFd_, EPOLL_CTL_DEL, fd, nullptr) != 0) {
+				MS_ERROR(logger_,
+					"WorkerThread {} failed to remove worker fd {} from epoll: {}",
+					id_,
+					fd,
 									strerror(errno));
 							}
 							fdToWorker_.erase(it);
@@ -504,7 +504,7 @@ void WorkerThread::onWorkerDied(std::shared_ptr<Worker> worker)
 			fdToWorker_[fd] = newWorker;
 			workerWebRtcServerPorts_[newWorker.get()] = webRtcServerPort;
 			workerManager_->addExistingWorker(newWorker);
-			MS_WARN(logger_, "WorkerThread {} respawned worker [pid:{}]", id_, newWorker->pid());
+			MS_INFO(logger_, "WorkerThread {} respawned worker [pid:{}]", id_, newWorker->pid());
 			if (onWorkerRespawned_) onWorkerRespawned_();
 		} catch (const std::exception& e) {
 			MS_ERROR(logger_, "WorkerThread {} failed to respawn worker: {}", id_, e.what());

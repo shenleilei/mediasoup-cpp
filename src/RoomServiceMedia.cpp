@@ -133,12 +133,22 @@ RoomService::Result RoomService::createTransport(const std::string& roomId,
 	const std::string& peerId, bool producing, bool consuming, const json& rtpCapabilities)
 {
 	if (producing == consuming)
+	{
+		MS_WARN(logger_, "[{} {}] createTransport failed: exactly one of producing or consuming must be true",
+			roomId, peerId);
 		return {false, {}, "", "exactly one of producing or consuming must be true"};
+	}
 
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {false, {}, "", "room not found"};
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] createTransport failed: room not found", roomId, peerId);
+		return {false, {}, "", "room not found"};
+	}
 	auto peer = room->getPeer(peerId);
-	if (!peer) return {false, {}, "", "peer not found"};
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] createTransport failed: peer not found", roomId, peerId);
+		return {false, {}, "", "peer not found"};
+	}
 	if (consuming) {
 		if (!rtpCapabilities.is_null() && !rtpCapabilities.is_object()) {
 			MS_WARN(logger_, "[{} {}] createTransport validation failed: invalid rtpCapabilities type",
@@ -170,7 +180,19 @@ RoomService::Result RoomService::createTransport(const std::string& roomId,
 		peer->recvTransport.reset();
 	}
 
-	auto transport = room->router()->createWebRtcTransport(opts);
+	std::shared_ptr<WebRtcTransport> transport;
+	try {
+		transport = room->router()->createWebRtcTransport(opts);
+	} catch (const std::exception& e) {
+		MS_WARN(logger_, "[{} {}] createTransport failed: createWebRtcTransport threw: {}",
+			roomId, peerId, e.what());
+		return {false, {}, "", std::string("createTransport failed: ") + e.what()};
+	} catch (...) {
+		MS_WARN(logger_, "[{} {}] createTransport failed: createWebRtcTransport threw unknown error",
+			roomId, peerId);
+		return {false, {}, "", "createTransport failed: unknown error"};
+	}
+	transport->setContext(roomId, peerId);
 	if (producing) peer->sendTransport = transport;
 	else           peer->recvTransport = transport;
 
@@ -194,27 +216,57 @@ RoomService::Result RoomService::connectTransport(const std::string& roomId,
 	const std::string& peerId, const std::string& transportId,
 	const DtlsParameters& dtlsParams)
 {
+	MS_INFO(logger_, "[{} {}] connectTransport start transportId={} dtlsParams={}",
+		roomId, peerId, transportId, json(dtlsParams).dump());
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {false, {}, "", "room not found"};
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] connectTransport failed: room not found transportId={}",
+			roomId, peerId, transportId);
+		return {false, {}, "", "room not found"};
+	}
 	auto peer = room->getPeer(peerId);
-	if (!peer) return {false, {}, "", "peer not found"};
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] connectTransport failed: peer not found transportId={}",
+			roomId, peerId, transportId);
+		return {false, {}, "", "peer not found"};
+	}
 	auto transport = peer->getTransport(transportId);
-	if (!transport) return {false, {}, "", "transport not found"};
+	if (!transport) {
+		MS_WARN(logger_, "[{} {}] connectTransport failed: transport not found [{}]",
+			roomId, peerId, transportId);
+		return {false, {}, "", "transport not found"};
+	}
 	auto wt = std::dynamic_pointer_cast<WebRtcTransport>(transport);
-	if (!wt) return {false, {}, "", "not a WebRtcTransport"};
-	return {true, wt->connect(dtlsParams)};
+	if (!wt) {
+		MS_WARN(logger_, "[{} {}] connectTransport failed: not a WebRtcTransport [{}]",
+			roomId, peerId, transportId);
+		return {false, {}, "", "not a WebRtcTransport"};
+	}
+	auto result = wt->connect(dtlsParams);
+	MS_INFO(logger_, "[{} {}] connectTransport done transportId={}", roomId, peerId, transportId);
+	return {true, result};
 }
 
 RoomService::Result RoomService::createPlainTransport(const std::string& roomId,
 	const std::string& peerId, bool producing, bool consuming)
 {
 	if (producing == consuming)
+	{
+		MS_WARN(logger_, "[{} {}] createPlainTransport failed: exactly one of producing or consuming must be true",
+			roomId, peerId);
 		return {false, {}, "", "exactly one of producing or consuming must be true"};
+	}
 
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {false, {}, "", "room not found"};
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] createPlainTransport failed: room not found", roomId, peerId);
+		return {false, {}, "", "room not found"};
+	}
 	auto peer = room->getPeer(peerId);
-	if (!peer) return {false, {}, "", "peer not found"};
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] createPlainTransport failed: peer not found", roomId, peerId);
+		return {false, {}, "", "peer not found"};
+	}
 
 	PlainTransportOptions opts;
 	opts.listenInfos = roomManager_.listenInfos();
@@ -235,7 +287,19 @@ RoomService::Result RoomService::createPlainTransport(const std::string& roomId,
 		peer->plainRecvTransport.reset();
 	}
 
-	auto transport = room->router()->createPlainTransport(opts);
+	std::shared_ptr<PlainTransport> transport;
+	try {
+		transport = room->router()->createPlainTransport(opts);
+	} catch (const std::exception& e) {
+		MS_WARN(logger_, "[{} {}] createPlainTransport failed: createPlainTransport threw: {}",
+			roomId, peerId, e.what());
+		return {false, {}, "", std::string("createPlainTransport failed: ") + e.what()};
+	} catch (...) {
+		MS_WARN(logger_, "[{} {}] createPlainTransport failed: createPlainTransport threw unknown error",
+			roomId, peerId);
+		return {false, {}, "", "createPlainTransport failed: unknown error"};
+	}
+	transport->setContext(roomId, peerId);
 	if (producing) peer->plainSendTransport = transport;
 	else           peer->plainRecvTransport = transport;
 
@@ -259,15 +323,36 @@ RoomService::Result RoomService::connectPlainTransport(const std::string& roomId
 	const std::string& peerId, const std::string& transportId,
 	const std::string& ip, uint16_t port)
 {
+	MS_INFO(logger_, "[{} {}] connectPlainTransport start transportId={} ip={} port={}",
+		roomId, peerId, transportId, ip, port);
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {false, {}, "", "room not found"};
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] connectPlainTransport failed: room not found transportId={}",
+			roomId, peerId, transportId);
+		return {false, {}, "", "room not found"};
+	}
 	auto peer = room->getPeer(peerId);
-	if (!peer) return {false, {}, "", "peer not found"};
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] connectPlainTransport failed: peer not found transportId={}",
+			roomId, peerId, transportId);
+		return {false, {}, "", "peer not found"};
+	}
 	auto transport = peer->getTransport(transportId);
-	if (!transport) return {false, {}, "", "transport not found"};
+	if (!transport) {
+		MS_WARN(logger_, "[{} {}] connectPlainTransport failed: transport not found [{}]",
+			roomId, peerId, transportId);
+		return {false, {}, "", "transport not found"};
+	}
 	auto pt = std::dynamic_pointer_cast<PlainTransport>(transport);
-	if (!pt) return {false, {}, "", "not a PlainTransport"};
-	return {true, pt->connect(ip, port)};
+	if (!pt) {
+		MS_WARN(logger_, "[{} {}] connectPlainTransport failed: not a PlainTransport [{}]",
+			roomId, peerId, transportId);
+		return {false, {}, "", "not a PlainTransport"};
+	}
+	auto result = pt->connect(ip, port);
+	MS_INFO(logger_, "[{} {}] connectPlainTransport done transportId={} ip={} port={}",
+		roomId, peerId, transportId, ip, port);
+	return {true, result};
 }
 
 RoomService::Result RoomService::plainPublish(const std::string& roomId,
@@ -278,18 +363,35 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 	uint16_t senderPort)
 {
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {false, {}, "", "room not found"};
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] plainPublish failed: room not found", roomId, peerId);
+		return {false, {}, "", "room not found"};
+	}
 	auto peer = room->getPeer(peerId);
-	if (!peer) return {false, {}, "", "peer not found"};
-	if (videoSsrcs.empty()) return {false, {}, "", "videoSsrcs cannot be empty"};
-	if (enableAudio && audioSsrc == 0) return {false, {}, "", "audioSsrc must be non-zero"};
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] plainPublish failed: peer not found", roomId, peerId);
+		return {false, {}, "", "peer not found"};
+	}
+	if (videoSsrcs.empty()) {
+		MS_WARN(logger_, "[{} {}] plainPublish failed: videoSsrcs cannot be empty", roomId, peerId);
+		return {false, {}, "", "videoSsrcs cannot be empty"};
+	}
+	if (enableAudio && audioSsrc == 0) {
+		MS_WARN(logger_, "[{} {}] plainPublish failed: audioSsrc must be non-zero", roomId, peerId);
+		return {false, {}, "", "audioSsrc must be non-zero"};
+	}
 
 	std::unordered_set<uint32_t> uniqueSsrcs;
 	if (enableAudio) uniqueSsrcs.insert(audioSsrc);
 	for (auto videoSsrc : videoSsrcs) {
-		if (videoSsrc == 0) return {false, {}, "", "videoSsrcs must be non-zero"};
-		if (!uniqueSsrcs.insert(videoSsrc).second)
+		if (videoSsrc == 0) {
+			MS_WARN(logger_, "[{} {}] plainPublish failed: videoSsrc must be non-zero", roomId, peerId);
+			return {false, {}, "", "videoSsrcs must be non-zero"};
+		}
+		if (!uniqueSsrcs.insert(videoSsrc).second) {
+			MS_WARN(logger_, "[{} {}] plainPublish failed: duplicate SSRC [{}]", roomId, peerId, videoSsrc);
 			return {false, {}, "", "duplicate SSRC in plainPublish request"};
+		}
 	}
 
 	PlainTransportOptions opts;
@@ -308,7 +410,19 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 		peer->plainSendTransport.reset();
 	}
 
-	auto transport = room->router()->createPlainTransport(opts);
+	std::shared_ptr<PlainTransport> transport;
+	try {
+		transport = room->router()->createPlainTransport(opts);
+	} catch (const std::exception& e) {
+		MS_WARN(logger_, "[{} {}] plainPublish failed: createPlainTransport threw: {}",
+			roomId, peerId, e.what());
+		return {false, {}, "", std::string("plainPublish failed: ") + e.what()};
+	} catch (...) {
+		MS_WARN(logger_, "[{} {}] plainPublish failed: createPlainTransport threw unknown error",
+			roomId, peerId);
+		return {false, {}, "", "plainPublish failed: unknown error"};
+	}
+	transport->setContext(roomId, peerId);
 	peer->plainSendTransport = transport;
 	if (hasExplicitSender) {
 		try {
@@ -331,8 +445,11 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 	auto caps = room->router()->rtpCapabilities();
 	const std::string requestedVideoCodec =
 		NormalizeRequestedPlainVideoCodec(videoCodec.empty() ? "h264" : videoCodec);
-	if (requestedVideoCodec != "h264" && requestedVideoCodec != "vp8")
+	if (requestedVideoCodec != "h264" && requestedVideoCodec != "vp8") {
+		MS_WARN(logger_, "[{} {}] plainPublish failed: unsupported videoCodec [{}]",
+			roomId, peerId, requestedVideoCodec);
 		return {false, {}, "", "unsupported plain publish videoCodec"};
+	}
 
 	std::optional<RtpCodecCapability> selectedVideoCodec;
 	std::optional<RtpCodecCapability> audioCodec;
@@ -350,11 +467,17 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 		}
 	}
 	if (!selectedVideoCodec.has_value()) {
-		if (requestedVideoCodec == "vp8")
+		if (requestedVideoCodec == "vp8") {
+			MS_WARN(logger_, "[{} {}] plainPublish failed: router has no VP8 codec", roomId, peerId);
 			return {false, {}, "", "router has no VP8 codec"};
+		}
+		MS_WARN(logger_, "[{} {}] plainPublish failed: router has no H264 Baseline codec", roomId, peerId);
 		return {false, {}, "", "router has no H264 Baseline codec"};
 	}
-	if (enableAudio && audioPt == 0) return {false, {}, "", "router has no opus codec"};
+	if (enableAudio && audioPt == 0) {
+		MS_WARN(logger_, "[{} {}] plainPublish failed: router has no opus codec", roomId, peerId);
+		return {false, {}, "", "router has no opus codec"};
+	}
 
 	const uint8_t videoPt = selectedVideoCodec->preferredPayloadType;
 	json videoCodecParameters = selectedVideoCodec->parameters;
@@ -409,7 +532,18 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 			{"kind", "video"}, {"rtpParameters", videoRtpParams},
 			{"routerRtpCapabilities", caps}
 		};
-	auto videoProd = transport->produce(videoProdOpts);
+	std::shared_ptr<Producer> videoProd;
+	try {
+		videoProd = transport->produce(videoProdOpts);
+	} catch (const std::exception& e) {
+		MS_WARN(logger_, "[{} {}] plainPublish failed: video produce threw at index {} ssrc={} error={}",
+			roomId, peerId, index, videoSsrc, e.what());
+		return {false, {}, "", std::string("plainPublish video produce failed: ") + e.what()};
+	} catch (...) {
+		MS_WARN(logger_, "[{} {}] plainPublish failed: video produce threw at index {} ssrc={} error=unknown",
+			roomId, peerId, index, videoSsrc);
+		return {false, {}, "", "plainPublish video produce failed: unknown error"};
+	}
 	room->router()->addProducer(videoProd);
 	roommedia::TrackPeerProducer(peer, videoProd);
 	watchProducerScore(roomId, videoProd);
@@ -442,7 +576,16 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 			{"kind", "audio"}, {"rtpParameters", audioRtpParams},
 			{"routerRtpCapabilities", caps}
 		};
-		audioProd = transport->produce(audioProdOpts);
+		try {
+			audioProd = transport->produce(audioProdOpts);
+		} catch (const std::exception& e) {
+			MS_WARN(logger_, "[{} {}] plainPublish failed: audio produce threw error={}",
+				roomId, peerId, e.what());
+			return {false, {}, "", std::string("plainPublish audio produce failed: ") + e.what()};
+		} catch (...) {
+			MS_WARN(logger_, "[{} {}] plainPublish failed: audio produce threw unknown error", roomId, peerId);
+			return {false, {}, "", "plainPublish audio produce failed: unknown error"};
+		}
 		room->router()->addProducer(audioProd);
 		roommedia::TrackPeerProducer(peer, audioProd);
 		watchProducerScore(roomId, audioProd);
@@ -496,9 +639,15 @@ RoomService::Result RoomService::plainSubscribe(const std::string& roomId,
 	bool autoReturn)
 {
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {false, {}, "", "room not found"};
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] plainSubscribe failed: room not found", roomId, peerId);
+		return {false, {}, "", "room not found"};
+	}
 	auto peer = room->getPeer(peerId);
-	if (!peer) return {false, {}, "", "peer not found"};
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] plainSubscribe failed: peer not found", roomId, peerId);
+		return {false, {}, "", "peer not found"};
+	}
 
 	if (autoReturn) {
 		if (recvIp.has_value() || recvPort.has_value()) {
@@ -525,7 +674,18 @@ RoomService::Result RoomService::plainSubscribe(const std::string& roomId,
 		peer->plainRecvTransport.reset();
 	}
 
-	auto transport = room->router()->createPlainTransport(opts);
+	std::shared_ptr<PlainTransport> transport;
+	try {
+		transport = room->router()->createPlainTransport(opts);
+	} catch (const std::exception& e) {
+		MS_WARN(logger_, "[{} {}] plainSubscribe failed: createPlainTransport threw: {}",
+			roomId, peerId, e.what());
+		return {false, {}, "", std::string("plainSubscribe failed: ") + e.what()};
+	} catch (...) {
+		MS_WARN(logger_, "[{} {}] plainSubscribe failed: createPlainTransport threw unknown error", roomId, peerId);
+		return {false, {}, "", "plainSubscribe failed: unknown error"};
+	}
+	transport->setContext(roomId, peerId);
 	peer->plainRecvTransport = transport;
 	if (!autoReturn) {
 		try {
@@ -545,15 +705,26 @@ RoomService::Result RoomService::plainSubscribe(const std::string& roomId,
 		}
 	}
 
-	json consumers = roommedia::ConsumeExistingProducers(
-		roomId,
-		peerId,
-		room,
-		peer,
-		std::static_pointer_cast<Transport>(transport),
-		logger_,
-		"plainSubscribe",
-		false);
+	json consumers;
+	try {
+		consumers = roommedia::ConsumeExistingProducers(
+			roomId,
+			peerId,
+			room,
+			peer,
+			std::static_pointer_cast<Transport>(transport),
+			logger_,
+			"plainSubscribe",
+			false);
+	} catch (const std::exception& e) {
+		MS_WARN(logger_, "[{} {}] plainSubscribe failed: consume existing producers threw: {}",
+			roomId, peerId, e.what());
+		return {false, {}, "", std::string("plainSubscribe consume failed: ") + e.what()};
+	} catch (...) {
+		MS_WARN(logger_, "[{} {}] plainSubscribe failed: consume existing producers threw unknown error",
+			roomId, peerId);
+		return {false, {}, "", "plainSubscribe consume failed: unknown error"};
+	}
 
 	auto tuple = transport->tuple();
 	return {true, {
@@ -568,6 +739,10 @@ RoomService::Result RoomService::produce(const std::string& roomId,
 	const std::string& peerId, const std::string& transportId,
 	const std::string& kind, const json& rtpParameters, const json& appData)
 {
+	const std::string source = appData.value("source", "");
+	MS_INFO(logger_, "[{} {}] produce start transportId={} kind={} source={} appData={}",
+		roomId, peerId, transportId, kind, source.empty() ? "-" : source, appData.dump());
+
 	if (kind != "audio" && kind != "video") {
 		MS_WARN(logger_, "[{} {}] produce validation failed: invalid kind '{}'", roomId, peerId, kind);
 		return {false, {}, "", "invalid kind"};
@@ -586,18 +761,36 @@ RoomService::Result RoomService::produce(const std::string& roomId,
 	}
 
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {false, {}, "", "room not found"};
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] produce failed: room not found", roomId, peerId);
+		return {false, {}, "", "room not found"};
+	}
 	auto peer = room->getPeer(peerId);
-	if (!peer) return {false, {}, "", "peer not found"};
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] produce failed: peer not found", roomId, peerId);
+		return {false, {}, "", "peer not found"};
+	}
 	auto transport = peer->getTransport(transportId);
-	if (!transport) return {false, {}, "", "transport not found"};
+	if (!transport) {
+		MS_WARN(logger_, "[{} {}] produce failed: transport not found [{}]", roomId, peerId, transportId);
+		return {false, {}, "", "transport not found"};
+	}
 
 	json produceOpts = {
 		{"kind", kind}, {"rtpParameters", rtpParameters},
 		{"routerRtpCapabilities", room->router()->rtpCapabilities()},
 		{"appData", appData}
 	};
-	auto producer = transport->produce(produceOpts);
+	std::shared_ptr<Producer> producer;
+	try {
+		producer = transport->produce(produceOpts);
+	} catch (const std::exception& e) {
+		MS_WARN(logger_, "[{} {}] produce failed: transport->produce threw: {}", roomId, peerId, e.what());
+		return {false, {}, "", std::string("produce failed: ") + e.what()};
+	} catch (...) {
+		MS_WARN(logger_, "[{} {}] produce failed: transport->produce threw unknown error", roomId, peerId);
+		return {false, {}, "", "produce failed: unknown error"};
+	}
 	room->router()->addProducer(producer);
 	roommedia::TrackPeerProducer(peer, producer);
 	watchProducerScore(roomId, producer);
@@ -606,6 +799,8 @@ RoomService::Result RoomService::produce(const std::string& roomId,
 	roommedia::AutoSubscribeProducerToOtherPeers(
 		roomId, peerId, room, producer, logger_, notify_, false);
 
+	MS_INFO(logger_, "[{} {}] produce done transportId={} kind={} source={} producerId={}",
+		roomId, peerId, transportId, kind, source.empty() ? "-" : source, producer->id());
 	return {true, {{"id", producer->id()}}};
 }
 
@@ -613,78 +808,145 @@ RoomService::Result RoomService::consume(const std::string& roomId,
 	const std::string& peerId, const std::string& transportId,
 	const std::string& producerId, const json& rtpCapabilities)
 {
+	MS_INFO(logger_, "[{} {}] consume start transportId={} producerId={}",
+		roomId, peerId, transportId, producerId);
+
 	if (!rtpCapabilities.is_object()) {
 		MS_WARN(logger_, "[{} {}] consume validation failed: invalid rtpCapabilities type", roomId, peerId);
 		return {false, {}, "", "invalid rtpCapabilities"};
 	}
 
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {false, {}, "", "room not found"};
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] consume failed: room not found", roomId, peerId);
+		return {false, {}, "", "room not found"};
+	}
 	auto peer = room->getPeer(peerId);
-	if (!peer) return {false, {}, "", "peer not found"};
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] consume failed: peer not found", roomId, peerId);
+		return {false, {}, "", "peer not found"};
+	}
 	auto transport = peer->getTransport(transportId);
-	if (!transport) return {false, {}, "", "transport not found"};
+	if (!transport) {
+		MS_WARN(logger_, "[{} {}] consume failed: transport not found [{}]", roomId, peerId, transportId);
+		return {false, {}, "", "transport not found"};
+	}
 	auto producer = room->router()->getProducerById(producerId);
-	if (!producer) return {false, {}, "", "producer not found"};
+	if (!producer) {
+		MS_WARN(logger_, "[{} {}] consume failed: producer not found [{}]", roomId, peerId, producerId);
+		return {false, {}, "", "producer not found"};
+	}
 
 	json consumeOpts = {
 		{"producerId", producerId},
 		{"rtpCapabilities", rtpCapabilities},
 		{"consumableRtpParameters", producer->consumableRtpParameters()}
 	};
-	auto consumer = transport->consume(consumeOpts);
+	std::shared_ptr<Consumer> consumer;
+	try {
+		consumer = transport->consume(consumeOpts);
+	} catch (const std::exception& e) {
+		MS_WARN(logger_, "[{} {}] consume failed: transport->consume threw: {}", roomId, peerId, e.what());
+		return {false, {}, "", std::string("consume failed: ") + e.what()};
+	} catch (...) {
+		MS_WARN(logger_, "[{} {}] consume failed: transport->consume threw unknown error", roomId, peerId);
+		return {false, {}, "", "consume failed: unknown error"};
+	}
 	roommedia::TrackPeerConsumer(peer, consumer);
+	MS_INFO(logger_, "[{} {}] consume done transportId={} producerId={} consumerId={}",
+		roomId, peerId, transportId, producerId, consumer->id());
 	return {true, consumer->toJson()};
 }
 
 RoomService::Result RoomService::pauseProducer(const std::string& roomId,
 	const std::string& producerId)
 {
+	MS_INFO(logger_, "[{} system] pauseProducer start producerId={}", roomId, producerId);
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {false, {}, "", "room not found"};
+	if (!room) {
+		MS_WARN(logger_, "[{} system] pauseProducer failed: room not found producerId={}", roomId, producerId);
+		return {false, {}, "", "room not found"};
+	}
 	auto producer = room->router()->getProducerById(producerId);
-	if (!producer) return {false, {}, "", "producer not found"};
+	if (!producer) {
+		MS_WARN(logger_, "[{} system] pauseProducer failed: producer not found [{}]", roomId, producerId);
+		return {false, {}, "", "producer not found"};
+	}
 	producer->pause();
+	MS_INFO(logger_, "[{} system] pauseProducer done producerId={}", roomId, producerId);
 	return {true, {}};
 }
 
 RoomService::Result RoomService::resumeProducer(const std::string& roomId,
 	const std::string& producerId)
 {
+	MS_INFO(logger_, "[{} system] resumeProducer start producerId={}", roomId, producerId);
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {false, {}, "", "room not found"};
+	if (!room) {
+		MS_WARN(logger_, "[{} system] resumeProducer failed: room not found producerId={}", roomId, producerId);
+		return {false, {}, "", "room not found"};
+	}
 	auto producer = room->router()->getProducerById(producerId);
-	if (!producer) return {false, {}, "", "producer not found"};
+	if (!producer) {
+		MS_WARN(logger_, "[{} system] resumeProducer failed: producer not found [{}]", roomId, producerId);
+		return {false, {}, "", "producer not found"};
+	}
 	producer->resume();
+	MS_INFO(logger_, "[{} system] resumeProducer done producerId={}", roomId, producerId);
 	return {true, {}};
 }
 
 RoomService::Result RoomService::restartIce(const std::string& roomId,
 	const std::string& peerId, const std::string& transportId)
 {
+	MS_INFO(logger_, "[{} {}] restartIce start transportId={}", roomId, peerId, transportId);
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {false, {}, "", "room not found"};
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] restartIce failed: room not found transportId={}", roomId, peerId, transportId);
+		return {false, {}, "", "room not found"};
+	}
 	auto peer = room->getPeer(peerId);
-	if (!peer) return {false, {}, "", "peer not found"};
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] restartIce failed: peer not found transportId={}", roomId, peerId, transportId);
+		return {false, {}, "", "peer not found"};
+	}
 	auto wt = std::dynamic_pointer_cast<WebRtcTransport>(peer->getTransport(transportId));
-	if (!wt) return {false, {}, "", "transport not found"};
-	return {true, wt->restartIce()};
+	if (!wt) {
+		MS_WARN(logger_, "[{} {}] restartIce failed: transport not found [{}]", roomId, peerId, transportId);
+		return {false, {}, "", "transport not found"};
+	}
+	auto result = wt->restartIce();
+	MS_INFO(logger_, "[{} {}] restartIce done transportId={}", roomId, peerId, transportId);
+	return {true, result};
 }
 
 RoomService::Result RoomService::setQosOverride(
 	const std::string& roomId, const std::string& callerPeerId,
 	const std::string& targetPeerId, const json& overrideData)
 {
-	if (callerPeerId != targetPeerId)
+	MS_INFO(logger_, "[{} {}] setQosOverride start targetPeerId={}", roomId, callerPeerId, targetPeerId);
+	if (callerPeerId != targetPeerId) {
+		MS_WARN(logger_, "[{} {}] setQosOverride failed: permission denied targetPeerId={}", roomId, callerPeerId, targetPeerId);
 		return {false, {}, "", "permission denied: can only set QoS override for self"};
+	}
 
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {false, {}, "", "room not found"};
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] setQosOverride failed: room not found targetPeerId={}", roomId, callerPeerId, targetPeerId);
+		return {false, {}, "", "room not found"};
+	}
 	auto peer = room->getPeer(targetPeerId);
-	if (!peer) return {false, {}, "", "peer not found"};
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] setQosOverride failed: peer not found targetPeerId={}", roomId, callerPeerId, targetPeerId);
+		return {false, {}, "", "peer not found"};
+	}
 
 	auto parsed = qos::QosValidator::ParseOverride(overrideData);
-	if (!parsed.ok) return {false, {}, "", "invalid qosOverride: " + parsed.error};
+	if (!parsed.ok) {
+		MS_WARN(logger_, "[{} {}] setQosOverride failed: invalid qosOverride targetPeerId={} error={}",
+			roomId, callerPeerId, targetPeerId, parsed.error);
+		return {false, {}, "", "invalid qosOverride: " + parsed.error};
+	}
 
 	if (notify_) {
 		notify_(roomId, targetPeerId, {
@@ -694,6 +956,7 @@ RoomService::Result RoomService::setQosOverride(
 		});
 	}
 
+	MS_INFO(logger_, "[{} {}] setQosOverride done targetPeerId={}", roomId, callerPeerId, targetPeerId);
 	return {true, json::object()};
 }
 
@@ -701,16 +964,29 @@ RoomService::Result RoomService::setQosPolicy(
 	const std::string& roomId, const std::string& callerPeerId,
 	const std::string& targetPeerId, const json& policyData)
 {
-	if (callerPeerId != targetPeerId)
+	MS_INFO(logger_, "[{} {}] setQosPolicy start targetPeerId={}", roomId, callerPeerId, targetPeerId);
+	if (callerPeerId != targetPeerId) {
+		MS_WARN(logger_, "[{} {}] setQosPolicy failed: permission denied targetPeerId={}", roomId, callerPeerId, targetPeerId);
 		return {false, {}, "", "permission denied: can only set QoS policy for self"};
+	}
 
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {false, {}, "", "room not found"};
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] setQosPolicy failed: room not found targetPeerId={}", roomId, callerPeerId, targetPeerId);
+		return {false, {}, "", "room not found"};
+	}
 	auto peer = room->getPeer(targetPeerId);
-	if (!peer) return {false, {}, "", "peer not found"};
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] setQosPolicy failed: peer not found targetPeerId={}", roomId, callerPeerId, targetPeerId);
+		return {false, {}, "", "peer not found"};
+	}
 
 	auto parsed = qos::QosValidator::ParsePolicy(policyData);
-	if (!parsed.ok) return {false, {}, "", "invalid qosPolicy: " + parsed.error};
+	if (!parsed.ok) {
+		MS_WARN(logger_, "[{} {}] setQosPolicy failed: invalid qosPolicy targetPeerId={} error={}",
+			roomId, callerPeerId, targetPeerId, parsed.error);
+		return {false, {}, "", "invalid qosPolicy: " + parsed.error};
+	}
 
 	if (notify_) {
 		notify_(roomId, targetPeerId, {
@@ -720,49 +996,80 @@ RoomService::Result RoomService::setQosPolicy(
 		});
 	}
 
+	MS_INFO(logger_, "[{} {}] setQosPolicy done targetPeerId={}", roomId, callerPeerId, targetPeerId);
 	return {true, json::object()};
 }
 
 RoomService::Result RoomService::pauseConsumer(const std::string& roomId,
 	const std::string& peerId, const std::string& consumerId)
 {
+	MS_INFO(logger_, "[{} {}] pauseConsumer start consumerId={}", roomId, peerId, consumerId);
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {false, {}, "", "room not found"};
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] pauseConsumer failed: room not found consumerId={}", roomId, peerId, consumerId);
+		return {false, {}, "", "room not found"};
+	}
 	auto peer = room->getPeer(peerId);
-	if (!peer) return {false, {}, "", "peer not found"};
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] pauseConsumer failed: peer not found consumerId={}", roomId, peerId, consumerId);
+		return {false, {}, "", "peer not found"};
+	}
 	auto it = peer->consumers.find(consumerId);
-	if (it == peer->consumers.end() || !it->second || it->second->closed())
+	if (it == peer->consumers.end() || !it->second || it->second->closed()) {
+		MS_WARN(logger_, "[{} {}] pauseConsumer failed: consumer not found [{}]", roomId, peerId, consumerId);
 		return {false, {}, "", "consumer not found"};
+	}
 	it->second->pause();
 	subscriberControllers_[roomstatsqos::MakePeerKey(roomId, peerId)].syncConsumerState(peer->consumers);
+	MS_INFO(logger_, "[{} {}] pauseConsumer done consumerId={}", roomId, peerId, consumerId);
 	return {true, it->second->toJson()};
 }
 
 RoomService::Result RoomService::resumeConsumer(const std::string& roomId,
 	const std::string& peerId, const std::string& consumerId)
 {
+	MS_INFO(logger_, "[{} {}] resumeConsumer start consumerId={}", roomId, peerId, consumerId);
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {false, {}, "", "room not found"};
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] resumeConsumer failed: room not found consumerId={}", roomId, peerId, consumerId);
+		return {false, {}, "", "room not found"};
+	}
 	auto peer = room->getPeer(peerId);
-	if (!peer) return {false, {}, "", "peer not found"};
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] resumeConsumer failed: peer not found consumerId={}", roomId, peerId, consumerId);
+		return {false, {}, "", "peer not found"};
+	}
 	auto it = peer->consumers.find(consumerId);
-	if (it == peer->consumers.end() || !it->second || it->second->closed())
+	if (it == peer->consumers.end() || !it->second || it->second->closed()) {
+		MS_WARN(logger_, "[{} {}] resumeConsumer failed: consumer not found [{}]", roomId, peerId, consumerId);
 		return {false, {}, "", "consumer not found"};
+	}
 	it->second->resume();
 	subscriberControllers_[roomstatsqos::MakePeerKey(roomId, peerId)].syncConsumerState(peer->consumers);
+	MS_INFO(logger_, "[{} {}] resumeConsumer done consumerId={}", roomId, peerId, consumerId);
 	return {true, it->second->toJson()};
 }
 
 RoomService::Result RoomService::getConsumerState(const std::string& roomId,
 	const std::string& peerId, const std::string& consumerId)
 {
+	MS_INFO(logger_, "[{} {}] getConsumerState start consumerId={}", roomId, peerId, consumerId);
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {false, {}, "", "room not found"};
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] getConsumerState failed: room not found consumerId={}", roomId, peerId, consumerId);
+		return {false, {}, "", "room not found"};
+	}
 	auto peer = room->getPeer(peerId);
-	if (!peer) return {false, {}, "", "peer not found"};
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] getConsumerState failed: peer not found consumerId={}", roomId, peerId, consumerId);
+		return {false, {}, "", "peer not found"};
+	}
 	auto it = peer->consumers.find(consumerId);
-	if (it == peer->consumers.end() || !it->second || it->second->closed())
+	if (it == peer->consumers.end() || !it->second || it->second->closed()) {
+		MS_WARN(logger_, "[{} {}] getConsumerState failed: consumer not found [{}]", roomId, peerId, consumerId);
 		return {false, {}, "", "consumer not found"};
+	}
+	MS_INFO(logger_, "[{} {}] getConsumerState done consumerId={}", roomId, peerId, consumerId);
 	return {true, it->second->toJson()};
 }
 
@@ -770,44 +1077,78 @@ RoomService::Result RoomService::setConsumerPreferredLayers(const std::string& r
 	const std::string& peerId, const std::string& consumerId,
 	uint8_t spatialLayer, uint8_t temporalLayer)
 {
+	MS_INFO(logger_, "[{} {}] setConsumerPreferredLayers start consumerId={} spatial={} temporal={}",
+		roomId, peerId, consumerId, spatialLayer, temporalLayer);
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {false, {}, "", "room not found"};
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] setConsumerPreferredLayers failed: room not found consumerId={}", roomId, peerId, consumerId);
+		return {false, {}, "", "room not found"};
+	}
 	auto peer = room->getPeer(peerId);
-	if (!peer) return {false, {}, "", "peer not found"};
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] setConsumerPreferredLayers failed: peer not found consumerId={}", roomId, peerId, consumerId);
+		return {false, {}, "", "peer not found"};
+	}
 	auto it = peer->consumers.find(consumerId);
-	if (it == peer->consumers.end() || !it->second || it->second->closed())
+	if (it == peer->consumers.end() || !it->second || it->second->closed()) {
+		MS_WARN(logger_, "[{} {}] setConsumerPreferredLayers failed: consumer not found [{}]", roomId, peerId, consumerId);
 		return {false, {}, "", "consumer not found"};
+	}
 	it->second->setPreferredLayers(spatialLayer, temporalLayer);
 	subscriberControllers_[roomstatsqos::MakePeerKey(roomId, peerId)].syncConsumerState(peer->consumers);
+	MS_INFO(logger_, "[{} {}] setConsumerPreferredLayers done consumerId={} spatial={} temporal={}",
+		roomId, peerId, consumerId, spatialLayer, temporalLayer);
 	return {true, it->second->toJson()};
 }
 
 RoomService::Result RoomService::setConsumerPriority(const std::string& roomId,
 	const std::string& peerId, const std::string& consumerId, uint8_t priority)
 {
+	MS_INFO(logger_, "[{} {}] setConsumerPriority start consumerId={} priority={}",
+		roomId, peerId, consumerId, priority);
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {false, {}, "", "room not found"};
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] setConsumerPriority failed: room not found consumerId={}", roomId, peerId, consumerId);
+		return {false, {}, "", "room not found"};
+	}
 	auto peer = room->getPeer(peerId);
-	if (!peer) return {false, {}, "", "peer not found"};
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] setConsumerPriority failed: peer not found consumerId={}", roomId, peerId, consumerId);
+		return {false, {}, "", "peer not found"};
+	}
 	auto it = peer->consumers.find(consumerId);
-	if (it == peer->consumers.end() || !it->second || it->second->closed())
+	if (it == peer->consumers.end() || !it->second || it->second->closed()) {
+		MS_WARN(logger_, "[{} {}] setConsumerPriority failed: consumer not found [{}]", roomId, peerId, consumerId);
 		return {false, {}, "", "consumer not found"};
+	}
 	it->second->setPriority(priority);
 	subscriberControllers_[roomstatsqos::MakePeerKey(roomId, peerId)].syncConsumerState(peer->consumers);
+	MS_INFO(logger_, "[{} {}] setConsumerPriority done consumerId={} priority={}",
+		roomId, peerId, consumerId, priority);
 	return {true, it->second->toJson()};
 }
 
 RoomService::Result RoomService::requestConsumerKeyFrame(const std::string& roomId,
 	const std::string& peerId, const std::string& consumerId)
 {
+	MS_INFO(logger_, "[{} {}] requestConsumerKeyFrame start consumerId={}", roomId, peerId, consumerId);
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {false, {}, "", "room not found"};
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] requestConsumerKeyFrame failed: room not found consumerId={}", roomId, peerId, consumerId);
+		return {false, {}, "", "room not found"};
+	}
 	auto peer = room->getPeer(peerId);
-	if (!peer) return {false, {}, "", "peer not found"};
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] requestConsumerKeyFrame failed: peer not found consumerId={}", roomId, peerId, consumerId);
+		return {false, {}, "", "peer not found"};
+	}
 	auto it = peer->consumers.find(consumerId);
-	if (it == peer->consumers.end() || !it->second || it->second->closed())
+	if (it == peer->consumers.end() || !it->second || it->second->closed()) {
+		MS_WARN(logger_, "[{} {}] requestConsumerKeyFrame failed: consumer not found [{}]", roomId, peerId, consumerId);
 		return {false, {}, "", "consumer not found"};
+	}
 	it->second->requestKeyFrame();
+	MS_INFO(logger_, "[{} {}] requestConsumerKeyFrame done consumerId={}", roomId, peerId, consumerId);
 	return {true, it->second->toJson()};
 }
 

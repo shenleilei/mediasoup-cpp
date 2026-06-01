@@ -59,9 +59,15 @@ json RoomService::collectPeerStats(
 	const std::string& peerId,
 	bool includeConsumers) {
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {};
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] collectPeerStats failed: room not found", roomId, peerId);
+		return {};
+	}
 	auto peer = room->getPeer(peerId);
-	if (!peer) return {};
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] collectPeerStats failed: peer not found", roomId, peerId);
+		return {};
+	}
 
 	json result = {{"peerId", peerId}};
 
@@ -113,10 +119,16 @@ json RoomService::collectPeerStats(
 }
 
 void RoomService::broadcastStats() {
-	if (statsBroadcastActive_) return;
+	if (statsBroadcastActive_) {
+		MS_DEBUG(logger_, "[system] broadcastStats skipped: already active");
+		return;
+	}
 
 	auto roomIds = roomManager_.getRoomIds();
-	if (roomIds.empty()) return;
+	if (roomIds.empty()) {
+		MS_DEBUG(logger_, "[system] broadcastStats skipped: no rooms");
+		return;
+	}
 
 	std::string names;
 	for (auto& id : roomIds) { if (!names.empty()) names += ", "; names += id; }
@@ -164,11 +176,15 @@ void RoomService::continueBroadcastStats() {
 
 void RoomService::broadcastStatsForRoom(const std::string& roomId, bool forceBroadcast) {
 	if (statsBroadcastActive_ && !forceBroadcast) {
+		MS_DEBUG(logger_, "[{} system] broadcastStats skipped: active and not forced", roomId);
 		return;
 	}
 
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return;
+	if (!room) {
+		MS_DEBUG(logger_, "[{} system] broadcastStats skipped: room not found", roomId);
+		return;
+	}
 
 	const auto currentProducerScores = BuildRoomProducerScoreSnapshot(room);
 	auto previousScoresIt = lastStatsReportProducerScores_.find(roomId);
@@ -178,6 +194,7 @@ void RoomService::broadcastStatsForRoom(const std::string& roomId, bool forceBro
 			previousScoresIt->second,
 			currentProducerScores,
 			kProducerScoreBroadcastDelta)) {
+		MS_DEBUG(logger_, "[{} system] broadcastStats skipped: producer scores unchanged", roomId);
 		return;
 	}
 
@@ -187,15 +204,18 @@ void RoomService::broadcastStatsForRoom(const std::string& roomId, bool forceBro
 			auto stats = collectPeerStats(roomId, peerId, /*includeConsumers=*/false);
 			if (!stats.empty()) allStats.push_back(stats);
 		} catch (const std::exception& e) {
-			MS_WARN(logger_, "broadcastStats collectPeerStats failed [room:{} peer:{}]: {}", roomId, peerId, e.what());
+			MS_WARN(logger_, "[{} {}] broadcastStats collectPeerStats failed: {}", roomId, peerId, e.what());
 			allStats.push_back({{"peerId", peerId}});
 		} catch (...) {
-			MS_WARN(logger_, "broadcastStats collectPeerStats failed [room:{} peer:{}]: unknown error", roomId, peerId);
+			MS_WARN(logger_, "[{} {}] broadcastStats collectPeerStats failed: unknown error", roomId, peerId);
 			allStats.push_back({{"peerId", peerId}});
 		}
 	}
 
-	if (allStats.empty()) return;
+	if (allStats.empty()) {
+		MS_DEBUG(logger_, "[{} system] broadcastStats skipped: no peer stats", roomId);
+		return;
+	}
 
 	if (broadcast_) {
 		broadcast_(roomId, "", {

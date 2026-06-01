@@ -37,7 +37,7 @@ static void validateNotificationArgs(const std::vector<std::any>& args,
 {
 	notif = nullptr;
 	if (args.empty()) {
-		spdlog::warn("{} notification args empty [id:{}]", owner, id);
+		MS_SPDLOG_WARN("{} notification args empty [id:{}]", owner, id);
 		throw std::invalid_argument("empty notification args");
 	}
 	event = std::any_cast<FBS::Notification::Event>(args[0]);
@@ -51,20 +51,20 @@ std::shared_ptr<Producer> Transport::produce(const json& options) {
 	if (closed_) throw std::runtime_error("Transport closed");
 
 	if (!options.contains("rtpParameters") || !options.at("rtpParameters").is_object()) {
-		MS_WARN(logger_, "produce validation failed [transportId:{}]: invalid rtpParameters", id_);
+		MS_WARN(logger_, "{} produce validation failed: invalid rtpParameters", logPrefix());
 		throw std::invalid_argument("invalid or missing 'rtpParameters'");
 	}
 	if (!options.contains("routerRtpCapabilities") || !options.at("routerRtpCapabilities").is_object()) {
-		MS_WARN(logger_, "produce validation failed [transportId:{}]: invalid routerRtpCapabilities", id_);
+		MS_WARN(logger_, "{} produce validation failed: invalid routerRtpCapabilities", logPrefix());
 		throw std::invalid_argument("invalid or missing 'routerRtpCapabilities'");
 	}
 	if (options.contains("appData") && !options.at("appData").is_object()) {
-		MS_WARN(logger_, "produce validation failed [transportId:{}]: invalid appData", id_);
+		MS_WARN(logger_, "{} produce validation failed: invalid appData", logPrefix());
 		throw std::invalid_argument("invalid 'appData': expected object");
 	}
 	std::string kind = getRequiredString(options, "kind");
 	if (kind != "audio" && kind != "video") {
-		MS_WARN(logger_, "produce validation failed [transportId:{} kind:{}]", id_, kind);
+		MS_WARN(logger_, "{} produce validation failed [kind:{}]", logPrefix(), kind);
 		throw std::invalid_argument("invalid 'kind': expected 'audio' or 'video'");
 	}
 	RtpParameters rtpParameters = options.at("rtpParameters").get<RtpParameters>();
@@ -77,7 +77,7 @@ std::shared_ptr<Producer> Transport::produce(const json& options) {
 	// Compute RTP mapping
 	auto rtpMapping = ortc::getProducerRtpParametersMapping(rtpParameters, routerRtpCapabilities);
 
-	MS_DEBUG(logger_, "produce [kind:{}] codecs={}", kind, json(rtpMapping.codecs).dump());
+	MS_DEBUG(logger_, "{} produce [kind:{}] codecs={}", logPrefix(), kind, json(rtpMapping.codecs).dump());
 
 	std::string producerId = utils::generateUUIDv4();
 	channel_->requestBuildWait(
@@ -101,6 +101,7 @@ std::shared_ptr<Producer> Transport::produce(const json& options) {
 		producerId, kind, rtpParameters, "simple",
 		appData,
 		consumableRtpParams, channel_, id_);
+	producer->setContext(roomId_, peerId_);
 
 	producers_[producerId] = producer;
 
@@ -117,11 +118,11 @@ std::shared_ptr<Producer> Transport::produce(const json& options) {
 			validateNotificationArgs(args, "Producer", producer->id(), event, notif);
 			producer->handleNotification(event, notif);
 		} catch (const std::bad_any_cast& e) {
-			spdlog::warn("Producer notification cast failed [id:{}]: {}", producer->id(), e.what());
+			MS_SPDLOG_WARN("{} Producer notification cast failed: {}", producer->logPrefix(), e.what());
 		} catch (const std::exception& e) {
-			spdlog::warn("Producer notification dropped [id:{}]: {}", producer->id(), e.what());
+			MS_SPDLOG_WARN("{} Producer notification dropped: {}", producer->logPrefix(), e.what());
 		} catch (...) {
-			spdlog::warn("Producer notification dropped [id:{}]: unknown error", producer->id());
+			MS_SPDLOG_WARN("{} Producer notification dropped: unknown error", producer->logPrefix());
 		}
 	}));
 
@@ -132,11 +133,11 @@ std::shared_ptr<Consumer> Transport::consume(const json& options) {
 	if (closed_) throw std::runtime_error("Transport closed");
 
 	if (!options.contains("rtpCapabilities") || !options.at("rtpCapabilities").is_object()) {
-		MS_WARN(logger_, "consume validation failed [transportId:{}]: invalid rtpCapabilities", id_);
+		MS_WARN(logger_, "{} consume validation failed: invalid rtpCapabilities", logPrefix());
 		throw std::invalid_argument("invalid or missing 'rtpCapabilities'");
 	}
 	if (!options.contains("consumableRtpParameters") || !options.at("consumableRtpParameters").is_object()) {
-		MS_WARN(logger_, "consume validation failed [transportId:{}]: invalid consumableRtpParameters", id_);
+		MS_WARN(logger_, "{} consume validation failed: invalid consumableRtpParameters", logPrefix());
 		throw std::invalid_argument("invalid or missing 'consumableRtpParameters'");
 	}
 	std::string producerId = getRequiredString(options, "producerId");
@@ -145,11 +146,11 @@ std::shared_ptr<Consumer> Transport::consume(const json& options) {
 	bool paused = getOptionalBool(options, "paused", false);
 	bool pipe = getOptionalBool(options, "pipe", false);
 	if (consumableRtpParameters.codecs.empty()) {
-		MS_WARN(logger_, "consume validation failed [transportId:{}]: empty codecs", id_);
+		MS_WARN(logger_, "{} consume validation failed: empty codecs", logPrefix());
 		throw std::invalid_argument("invalid 'consumableRtpParameters': codecs cannot be empty");
 	}
 	if (consumableRtpParameters.codecs[0].mimeType.empty()) {
-		MS_WARN(logger_, "consume validation failed [transportId:{}]: empty codecs[0].mimeType", id_);
+		MS_WARN(logger_, "{} consume validation failed: empty codecs[0].mimeType", logPrefix());
 		throw std::invalid_argument("invalid 'consumableRtpParameters': codecs[0].mimeType cannot be empty");
 	}
 
@@ -202,6 +203,7 @@ std::shared_ptr<Consumer> Transport::consume(const json& options) {
 
 	auto consumer = std::make_shared<Consumer>(
 		consumerId, producerId, kind, consumerRtpParams, type, channel_, id_);
+	consumer->setContext(roomId_, peerId_);
 
 	consumers_[consumerId] = consumer;
 
@@ -217,11 +219,11 @@ std::shared_ptr<Consumer> Transport::consume(const json& options) {
 			validateNotificationArgs(args, "Consumer", consumer->id(), event, notif);
 			consumer->handleNotification(event, notif);
 		} catch (const std::bad_any_cast& e) {
-			spdlog::warn("Consumer notification cast failed [id:{}]: {}", consumer->id(), e.what());
+			MS_SPDLOG_WARN("{} Consumer notification cast failed: {}", consumer->logPrefix(), e.what());
 		} catch (const std::exception& e) {
-			spdlog::warn("Consumer notification dropped [id:{}]: {}", consumer->id(), e.what());
+			MS_SPDLOG_WARN("{} Consumer notification dropped: {}", consumer->logPrefix(), e.what());
 		} catch (...) {
-			spdlog::warn("Consumer notification dropped [id:{}]: unknown error", consumer->id());
+			MS_SPDLOG_WARN("{} Consumer notification dropped: unknown error", consumer->logPrefix());
 		}
 	}));
 
@@ -438,9 +440,9 @@ void Transport::close() {
 				return reqOff.Union();
 			}, routerId_);
 	} catch (const std::exception& e) {
-		spdlog::warn("Transport::close() request failed [id:{}]: {}", id_, e.what());
+		MS_SPDLOG_WARN("Transport::close() request failed [id:{}]: {}", id_, e.what());
 	} catch (...) {
-		spdlog::warn("Transport::close() request failed [id:{}]: unknown error", id_);
+		MS_SPDLOG_WARN("Transport::close() request failed [id:{}]: unknown error", id_);
 	}
 
 	cleanupOwnedEntities();

@@ -49,7 +49,7 @@ void SignalingServerHttp::RegisterHttpRoutes(uWS::SSLApp& app, SignalingServer& 
 		(void)loop;
 		(void)clientIp;
 		(void)requestStart;
-		spdlog::debug("api.resolve received [req:{} roomId:{} local-only:true]", requestId, roomId);
+		MS_SPDLOG_DEBUG("api.resolve received [req:{} roomId:{} local-only:true]", requestId, roomId);
 		res->writeHeader("Content-Type", "application/json")
 			->writeHeader("Access-Control-Allow-Origin", "*")
 			->end(R"({"wsUrl":"","isNew":true})");
@@ -167,7 +167,7 @@ void SignalingServerHttp::StartBackgroundTimers(
 					if (wtp->roomService())
 						wtp->roomService()->broadcastStats();
 				} catch (const std::exception& e) {
-					spdlog::error("broadcastStats exception: {}", e.what());
+					MS_SPDLOG_ERROR("broadcastStats exception: {}", e.what());
 				}
 			});
 		}

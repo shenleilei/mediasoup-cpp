@@ -32,6 +32,7 @@ bool ValidateReadableRegularFile(const std::string& path, const char* label, std
 {
 	if (path.empty()) {
 		error = std::string(label) + " path is empty";
+		MS_SPDLOG_ERROR("{} validation failed: path is empty", label);
 		return false;
 	}
 
@@ -39,22 +40,27 @@ bool ValidateReadableRegularFile(const std::string& path, const char* label, std
 	const std::filesystem::path fsPath(path);
 	if (!std::filesystem::exists(fsPath, ec)) {
 		error = std::string(label) + " not found: " + path;
+		MS_SPDLOG_ERROR("{} validation failed: not found [path:{}]", label, path);
 		return false;
 	}
 	if (ec) {
 		error = std::string(label) + " existence check failed for " + path + ": " + ec.message();
+		MS_SPDLOG_ERROR("{} validation failed: existence check failed [path:{} error:{}]", label, path, ec.message());
 		return false;
 	}
 	if (!std::filesystem::is_regular_file(fsPath, ec)) {
 		error = std::string(label) + " is not a regular file: " + path;
+		MS_SPDLOG_ERROR("{} validation failed: not a regular file [path:{}]", label, path);
 		return false;
 	}
 	if (ec) {
 		error = std::string(label) + " type check failed for " + path + ": " + ec.message();
+		MS_SPDLOG_ERROR("{} validation failed: type check failed [path:{} error:{}]", label, path, ec.message());
 		return false;
 	}
 	if (access(path.c_str(), R_OK) != 0) {
 		error = std::string(label) + " is not readable: " + path + " (" + std::strerror(errno) + ")";
+		MS_SPDLOG_ERROR("{} validation failed: not readable [path:{} error:{}]", label, path, std::strerror(errno));
 		return false;
 	}
 
@@ -129,7 +135,7 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 			if (listenSocket) {
 				listenSucceeded = true;
 				notifyStartup(true);
-				spdlog::info(
+				MS_SPDLOG_INFO(
 					"SignalingServer listening with HTTPS/WSS on port {} cert={} key={}",
 					port_, tlsOptions_.certFile, tlsOptions_.keyFile);
 				auto* loop = uWS::Loop::get();
@@ -141,7 +147,7 @@ bool SignalingServer::run(const std::function<void(bool)>& startupResult) {
 					shutdownTimer);
 			} else {
 				notifyStartup(false);
-				spdlog::error("SignalingServer failed to listen on port {}", port_);
+				MS_SPDLOG_ERROR("SignalingServer failed to listen on port {}", port_);
 			}
 		});
 

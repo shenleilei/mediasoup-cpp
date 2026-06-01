@@ -9,6 +9,7 @@ namespace mediasoup {
 
 void Producer::pause() {
 	if (closed_) return;
+	MS_INFO(logger_, "{} pause()", logPrefix());
 	channel_->requestWait(FBS::Request::Method::PRODUCER_PAUSE,
 		FBS::Request::Body::NONE, 0, id_);
 	paused_ = true;
@@ -17,6 +18,7 @@ void Producer::pause() {
 
 void Producer::resume() {
 	if (closed_) return;
+	MS_INFO(logger_, "{} resume()", logPrefix());
 	channel_->requestWait(FBS::Request::Method::PRODUCER_RESUME,
 		FBS::Request::Body::NONE, 0, id_);
 	paused_ = false;
@@ -26,6 +28,7 @@ void Producer::resume() {
 void Producer::close() {
 	if (closed_) return;
 	closed_ = true;
+	MS_INFO(logger_, "{} close()", logPrefix());
 
 	if (channel_ && channelListenerId_ != 0) {
 		channel_->emitter().off(channelListenerId_);
@@ -42,9 +45,9 @@ void Producer::close() {
 			}, transportId_);
 			// Fire-and-forget: don't .get() — avoids blocking control thread if worker is slow
 	} catch (const std::exception& e) {
-		spdlog::warn("Producer::close() request failed [id:{}]: {}", id_, e.what());
+		MS_SPDLOG_WARN("{} Producer::close() request failed: {}", logPrefix(), e.what());
 	} catch (...) {
-			spdlog::warn("Producer::close() request failed [id:{}]: unknown error", id_);
+			MS_SPDLOG_WARN("{} Producer::close() request failed: unknown error", logPrefix());
 		}
 
 	emitter_.emitChecked("@close", {std::any(std::string("close"))});

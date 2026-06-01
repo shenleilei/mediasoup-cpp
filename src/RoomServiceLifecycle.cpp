@@ -9,6 +9,8 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 	const std::string& displayName, const json& rtpCapabilities, const std::string& clientIp)
 {
 	(void)clientIp;
+	MS_INFO(logger_, "[{} {}] join start displayName={} clientIp={} rtpCapabilities={}",
+		roomId, peerId, displayName, clientIp, rtpCapabilities.dump());
 
 	auto existingRoom = roomManager_.getRoom(roomId);
 	if (!existingRoom) {
@@ -77,17 +79,24 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 		});
 	}
 
-	return {true, {
+	auto result = Result{true, {
 		{"routerRtpCapabilities", room->router()->rtpCapabilities()},
 		{"existingProducers", existingProducers},
 		{"participants", room->getParticipants()},
 		{"qosPolicy", getDefaultQosPolicy()}
 	}};
+	MS_INFO(logger_, "[{} {}] join done reconnect={} participants={}",
+		roomId, peerId, isReconnect ? "true" : "false", room->peerCount());
+	return result;
 }
 
 RoomService::Result RoomService::leave(const std::string& roomId, const std::string& peerId) {
+	MS_INFO(logger_, "[{} {}] leave start", roomId, peerId);
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return {true, {}};
+	if (!room) {
+		MS_INFO(logger_, "[{} {}] leave done room_missing=true", roomId, peerId);
+		return {true, {}};
+	}
 
 	qosRegistry_.ErasePeer(roomId, peerId);
 	roomstatsqos::ClearPeerAutomaticOverrideRecords(
@@ -122,6 +131,7 @@ RoomService::Result RoomService::leave(const std::string& roomId, const std::str
 		roomManager_.removeRoom(roomId);
 		if (roomLifecycle_) roomLifecycle_(roomId, false);
 	}
+	MS_INFO(logger_, "[{} {}] leave done room_empty={}", roomId, peerId, room->empty() ? "true" : "false");
 	return {true, {}};
 }
 
@@ -131,14 +141,25 @@ bool RoomService::leaveIfSessionMatches(
 	uint64_t expectedSessionId)
 {
 	if (expectedSessionId == 0) {
+		MS_DEBUG(logger_, "[{} {}] leave skipped: expectedSessionId=0", roomId, peerId);
 		return false;
 	}
 
 	auto room = roomManager_.getRoom(roomId);
-	if (!room) return false;
+	if (!room) {
+		MS_DEBUG(logger_, "[{} {}] leave skipped: room not found expectedSession={}",
+			roomId, peerId, expectedSessionId);
+		return false;
+	}
 	auto peer = room->getPeer(peerId);
-	if (!peer) return false;
+	if (!peer) {
+		MS_DEBUG(logger_, "[{} {}] leave skipped: peer not found expectedSession={}",
+			roomId, peerId, expectedSessionId);
+		return false;
+	}
 	if (peer->sessionId != expectedSessionId) {
+		MS_DEBUG(logger_, "[{} {}] leave skipped: session mismatch expected={} actual={}",
+			roomId, peerId, expectedSessionId, peer->sessionId);
 		return false;
 	}
 
@@ -150,12 +171,12 @@ void RoomService::checkRoomHealth() {
 	auto deadRooms = roomManager_.getDeadRooms();
 	if (deadRooms.empty()) return;
 
-	MS_WARN(logger_, "checkRoomHealth: found {} dead rooms", deadRooms.size());
+	MS_WARN(logger_, "[system] checkRoomHealth: found {} dead rooms", deadRooms.size());
 	for (auto& roomId : deadRooms) {
 		auto room = roomManager_.getRoom(roomId);
 		if (!room) continue;
 
-		MS_WARN(logger_, "Room {} has dead router, notifying {} peers to reconnect",
+		MS_WARN(logger_, "[{} system] dead router, notifying {} peers to reconnect",
 			roomId, room->getPeerIds().size());
 
 		if (broadcast_) {
@@ -171,7 +192,7 @@ void RoomService::checkRoomHealth() {
 
 void RoomService::cleanIdleRooms(int idleSeconds) {
 	for (auto& id : roomManager_.getIdleRooms(idleSeconds)) {
-		MS_DEBUG(logger_, "GC idle room: {}", id);
+		MS_DEBUG(logger_, "[{} system] GC idle room", id);
 		destroyRoom(id);
 	}
 }
