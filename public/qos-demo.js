@@ -71,6 +71,42 @@
     console.log(message);
   }
 
+  function summarizeCurrentContext(extraFields = []) {
+    const fields = [];
+    if (state.roomId) fields.push(`room=${state.roomId}`);
+    if (state.peerId) fields.push(`peer=${state.peerId}`);
+    fields.push(...extraFields.filter(Boolean));
+    return fields.length > 0 ? ` [${fields.join(' ')}]` : '';
+  }
+
+  function summarizeRequestData(data = {}) {
+    const fields = [];
+    if (data.transportId) fields.push(`transport=${data.transportId}`);
+    if (data.producerId) fields.push(`producer=${data.producerId}`);
+    if (data.consumerId) fields.push(`consumer=${data.consumerId}`);
+    if (data.peerId && data.peerId !== state.peerId) fields.push(`targetPeer=${data.peerId}`);
+    if (data.roomId && data.roomId !== state.roomId) fields.push(`targetRoom=${data.roomId}`);
+    if (data.displayName) fields.push(`displayName=${data.displayName}`);
+    if (data.kind) fields.push(`kind=${data.kind}`);
+    if (data.producing !== undefined) fields.push(`producing=${data.producing ? 'true' : 'false'}`);
+    if (data.consuming !== undefined) fields.push(`consuming=${data.consuming ? 'true' : 'false'}`);
+    return summarizeCurrentContext(fields);
+  }
+
+  function summarizeNotificationData(method, data = {}) {
+    const fields = [];
+    if (data.peerId) fields.push(`remotePeer=${data.peerId}`);
+    if (data.displayName) fields.push(`displayName=${data.displayName}`);
+    if (data.reconnect !== undefined) fields.push(`reconnect=${data.reconnect ? 'true' : 'false'}`);
+    if (data.producerId) fields.push(`producer=${data.producerId}`);
+    if (data.id) fields.push(`consumer=${data.id}`);
+    if (data.consumerId) fields.push(`consumer=${data.consumerId}`);
+    if (data.kind) fields.push(`kind=${data.kind}`);
+    if (data.reason) fields.push(`reason=${data.reason}`);
+    if (method === 'statsReport' && Array.isArray(data.peers)) fields.push(`statsPeers=${data.peers.length}`);
+    return summarizeCurrentContext(fields);
+  }
+
   function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
@@ -1227,22 +1263,22 @@
 
     return new Promise((resolve, reject) => {
       const id = ++state.reqId;
-      log(`Request start ${method}#${id}`);
+      log(`Request start ${method}#${id}${summarizeRequestData(data)}`);
       const timer = setTimeout(() => {
         state.pending.delete(id);
-        log(`Request failed ${method}#${id}: timeout`);
+        log(`Request failed ${method}#${id}${summarizeRequestData(data)}: timeout`);
         reject(new Error(`request timeout: ${method}`));
       }, 10000);
 
       state.pending.set(id, {
         resolve: value => {
           clearTimeout(timer);
-          log(`Request done ${method}#${id}`);
+          log(`Request done ${method}#${id}${summarizeRequestData(data)}`);
           resolve(value);
         },
         reject: error => {
           clearTimeout(timer);
-          log(`Request failed ${method}#${id}: ${error.message}`);
+          log(`Request failed ${method}#${id}${summarizeRequestData(data)}: ${error.message}`);
           reject(error);
         },
       });
@@ -1366,13 +1402,13 @@
       message.method === 'qosConnectionQuality' ||
       message.method === 'qosRoomState'
     ) {
-      log(`Notification: ${message.method}`);
+      log(`Notification: ${message.method}${summarizeNotificationData(message.method, message.data)}`);
       dispatchQosNotification(message);
       return;
     }
 
     if (message.method === 'statsReport') {
-      log('Notification: statsReport');
+      log(`Notification: statsReport${summarizeNotificationData(message.method, message.data)}`);
       state.latestStatsReport = message.data;
       syncRemoteConsumerServerState();
       renderQosPanel();
@@ -1385,13 +1421,13 @@
     }
 
     if (message.method === 'peerJoined') {
-      log(`Peer joined: ${message.data.peerId}`);
+      log(`Notification: peerJoined${summarizeNotificationData(message.method, message.data)}`);
       return;
     }
 
     if (message.method === 'peerLeft') {
       removeRemoteVideoConsumersByPeer(message.data.peerId);
-      log(`Peer left: ${message.data.peerId}`);
+      log(`Notification: peerLeft${summarizeNotificationData(message.method, message.data)}`);
       return;
     }
 
@@ -1400,13 +1436,13 @@
       return;
     }
 
-    log(`Notification: ${message.method}`);
+    log(`Notification: ${message.method}${summarizeNotificationData(message.method, message.data)}`);
   }
 
   async function handleNewConsumer(data) {
     if (!state.recvTransport) {
       state.pendingConsumers.push(data);
-      log(`Queued consumer ${data.kind} from ${data.peerId || data.producerId} until recv transport is ready`);
+      log(`Queued consumer until recv transport ready${summarizeNotificationData('newConsumer', data)}`);
       return;
     }
 
@@ -1454,7 +1490,7 @@
         renderedElement.addEventListener('loadedmetadata', ensurePlayback, { once: true });
         renderedElement.addEventListener('canplay', ensurePlayback, { once: true });
         consumer.track.onunmute = () => {
-          log(`Remote track unmuted for ${data.peerId || data.producerId}`);
+          log(`Remote track unmuted${summarizeNotificationData('newConsumer', data)}`);
           ensurePlayback();
         };
         ensurePlayback();
@@ -1490,9 +1526,9 @@
         }, 1000);
       }
 
-      log(`Subscribed ${data.kind} from ${data.peerId || data.producerId}`);
+      log(`Subscribed${summarizeNotificationData('newConsumer', data)}`);
     } catch (error) {
-      log(`newConsumer error: ${error.message}`);
+      log(`newConsumer error${summarizeNotificationData('newConsumer', data)}: ${error.message}`);
     }
   }
 
@@ -1515,7 +1551,7 @@
         rtpParameters: response.rtpParameters,
       });
     } catch (error) {
-      log(`Consume error: ${error.message}`);
+      log(`Consume error [room=${state.roomId} peer=${state.peerId} producer=${producerId} kind=${kind || '-'}]: ${error.message}`);
     }
   }
 
@@ -1579,10 +1615,10 @@
     try {
       await wsRequest('requestConsumerKeyFrame', { consumerId });
       if (label) {
-        log(`Requested keyframe for ${label}`);
+        log(`Requested keyframe [room=${state.roomId} peer=${state.peerId} consumer=${consumerId} label=${label}]`);
       }
     } catch (error) {
-      log(`Keyframe request failed for ${label || consumerId}: ${error.message}`);
+      log(`Keyframe request failed [room=${state.roomId} peer=${state.peerId} consumer=${consumerId} label=${label || '-'}]: ${error.message}`);
     }
   }
 
@@ -1706,7 +1742,7 @@
     }
 
     if (!supportsDownlinkQos()) {
-      log('Downlink QoS reporter is not available in browser bundle');
+      log(`Downlink QoS reporter is not available in browser bundle${summarizeCurrentContext()}`);
       return;
     }
 
@@ -1732,7 +1768,7 @@
     refreshDownlinkHints();
     reporter.start();
     void reporter.reportNow();
-    log(`Downlink QoS reporter started for subscriber ${state.peerId}`);
+    log(`Downlink QoS reporter started${summarizeCurrentContext()}`);
   }
 
   function registerRemoteVideoConsumer(entry) {
@@ -1963,7 +1999,7 @@
     }
     state.legacyDebugModeActive = true;
     state.legacyStatsTimer = null;
-    log('Legacy QoS mode keeps local browser debug only; server-side clientStats upload is disabled because mediasoup.qos.client.v1 is required.');
+    log(`Legacy QoS mode keeps local browser debug only; server-side clientStats upload is disabled because mediasoup.qos.client.v1 is required${summarizeCurrentContext()}`);
     updateControls();
   }
 
@@ -2033,12 +2069,12 @@
     updateMeta();
 
     setStatus(state.recoveryInFlight ? 'Recovering session…' : 'Connecting...', 'warn');
-    log(`Resolving room ${roomId}`);
+    log(`Resolving room${summarizeCurrentContext([`targetRoom=${roomId}`])}`);
 
     const wsUrl = await resolveWsUrl(roomId);
     await connectWs(wsUrl);
     setStatus('Connected', 'ok');
-    log(`Connected to ${wsUrl}`);
+    log(`Connected to ${wsUrl}${summarizeCurrentContext([`ws=${wsUrl}`])}`);
 
     const joinResponse = await wsRequest('join', {
       roomId,
@@ -2054,10 +2090,10 @@
           policy: demoPolicy,
         });
         state.latestQosPolicy = demoPolicy;
-        log('Applied demo QoS policy: keep video visible, disable upstream video pause');
+        log(`Applied demo QoS policy: keep video visible, disable upstream video pause${summarizeCurrentContext([`schema=${demoPolicy.schema || '-'}`])}`);
       } catch (error) {
         state.latestQosPolicy = demoPolicy;
-        log(`Demo QoS policy update failed (${error.message}), enforcing no-pause policy locally`);
+        log(`Demo QoS policy update failed${summarizeCurrentContext([`schema=${demoPolicy.schema || '-'}`])}: ${error.message}`);
       }
     }
 
@@ -2108,7 +2144,7 @@
     }
 
     setStatus(`Joined room ${roomId}`, 'ok');
-    log(`Joined room ${roomId} as ${peerId}`);
+    log(`Joined room${summarizeCurrentContext()}`);
     startDebugStatsTimer();
     renderQosPanel();
     updateControls();
@@ -2190,13 +2226,13 @@
         appData: { source: 'audio' },
       });
       state.publishedProducers.set(audioProducer.id, audioProducer);
-      log(`Producing audio [${audioProducer.id}]`);
+      log(`Producing audio${summarizeCurrentContext([`producer=${audioProducer.id}`, 'kind=audio'])}`);
     }
 
     const videoProducers = [];
     const preferredVideoCodec = selectPreferredVideoCodec();
     if (preferredVideoCodec) {
-      log(`Publishing video with codec ${preferredVideoCodec.mimeType}`);
+      log(`Publishing video with codec ${preferredVideoCodec.mimeType}${summarizeCurrentContext([`codec=${preferredVideoCodec.mimeType}`])}`);
     }
     for (const [index, entry] of cameraEntries.entries()) {
       const producer = await state.sendTransport.produce({
@@ -2206,7 +2242,7 @@
       });
       state.publishedProducers.set(producer.id, producer);
       videoProducers.push(producer);
-      log(`Producing video #${index + 1} (${entry.label}) [${producer.id}]`);
+      log(`Producing video${summarizeCurrentContext([`producer=${producer.id}`, `source=${entry.source || 'camera'}`, `label=${entry.label || `camera-${index + 1}`}`, `cameraIndex=${index + 1}`, 'kind=video'])}`);
     }
 
     state.desiredLocalPublish = true;
@@ -2243,7 +2279,7 @@
 
     if (typeof qosLib.createMediasoupProducerQosController === 'function') {
       if (videoProducers.length > 1) {
-        log('Peer QoS session API missing, falling back to the first video producer only');
+        log(`Peer QoS session API missing, falling back to the first video producer only${summarizeCurrentContext()}`);
       }
       return createSingleProducerQosSession(videoProducers[0]);
     }
@@ -2260,7 +2296,7 @@
     }
 
     if (useLegacyQos) {
-      log('Legacy QoS mode enabled via query parameter');
+      log(`Legacy QoS mode enabled via query parameter${summarizeCurrentContext()}`);
       startLegacyClientStatsReporting();
       updateControls();
       return;
@@ -2268,7 +2304,7 @@
 
     const session = createLocalQosSession(videoProducers);
     if (!session) {
-      log('QoS library is not available in browser bundle, falling back to legacy local debug mode');
+      log(`QoS library is not available in browser bundle, falling back to legacy local debug mode${summarizeCurrentContext()}`);
       startLegacyClientStatsReporting();
       updateControls();
       return;
@@ -2307,7 +2343,7 @@
     void state.qosSession.sampleAllNow?.();
     syncLocalVideoEntries();
     renderLocalPreviewCards();
-    log(`QoS session started for ${videoProducers.length} video producer(s)`);
+    log(`QoS session started${summarizeCurrentContext([`videoProducers=${videoProducers.length}`])}`);
     renderQosPanel();
     updateControls();
   }
@@ -2323,10 +2359,10 @@
       cameraEntries = capture.cameraEntries;
       captureStreams = capture.captureStreams;
       state.usingFallbackStream = false;
-      log(`Using ${cameraEntries.length} camera(s)${audioTrack ? ' + microphone' : ''}`);
+      log(`Using local capture${summarizeCurrentContext([`cameras=${cameraEntries.length}`, `audio=${audioTrack ? 'true' : 'false'}`])}`);
     } catch (error) {
       state.usingFallbackStream = true;
-      log(`getUserMedia failed (${error.message}), using fallback canvas stream`);
+      log(`getUserMedia failed${summarizeCurrentContext()}: ${error.message}; using fallback canvas stream`);
       const fallbackStream = buildFallbackStream();
       audioTrack = fallbackStream.getAudioTracks()[0] || null;
       const fallbackVideoTrack = fallbackStream.getVideoTracks()[0] || null;
@@ -2357,7 +2393,7 @@
     const recoveryReason = data.reason || 'worker crashed';
 
     state.recoveryInFlight = (async () => {
-      log(`serverRestart received for room ${roomId}: ${recoveryReason}`);
+      log(`serverRestart received${summarizeCurrentContext([`targetRoom=${roomId}`, `reason=${recoveryReason}`])}`);
       setStatus(`Worker restarted, recovering ${roomId} as ${peerId}…`, 'warn');
       stopDebugStatsTimer();
       failPendingRequests(`serverRestart: ${recoveryReason}`);
@@ -2381,12 +2417,12 @@
         state.recoveryAttempt = attempt;
         setStatus(`Recovering ${roomId} as ${peerId} (${attempt}/${maxAttempts})`, 'warn');
         try {
-          log(`Recovery attempt ${attempt}/${maxAttempts}: rejoining ${roomId} as ${peerId}`);
+          log(`Recovery attempt ${attempt}/${maxAttempts}: rejoining${summarizeCurrentContext([`targetRoom=${roomId}`, `targetPeer=${peerId}`])}`);
           await establishJoinedSession(roomId, peerId);
           recovered = true;
           break;
         } catch (error) {
-          log(`Recovery attempt ${attempt}/${maxAttempts} failed: ${error.message}`);
+          log(`Recovery attempt ${attempt}/${maxAttempts} failed${summarizeCurrentContext([`targetRoom=${roomId}`, `targetPeer=${peerId}`])}: ${error.message}`);
           setStatus(`Recovery attempt ${attempt}/${maxAttempts} failed`, 'warn');
           await sleep(Math.min(1000 * attempt, 4000));
         }
@@ -2399,9 +2435,9 @@
       if (shouldRepublish) {
         const reusable = collectReusableLocalCapture();
         if (reusable) {
-          log(`Reusing existing local capture while recovering ${roomId} as ${peerId}`);
+          log(`Reusing existing local capture while recovering${summarizeCurrentContext([`targetRoom=${roomId}`, `targetPeer=${peerId}`])}`);
         } else {
-          log(`No reusable capture remained; reacquiring local media for ${roomId} as ${peerId}`);
+          log(`No reusable capture remained; reacquiring local media${summarizeCurrentContext([`targetRoom=${roomId}`, `targetPeer=${peerId}`])}`);
         }
         const capture = reusable || await buildFreshCaptureSelection();
         await publishCapturedMedia(capture);
@@ -2409,14 +2445,14 @@
 
       state.recoveryAttempt = 0;
       setStatus(`Recovered ${roomId} as ${peerId}`, 'ok');
-      log(`Recovered room ${roomId} as original peer ${peerId}`);
+      log(`Recovered session${summarizeCurrentContext([`targetRoom=${roomId}`, `targetPeer=${peerId}`])}`);
     })();
 
     try {
       await state.recoveryInFlight;
     } catch (error) {
       setStatus(`Recovery failed for ${roomId} as ${peerId}`, 'err');
-      log(`Recovery failed for ${roomId} as ${peerId}: ${error.message}`);
+      log(`Recovery failed${summarizeCurrentContext([`targetRoom=${roomId}`, `targetPeer=${peerId}`])}: ${error.message}`);
     } finally {
       state.recoveryInFlight = null;
       updateControls();
@@ -2438,7 +2474,7 @@
       await establishJoinedSession(roomId, peerId);
     } catch (error) {
       setStatus('Join failed', 'err');
-      log(`Join failed: ${error.message}`);
+      log(`Join failed${summarizeCurrentContext()}: ${error.message}`);
       updateControls();
     }
   }
@@ -2454,7 +2490,7 @@
     } catch (error) {
       resetLocalPublishState();
       setStatus('Publish failed', 'err');
-      log(`Publish failed: ${error.message}`);
+      log(`Publish failed${summarizeCurrentContext()}: ${error.message}`);
       renderQosPanel();
       updateControls();
     }
@@ -2463,7 +2499,7 @@
   function stopQos() {
     stopLocalQosSession();
     stopLegacyClientStatsReporting();
-    log('Local producer QoS control stopped');
+    log(`Local producer QoS control stopped${summarizeCurrentContext()}`);
     renderQosPanel();
     updateControls();
   }
@@ -2683,11 +2719,11 @@
 
     if (!window.mediasoupClient) {
       setStatus('mediasoup client bundle missing', 'err');
-      log('mediasoup client bundle did not load');
+      log(`mediasoup client bundle did not load${summarizeCurrentContext()}`);
       return;
     }
 
-    log(useLegacyQos ? 'Demo started in legacy QoS mode' : 'Demo started with new QoS library');
+    log(`${useLegacyQos ? 'Demo started in legacy QoS mode' : 'Demo started with new QoS library'}${summarizeCurrentContext()}`);
   }
 
   init();
