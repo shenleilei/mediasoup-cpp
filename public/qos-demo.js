@@ -1227,18 +1227,22 @@
 
     return new Promise((resolve, reject) => {
       const id = ++state.reqId;
+      log(`Request start ${method}#${id}`);
       const timer = setTimeout(() => {
         state.pending.delete(id);
+        log(`Request failed ${method}#${id}: timeout`);
         reject(new Error(`request timeout: ${method}`));
       }, 10000);
 
       state.pending.set(id, {
         resolve: value => {
           clearTimeout(timer);
+          log(`Request done ${method}#${id}`);
           resolve(value);
         },
         reject: error => {
           clearTimeout(timer);
+          log(`Request failed ${method}#${id}: ${error.message}`);
           reject(error);
         },
       });
@@ -1253,6 +1257,10 @@
   }
 
   function resolveWsUrl(roomId) {
+    const runtimeConfig = window.__qosDemoConfig || {};
+    if (runtimeConfig.wsUrl) {
+      return Promise.resolve(runtimeConfig.wsUrl);
+    }
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const fallback = `${proto}://${location.host}/ws`;
     return fetch(`/api/resolve?roomId=${encodeURIComponent(roomId)}`)
@@ -1358,11 +1366,13 @@
       message.method === 'qosConnectionQuality' ||
       message.method === 'qosRoomState'
     ) {
+      log(`Notification: ${message.method}`);
       dispatchQosNotification(message);
       return;
     }
 
     if (message.method === 'statsReport') {
+      log('Notification: statsReport');
       state.latestStatsReport = message.data;
       syncRemoteConsumerServerState();
       renderQosPanel();
@@ -1371,12 +1381,6 @@
 
     if (message.method === 'newConsumer') {
       void handleNewConsumer(message.data);
-      return;
-    }
-
-    if (message.method === 'newProducer') {
-      removeRemoteVideoConsumersByProducerId(message.data.producerId);
-      void consumeProducer(message.data.producerId, message.data.kind);
       return;
     }
 

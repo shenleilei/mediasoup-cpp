@@ -58,6 +58,8 @@ json RoomService::collectPeerStats(
 	const std::string& roomId,
 	const std::string& peerId,
 	bool includeConsumers) {
+	MS_INFO(logger_, "[{} {}] collectPeerStats start includeConsumers={}",
+		roomId, peerId, includeConsumers ? "true" : "false");
 	auto room = roomManager_.getRoom(roomId);
 	if (!room) {
 		MS_WARN(logger_, "[{} {}] collectPeerStats failed: room not found", roomId, peerId);
@@ -114,6 +116,14 @@ json RoomService::collectPeerStats(
 	roomstatsqos::AppendPeerQosStats(result, qosRegistry_, roomId, peerId);
 	roomstatsqos::AppendPeerDownlinkStats(
 		result, downlinkQosRegistry_, subscriberControllers_, roomId, peerId);
+	MS_INFO(logger_, "[{} {}] collectPeerStats done includeConsumers={} producers={} consumers={} hasSendTransport={} hasRecvTransport={}",
+		roomId,
+		peerId,
+		includeConsumers ? "true" : "false",
+		result.contains("producers") && result["producers"].is_array() ? result["producers"].size() : 0,
+		includeConsumers && result.contains("consumers") && result["consumers"].is_array() ? result["consumers"].size() : 0,
+		result.contains("sendTransport") && !result["sendTransport"].is_null() ? "true" : "false",
+		result.contains("recvTransport") && !result["recvTransport"].is_null() ? "true" : "false");
 
 	return result;
 }
@@ -218,6 +228,9 @@ void RoomService::broadcastStatsForRoom(const std::string& roomId, bool forceBro
 	}
 
 	if (broadcast_) {
+		const auto targetPeers = room->getPeerIds();
+		MS_INFO(logger_, "[{} system] notify statsReport targetPeerCount={} targetPeers={} statsPeers={}",
+			roomId, targetPeers.size(), json(targetPeers).dump(), allStats.size());
 		broadcast_(roomId, "", {
 			{"notification", true}, {"method", "statsReport"},
 			{"data", {{"roomId", roomId}, {"peers", allStats}}}

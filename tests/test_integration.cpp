@@ -338,6 +338,141 @@ TEST_F(IntegrationTest, ProduceAndAutoSubscribe) {
 	EXPECT_EQ(consumerNotif["data"]["kind"], "audio");
 }
 
+TEST_F(IntegrationTest, AutoSubscribeStillNotifiesWhenSubscriberPrecreatedSendAndRecvWithoutExistingProducers) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoomWithoutRtpCapabilities(testRoom_, "bob");
+
+	auto bobRecv = bob.ws->request("createWebRtcTransport", {
+		{"producing", false}, {"consuming", true},
+		{"rtpCapabilities", defaultRtpCapabilities()}
+	});
+	ASSERT_TRUE(bobRecv.value("ok", false)) << bobRecv.dump();
+	ASSERT_TRUE(bobRecv.contains("data")) << bobRecv.dump();
+	ASSERT_TRUE(bobRecv["data"].contains("consumers")) << bobRecv.dump();
+	EXPECT_TRUE(bobRecv["data"]["consumers"].is_array()) << bobRecv.dump();
+	EXPECT_TRUE(bobRecv["data"]["consumers"].empty()) << bobRecv.dump();
+
+	auto bobSend = bob.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(bobSend.value("ok", false)) << bobSend.dump();
+
+	auto aliceSend = alice.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(aliceSend.value("ok", false)) << aliceSend.dump();
+
+	json audioRtpParams = {
+		{"codecs", {{
+			{"mimeType", "audio/opus"}, {"clockRate", 48000}, {"channels", 2},
+			{"payloadType", 100}
+		}}},
+		{"encodings", {{{"ssrc", 77777771}}}},
+		{"mid", "0"}
+	};
+	auto produceResp = alice.ws->request("produce", {
+		{"transportId", aliceSend["data"]["id"]},
+		{"kind", "audio"},
+		{"rtpParameters", audioRtpParams}
+	});
+	ASSERT_TRUE(produceResp.value("ok", false)) << produceResp.dump();
+	ASSERT_TRUE(produceResp["data"].contains("id")) << produceResp.dump();
+
+	auto consumerNotif = bob.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(consumerNotif.empty()) << "Bob did not receive newConsumer after precreating send/recv";
+	EXPECT_EQ(consumerNotif["data"]["peerId"], "alice");
+	EXPECT_EQ(consumerNotif["data"]["producerId"], produceResp["data"]["id"]);
+	EXPECT_EQ(consumerNotif["data"]["kind"], "audio");
+}
+
+TEST_F(IntegrationTest, AutoSubscribeNotifiesExistingPeerWhenPublisherJoinsLaterAndProduces) {
+	auto alice = joinRoomWithoutRtpCapabilities(testRoom_, "alice");
+
+	auto aliceRecv = alice.ws->request("createWebRtcTransport", {
+		{"producing", false}, {"consuming", true},
+		{"rtpCapabilities", defaultRtpCapabilities()}
+	});
+	ASSERT_TRUE(aliceRecv.value("ok", false)) << aliceRecv.dump();
+	ASSERT_TRUE(aliceRecv.contains("data")) << aliceRecv.dump();
+	ASSERT_TRUE(aliceRecv["data"].contains("consumers")) << aliceRecv.dump();
+	EXPECT_TRUE(aliceRecv["data"]["consumers"].is_array()) << aliceRecv.dump();
+	EXPECT_TRUE(aliceRecv["data"]["consumers"].empty()) << aliceRecv.dump();
+
+	auto aliceSend = alice.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(aliceSend.value("ok", false)) << aliceSend.dump();
+
+	auto bob = joinRoom(testRoom_, "bob");
+	auto bobSend = bob.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(bobSend.value("ok", false)) << bobSend.dump();
+
+	json audioRtpParams = {
+		{"codecs", {{
+			{"mimeType", "audio/opus"}, {"clockRate", 48000}, {"channels", 2},
+			{"payloadType", 100}
+		}}},
+		{"encodings", {{{"ssrc", 77777772}}}},
+		{"mid", "0"}
+	};
+	auto produceResp = bob.ws->request("produce", {
+		{"transportId", bobSend["data"]["id"]},
+		{"kind", "audio"},
+		{"rtpParameters", audioRtpParams}
+	});
+	ASSERT_TRUE(produceResp.value("ok", false)) << produceResp.dump();
+	ASSERT_TRUE(produceResp["data"].contains("id")) << produceResp.dump();
+
+	auto consumerNotif = alice.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(consumerNotif.empty()) << "Alice did not receive newConsumer after Bob joined later and produced";
+	EXPECT_EQ(consumerNotif["data"]["peerId"], "bob");
+	EXPECT_EQ(consumerNotif["data"]["producerId"], produceResp["data"]["id"]);
+	EXPECT_EQ(consumerNotif["data"]["kind"], "audio");
+}
+
+TEST_F(IntegrationTest, JoinAndRecvTransportWithoutCapabilitiesStillReceiveNewConsumer) {
+	auto alice = joinRoomWithoutRtpCapabilities(testRoom_, "alice");
+
+	auto aliceRecv = alice.ws->request("createWebRtcTransport", {
+		{"producing", false}, {"consuming", true}
+	});
+	ASSERT_TRUE(aliceRecv.value("ok", false)) << aliceRecv.dump();
+	ASSERT_TRUE(aliceRecv.contains("data")) << aliceRecv.dump();
+	ASSERT_TRUE(aliceRecv["data"].contains("consumers")) << aliceRecv.dump();
+	EXPECT_TRUE(aliceRecv["data"]["consumers"].is_array()) << aliceRecv.dump();
+	EXPECT_TRUE(aliceRecv["data"]["consumers"].empty()) << aliceRecv.dump();
+
+	auto bob = joinRoom(testRoom_, "bob");
+	auto bobSend = bob.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(bobSend.value("ok", false)) << bobSend.dump();
+
+	json audioRtpParams = {
+		{"codecs", {{
+			{"mimeType", "audio/opus"}, {"clockRate", 48000}, {"channels", 2},
+			{"payloadType", 100}
+		}}},
+		{"encodings", {{{"ssrc", 77777773}}}},
+		{"mid", "0"}
+	};
+	auto produceResp = bob.ws->request("produce", {
+		{"transportId", bobSend["data"]["id"]},
+		{"kind", "audio"},
+		{"rtpParameters", audioRtpParams}
+	});
+	ASSERT_TRUE(produceResp.value("ok", false)) << produceResp.dump();
+	ASSERT_TRUE(produceResp["data"].contains("id")) << produceResp.dump();
+
+	auto consumerNotif = alice.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(consumerNotif.empty()) << "Alice did not receive newConsumer without join/createTransport rtpCapabilities";
+	EXPECT_EQ(consumerNotif["data"]["peerId"], "bob");
+	EXPECT_EQ(consumerNotif["data"]["producerId"], produceResp["data"]["id"]);
+	EXPECT_EQ(consumerNotif["data"]["kind"], "audio");
+}
+
 TEST_F(IntegrationTest, RecvTransportRequestCanPopulateRtpCapabilitiesForLaterAutoSubscribe) {
 	auto alice = joinRoom(testRoom_, "alice");
 	auto bob = joinRoomWithoutRtpCapabilities(testRoom_, "bob");

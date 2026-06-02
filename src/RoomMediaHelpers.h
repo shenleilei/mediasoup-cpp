@@ -136,6 +136,11 @@ inline json BuildConsumerData(
 	return data;
 }
 
+inline bool HasConsumerRtpCapabilities(const std::shared_ptr<Peer>& peer)
+{
+	return peer && !peer->rtpCapabilities.codecs.empty();
+}
+
 inline json ConsumeExistingProducers(
 	const std::string& roomId,
 	const std::string& peerId,
@@ -148,6 +153,11 @@ inline json ConsumeExistingProducers(
 {
 	json consumers = json::array();
 	if (!room || !peer || !transport) {
+		return consumers;
+	}
+	if (!HasConsumerRtpCapabilities(peer)) {
+		MS_DEBUG(logger, "[{} {}] {} skipped: peer has empty rtpCapabilities",
+			roomId, peerId, failureContext);
 		return consumers;
 	}
 
@@ -249,6 +259,8 @@ inline void AutoSubscribeProducerToOtherPeers(
 			}
 
 			if (notify) {
+				MS_INFO(logger, "[{} {}] notify newConsumer target={} producerId={} consumerId={} kind={}",
+					roomId, producerPeerId, other->id, producer->id(), consumer->id(), consumer->kind());
 				notify(roomId, other->id, {
 					{"notification", true},
 					{"method", "newConsumer"},

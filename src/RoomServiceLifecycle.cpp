@@ -36,8 +36,11 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 	auto peer = std::make_shared<Peer>();
 	peer->id = peerId;
 	peer->displayName = displayName;
-	if (!rtpCapabilities.empty())
+	if (!rtpCapabilities.empty()) {
 		peer->rtpCapabilities = rtpCapabilities.get<RtpCapabilities>();
+	} else {
+		peer->rtpCapabilities = room->router()->rtpCapabilities();
+	}
 
 	auto oldPeer = room->replacePeer(peer);
 	bool isReconnect = false;
@@ -63,7 +66,9 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 	}
 
 	json existingProducers = json::array();
+	std::vector<std::string> targetPeers;
 	for (auto& other : room->getOtherPeers(peerId)) {
+		targetPeers.push_back(other->id);
 		for (auto& [pid, prod] : other->producers) {
 			existingProducers.push_back({
 				{"producerId", prod->id()}, {"producerPeerId", other->id},
@@ -73,6 +78,15 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 	}
 
 	if (broadcast_) {
+		MS_INFO(logger_, "[{} {}] notify peerJoined joinedPeerId={} displayName={} reconnect={} targetPeerCount={} targetPeers={} participantCount={}",
+			roomId,
+			peerId,
+			peerId,
+			displayName,
+			isReconnect ? "true" : "false",
+			targetPeers.size(),
+			json(targetPeers).dump(),
+			room->peerCount());
 		broadcast_(roomId, peerId, {
 			{"notification", true}, {"method", "peerJoined"},
 			{"data", {{"peerId", peerId}, {"displayName", displayName},
@@ -122,6 +136,14 @@ RoomService::Result RoomService::leave(const std::string& roomId, const std::str
 		markDownlinkRoomDirty(roomId);
 
 	if (broadcast_) {
+		const auto remainingPeers = room->getPeerIds();
+		MS_INFO(logger_, "[{} {}] notify peerLeft leftPeerId={} targetPeerCount={} targetPeers={} participantCount={}",
+			roomId,
+			peerId,
+			peerId,
+			remainingPeers.size(),
+			json(remainingPeers).dump(),
+			room->peerCount());
 		broadcast_(roomId, peerId, {
 			{"notification", true}, {"method", "peerLeft"},
 			{"data", {{"peerId", peerId}}}
@@ -181,6 +203,9 @@ void RoomService::checkRoomHealth() {
 			roomId, room->getPeerIds().size());
 
 		if (broadcast_) {
+			const auto targetPeers = room->getPeerIds();
+			MS_INFO(logger_, "[{} system] notify serverRestart reason=worker crashed targetPeerCount={} targetPeers={}",
+				roomId, targetPeers.size(), json(targetPeers).dump());
 			broadcast_(roomId, "", {
 				{"notification", true}, {"method", "serverRestart"},
 				{"data", {{"roomId", roomId}, {"reason", "worker crashed"}}}

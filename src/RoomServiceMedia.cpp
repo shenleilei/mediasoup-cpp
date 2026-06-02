@@ -132,6 +132,9 @@ uint8_t FindAbsCaptureTimeExtensionId(const RtpCapabilities& caps, const std::st
 RoomService::Result RoomService::createTransport(const std::string& roomId,
 	const std::string& peerId, bool producing, bool consuming, const json& rtpCapabilities)
 {
+	MS_INFO(logger_, "[{} {}] createTransport start producing={} consuming={} hasRtpCapabilities={}",
+		roomId, peerId, producing ? "true" : "false", consuming ? "true" : "false",
+		(!rtpCapabilities.is_null() && !rtpCapabilities.empty()) ? "true" : "false");
 	if (producing == consuming)
 	{
 		MS_WARN(logger_, "[{} {}] createTransport failed: exactly one of producing or consuming must be true",
@@ -209,6 +212,9 @@ RoomService::Result RoomService::createTransport(const std::string& roomId,
 			"auto-subscribe on createTransport");
 	}
 
+	MS_INFO(logger_, "[{} {}] createTransport done transportId={} producing={} consuming={} precreatedConsumers={}",
+		roomId, peerId, transport->id(), producing ? "true" : "false", consuming ? "true" : "false",
+		result.contains("consumers") && result["consumers"].is_array() ? result["consumers"].size() : 0);
 	return {true, result};
 }
 
@@ -250,6 +256,8 @@ RoomService::Result RoomService::connectTransport(const std::string& roomId,
 RoomService::Result RoomService::createPlainTransport(const std::string& roomId,
 	const std::string& peerId, bool producing, bool consuming)
 {
+	MS_INFO(logger_, "[{} {}] createPlainTransport start producing={} consuming={}",
+		roomId, peerId, producing ? "true" : "false", consuming ? "true" : "false");
 	if (producing == consuming)
 	{
 		MS_WARN(logger_, "[{} {}] createPlainTransport failed: exactly one of producing or consuming must be true",
@@ -316,6 +324,9 @@ RoomService::Result RoomService::createPlainTransport(const std::string& roomId,
 			"auto-subscribe on createPlainTransport");
 	}
 
+	MS_INFO(logger_, "[{} {}] createPlainTransport done transportId={} producing={} consuming={} precreatedConsumers={}",
+		roomId, peerId, transport->id(), producing ? "true" : "false", consuming ? "true" : "false",
+		result.contains("consumers") && result["consumers"].is_array() ? result["consumers"].size() : 0);
 	return {true, result};
 }
 
@@ -362,6 +373,9 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 	const std::string& senderIp,
 	uint16_t senderPort)
 {
+	MS_INFO(logger_, "[{} {}] plainPublish start videoTracks={} audioEnabled={} senderIp={} senderPort={} videoCodec={}",
+		roomId, peerId, videoSsrcs.size(), enableAudio ? "true" : "false",
+		senderIp.empty() ? "-" : senderIp, senderPort, videoCodec.empty() ? "-" : videoCodec);
 	auto room = roomManager_.getRoom(roomId);
 	if (!room) {
 		MS_WARN(logger_, "[{} {}] plainPublish failed: room not found", roomId, peerId);
@@ -629,6 +643,8 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 		result["audioProdId"] = audioProd->id();
 		result["audioTransportCcExtId"] = audioTransportCcExtId;
 	}
+	MS_INFO(logger_, "[{} {}] plainPublish done transportId={} videoTracks={} audioEnabled={}",
+		roomId, peerId, transport->id(), videoProducers.size(), enableAudio ? "true" : "false");
 	return {true, result};
 }
 
@@ -638,6 +654,9 @@ RoomService::Result RoomService::plainSubscribe(const std::string& roomId,
 	const std::optional<uint16_t>& recvPort,
 	bool autoReturn)
 {
+	MS_INFO(logger_, "[{} {}] plainSubscribe start autoReturn={} recvIp={} recvPort={}",
+		roomId, peerId, autoReturn ? "true" : "false",
+		recvIp.has_value() ? *recvIp : "-", recvPort.has_value() ? std::to_string(*recvPort) : "-");
 	auto room = roomManager_.getRoom(roomId);
 	if (!room) {
 		MS_WARN(logger_, "[{} {}] plainSubscribe failed: room not found", roomId, peerId);
@@ -727,6 +746,8 @@ RoomService::Result RoomService::plainSubscribe(const std::string& roomId,
 	}
 
 	auto tuple = transport->tuple();
+	MS_INFO(logger_, "[{} {}] plainSubscribe done transportId={} consumers={} autoReturn={}",
+		roomId, peerId, transport->id(), consumers.is_array() ? consumers.size() : 0, autoReturn ? "true" : "false");
 	return {true, {
 		{"transportId", transport->id()},
 		{"ip", tuple.localAddress}, {"port", tuple.localPort},
@@ -949,6 +970,8 @@ RoomService::Result RoomService::setQosOverride(
 	}
 
 	if (notify_) {
+		MS_INFO(logger_, "[{} {}] notify qosOverride target={} reason={}",
+			roomId, callerPeerId, targetPeerId, parsed.value.reason);
 		notify_(roomId, targetPeerId, {
 			{"notification", true},
 			{"method", "qosOverride"},
@@ -989,6 +1012,8 @@ RoomService::Result RoomService::setQosPolicy(
 	}
 
 	if (notify_) {
+		MS_INFO(logger_, "[{} {}] notify qosPolicy target={} schema={}",
+			roomId, callerPeerId, targetPeerId, parsed.value.schema);
 		notify_(roomId, targetPeerId, {
 			{"notification", true},
 			{"method", "qosPolicy"},

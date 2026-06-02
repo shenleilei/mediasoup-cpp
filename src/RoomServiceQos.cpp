@@ -59,6 +59,8 @@ RoomService::Result RoomService::setClientStats(
 	const std::string& peerId,
 	qos::ClientQosSnapshot stats)
 {
+	MS_INFO(logger_, "[{} {}] clientStats start seq={} stale={} tracks={}",
+		roomId, peerId, stats.seq, stats.peerStale ? "true" : "false", stats.tracks.size());
 	auto room = roomManager_.getRoom(roomId);
 	if (!room) {
 		MS_WARN(logger_, "[{} {}] clientStats failed: room not found", roomId, peerId);
@@ -88,6 +90,8 @@ RoomService::Result RoomService::setClientStats(
 	maybeSendAutomaticQosOverride(roomId, peerId, aggregate);
 	maybeBroadcastRoomQosState(roomId);
 	cleanupExpiredQosOverrides();
+	MS_INFO(logger_, "[{} {}] clientStats done seq={} quality={} stale={} tracks={}",
+		roomId, peerId, stats.seq, aggregate.quality, aggregate.stale ? "true" : "false", stats.tracks.size());
 	return {true, roomstatsqos::BuildStatsStoreResponseData(true), "", ""};
 }
 
@@ -108,8 +112,10 @@ void RoomService::maybeSendAutomaticQosOverride(
 					"[{} {}] clearing automatic QoS override [{}]",
 					roomId,
 					peerId,
-					SummarizePeerQosAggregate(aggregate)
+						SummarizePeerQosAggregate(aggregate)
 				);
+				MS_INFO(logger_, "[{} {}] notify qosOverride target={} reason=server_auto_clear",
+					roomId, peerId, peerId);
 				notify_(roomId, peerId, {
 					{"notification", true},
 					{"method", "qosOverride"},
@@ -144,6 +150,8 @@ void RoomService::maybeSendAutomaticQosOverride(
 			automatic->overrideData.hasMaxLevelClamp ? std::to_string(automatic->overrideData.maxLevelClamp) : "unset",
 			automatic->overrideData.hasDisableRecovery ? (automatic->overrideData.disableRecovery ? "true" : "false") : "unset"
 		);
+		MS_INFO(logger_, "[{} {}] notify qosOverride target={} reason={}",
+			roomId, peerId, peerId, automatic->overrideData.reason);
 		notify_(roomId, peerId, {
 			{"notification", true},
 			{"method", "qosOverride"},
@@ -177,6 +185,8 @@ void RoomService::maybeNotifyConnectionQuality(
 	auto it = lastConnectionQualitySignatures_.find(key);
 	if (it != lastConnectionQualitySignatures_.end() && it->second == signature) return;
 
+	MS_INFO(logger_, "[{} {}] notify qosConnectionQuality target={} quality={}",
+		roomId, peerId, peerId, aggregate.quality);
 	notify_(roomId, peerId, {
 		{"notification", true},
 		{"method", "qosConnectionQuality"},
@@ -212,6 +222,8 @@ void RoomService::maybeBroadcastRoomQosState(const std::string& roomId)
 	const std::string signature = roomAggregate.data.dump();
 	auto it = lastRoomQosStateSignatures_.find(roomId);
 	if (it == lastRoomQosStateSignatures_.end() || it->second != signature) {
+		MS_INFO(logger_, "[{} system] notify qosRoomState target=* quality={} peers={}",
+			roomId, roomAggregate.quality, roomAggregate.peerCount);
 		broadcast_(roomId, "", {
 			{"notification", true},
 			{"method", "qosRoomState"},
@@ -243,6 +255,8 @@ void RoomService::maybeSendRoomPressureOverrides(
 			MS_DEBUG(logger_, "[{} {}] room pressure override skipped: no candidate", roomId, peerId);
 			auto it = autoQosOverrideRecords_.find(key);
 			if (it != autoQosOverrideRecords_.end()) {
+				MS_INFO(logger_, "[{} {}] notify qosOverride target={} reason=server_room_pressure_clear",
+					roomId, peerId, peerId);
 				notify_(roomId, peerId, {
 					{"notification", true},
 					{"method", "qosOverride"},
@@ -263,6 +277,8 @@ void RoomService::maybeSendRoomPressureOverrides(
 		if (peerAlreadyDegraded) {
 			auto it = autoQosOverrideRecords_.find(key);
 			if (it != autoQosOverrideRecords_.end()) {
+				MS_INFO(logger_, "[{} {}] notify qosOverride target={} reason=server_room_pressure_clear",
+					roomId, peerId, peerId);
 				notify_(roomId, peerId, {
 					{"notification", true},
 					{"method", "qosOverride"},
@@ -278,6 +294,8 @@ void RoomService::maybeSendRoomPressureOverrides(
 			continue;
 		}
 
+		MS_INFO(logger_, "[{} {}] notify qosOverride target={} reason={}",
+			roomId, peerId, peerId, roomAutomatic->overrideData.reason);
 		notify_(roomId, peerId, {
 			{"notification", true},
 			{"method", "qosOverride"},
@@ -312,6 +330,8 @@ void RoomService::cleanupExpiredQosOverrides()
 		std::string roomId;
 		std::string peerId;
 		if (notify_ && roomstatsqos::ParseRoomPeerKey(it->first, roomId, peerId)) {
+			MS_INFO(logger_, "[{} {}] notify qosOverride target={} reason=server_ttl_expired",
+				roomId, peerId, peerId);
 			notify_(roomId, peerId, {
 				{"notification", true},
 				{"method", "qosOverride"},

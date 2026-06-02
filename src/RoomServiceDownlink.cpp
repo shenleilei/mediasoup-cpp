@@ -54,6 +54,8 @@ RoomService::Result RoomService::setDownlinkClientStats(
 	const std::string& peerId,
 	qos::DownlinkSnapshot stats)
 {
+	MS_INFO(logger_, "[{} {}] downlinkClientStats start seq={} subscriptions={}",
+		roomId, peerId, stats.seq, stats.subscriptions.size());
 	auto room = roomManager_.getRoom(roomId);
 	if (!room) {
 		MS_DEBUG(logger_, "[{} {}] downlink stats rejected: room missing", roomId, peerId);
@@ -84,6 +86,8 @@ RoomService::Result RoomService::setDownlinkClientStats(
 	}
 
 	markDownlinkRoomDirty(roomId);
+	MS_INFO(logger_, "[{} {}] downlinkClientStats done seq={} subscriptions={} dropped={}",
+		roomId, peerId, stats.seq, stats.subscriptions.size(), droppedSubscriptions);
 	return {true, roomstatsqos::BuildStatsStoreResponseData(true), "", ""};
 }
 
