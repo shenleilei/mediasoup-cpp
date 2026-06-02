@@ -43,6 +43,19 @@
 - `statsReport` 广播次数
 - `serverRestart` 次数
 
+说明：
+
+- 这里的“精确事件指标”，指的是**单条日志代表一个明确业务事件**
+- 但如果日志本身带有广播 fan-out 信息，例如：
+  - `targetPeerCount`
+  - `targetPeers`
+- 那么做房间级或 peer 级统计时，必须明确是否按：
+  - 原始日志条数统计
+  - 逻辑事件统计
+  - 广播目标数统计
+
+不能默认把“原始日志条数”直接当成业务事件总量。
+
 ### 1.2 精确快照指标
 
 这类直接用低频快照日志：
@@ -187,13 +200,13 @@
 4. 当前全站人数
 5. `join` 成功率
 6. `produce` 成功率
-7. `newConsumer` 下发量
+7. `poor/lost` peer 比例
 8. `poor/lost` peer 比例
 
 再额外加 2 个稳定性卡片：
 
 9. `serverRestart` 次数
-10. `error/warn` 总量
+10. `error` 白名单计数
 
 这已经足够回答：
 
@@ -205,6 +218,9 @@
 - 订阅链是否正常
 - 质量是不是在恶化
 - 服务是不是在抖
+
+`newConsumer` 仍然重要，但更适合作为第二屏“信令与媒体盘”的内部链路指标，  
+不建议继续把它当成首页业务主 KPI。
 
 ---
 
@@ -229,6 +245,14 @@
 
 - 精确快照
 
+### 新鲜度要求
+
+- 必须校验快照时间
+- 如果最近一个快照超过约定阈值未更新，这个卡片必须显示：
+  - stale
+  - 或置灰
+  - 或直接告警
+
 ### 是否建议报警
 
 - 一般不建议
@@ -251,6 +275,10 @@
 ### 精度
 
 - 精确快照
+
+### 新鲜度要求
+
+- 与 `globalSnapshot` 同步检查新鲜度
 
 ### 是否建议报警
 
@@ -275,6 +303,10 @@
 
 - 精确快照
 
+### 新鲜度要求
+
+- 与 `globalSnapshot` 同步检查新鲜度
+
 ### 是否建议报警
 
 - 一般不建议
@@ -298,6 +330,10 @@
 
 - 精确快照
 
+### 新鲜度要求
+
+- 与 `globalSnapshot` 同步检查新鲜度
+
 ### 是否建议报警
 
 - 一般不建议
@@ -311,6 +347,16 @@
 ### 统计口径
 
 - `ok=true / 全部 join 请求`
+
+### 指标语义
+
+- 这是**请求级成功率**
+- 不是用户级成功率
+- 重试、重连、重复 join、重定向都会影响分母
+
+所以首页上应该标成：
+
+- `join 请求成功率`
 
 ### 推荐图表
 
@@ -331,6 +377,12 @@
 
 - `ok=true / 全部 produce 请求`
 
+### 指标语义
+
+- 这是**请求级成功率**
+- 不是“发流用户成功率”
+- 同一个用户反复重试会重复计入分母
+
 ### 推荐图表
 
 - 单值卡片
@@ -340,26 +392,7 @@
 
 - 建议
 
-## 4.7 newConsumer 下发量
-
-### 使用日志
-
-- `notify newConsumer target=... producerId=... consumerId=... kind=...`
-
-### 统计口径
-
-- 每分钟条数
-
-### 推荐图表
-
-- 分钟级柱状图
-- 按 `kind` 分组
-
-### 是否建议报警
-
-- 一般不单独报警
-
-## 4.8 poor/lost peer 比例
+## 4.7 poor/lost peer 比例
 
 ### 使用日志
 
@@ -368,8 +401,10 @@
 ### 统计口径
 
 - 最近 5 分钟：
-  - `quality in (poor,lost)` 数量
-  - 除以全部 connection quality 通知数量
+  - 按 `room + target + quality` 做去重或取最后状态
+  - 再统计 `poor/lost` 占比
+
+不要直接按原始日志条数算比例，否则频繁更新的 peer 会被放大。
 
 ### 推荐图表
 
@@ -380,7 +415,7 @@
 
 - 建议
 
-## 4.9 serverRestart 次数
+## 4.8 serverRestart 次数
 
 ### 使用日志
 
@@ -399,25 +434,38 @@
 
 - 强烈建议
 
-## 4.10 error/warn 总量
+## 4.9 error 白名单计数
 
 ### 使用日志
 
-- `warning`
-- `error`
+- 只统计明确白名单的业务错误
+
+例如建议第一批只纳入：
+
+- `auto-subscribe FAILED`
+- `serverRestart`
+- `request-done ... ok=false` 的关键方法
+- 明确的 `room not found / peer not found / transport not found / invalid payload`
 
 ### 统计口径
 
-- 最近 5 分钟 error/warn 数
+- 最近 5 分钟白名单错误数
+
+不建议直接统计所有 `warning/error` 原始日志条数。
+
+原因：
+
+- worker 内部有大量高频、低动作性的 warning
+- 直接按 severity 聚合会长期噪音化
 
 ### 推荐图表
 
-- 双折线
-- TopN 错误文本
+- 白名单错误趋势
+- TopN 白名单错误类型
 
 ### 是否建议报警
 
-- error 可做观察告警
+- 建议只对白名单错误做告警
 
 ---
 
@@ -433,6 +481,8 @@
 - `produce kind/source` 分布
 - `producer closed` 次数
 - `consumer closed` 次数
+
+这里的 `newConsumer` 更适合做内部链路观测，而不是首页业务 KPI。
 
 ## 5.1 createWebRtcTransport 成功率
 
@@ -464,6 +514,13 @@
 
 - `notify peerJoined`
 - `notify peerLeft`
+
+做房间级事件统计时，建议按：
+
+- `room + joinedPeerId`
+- `room + leftPeerId`
+
+做逻辑事件去重，不要直接拿原始广播行数。
 
 ## 5.5 producer closed
 
@@ -504,17 +561,34 @@
 
 - `notify qosConnectionQuality target=... quality=...`
 
+建议按：
+
+- `room + target`
+
+聚合最终状态，避免同一 peer 高频上报造成比例失真。
+
 ## 6.2 room 级质量
 
 使用日志：
 
 - `notify qosRoomState quality=... peers=...`
 
+建议按：
+
+- `room`
+
+聚合最终状态，不要直接按广播 fan-out 后的原始条数累计。
+
 ## 6.3 QoS 干预频率
 
 使用日志：
 
 - `notify qosOverride target=... reason=...`
+
+建议区分两种统计口径：
+
+- 原始通知次数
+- 去重后的 `room + target + reason` 逻辑事件次数
 
 重点看：
 
@@ -560,6 +634,10 @@
 规则：
 
 - 任意 5 分钟 >= 1
+
+补充：
+
+- 最好再结合容器存活、健康检查失败等第二信号，不要完全依赖单一日志。
 
 ### B. join 成功率下降
 
