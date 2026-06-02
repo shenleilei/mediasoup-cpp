@@ -75,8 +75,11 @@ inline void RemovePeerProducerSourceMapping(
 }
 
 inline void TrackPeerProducer(
+	const std::string& roomId,
+	const std::string& peerId,
 	const std::shared_ptr<Peer>& peer,
-	const std::shared_ptr<Producer>& producer)
+	const std::shared_ptr<Producer>& producer,
+	const std::shared_ptr<spdlog::logger>& logger)
 {
 	if (!peer || !producer) {
 		return;
@@ -89,17 +92,39 @@ inline void TrackPeerProducer(
 
 	std::weak_ptr<Peer> weakPeer = peer;
 	const std::string producerId = producer->id();
+	const std::string kind = producer->kind();
 	producer->emitter().once("@close", [weakPeer, producerId, source, ssrcs](const std::vector<std::any>&) {
 		if (auto lockedPeer = weakPeer.lock()) {
 			lockedPeer->producers.erase(producerId);
 			RemovePeerProducerSourceMapping(lockedPeer, source, ssrcs);
 		}
 	});
+	producer->emitter().once("@close", [weakPeer, roomId, peerId, producerId, kind, source, logger](const std::vector<std::any>& args) {
+		std::string reason = "close";
+		if (!args.empty()) {
+			try {
+				reason = std::any_cast<std::string>(args[0]);
+			} catch (...) {
+				reason = "close";
+			}
+		}
+		size_t remainingProducers = 0;
+		if (auto lockedPeer = weakPeer.lock()) {
+			remainingProducers = lockedPeer->producers.size();
+		}
+		if (logger) {
+			MS_INFO(logger, "[{} {}] producer closed producerId={} kind={} source={} reason={} remainingProducers={}",
+				roomId, peerId, producerId, kind, source.empty() ? "-" : source, reason, remainingProducers);
+		}
+	});
 }
 
 inline void TrackPeerConsumer(
+	const std::string& roomId,
+	const std::string& peerId,
 	const std::shared_ptr<Peer>& peer,
-	const std::shared_ptr<Consumer>& consumer)
+	const std::shared_ptr<Consumer>& consumer,
+	const std::shared_ptr<spdlog::logger>& logger)
 {
 	if (!peer || !consumer) {
 		return;
@@ -109,9 +134,29 @@ inline void TrackPeerConsumer(
 
 	std::weak_ptr<Peer> weakPeer = peer;
 	const std::string consumerId = consumer->id();
+	const std::string producerId = consumer->producerId();
+	const std::string kind = consumer->kind();
 	consumer->emitter().once("@close", [weakPeer, consumerId](const std::vector<std::any>&) {
 		if (auto lockedPeer = weakPeer.lock()) {
 			lockedPeer->consumers.erase(consumerId);
+		}
+	});
+	consumer->emitter().once("@close", [weakPeer, roomId, peerId, consumerId, producerId, kind, logger](const std::vector<std::any>& args) {
+		std::string reason = "close";
+		if (!args.empty()) {
+			try {
+				reason = std::any_cast<std::string>(args[0]);
+			} catch (...) {
+				reason = "close";
+			}
+		}
+		size_t remainingConsumers = 0;
+		if (auto lockedPeer = weakPeer.lock()) {
+			remainingConsumers = lockedPeer->consumers.size();
+		}
+		if (logger) {
+			MS_INFO(logger, "[{} {}] consumer closed consumerId={} producerId={} kind={} reason={} remainingConsumers={}",
+				roomId, peerId, consumerId, producerId, kind, reason, remainingConsumers);
 		}
 	});
 }
@@ -170,7 +215,7 @@ inline json ConsumeExistingProducers(
 					{"consumableRtpParameters", producer->consumableRtpParameters()}
 				};
 				auto consumer = transport->consume(consumeOpts);
-				TrackPeerConsumer(peer, consumer);
+				TrackPeerConsumer(roomId, peerId, peer, consumer, logger);
 				if (consumer->kind() == "video") {
 					try {
 						consumer->requestKeyFrame();
@@ -245,7 +290,7 @@ inline void AutoSubscribeProducerToOtherPeers(
 				{"consumableRtpParameters", producer->consumableRtpParameters()}
 			};
 			auto consumer = recvTransport->consume(consumeOpts);
-			TrackPeerConsumer(other, consumer);
+			TrackPeerConsumer(roomId, other->id, other, consumer, logger);
 			if (consumer->kind() == "video") {
 				try {
 					consumer->requestKeyFrame();

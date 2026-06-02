@@ -52,6 +52,39 @@ json BuildRoomProducerScoreSnapshot(const std::shared_ptr<Room>& room)
 
 constexpr double kProducerScoreBroadcastDelta = 1.0;
 
+json BuildRoomSnapshot(const std::shared_ptr<Room>& room)
+{
+	json snapshot = {
+		{"participants", 0},
+		{"publishers", 0},
+		{"subscribers", 0}
+	};
+	if (!room) {
+		return snapshot;
+	}
+
+	size_t publishers = 0;
+	size_t subscribers = 0;
+	const auto peerIds = room->getPeerIds();
+	for (const auto& peerId : peerIds) {
+		auto peer = room->getPeer(peerId);
+		if (!peer) {
+			continue;
+		}
+		if (!peer->producers.empty()) {
+			++publishers;
+		}
+		if (!peer->consumers.empty()) {
+			++subscribers;
+		}
+	}
+
+	snapshot["participants"] = peerIds.size();
+	snapshot["publishers"] = publishers;
+	snapshot["subscribers"] = subscribers;
+	return snapshot;
+}
+
 } // namespace
 
 json RoomService::collectPeerStats(
@@ -148,12 +181,42 @@ void RoomService::broadcastStats() {
 	pendingStatsRooms_.clear();
 	for (auto& roomId : roomIds) pendingStatsRooms_.push_back(roomId);
 	try {
+		emitGlobalRoomSnapshot();
 		continueBroadcastStats();
 	} catch (...) {
 		statsBroadcastActive_ = false;
 		pendingStatsRooms_.clear();
 		throw;
 	}
+}
+
+void RoomService::emitGlobalRoomSnapshot()
+{
+	const auto roomIds = roomManager_.getRoomIds();
+	size_t rooms = 0;
+	size_t peers = 0;
+	size_t publishers = 0;
+	size_t subscribers = 0;
+
+	for (const auto& roomId : roomIds) {
+		auto room = roomManager_.getRoom(roomId);
+		if (!room) {
+			continue;
+		}
+		++rooms;
+		const auto roomSnapshot = BuildRoomSnapshot(room);
+		peers += roomSnapshot.value("participants", 0);
+		publishers += roomSnapshot.value("publishers", 0);
+		subscribers += roomSnapshot.value("subscribers", 0);
+		MS_INFO(logger_, "[{} system] roomSnapshot participants={} publishers={} subscribers={}",
+			roomId,
+			roomSnapshot.value("participants", 0),
+			roomSnapshot.value("publishers", 0),
+			roomSnapshot.value("subscribers", 0));
+	}
+
+	MS_INFO(logger_, "[system] globalSnapshot rooms={} publishers={} subscribers={} peers={}",
+		rooms, publishers, subscribers, peers);
 }
 
 void RoomService::continueBroadcastStats() {

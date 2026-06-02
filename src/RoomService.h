@@ -165,6 +165,7 @@ private:
 	void broadcastStatsForRoom(const std::string& roomId, bool forceBroadcast);
 	void continueBroadcastStats();
 	void watchProducerScore(const std::string& roomId, const std::shared_ptr<Producer>& producer);
+	void emitGlobalRoomSnapshot();
 	void maybeSendAutomaticQosOverride(const std::string& roomId,
 		const std::string& peerId, const qos::PeerQosAggregate& aggregate);
 	void maybeNotifyConnectionQuality(const std::string& roomId,

@@ -559,7 +559,7 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 		return {false, {}, "", "plainPublish video produce failed: unknown error"};
 	}
 	room->router()->addProducer(videoProd);
-	roommedia::TrackPeerProducer(peer, videoProd);
+	roommedia::TrackPeerProducer(roomId, peerId, peer, videoProd, logger_);
 	watchProducerScore(roomId, videoProd);
 	videoProducers.push_back(videoProd);
 }
@@ -601,7 +601,7 @@ RoomService::Result RoomService::plainPublish(const std::string& roomId,
 			return {false, {}, "", "plainPublish audio produce failed: unknown error"};
 		}
 		room->router()->addProducer(audioProd);
-		roommedia::TrackPeerProducer(peer, audioProd);
+		roommedia::TrackPeerProducer(roomId, peerId, peer, audioProd, logger_);
 		watchProducerScore(roomId, audioProd);
 	}
 
@@ -813,7 +813,7 @@ RoomService::Result RoomService::produce(const std::string& roomId,
 		return {false, {}, "", "produce failed: unknown error"};
 	}
 	room->router()->addProducer(producer);
-	roommedia::TrackPeerProducer(peer, producer);
+	roommedia::TrackPeerProducer(roomId, peerId, peer, producer, logger_);
 	watchProducerScore(roomId, producer);
 	indexPeerProducers(roomId, peerId, peer->producers);
 
@@ -873,7 +873,7 @@ RoomService::Result RoomService::consume(const std::string& roomId,
 		MS_WARN(logger_, "[{} {}] consume failed: transport->consume threw unknown error", roomId, peerId);
 		return {false, {}, "", "consume failed: unknown error"};
 	}
-	roommedia::TrackPeerConsumer(peer, consumer);
+	roommedia::TrackPeerConsumer(roomId, peerId, peer, consumer, logger_);
 	MS_INFO(logger_, "[{} {}] consume done transportId={} producerId={} consumerId={}",
 		roomId, peerId, transportId, producerId, consumer->id());
 	return {true, consumer->toJson()};
