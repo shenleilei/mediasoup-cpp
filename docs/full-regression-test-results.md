@@ -1,6 +1,6 @@
 # Full Regression Test Results
 
-Generated at: `2026-06-02 11:25:57 CST`
+Generated at: `2026-06-02 20:28:34 CST`
 
 ## Summary
 
@@ -20,8 +20,8 @@ Generated at: `2026-06-02 11:25:57 CST`
 
 | Task | Group | Status | Duration |
 |---|---|---|---|
-| `unit` | `unit` | `PASS` | `1s` |
-| `integration:mediasoup_integration_tests` | `integration` | `PASS` | `57s` |
+| `unit` | `unit` | `PASS` | `2s` |
+| `integration:mediasoup_integration_tests` | `integration` | `PASS` | `66s` |
 | `integration:mediasoup_e2e_tests` | `integration` | `PASS` | `11s` |
 | `integration:mediasoup_stability_integration_tests` | `integration` | `PASS` | `30s` |
 | `integration:mediasoup_review_fix_tests` | `integration` | `PASS` | `39s` |
@@ -31,8 +31,8 @@ Generated at: `2026-06-02 11:25:57 CST`
 
 | Task | Duration | Visual |
 |---|---:|---|
-| `unit` | `1s` | # |
-| `integration:mediasoup_integration_tests` | `57s` | # |
+| `unit` | `2s` | # |
+| `integration:mediasoup_integration_tests` | `66s` | # |
 | `integration:mediasoup_e2e_tests` | `11s` | # |
 | `integration:mediasoup_stability_integration_tests` | `30s` | # |
 | `integration:mediasoup_review_fix_tests` | `39s` | # |
@@ -42,6 +42,6 @@ Generated at: `2026-06-02 11:25:57 CST`
 
 | Report | Scope | Link | Updated |
 |---|---|---|---|
-| Downlink Summary | Downlink QoS summary | [downlink-qos-test-results-summary.md](downlink-qos-test-results-summary.md) | 2026-06-02 11:25:57 |
-| Downlink Cases | Downlink per-case report | [downlink-qos-case-results.md](downlink-qos-case-results.md) | 2026-06-02 11:25:57 |
-| Downlink Matrix JSON | Latest downlink matrix artifact | [downlink-qos-matrix-report.json](generated/downlink-qos-matrix-report.json) | 2026-06-02 11:24:15 |
+| Downlink Summary | Downlink QoS summary | [downlink-qos-test-results-summary.md](downlink-qos-test-results-summary.md) | 2026-06-02 20:28:34 |
+| Downlink Cases | Downlink per-case report | [downlink-qos-case-results.md](downlink-qos-case-results.md) | 2026-06-02 20:28:33 |
+| Downlink Matrix JSON | Latest downlink matrix artifact | [downlink-qos-matrix-report.json](generated/downlink-qos-matrix-report.json) | 2026-06-02 20:26:52 |

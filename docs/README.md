@@ -34,6 +34,10 @@
 | [architecture_cn.md](./architecture_cn.md) | 历史架构详解，包含旧的多节点/录制实现说明；不要将其作为当前运行事实来源。 |
 | [dependencies_cn.md](./dependencies_cn.md) | 构建 / 运行 / 测试依赖总览，统一说明系统包、vendored 依赖、Node harness 依赖和 `setup.sh` / CMake 解析规则。 |
 | [qos-status.md](./qos-status.md) | QoS 总状态摘要，统一给出 browser uplink / server QoS / downlink 的当前口径与结果入口。 |
+| [uplink-downlink-api_cn.md](./uplink-downlink-api_cn.md) | 上下行接口总文档，统一说明客户端发什么、服务端回什么、服务端推什么以及正确顺序。 |
+| [minimal-subscribe-access_cn.md](./minimal-subscribe-access_cn.md) | 最小订阅接入说明，只覆盖 `join -> device.load -> recvTransport -> existingProducers/newConsumer` 这条最短链。 |
+| [server-notify-categories_cn.md](./server-notify-categories_cn.md) | 服务端主动通知分类，按成员、订阅、QoS、统计、恢复说明客户端应处理什么。 |
+| [client-reporting-protocol_cn.md](./client-reporting-protocol_cn.md) | 端上上报协议，按 join、transport、produce、consume、QoS/统计上报说明客户端要发什么。 |
 | [full-regression-test-results.md](./full-regression-test-results.md) | 最新一次 `scripts/run_all_tests.sh` 生成的仓库全量回归结果页，按选择分组记录逐任务 PASS/FAIL 和耗时。 |
 | [nightly-full-regression.md](./nightly-full-regression.md) | nightly 全量回归自动化说明，包含 03:00 cron 安装、日志目录、邮件摘要和 Markdown 附件约定。 |
 | [downlink-qos-status.md](./downlink-qos-status.md) | downlink QoS 当前状态摘要，说明当前范围、当前结果入口和后续边界。 |
