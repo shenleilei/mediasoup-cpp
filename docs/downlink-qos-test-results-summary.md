@@ -1,6 +1,6 @@
 # 下行 QoS 测试结果汇总
 
-生成时间：`2026-06-02T12:28:33.969Z`
+生成时间：`2026-06-02T13:22:39.355Z`
 
 ## 1. 汇总
 
@@ -54,7 +54,7 @@
 | 类别 | `browser` |
 | 说明 | 浏览器信令控制验证：pause / resume / requestKeyFrame 基本控制链路 |
 | 状态 | `PASS` |
-| 耗时 | `6s` |
+| 耗时 | `7s` |
 | 对应命令 | `node tests/qos_harness/browser_downlink_controls.mjs` |
 
 ### browser-harness:downlink-e2e

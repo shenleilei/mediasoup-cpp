@@ -1,6 +1,6 @@
 # Full Regression Test Results
 
-Generated at: `2026-06-02 20:28:34 CST`
+Generated at: `2026-06-02 21:22:39 CST`
 
 ## Summary
 
@@ -20,28 +20,28 @@ Generated at: `2026-06-02 20:28:34 CST`
 
 | Task | Group | Status | Duration |
 |---|---|---|---|
-| `unit` | `unit` | `PASS` | `2s` |
-| `integration:mediasoup_integration_tests` | `integration` | `PASS` | `66s` |
-| `integration:mediasoup_e2e_tests` | `integration` | `PASS` | `11s` |
-| `integration:mediasoup_stability_integration_tests` | `integration` | `PASS` | `30s` |
+| `unit` | `unit` | `PASS` | `1s` |
+| `integration:mediasoup_integration_tests` | `integration` | `PASS` | `65s` |
+| `integration:mediasoup_e2e_tests` | `integration` | `PASS` | `10s` |
+| `integration:mediasoup_stability_integration_tests` | `integration` | `PASS` | `31s` |
 | `integration:mediasoup_review_fix_tests` | `integration` | `PASS` | `39s` |
-| `qos:qos-regression` | `qos` | `PASS` | `879s` |
+| `qos:qos-regression` | `qos` | `PASS` | `876s` |
 
 ## Task Duration View
 
 | Task | Duration | Visual |
 |---|---:|---|
-| `unit` | `2s` | # |
-| `integration:mediasoup_integration_tests` | `66s` | # |
-| `integration:mediasoup_e2e_tests` | `11s` | # |
-| `integration:mediasoup_stability_integration_tests` | `30s` | # |
+| `unit` | `1s` | # |
+| `integration:mediasoup_integration_tests` | `65s` | # |
+| `integration:mediasoup_e2e_tests` | `10s` | # |
+| `integration:mediasoup_stability_integration_tests` | `31s` | # |
 | `integration:mediasoup_review_fix_tests` | `39s` | # |
-| `qos:qos-regression` | `879s` | #################### |
+| `qos:qos-regression` | `876s` | #################### |
 
 ## Detailed Reports
 
 | Report | Scope | Link | Updated |
 |---|---|---|---|
-| Downlink Summary | Downlink QoS summary | [downlink-qos-test-results-summary.md](downlink-qos-test-results-summary.md) | 2026-06-02 20:28:34 |
-| Downlink Cases | Downlink per-case report | [downlink-qos-case-results.md](downlink-qos-case-results.md) | 2026-06-02 20:28:33 |
-| Downlink Matrix JSON | Latest downlink matrix artifact | [downlink-qos-matrix-report.json](generated/downlink-qos-matrix-report.json) | 2026-06-02 20:26:52 |
+| Downlink Summary | Downlink QoS summary | [downlink-qos-test-results-summary.md](downlink-qos-test-results-summary.md) | 2026-06-02 21:22:39 |
+| Downlink Cases | Downlink per-case report | [downlink-qos-case-results.md](downlink-qos-case-results.md) | 2026-06-02 21:22:39 |
+| Downlink Matrix JSON | Latest downlink matrix artifact | [downlink-qos-matrix-report.json](generated/downlink-qos-matrix-report.json) | 2026-06-02 21:21:00 |
