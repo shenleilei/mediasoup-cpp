@@ -1,6 +1,6 @@
 # 下行 QoS 测试结果汇总
 
-生成时间：`2026-06-02T13:22:39.355Z`
+生成时间：`2026-06-02T15:16:13.986Z`
 
 ## 1. 汇总
 
@@ -43,7 +43,7 @@
 | 类别 | `server` |
 | 说明 | 服务端 downlink QoS 集成测试（consumer state、publisher clamp、stale snapshot 回归） |
 | 状态 | `PASS` |
-| 耗时 | `224s` |
+| 耗时 | `225s` |
 | 对应命令 | `./build/mediasoup_qos_integration_tests` |
 
 ### browser-harness:downlink-controls
@@ -54,7 +54,7 @@
 | 类别 | `browser` |
 | 说明 | 浏览器信令控制验证：pause / resume / requestKeyFrame 基本控制链路 |
 | 状态 | `PASS` |
-| 耗时 | `7s` |
+| 耗时 | `6s` |
 | 对应命令 | `node tests/qos_harness/browser_downlink_controls.mjs` |
 
 ### browser-harness:downlink-e2e
@@ -76,7 +76,7 @@
 | 类别 | `browser` |
 | 说明 | 浏览器弱网竞争验证：高优先级 subscriber 分配优于低优先级 |
 | 状态 | `PASS` |
-| 耗时 | `42s` |
+| 耗时 | `43s` |
 | 对应命令 | `node tests/qos_harness/browser_downlink_priority.mjs` |
 
 ### browser-harness:downlink-v2
@@ -87,7 +87,7 @@
 | 类别 | `browser` |
 | 说明 | 浏览器 v2 验证：subscriber demand -> track-scoped publisher clamp / clear / zero-demand hold |
 | 状态 | `PASS` |
-| 耗时 | `7s` |
+| 耗时 | `6s` |
 | 对应命令 | `node tests/qos_harness/browser_downlink_v2.mjs` |
 
 ### browser-harness:downlink-v3
