@@ -18,6 +18,12 @@ SignalingServer::RuntimeSnapshot SignalingServer::collectRuntimeSnapshot() const
 	snapshot.joinFailures = joinFailures_.load(std::memory_order_relaxed);
 	snapshot.plainPublishFailures = plainPublishFailures_.load(std::memory_order_relaxed);
 	snapshot.plainSubscribeFailures = plainSubscribeFailures_.load(std::memory_order_relaxed);
+	{
+		std::lock_guard<std::mutex> lock(requestRejectsMutex_);
+		for (const auto& [method, counter] : requestRejectsByMethod_) {
+			snapshot.requestRejectsByMethod[method] = counter.load(std::memory_order_relaxed);
+		}
+	}
 	snapshot.workerDeaths = workerDeaths_.load(std::memory_order_relaxed);
 	snapshot.workerRespawns = workerRespawns_.load(std::memory_order_relaxed);
 	snapshot.wsDisconnects = wsDisconnects_.load(std::memory_order_relaxed);
@@ -70,6 +76,11 @@ std::string SignalingServer::buildPrometheusMetrics(const RuntimeSnapshot& snaps
 		out << "# TYPE " << name << " counter\n";
 		out << name << ' ' << value << "\n";
 	};
+	auto writeLabeledCounter = [&out](const char* name, const char* help, const std::string& labels, double value) {
+		out << "# HELP " << name << ' ' << help << "\n";
+		out << "# TYPE " << name << " counter\n";
+		out << name << '{' << labels << "} " << value << "\n";
+	};
 	auto writeLabeledGauge = [&out](const char* name, const char* help, const std::string& labels, double value) {
 		out << "# HELP " << name << ' ' << help << "\n";
 		out << "# TYPE " << name << " gauge\n";
@@ -92,6 +103,15 @@ std::string SignalingServer::buildPrometheusMetrics(const RuntimeSnapshot& snaps
 	writeCounter("mediasoup_sfu_join_failures_total", "Failed join requests", static_cast<double>(snapshot.joinFailures));
 	writeCounter("mediasoup_sfu_plain_publish_failures_total", "Failed plainPublish requests", static_cast<double>(snapshot.plainPublishFailures));
 	writeCounter("mediasoup_sfu_plain_subscribe_failures_total", "Failed plainSubscribe requests", static_cast<double>(snapshot.plainSubscribeFailures));
+	for (auto it = snapshot.requestRejectsByMethod.begin(); it != snapshot.requestRejectsByMethod.end(); ++it) {
+		const std::string method = it.key();
+		const double count = it.value().get<double>();
+		writeLabeledCounter(
+			"mediasoup_sfu_request_rejects_total",
+			"Rejected signaling requests grouped by method",
+			"method=\"" + method + "\"",
+			count);
+	}
 	writeCounter("mediasoup_sfu_worker_deaths_total", "Observed worker death events", static_cast<double>(snapshot.workerDeaths));
 	writeCounter("mediasoup_sfu_worker_respawns_total", "Observed worker respawn events", static_cast<double>(snapshot.workerRespawns));
 	writeCounter("mediasoup_sfu_ws_disconnects_total", "Observed websocket disconnects", static_cast<double>(snapshot.wsDisconnects));
@@ -136,6 +156,13 @@ void SignalingServer::onWorkerDiedEvent()
 void SignalingServer::onWorkerRespawnedEvent()
 {
 	workerRespawns_.fetch_add(1, std::memory_order_relaxed);
+}
+
+void SignalingServer::recordRequestReject(const std::string& method)
+{
+	const auto key = method.empty() ? "unknown" : method;
+	std::lock_guard<std::mutex> lock(requestRejectsMutex_);
+	requestRejectsByMethod_[key].fetch_add(1, std::memory_order_relaxed);
 }
 
 WorkerThread* SignalingServer::pickLeastLoadedWorkerThread() const {

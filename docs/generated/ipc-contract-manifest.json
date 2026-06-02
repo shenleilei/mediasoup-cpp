@@ -1,6 +1,6 @@
 {
-  "generatedAtUtc": "2026-06-01T13:24:18Z",
-  "ipcContractFingerprint": "ffa1027aa57d89932bcd6c2734aa62b539ee4bb9b42d05039ca63377ea9d5c77",
+  "generatedAtUtc": "2026-06-02T03:25:57Z",
+  "ipcContractFingerprint": "889930dfe36af645ee6fe87ea07a84186d0b7689bdd4beab60d9731b5b2c3341",
   "ipcSensitiveFiles": [
     {
       "path": "CMakeLists.txt",
@@ -432,7 +432,7 @@
     },
     {
       "path": "src/mediasoup-worker-src/worker/include/RTC/Consumer.hpp",
-      "sha256": "d1c0f407595da39a8f0cbe4a0f0d474dd7612496c6a23bb77e1574e3b8251d7c"
+      "sha256": "5a0166e59c79bc3fdf97c2896b18a8f21254190096615feef290a7f29eb89d0e"
     },
     {
       "path": "src/mediasoup-worker-src/worker/include/RTC/DataConsumer.hpp",
@@ -492,7 +492,7 @@
     },
     {
       "path": "src/mediasoup-worker-src/worker/include/RTC/Producer.hpp",
-      "sha256": "68531f23d3b668167c1e6868359c910b4ebc0a5077119b6225b5be319e59639b"
+      "sha256": "39ffc4a7d541dc39079cf9ae98b2bc30456f7d2338204fe359666f306950db62"
     },
     {
       "path": "src/mediasoup-worker-src/worker/include/RTC/RTCP/Bye.hpp",
@@ -792,7 +792,7 @@
     },
     {
       "path": "src/mediasoup-worker-src/worker/src/RTC/Consumer.cpp",
-      "sha256": "593fe286b1255ddb742476acbef8a8a5795e4acc016c29e78e9c77b8f9febc99"
+      "sha256": "8ff4b50b31eda8bd1e043fdabe1b3ee076e5f2caf46b91c8f930201aeaa4d104"
     },
     {
       "path": "src/mediasoup-worker-src/worker/src/RTC/DataConsumer.cpp",
@@ -848,7 +848,7 @@
     },
     {
       "path": "src/mediasoup-worker-src/worker/src/RTC/Producer.cpp",
-      "sha256": "35449fbdf323c950ff3b0892c5118e35d67938d24cf1ff68d5bc39ad0cf89d19"
+      "sha256": "f6c19223e2807f1f031ef9393c7869841d40c06ee3ee06ca0bfaebfc06d65f85"
     },
     {
       "path": "src/mediasoup-worker-src/worker/src/RTC/RTCP/Bye.cpp",
@@ -1100,7 +1100,7 @@
     },
     {
       "path": "src/mediasoup-worker-src/worker/src/RTC/Transport.cpp",
-      "sha256": "a852ee72c2b99b2fb2092626196a5d9e5c4dffdbc8865bbb7ca47436463fcb67"
+      "sha256": "705b3e2dadb32139e030ed5cb50d5a273523b218bbdfd041391cf424888778ab"
     },
     {
       "path": "src/mediasoup-worker-src/worker/src/RTC/TransportCongestionControlClient.cpp",

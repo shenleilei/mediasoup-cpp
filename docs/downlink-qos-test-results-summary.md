@@ -1,6 +1,6 @@
 # 下行 QoS 测试结果汇总
 
-生成时间：`2026-06-01T13:24:18.014Z`
+生成时间：`2026-06-02T03:25:57.409Z`
 
 ## 1. 汇总
 
@@ -43,7 +43,7 @@
 | 类别 | `server` |
 | 说明 | 服务端 downlink QoS 集成测试（consumer state、publisher clamp、stale snapshot 回归） |
 | 状态 | `PASS` |
-| 耗时 | `225s` |
+| 耗时 | `223s` |
 | 对应命令 | `./build/mediasoup_qos_integration_tests` |
 
 ### browser-harness:downlink-controls
@@ -54,7 +54,7 @@
 | 类别 | `browser` |
 | 说明 | 浏览器信令控制验证：pause / resume / requestKeyFrame 基本控制链路 |
 | 状态 | `PASS` |
-| 耗时 | `6s` |
+| 耗时 | `7s` |
 | 对应命令 | `node tests/qos_harness/browser_downlink_controls.mjs` |
 
 ### browser-harness:downlink-e2e
@@ -109,6 +109,6 @@
 | 类别 | `browser` |
 | 说明 | downlink 弱网矩阵：baseline / bw / loss / rtt / jitter / transition / competition / zero-demand |
 | 状态 | `PASS` |
-| 耗时 | `337s` |
+| 耗时 | `336s` |
 | 对应命令 | `node tests/qos_harness/run_downlink_matrix.mjs` |
 

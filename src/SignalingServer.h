@@ -42,6 +42,7 @@ public:
 	bool run(const std::function<void(bool)>& startupResult = {});
 	void stop();
 	void stopRegistryWorker();
+	void recordRequestReject(const std::string& method);
 
 private:
 	friend struct SignalingServerHttp;
@@ -58,6 +59,7 @@ private:
 		uint64_t joinFailures = 0;
 		uint64_t plainPublishFailures = 0;
 		uint64_t plainSubscribeFailures = 0;
+		json requestRejectsByMethod = json::object();
 		uint64_t workerDeaths = 0;
 		uint64_t workerRespawns = 0;
 		uint64_t wsDisconnects = 0;
@@ -114,6 +116,8 @@ private:
 	std::atomic<uint64_t> joinFailures_{0};
 	std::atomic<uint64_t> plainPublishFailures_{0};
 	std::atomic<uint64_t> plainSubscribeFailures_{0};
+	std::unordered_map<std::string, std::atomic<uint64_t>> requestRejectsByMethod_;
+	mutable std::mutex requestRejectsMutex_;
 	std::atomic<uint64_t> workerDeaths_{0};
 	std::atomic<uint64_t> workerRespawns_{0};
 	std::atomic<uint64_t> wsDisconnects_{0};

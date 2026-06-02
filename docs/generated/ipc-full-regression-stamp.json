@@ -1,8 +1,8 @@
 {
   "command": "./script/run_all_tests.sh all",
-  "fullRegressionReportGeneratedAt": "2026-06-01 21:24:18 CST",
-  "generatedAtUtc": "2026-06-01T13:24:18Z",
-  "ipcContractFingerprint": "ffa1027aa57d89932bcd6c2734aa62b539ee4bb9b42d05039ca63377ea9d5c77",
+  "fullRegressionReportGeneratedAt": "2026-06-02 11:25:57 CST",
+  "generatedAtUtc": "2026-06-02T03:25:57Z",
+  "ipcContractFingerprint": "889930dfe36af645ee6fe87ea07a84186d0b7689bdd4beab60d9731b5b2c3341",
   "ipcSensitiveFileCount": 283,
   "manifestPath": "docs/generated/ipc-contract-manifest.json",
   "requiredEntryPoint": "./script/run_all_tests.sh all"

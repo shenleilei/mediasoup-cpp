@@ -31,6 +31,7 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 	auto room = roomManager_.createRoom(roomId);
 	if (roomCreated && roomLifecycle_) {
 		roomLifecycle_(roomId, true);
+		MS_INFO(logger_, "[{} system] room created", roomId);
 	}
 	auto peer = std::make_shared<Peer>();
 	peer->id = peerId;
@@ -224,7 +225,8 @@ void RoomService::cleanupRoomResources(const std::string& roomId) {
 
 void RoomService::destroyRoom(const std::string& roomId) {
 	cleanupRoomResources(roomId);
-	roomManager_.removeRoom(roomId);
+	bool removed = roomManager_.removeRoom(roomId);
+	MS_INFO(logger_, "[{} system] room destroyed removed={}", roomId, removed ? "true" : "false");
 	if (roomLifecycle_) roomLifecycle_(roomId, false);
 }
 

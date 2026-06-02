@@ -160,7 +160,7 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 				std::string roomId = sd->roomId;
 				std::string peerId = sd->peerId;
 				uint64_t sessionId = sd->sessionId;
-				auto logRequestReject = [method, id, sessionId, remote = std::string(ws->getRemoteAddressAsText())](
+								auto logRequestReject = [method, id, sessionId, remote = std::string(ws->getRemoteAddressAsText())](
 					std::string_view reason,
 					std::string_view rejectRoomId,
 					std::string_view rejectPeerId) {
@@ -204,6 +204,7 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 							hasMappedSession ? "true" : "false",
 							std::string(ws->getRemoteAddressAsText()));
 						server.joinFailures_.fetch_add(1, std::memory_order_relaxed);
+						server.recordRequestReject(method);
 						json resp = {
 							{"response", true},
 							{"id", id},
@@ -218,6 +219,7 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 				if (method == "clientStats") {
 					if (roomId.empty() || peerId.empty() || sessionId == kInvalidSessionId) {
 						server.rejectedClientStats_.fetch_add(1, std::memory_order_relaxed);
+						server.recordRequestReject(method);
 						logRequestReject("clientStats requires joined session", roomId, peerId);
 						json resp = {
 							{"response", true},
@@ -232,6 +234,7 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 					bool validSession = HasMappedSession(wsMap, ws, roomId, peerId, sessionId);
 					if (!validSession) {
 						server.staleRequestDrops_.fetch_add(1, std::memory_order_relaxed);
+						server.recordRequestReject(method);
 						logRequestReject("stale session", roomId, peerId);
 						json resp = {
 							{"response", true},
@@ -246,6 +249,7 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 					auto* wt = server.getWorkerThread(roomId, false);
 					if (!wt || !wt->roomService()) {
 						server.rejectedClientStats_.fetch_add(1, std::memory_order_relaxed);
+						server.recordRequestReject(method);
 						logRequestReject("room not assigned", roomId, peerId);
 						json resp = {
 							{"response", true},
@@ -260,6 +264,7 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 					auto qosParse = qos::QosValidator::ParseClientSnapshot(data);
 					if (!qosParse.ok) {
 						server.rejectedClientStats_.fetch_add(1, std::memory_order_relaxed);
+						server.recordRequestReject(method);
 						logRequestReject(std::string("invalid clientStats: ") + qosParse.error, roomId, peerId);
 						json resp = {
 							{"response", true},
@@ -303,6 +308,7 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 					static constexpr int64_t kMinDownlinkStatsIntervalMs = 100;
 					if (roomId.empty() || peerId.empty() || sessionId == kInvalidSessionId) {
 						logRequestReject("downlinkClientStats requires joined session", roomId, peerId);
+						server.recordRequestReject(method);
 						json resp = {
 							{"response", true},
 							{"id", id},
@@ -316,6 +322,7 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 					bool validSession = HasMappedSession(wsMap, ws, roomId, peerId, sessionId);
 					if (!validSession) {
 						server.staleRequestDrops_.fetch_add(1, std::memory_order_relaxed);
+						server.recordRequestReject(method);
 						logRequestReject("stale session", roomId, peerId);
 						json resp = {
 							{"response", true},
@@ -330,6 +337,7 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 					auto dlParse = qos::QosValidator::ParseDownlinkSnapshot(data);
 					if (!dlParse.ok) {
 						logRequestReject(std::string("invalid downlinkClientStats: ") + dlParse.error, roomId, peerId);
+						server.recordRequestReject(method);
 						json resp = {
 							{"response", true},
 							{"id", id},
@@ -343,6 +351,7 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 					auto* wt = server.getWorkerThread(roomId, false);
 					if (!wt || !wt->roomService()) {
 						logRequestReject("room not assigned", roomId, peerId);
+						server.recordRequestReject(method);
 						json resp = {
 							{"response", true},
 							{"id", id},
@@ -359,14 +368,15 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 						std::chrono::steady_clock::now().time_since_epoch()).count();
 					auto& state = (*downlinkStatsRateLimit)[mapKey];
 					const bool advancingSeq = IsAdvancingDownlinkSeq(state, seq);
-					if (advancingSeq &&
-						state.pending &&
-						nowMs - state.pendingSinceMs <= kMinDownlinkStatsIntervalMs) {
-						server.rejectedClientStats_.fetch_add(1, std::memory_order_relaxed);
-						logRequestReject("downlinkClientStats rate limited", roomId, peerId);
-						json resp = {
-							{"response", true},
-							{"id", id},
+						if (advancingSeq &&
+							state.pending &&
+							nowMs - state.pendingSinceMs <= kMinDownlinkStatsIntervalMs) {
+							server.rejectedClientStats_.fetch_add(1, std::memory_order_relaxed);
+							server.recordRequestReject(method);
+							logRequestReject("downlinkClientStats rate limited", roomId, peerId);
+							json resp = {
+								{"response", true},
+								{"id", id},
 							{"ok", false},
 							{"error", "downlinkClientStats rate limited"}
 						};
@@ -426,6 +436,7 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 						joinRequest,
 						joinError)) {
 						server.joinFailures_.fetch_add(1, std::memory_order_relaxed);
+						server.recordRequestReject(method);
 						logRequestReject(std::string("join validation failed: ") + joinError,
 							data.value("roomId", roomId),
 							data.value("peerId", peerId));
@@ -456,13 +467,14 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 				} else {
 					wt = server.getWorkerThread(targetRoomId, false);
 				}
-				if (!wt) {
-					if (method == "join") {
-						server.joinFailures_.fetch_add(1, std::memory_order_relaxed);
-					}
-					logRequestReject(method == "join" ? "no available worker thread" : "room not assigned",
-						method == "join" ? joinRequest.roomId : roomId,
-						method == "join" ? joinRequest.peerId : peerId);
+					if (!wt) {
+						if (method == "join") {
+							server.joinFailures_.fetch_add(1, std::memory_order_relaxed);
+						}
+						server.recordRequestReject(method);
+						logRequestReject(method == "join" ? "no available worker thread" : "room not assigned",
+							method == "join" ? joinRequest.roomId : roomId,
+							method == "join" ? joinRequest.peerId : peerId);
 					json resp = {
 						{"response", true},
 						{"id", id},
@@ -481,13 +493,15 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 				{
 					auto* rs = wt->roomService();
 					if (!rs) {
+						server.recordRequestReject(method);
 						logRequestReject("worker not ready",
 							method == "join" ? joinRequest.roomId : roomId,
 							method == "join" ? joinRequest.peerId : peerId);
 						loop->defer([&server, ws, alive, id, method, newSessionId, targetRoomId] {
 							if (method == "join") {
-								server.joinFailures_.fetch_add(1, std::memory_order_relaxed);
-								server.unassignRoom(targetRoomId);
+						server.joinFailures_.fetch_add(1, std::memory_order_relaxed);
+						server.recordRequestReject(method);
+							server.unassignRoom(targetRoomId);
 							}
 							if (!alive->load(std::memory_order_relaxed)) return;
 							if (method == "join") {
@@ -505,16 +519,17 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 						return;
 					}
 
-					if (method != "join" && sessionId != kInvalidSessionId) {
-						auto room = rs->getRoom(roomId);
-						if (room) {
-							auto peer = room->getPeer(peerId);
-							if (peer && peer->sessionId != 0 && peer->sessionId != sessionId) {
-								MS_SPDLOG_WARN("[{} {}] dropping stale {} (session:{} current:{})",
-									roomId, peerId, method, sessionId, peer->sessionId);
-								logRequestReject("remote login", roomId, peerId);
-								loop->defer([ws, alive, id] {
-									if (!alive->load()) return;
+						if (method != "join" && sessionId != kInvalidSessionId) {
+							auto room = rs->getRoom(roomId);
+							if (room) {
+								auto peer = room->getPeer(peerId);
+								if (peer && peer->sessionId != 0 && peer->sessionId != sessionId) {
+									MS_SPDLOG_WARN("[{} {}] dropping stale {} (session:{} current:{})",
+										roomId, peerId, method, sessionId, peer->sessionId);
+									server.recordRequestReject(method);
+									logRequestReject("remote login", roomId, peerId);
+									loop->defer([ws, alive, id] {
+										if (!alive->load()) return;
 									json resp = {
 										{"response", true},
 										{"id", id},
@@ -595,13 +610,13 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 					const std::string requestPeerId = joinOk ? jPeerId : peerId;
 
 					const int workerThreadId = wt ? wt->id() : -1;
-					loop->defer([&server, id, workerThreadId, wsMap, ws, alive, respStr = std::move(respStr),
-						method, joinOk, joinFailed, newSessionId,
-						jRoomId = std::move(jRoomId), jPeerId = std::move(jPeerId),
-						joinQosPolicy = std::move(joinQosPolicy),
-						requestOk, requestRedirect, requestError, requestSessionId,
-						requestRoomId = std::move(requestRoomId), requestPeerId = std::move(requestPeerId)]
-					{
+						loop->defer([&server, id, workerThreadId, wsMap, ws, alive, respStr = std::move(respStr),
+							method, joinOk, joinFailed, newSessionId,
+							jRoomId = std::move(jRoomId), jPeerId = std::move(jPeerId),
+							joinQosPolicy = std::move(joinQosPolicy),
+							requestOk, requestRedirect, requestError, requestSessionId,
+							requestRoomId = std::move(requestRoomId), requestPeerId = std::move(requestPeerId)]
+						{
 						WorkerThread* deferredWt =
 							server.running_.load(std::memory_order_relaxed)
 								? server.findWorkerThreadById(workerThreadId)
@@ -644,8 +659,9 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 									socketData,
 									newSessionId,
 									deferredWt != nullptr && deferredWt->roomService() != nullptr)) {
-									server.joinFailures_.fetch_add(1, std::memory_order_relaxed);
-									server.unassignRoom(jRoomId);
+								server.joinFailures_.fetch_add(1, std::memory_order_relaxed);
+								server.recordRequestReject(method);
+								server.unassignRoom(jRoomId);
 									MS_SPDLOG_WARN(
 										"[request-reject] room={} peer={} method=join id={} session={} remote={} reason=worker unavailable during join completion",
 										jRoomId,

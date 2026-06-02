@@ -180,10 +180,13 @@ public:
 		return it != rooms_.end() ? it->second : nullptr;
 	}
 
-	void removeRoom(const std::string& roomId) {
+	bool removeRoom(const std::string& roomId) {
 		std::lock_guard<std::mutex> lock(mutex_);
 		auto it = rooms_.find(roomId);
-		if (it != rooms_.end()) { it->second->close(); rooms_.erase(it); }
+		if (it == rooms_.end()) return false;
+		it->second->close();
+		rooms_.erase(it);
+		return true;
 	}
 
 	std::vector<std::string> getIdleRooms(int seconds) {

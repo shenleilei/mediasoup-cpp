@@ -1,6 +1,6 @@
 # 下行 QoS 逐 Case 最终结果
 
-生成时间：`2026-06-01T13:22:39.206Z`
+生成时间：`2026-06-02T03:24:15.770Z`
 
 ## 1. 汇总
 
@@ -39,8 +39,8 @@
 | 实际结果 | PASS（ok） |
 | impairment 结束 consumer 状态 | paused=false, preferredSpatialLayer=2, preferredTemporalLayer=2, priority=220 |
 | recovery 结束 consumer 状态 | paused=false, preferredSpatialLayer=2, preferredTemporalLayer=2, priority=220 |
-| 关键时间指标 | firstUnpausedConsumer=2026-06-01T13:17:25.989Z；layerStable=2026-06-01T13:17:25.989Z |
-| 恢复里程碑 | recoveryTraceSpan=9548ms；recoveryEntries=20 |
+| 关键时间指标 | firstUnpausedConsumer=2026-06-02T03:19:02.550Z；layerStable=2026-06-02T03:19:02.550Z |
+| 恢复里程碑 | recoveryTraceSpan=9557ms；recoveryEntries=20 |
 | 恢复诊断 | layers=[2], transitions=0, final=2 |
 | D8 振荡检测 | 无振荡 (seq=-, pause=0, resume=0) |
 | D7 竞争结果 | - |
@@ -60,8 +60,8 @@
 | 实际结果 | PASS（ok） |
 | impairment 结束 consumer 状态 | paused=false, preferredSpatialLayer=0, preferredTemporalLayer=2, priority=220 |
 | recovery 结束 consumer 状态 | paused=false, preferredSpatialLayer=2, preferredTemporalLayer=2, priority=220 |
-| 关键时间指标 | firstClamp=2026-06-01T13:17:47.853Z；firstUnpausedConsumer=2026-06-01T13:18:02.932Z；layerStable=2026-06-01T13:18:02.932Z |
-| 恢复里程碑 | recoveryTraceSpan=14576ms；recoveryEntries=30 |
+| 关键时间指标 | firstClamp=2026-06-02T03:19:24.417Z；firstUnpausedConsumer=2026-06-02T03:19:39.504Z；layerStable=2026-06-02T03:19:39.504Z |
+| 恢复里程碑 | recoveryTraceSpan=14571ms；recoveryEntries=30 |
 | 恢复诊断 | layers=[2], transitions=0, final=2 |
 | D8 振荡检测 | 无振荡 (seq=-, pause=0, resume=0) |
 | D7 竞争结果 | - |
@@ -81,8 +81,8 @@
 | 实际结果 | PASS（ok） |
 | impairment 结束 consumer 状态 | paused=false, preferredSpatialLayer=0, preferredTemporalLayer=0, priority=220 |
 | recovery 结束 consumer 状态 | paused=false, preferredSpatialLayer=2, preferredTemporalLayer=2, priority=220 |
-| 关键时间指标 | firstClamp=2026-06-01T13:18:29.813Z；firstUnpausedConsumer=2026-06-01T13:18:44.894Z；layerStable=2026-06-01T13:18:47.409Z |
-| 恢复里程碑 | recoveryTraceSpan=14576ms；recoveryEntries=30 |
+| 关键时间指标 | firstClamp=2026-06-02T03:20:06.378Z；firstUnpausedConsumer=2026-06-02T03:20:21.461Z；layerStable=2026-06-02T03:20:23.976Z |
+| 恢复里程碑 | recoveryTraceSpan=14580ms；recoveryEntries=30 |
 | 恢复诊断 | layers=[0,1,2], transitions=2, final=2 |
 | D8 振荡检测 | 无振荡 (seq=-, pause=0, resume=0) |
 | D7 竞争结果 | - |
@@ -102,8 +102,8 @@
 | 实际结果 | PASS（ok） |
 | impairment 结束 consumer 状态 | paused=false, preferredSpatialLayer=0, preferredTemporalLayer=0, priority=220 |
 | recovery 结束 consumer 状态 | paused=false, preferredSpatialLayer=2, preferredTemporalLayer=2, priority=220 |
-| 关键时间指标 | firstClamp=2026-06-01T13:19:11.777Z；firstUnpausedConsumer=2026-06-01T13:19:26.854Z；layerStable=2026-06-01T13:19:29.365Z |
-| 恢复里程碑 | recoveryTraceSpan=14574ms；recoveryEntries=30 |
+| 关键时间指标 | firstClamp=2026-06-02T03:20:48.349Z；firstUnpausedConsumer=2026-06-02T03:21:03.423Z；layerStable=2026-06-02T03:21:05.937Z |
+| 恢复里程碑 | recoveryTraceSpan=14576ms；recoveryEntries=30 |
 | 恢复诊断 | layers=[0,1,2], transitions=2, final=2 |
 | D8 振荡检测 | 无振荡 (seq=-, pause=0, resume=0) |
 | D7 竞争结果 | - |
@@ -123,8 +123,8 @@
 | 实际结果 | PASS（ok） |
 | impairment 结束 consumer 状态 | paused=false, preferredSpatialLayer=0, preferredTemporalLayer=0, priority=220 |
 | recovery 结束 consumer 状态 | paused=false, preferredSpatialLayer=2, preferredTemporalLayer=2, priority=220 |
-| 关键时间指标 | firstClamp=2026-06-01T13:19:53.746Z；firstUnpausedConsumer=2026-06-01T13:20:08.829Z；layerStable=2026-06-01T13:20:11.341Z |
-| 恢复里程碑 | recoveryTraceSpan=14577ms；recoveryEntries=30 |
+| 关键时间指标 | firstClamp=2026-06-02T03:21:30.312Z；firstUnpausedConsumer=2026-06-02T03:21:45.399Z；layerStable=2026-06-02T03:21:47.913Z |
+| 恢复里程碑 | recoveryTraceSpan=14578ms；recoveryEntries=30 |
 | 恢复诊断 | layers=[0,1,2], transitions=2, final=2 |
 | D8 振荡检测 | 无振荡 (seq=-, pause=0, resume=0) |
 | D7 竞争结果 | - |
@@ -144,8 +144,8 @@
 | 实际结果 | PASS（ok） |
 | impairment 结束 consumer 状态 | paused=false, preferredSpatialLayer=0, preferredTemporalLayer=0, priority=220 |
 | recovery 结束 consumer 状态 | paused=false, preferredSpatialLayer=2, preferredTemporalLayer=2, priority=220 |
-| 关键时间指标 | firstClamp=2026-06-01T13:20:35.713Z；firstUnpausedConsumer=2026-06-01T13:20:50.792Z；layerStable=2026-06-01T13:20:53.306Z |
-| 恢复里程碑 | recoveryTraceSpan=19605ms；recoveryEntries=40 |
+| 关键时间指标 | firstClamp=2026-06-02T03:22:12.295Z；firstUnpausedConsumer=2026-06-02T03:22:27.379Z；layerStable=2026-06-02T03:22:29.892Z |
+| 恢复里程碑 | recoveryTraceSpan=19603ms；recoveryEntries=40 |
 | 恢复诊断 | layers=[0,1,2], transitions=2, final=2 |
 | D8 振荡检测 | 无振荡 (seq=-, pause=0, resume=0) |
 | D7 竞争结果 | - |
@@ -166,7 +166,7 @@
 | impairment 结束 consumer 状态 | sub1(paused=false, layer=0, priority=120)；sub2(paused=false, layer=1, priority=220) |
 | recovery 结束 consumer 状态 | sub1(paused=false, layer=2, priority=120)；sub2(paused=false, layer=2, priority=220) |
 | 关键时间指标 | - |
-| 恢复里程碑 | recoveryTraceSpan=14580ms；recoveryEntries=30 |
+| 恢复里程碑 | recoveryTraceSpan=14583ms；recoveryEntries=30 |
 | 恢复诊断 | sub1(paused=false, layer=2, priority=120)；sub2(paused=false, layer=2, priority=220) |
 | D8 振荡检测 | - |
 | D7 竞争结果 | low-priority(sub1): layer=0, priority=120；high-priority(sub2): layer=1, priority=220 |
@@ -186,8 +186,8 @@
 | 实际结果 | PASS（ok） |
 | impairment 结束 consumer 状态 | paused=true, preferredSpatialLayer=2, preferredTemporalLayer=2, priority=1 |
 | recovery 结束 consumer 状态 | paused=false, preferredSpatialLayer=2, preferredTemporalLayer=2, priority=220 |
-| 关键时间指标 | firstClamp=2026-06-01T13:22:04.700Z；firstPause=2026-06-01T13:22:08.720Z；firstResume=2026-06-01T13:22:14.754Z；firstUnpausedConsumer=2026-06-01T13:22:14.754Z；layerStable=2026-06-01T13:22:14.754Z |
-| 恢复里程碑 | pauseLatency=4222ms；resumeLatency=201ms；recoveryTraceSpan=14577ms；recoveryEntries=30 |
+| 关键时间指标 | firstClamp=2026-06-02T03:23:41.264Z；firstPause=2026-06-02T03:23:45.287Z；firstResume=2026-06-02T03:23:51.320Z；firstUnpausedConsumer=2026-06-02T03:23:51.320Z；layerStable=2026-06-02T03:23:51.320Z |
+| 恢复里程碑 | pauseLatency=4224ms；resumeLatency=200ms；recoveryTraceSpan=14582ms；recoveryEntries=30 |
 | 恢复诊断 | layers=[2], transitions=0, final=2 |
 | D8 振荡检测 | 无振荡 (seq=pause->resume, pause=2, resume=1) |
 | D7 竞争结果 | - |
