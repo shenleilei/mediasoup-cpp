@@ -268,15 +268,66 @@ peer 离开时，普通端收到 `peerLeft`：
 
 ## 5. 受限端收到音频
 
-普通端 claim 成功并 produce audio 后，受限端会按现有订阅流程收到 audio consumer。可能出现在两个地方：
+普通端 claim 成功并 produce audio 后，服务端才会给受限端创建 audio consumer。受限端不需要主动判断“谁 claim 了我”，也不需要再发额外授权请求；只按现有订阅流程处理服务端下发的 consumer。
 
-- 如果受限端 recv transport 已创建，收到 `newConsumer`。
-- 如果受限端晚创建 recv transport，audio consumer 可能直接在 `createWebRtcTransport` 响应的 `consumers` 里返回。
+第一种时序是受限端已经创建好 recv transport，普通端后来打开音频。受限端会收到 `newConsumer`：
+
+```json
+{
+  "notification": true,
+  "method": "newConsumer",
+  "data": {
+    "peerId": "peer-a",
+    "producerId": "producer-audio-1",
+    "id": "consumer-audio-1",
+    "kind": "audio",
+    "appData": {
+      "source": "audio"
+    },
+    "producerPaused": false,
+    "rtpParameters": {}
+  }
+}
+```
+
+第二种时序是普通端已经 claim 并 produce audio，受限端之后才创建 recv transport。此时不一定再收到额外 `newConsumer`，audio consumer 可能直接出现在 `createWebRtcTransport` 响应的 `consumers` 数组里：
+
+```json
+{
+  "response": true,
+  "id": 2,
+  "ok": true,
+  "data": {
+    "id": "recv-transport-b",
+    "iceParameters": {},
+    "iceCandidates": [],
+    "dtlsParameters": {},
+    "consumers": [
+      {
+        "peerId": "peer-a",
+        "producerId": "producer-audio-1",
+        "id": "consumer-audio-1",
+        "kind": "audio",
+        "appData": {
+          "source": "audio"
+        },
+        "producerPaused": false,
+        "rtpParameters": {}
+      }
+    ]
+  }
+}
+```
 
 受限端行为：
 
-- 按现有 `newConsumer` / `consumers` 逻辑创建 consumer 和 audio DOM。
-- 不需要额外判断授权；服务端只会下发已授权 audio consumer。
+- `newConsumer.data` 和 `createWebRtcTransport.data.consumers[]` 是同一种 consumer 参数，处理函数可以复用。
+- 调用 `recvTransport.consume({ id, producerId, kind, rtpParameters, appData })`。
+- 用 `consumer.track` 创建 `MediaStream`，挂到 audio DOM 上。
+- 保存 `consumerId -> consumer/audio DOM` 映射，后续 `producerLeft` 或 `consumerClosed` 要按 consumerId 清理。
+- `data.peerId` 是发流端，也就是普通端 A；不是受限端自己的 peerId。
+- `data.appData.source="audio"` 只表示这条 producer 是音频来源，不表示目标端。
+- 受限端收到 audio consumer 后才应该出现远端音频卡片或音量变化；claim 成功但还没 produce 时，不会有音频 consumer。
 
 ## 6. 普通端关闭受限端音频
 
