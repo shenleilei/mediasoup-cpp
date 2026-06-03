@@ -2,7 +2,22 @@
 
 本文按人的实际使用顺序写：先打开受限端，再打开普通端，普通端选择受限端并打开音频，最后关闭音频。第一版只考虑 `WebRtcTransport`。
 
-示例里的 `id` 是客户端数字流水号，只用于匹配 request/response，不是业务 id。
+示例里的 `id` 是客户端数字流水号，只用于匹配 request/response，不是业务 id。示例 JSON 只展示业务接入需要关注的字段，ICE/DTLS/RTP 参数用 `{}` 省略。
+
+## 0. 业务最小接入清单
+
+业务只需要按下面几条接：
+
+- 受限端入会时带 `audioRole="audio-restricted"`；普通端不带 `audioRole` 或带 `audioRole="normal"`。
+- 普通端从 `join.data.participants` 和 `peerJoined` 维护“可选择的受限端列表”，显示 `displayName (peerId)`，选中值用 `peerId`。
+- 普通端点击“打开”时，先发 `claimAudioRestrictedSlot(targetPeerId)`；claim 成功后再创建或复用本地 audio producer。
+- `claimAudioRestrictedSlot` 失败时不要采集麦克风、不要 produce。
+- claim 成功但采集麦克风或 produce 失败时，要发 `releaseAudioRestrictedSlot(targetPeerId)` 清掉占位。
+- 普通端点击“关闭”时，当前 demo 的语义是“不再发本地音频”：先 `closeProducer`，再 `releaseAudioRestrictedSlot`。
+- 受限端不需要发 claim，也不需要额外鉴权；只处理服务端下发的 `newConsumer` / `consumers`，以及后续清理通知。
+- 这个限制只影响受限端接收 audio；普通端接收 audio、受限端接收 video 都按原流程走。
+- 业务本地最少记三类信息：自己的 `peerId`、可选受限端列表、当前已打开的目标 `peerId` 和本地 audio producer。
+- 如果当前已打开的受限端退出又用同一个 `peerId` 重进，普通端在收到该 peer 的 `peerJoined` 后要重新发一次 `claimAudioRestrictedSlot`。
 
 ## 1. 打开受限端页面并加入房间
 
@@ -145,6 +160,7 @@ https://volcvideo3.zelostech.com.cn:1770/?displayName=普通端A
 
 - 如果 `audioRole="audio-restricted"` 且不是自己，就加入可选列表。
 - 如果该 `peerId` 是当前已打开目标，且本端仍在发布 audio，可以重新 claim。
+- 不要只依赖 `reconnect=true` 判断是否重 claim；受限端先退出再重新加入时，`peerJoined.reconnect` 可能是 `false`，关键是 `peerId` 是否等于当前已打开目标。
 
 peer 离开时，普通端收到 `peerLeft`：
 
@@ -163,6 +179,20 @@ peer 离开时，普通端收到 `peerLeft`：
 - 从可选列表删除该 `peerId`。
 - 当前 demo 会保留已打开目标状态，用于同 `peerId` 重连后重新 claim。
 - 业务如果不需要重连保持，也可以在 `peerLeft` 时清空本地打开状态。
+
+### 3.1 受限端退出又重进
+
+服务端在受限端离开时会清掉这个受限端对应的占位，并关闭该受限端上已有的 audio consumer。普通端如果还在发布本地 audio，并且业务希望同一个受限端恢复后继续听，就不能只把 `peerLeft` 当成永久关闭。
+
+推荐业务行为：
+
+- `peerLeft(peer-b)` 时，从下拉框删除 `peer-b`，但如果 `peer-b` 是当前已打开目标，可以保留本地打开状态。
+- `peerJoined(peer-b, audioRole="audio-restricted")` 时，把 `peer-b` 加回下拉框。
+- 如果 `peer-b` 等于当前已打开目标，且本端本地 audio producer 还存在，立即重新发 `claimAudioRestrictedSlot({ "targetPeerId": "peer-b" })`。
+- 重 claim 成功后，不需要重新 produce；原来的 audio producer 还在，服务端会重新给重进的受限端创建 audio consumer。
+- 如果重 claim 失败，例如目标已被其他普通端占用，清空本地打开状态并提示业务重新选择或重新打开。
+
+当前 public demo 已按这个逻辑验证：受限端关闭页面后用同一个 `peerId` 重新加入，普通端会自动再发一次 `claimAudioRestrictedSlot`，重进后的受限端会重新收到 audio consumer。
 
 ## 4. 普通端选择受限端并打开音频
 
@@ -194,7 +224,7 @@ peer 离开时，普通端收到 `peerLeft`：
     "targetPeerId": "peer-b",
     "ownerPeerId": "peer-a",
     "alreadyOwned": false,
-    "consumersCreated": 1
+    "consumersCreated": 0
   }
 }
 ```
@@ -202,9 +232,46 @@ peer 离开时，普通端收到 `peerLeft`：
 普通端行为：
 
 - 记录本地打开状态，例如 `claimedAudioTargetPeerId = "peer-b"`。
-- 然后发布 audio producer，`produce.appData.source = "audio"`。
+- 然后发布 audio producer，`produce.appData.source = "audio"`。当前 demo 是先 claim 后 produce，所以这里的 `consumersCreated` 通常是 0。
 - `alreadyOwned=true` 表示重复 claim，同样按成功处理。
-- `consumersCreated` 只用于观测，不需要客户端据此播放。
+- `consumersCreated` 只用于观测，不需要客户端据此播放；受限端真正播放以 `newConsumer` / `consumers` 为准。
+
+普通端随后走原有发布流程：创建或复用 send `WebRtcTransport`，并在 `transport.produce()` 回调里发 `produce`。这里不是新增 transport 协议，只是 audio producer 的 `appData.source` 必须带上 `audio`。示例只展示业务字段：
+
+```json
+{
+  "request": true,
+  "id": 3,
+  "method": "produce",
+  "data": {
+    "transportId": "send-transport-a",
+    "kind": "audio",
+    "rtpParameters": {},
+    "appData": {
+      "source": "audio"
+    }
+  }
+}
+```
+
+普通端收到：
+
+```json
+{
+  "response": true,
+  "id": 3,
+  "ok": true,
+  "data": {
+    "id": "producer-audio-1"
+  }
+}
+```
+
+普通端行为：
+
+- 保存本地 audio producer。
+- 如果 produce 失败或麦克风采集失败，立即对刚才的 `targetPeerId` 发 `releaseAudioRestrictedSlot`。
+- 不要把 `appData.source` 当成目标端；目标端只来自下拉框选中的 `targetPeerId`。
 
 目标是普通端时，普通端收到：
 
@@ -341,7 +408,7 @@ peer 离开时，普通端收到 `peerLeft`：
 ```json
 {
   "request": true,
-  "id": 3,
+  "id": 4,
   "method": "closeProducer",
   "data": {
     "source": "audio"
@@ -354,7 +421,7 @@ peer 离开时，普通端收到 `peerLeft`：
 ```json
 {
   "request": true,
-  "id": 3,
+  "id": 4,
   "method": "closeProducer",
   "data": {
     "producerId": "producer-audio-1"
@@ -367,7 +434,7 @@ peer 离开时，普通端收到 `peerLeft`：
 ```json
 {
   "response": true,
-  "id": 3,
+  "id": 4,
   "ok": true,
   "data": {
     "producerId": "producer-audio-1",
@@ -398,7 +465,7 @@ peer 离开时，普通端收到 `peerLeft`：
 ```json
 {
   "request": true,
-  "id": 4,
+  "id": 5,
   "method": "releaseAudioRestrictedSlot",
   "data": {
     "targetPeerId": "peer-b"
@@ -411,12 +478,12 @@ peer 离开时，普通端收到 `peerLeft`：
 ```json
 {
   "response": true,
-  "id": 4,
+  "id": 5,
   "ok": true,
   "data": {
     "released": true,
     "targetPeerId": "peer-b",
-    "closedConsumers": 1
+    "closedConsumers": 0
   }
 }
 ```
@@ -432,7 +499,7 @@ peer 离开时，普通端收到 `peerLeft`：
 
 - release 返回后清空本地打开状态。
 - `not-claimed`、`not-required` 或 `not-owner` 也清空本地状态。
-- `closedConsumers` 是本次 release 实际关闭的 consumer 数，可能是 0 或更多。
+- `closedConsumers` 是本次 release 实际关闭的 consumer 数，可能是 0 或更多。当前 demo 先 `closeProducer`，consumer 通常已经被 producer 关闭，所以这里常见是 0。
 
 ## 7. 受限端清理音频
 
