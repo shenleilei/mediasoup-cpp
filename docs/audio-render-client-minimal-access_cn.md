@@ -44,6 +44,18 @@
 
 ## 3. 打开某个受限端音频
 
+发 claim 前，客户端先维护可选受限端列表：
+
+- 初始来源：`join` 成功响应里的 `data.participants`。
+- 增量来源：后续 `peerJoined` 通知。
+- 删除来源：后续 `peerLeft` 通知。
+- 每个 peer 至少使用 `peerId`、`displayName`、`audioRole`。
+- 只把 `audioRole = "audio-restricted"` 且 `peerId != selfPeerId` 的 peer 放进可选列表。
+- 下拉框显示 `displayName (peerId)`，下拉值使用 `peerId`。
+- 不从 producer `source` 获取目标端；`source=audio` 只表示媒体来源。
+
+客户端选择某个受限端后，把该项的 `peerId` 作为 `targetPeerId`。
+
 客户端发：
 
 - `claimAudioRestrictedSlot`
