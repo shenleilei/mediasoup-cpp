@@ -12,6 +12,7 @@ struct JoinRequestContext {
 	std::string peerId;
 	std::string displayName;
 	std::string clientIp;
+	std::string audioRole = "normal";
 	json rtpCapabilities = json::object();
 };
 
@@ -47,6 +48,15 @@ inline bool BuildJoinRequestContext(
 	}
 
 	joinRequest.displayName = data.value("displayName", joinRequest.peerId);
+	if (data.contains("audioRole") && !data.at("audioRole").is_string()) {
+		error = "invalid audioRole";
+		return false;
+	}
+	joinRequest.audioRole = data.value("audioRole", std::string("normal"));
+	if (joinRequest.audioRole != "normal" && joinRequest.audioRole != "audio-restricted") {
+		error = "invalid audioRole";
+		return false;
+	}
 	joinRequest.rtpCapabilities = data.value("rtpCapabilities", json::object());
 	joinRequest.clientIp = remoteAddress;
 
@@ -87,7 +97,8 @@ inline RoomService::Result DispatchRoomServiceRequest(
 			joinRequest->peerId,
 			joinRequest->displayName,
 			joinRequest->rtpCapabilities,
-			joinRequest->clientIp);
+			joinRequest->clientIp,
+			joinRequest->audioRole);
 		if (result.ok && result.redirect.empty()) {
 			auto room = roomService.getRoom(joinRequest->roomId);
 			if (room) {
@@ -132,6 +143,33 @@ inline RoomService::Result DispatchRoomServiceRequest(
 			data.at("transportId").get<std::string>(),
 			data.at("producerId").get<std::string>(),
 			data.at("rtpCapabilities"));
+	}
+	if (method == "claimAudioRestrictedSlot") {
+		return roomService.claimAudioRestrictedSlot(
+			roomId,
+			peerId,
+			data.at("targetPeerId").get<std::string>());
+	}
+	if (method == "releaseAudioRestrictedSlot") {
+		return roomService.releaseAudioRestrictedSlot(
+			roomId,
+			peerId,
+			data.at("targetPeerId").get<std::string>());
+	}
+	if (method == "closeProducer") {
+		if (data.contains("producerId")) {
+			return roomService.closeProducer(
+				roomId,
+				peerId,
+				data.at("producerId").get<std::string>());
+		}
+		if (data.contains("source")) {
+			return roomService.closeProducerBySource(
+				roomId,
+				peerId,
+				data.at("source").get<std::string>());
+		}
+		return {false, {}, "", "missing producerId or source"};
 	}
 	if (method == "pauseProducer") {
 		return roomService.pauseProducer(

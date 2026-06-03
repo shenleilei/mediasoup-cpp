@@ -1,8 +1,37 @@
 (function () {
-  const qosMode = new URLSearchParams(location.search).get('qos') || 'full';
+  const query = new URLSearchParams(location.search);
+  const qosMode = query.get('qos') || 'full';
   const useLegacyQos = qosMode === 'legacy';
   const useFullQos = qosMode === 'full';
-  const publishAllCameras = new URLSearchParams(location.search).get('multicam') === '1';
+  const publishAllCameras = query.get('multicam') === '1';
+  const initialAudioRole = query.get('audioRole') === 'audio-restricted'
+    ? 'audio-restricted'
+    : 'normal';
+  const configuredDisplayName = String(query.get('displayName') || '').trim();
+  const configuredInitialAudioClaimTargets = normalizeAudioTargetList([
+    ...query.getAll('audioTargetPeerId'),
+    ...query.getAll('audioTarget'),
+  ]);
+
+  function normalizeAudioTargetList(values) {
+    const targets = [];
+    const seen = new Set();
+    for (const rawValue of values || []) {
+      const rawItems = Array.isArray(rawValue) ? rawValue : [rawValue];
+      for (const rawItem of rawItems) {
+        const parts = String(rawItem || '').split(',');
+        for (const part of parts) {
+          const targetPeerId = part.trim();
+          if (!targetPeerId || seen.has(targetPeerId)) {
+            continue;
+          }
+          seen.add(targetPeerId);
+          targets.push(targetPeerId);
+        }
+      }
+    }
+    return targets;
+  }
 
   const els = {
     status: document.getElementById('status'),
@@ -10,6 +39,10 @@
     joinBtn: document.getElementById('joinBtn'),
     publishBtn: document.getElementById('publishBtn'),
     stopBtn: document.getElementById('stopBtn'),
+    audioTargetSelect: document.getElementById('audioTargetSelect'),
+    claimAudioBtn: document.getElementById('claimAudioBtn'),
+    releaseAudioBtn: document.getElementById('releaseAudioBtn'),
+    audioSlotStatus: document.getElementById('audioSlotStatus'),
     log: document.getElementById('log'),
     localVideos: document.getElementById('localVideos'),
     remoteVideos: document.getElementById('remoteVideos'),
@@ -26,6 +59,7 @@
     recvTransport: null,
     roomId: '',
     peerId: '',
+    displayName: configuredDisplayName,
     reqId: 0,
     pending: new Map(),
     pendingConsumers: [],
@@ -34,6 +68,7 @@
     localAudioActive: false,
     publishedProducers: new Map(),
     remoteVideoConsumers: new Map(),
+    remoteAudioConsumers: new Map(),
     qosSession: null,
     downlinkBundle: null,
     latestQosPolicy: null,
@@ -49,7 +84,13 @@
     usingFallbackStream: false,
     desiredLocalPublish: false,
     recoveryInFlight: null,
+    localPublishStopInFlight: null,
     recoveryAttempt: 0,
+    audioRole: initialAudioRole,
+    claimedAudioTargetPeerId: '',
+    audioRestrictedPeers: new Map(),
+    audioSlotActionInFlight: false,
+    peerProfiles: new Map(),
   };
 
   const qosLib = window.mediasoupClient && window.mediasoupClient.qos;
@@ -84,9 +125,11 @@
     if (data.transportId) fields.push(`transport=${data.transportId}`);
     if (data.producerId) fields.push(`producer=${data.producerId}`);
     if (data.consumerId) fields.push(`consumer=${data.consumerId}`);
+    if (data.targetPeerId) fields.push(`targetPeer=${data.targetPeerId}`);
     if (data.peerId && data.peerId !== state.peerId) fields.push(`targetPeer=${data.peerId}`);
     if (data.roomId && data.roomId !== state.roomId) fields.push(`targetRoom=${data.roomId}`);
     if (data.displayName) fields.push(`displayName=${data.displayName}`);
+    if (data.audioRole) fields.push(`audioRole=${data.audioRole}`);
     if (data.kind) fields.push(`kind=${data.kind}`);
     if (data.producing !== undefined) fields.push(`producing=${data.producing ? 'true' : 'false'}`);
     if (data.consuming !== undefined) fields.push(`consuming=${data.consuming ? 'true' : 'false'}`);
@@ -283,6 +326,48 @@
     return value ? 'yes' : 'no';
   }
 
+  function upsertPeerProfile(peer) {
+    const peerId = String(peer?.peerId || '').trim();
+    if (!peerId) {
+      return;
+    }
+    const previous = state.peerProfiles.get(peerId) || {};
+    state.peerProfiles.set(peerId, {
+      ...previous,
+      peerId,
+      displayName: String(peer.displayName || previous.displayName || peerId),
+      audioRole: peer.audioRole || previous.audioRole || 'normal',
+    });
+  }
+
+  function rebuildPeerProfiles(participants) {
+    state.peerProfiles.clear();
+    upsertPeerProfile({
+      peerId: state.peerId,
+      displayName: state.displayName || state.peerId,
+      audioRole: state.audioRole,
+    });
+    for (const participant of participants || []) {
+      upsertPeerProfile(participant);
+    }
+  }
+
+  function peerDisplayName(peerId) {
+    const profile = state.peerProfiles.get(peerId);
+    return String(profile?.displayName || peerId || 'remote-peer');
+  }
+
+  function peerLabel(peerId) {
+    if (!peerId) {
+      return 'remote-peer';
+    }
+    const displayName = peerDisplayName(peerId);
+    const shortPeerId = shortId(peerId);
+    return displayName && displayName !== peerId
+      ? `${displayName} · ${shortPeerId}`
+      : shortPeerId;
+  }
+
   function pillClass(stateName) {
     if (!stateName) {
       return 'stable';
@@ -312,15 +397,201 @@
     return Boolean(
       state.sendTransport ||
       state.publishedProducers.size > 0 ||
-      state.localCaptureStreams.length > 0
+      state.localCaptureStreams.some(stream =>
+        stream && stream.getTracks().some(track => track.readyState !== 'ended')
+      )
+    );
+  }
+
+  function hasActiveVideoPublish() {
+    return state.localVideoEntries.some(entry =>
+      entry?.producer?.id ||
+      (entry?.track && entry.track.readyState !== 'ended')
     );
   }
 
   function updateControls() {
     const busyRecovering = Boolean(state.recoveryInFlight);
-    els.joinBtn.disabled = busyRecovering;
-    els.publishBtn.disabled = busyRecovering || !state.device || hasActiveLocalPublish();
-    els.stopBtn.disabled = busyRecovering || (!state.qosSession && !state.legacyDebugModeActive);
+    const busyStopping = Boolean(state.localPublishStopInFlight);
+    els.joinBtn.disabled = busyRecovering || busyStopping;
+    els.publishBtn.disabled = busyRecovering || busyStopping || !state.device || hasActiveVideoPublish();
+    els.stopBtn.disabled = busyRecovering || busyStopping || !hasActiveLocalPublish();
+    updateAudioTargetControls();
+  }
+
+  function isJoinedSessionReady() {
+    return Boolean(
+      state.device &&
+      state.ws &&
+      state.ws.readyState === WebSocket.OPEN
+    );
+  }
+
+  function getSelectedAudioTargetPeerId() {
+    return String(els.audioTargetSelect?.value || '').trim();
+  }
+
+  function setAudioSlotStatus(text) {
+    if (!els.audioSlotStatus) {
+      return;
+    }
+    els.audioSlotStatus.textContent = String(text || '');
+  }
+
+  function resolveAudioTargetDisplayName(peerId, displayNameOverride = '') {
+    const normalizedPeerId = String(peerId || '').trim();
+    if (!normalizedPeerId) {
+      return '';
+    }
+
+    const overrideName = String(displayNameOverride || '').trim();
+    if (overrideName && overrideName !== normalizedPeerId) {
+      return overrideName;
+    }
+
+    const profileName = String(peerDisplayName(normalizedPeerId) || '').trim();
+    return profileName && profileName !== normalizedPeerId
+      ? profileName
+      : normalizedPeerId;
+  }
+
+  function audioTargetPeerLabel(peerId, displayNameOverride = '') {
+    const normalizedPeerId = String(peerId || '').trim();
+    if (!normalizedPeerId) {
+      return '';
+    }
+
+    const displayName = resolveAudioTargetDisplayName(normalizedPeerId, displayNameOverride);
+    return displayName && displayName !== normalizedPeerId
+      ? `${displayName} (${normalizedPeerId})`
+      : normalizedPeerId;
+  }
+
+  function formatAudioTargetPeerLabel(peer) {
+    const peerId = String(peer?.peerId || '').trim();
+    const label = audioTargetPeerLabel(peerId, peer?.displayName);
+    return state.claimedAudioTargetPeerId === peerId
+      ? `${label} · 已打开`
+      : label;
+  }
+
+  function updateAudioTargetControls({ preserveStatus = false } = {}) {
+    if (!els.audioTargetSelect || !els.claimAudioBtn || !els.releaseAudioBtn) {
+      return;
+    }
+
+    const joined = isJoinedSessionReady();
+    const busy = Boolean(
+      state.recoveryInFlight ||
+      state.localPublishStopInFlight ||
+      state.audioSlotActionInFlight
+    );
+    const hasTargets = state.audioRestrictedPeers.size > 0;
+    const selectedPeerId = getSelectedAudioTargetPeerId();
+    const claimedPeerId = state.claimedAudioTargetPeerId;
+    const selectedClaimed = Boolean(selectedPeerId && claimedPeerId === selectedPeerId);
+    const blockedByOtherTarget = Boolean(claimedPeerId && selectedPeerId && claimedPeerId !== selectedPeerId);
+    const selectedLabel = audioTargetPeerLabel(selectedPeerId);
+    const claimedLabel = audioTargetPeerLabel(claimedPeerId);
+
+    els.audioTargetSelect.disabled = busy || !joined || !hasTargets;
+    els.claimAudioBtn.disabled = busy || !joined || !selectedPeerId || selectedClaimed || blockedByOtherTarget;
+    els.releaseAudioBtn.disabled = busy || !joined || !selectedPeerId || !selectedClaimed || blockedByOtherTarget;
+
+    if (preserveStatus) {
+      return;
+    }
+
+    if (!joined) {
+      setAudioSlotStatus('加入房间后可选择音频受限端');
+    } else if (!hasTargets) {
+      setAudioSlotStatus('当前房间暂无音频受限端');
+    } else if (!selectedPeerId) {
+      setAudioSlotStatus('选择音频受限端后打开音频');
+    } else if (blockedByOtherTarget) {
+      setAudioSlotStatus(`当前已打开 ${claimedLabel}，请先关闭后再切换`);
+    } else if (selectedClaimed) {
+      setAudioSlotStatus(`已打开 ${selectedLabel}，可点击关闭`);
+    } else {
+      setAudioSlotStatus(`已选择 ${selectedLabel}，可点击打开`);
+    }
+  }
+
+  function renderAudioTargetOptions() {
+    if (!els.audioTargetSelect) {
+      return;
+    }
+
+    const previousValue = getSelectedAudioTargetPeerId();
+    els.audioTargetSelect.textContent = '';
+
+    const peers = Array.from(state.audioRestrictedPeers.values())
+      .sort((left, right) => String(left.peerId).localeCompare(String(right.peerId)));
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = peers.length > 0 ? '请选择音频受限端' : '暂无音频受限端';
+    els.audioTargetSelect.appendChild(placeholder);
+
+    for (const peer of peers) {
+      const option = document.createElement('option');
+      option.value = peer.peerId;
+      option.textContent = formatAudioTargetPeerLabel(peer);
+      els.audioTargetSelect.appendChild(option);
+    }
+
+    if (previousValue && state.audioRestrictedPeers.has(previousValue)) {
+      els.audioTargetSelect.value = previousValue;
+    } else if (peers.length === 1) {
+      els.audioTargetSelect.value = peers[0].peerId;
+    } else {
+      els.audioTargetSelect.value = '';
+    }
+
+    updateAudioTargetControls();
+  }
+
+  function upsertAudioRestrictedPeer(peer) {
+    const peerId = String(peer?.peerId || '').trim();
+    if (!peerId || peerId === state.peerId) {
+      return;
+    }
+    upsertPeerProfile(peer);
+    if (peer?.audioRole !== 'audio-restricted') {
+      state.audioRestrictedPeers.delete(peerId);
+      renderAudioTargetOptions();
+      return;
+    }
+
+    state.audioRestrictedPeers.set(peerId, {
+      peerId,
+      displayName: resolveAudioTargetDisplayName(peerId, peer.displayName),
+      audioRole: 'audio-restricted',
+    });
+    renderAudioTargetOptions();
+  }
+
+  function rebuildAudioRestrictedPeers(participants) {
+    state.audioRestrictedPeers.clear();
+    for (const participant of participants || []) {
+      upsertPeerProfile(participant);
+      const peerId = String(participant?.peerId || '').trim();
+      if (!peerId || peerId === state.peerId || participant?.audioRole !== 'audio-restricted') {
+        continue;
+      }
+      state.audioRestrictedPeers.set(peerId, {
+        peerId,
+        displayName: resolveAudioTargetDisplayName(peerId, participant.displayName),
+        audioRole: 'audio-restricted',
+      });
+    }
+    renderAudioTargetOptions();
+  }
+
+  function removeAudioRestrictedPeer(peerId) {
+    if (!peerId || !state.audioRestrictedPeers.delete(peerId)) {
+      return;
+    }
+    renderAudioTargetOptions();
   }
 
   function createVideoCard({ title, subtitle, badgeText, stream, muted = false }) {
@@ -359,6 +630,144 @@
     return card;
   }
 
+  function createRemoteAudioCard({ title, subtitle, badgeText, stream }) {
+    const card = document.createElement('div');
+    card.className = 'video-card audio-card';
+
+    const frame = document.createElement('div');
+    frame.className = 'video-frame audio-frame';
+
+    const shell = document.createElement('div');
+    shell.className = 'audio-shell';
+
+    const icon = document.createElement('div');
+    icon.className = 'audio-icon';
+    icon.textContent = 'AUDIO';
+
+    const hint = document.createElement('div');
+    hint.className = 'audio-hint';
+    hint.textContent = '远端音频已打开';
+
+    const volume = document.createElement('div');
+    volume.className = 'audio-volume';
+
+    const volumeMeter = document.createElement('div');
+    volumeMeter.className = 'audio-volume-meter';
+
+    const volumeFill = document.createElement('div');
+    volumeFill.className = 'audio-volume-fill';
+    volumeMeter.appendChild(volumeFill);
+
+    const volumeText = document.createElement('div');
+    volumeText.className = 'audio-volume-text';
+    volumeText.textContent = '音量等待中...';
+
+    volume.appendChild(volumeMeter);
+    volume.appendChild(volumeText);
+
+    const element = document.createElement('audio');
+    element.autoplay = true;
+    element.controls = true;
+    element.playsInline = true;
+    element.srcObject = stream;
+
+    shell.appendChild(icon);
+    shell.appendChild(hint);
+    shell.appendChild(volume);
+    shell.appendChild(element);
+    frame.appendChild(shell);
+
+    const meta = document.createElement('div');
+    meta.className = 'video-meta';
+    meta.innerHTML =
+      '<div>' +
+      `<div class="video-title">${escapeHtml(title)}</div>` +
+      `<div class="video-subtitle">${escapeHtml(subtitle)}</div>` +
+      '</div>' +
+      `<div class="badge">${escapeHtml(badgeText)}</div>`;
+
+    card.appendChild(frame);
+    card.appendChild(meta);
+    card.volumeFillEl = volumeFill;
+    card.volumeTextEl = volumeText;
+    return card;
+  }
+
+  function startAudioVolumeMonitor(stream, card) {
+    const volumeFillEl = card?.volumeFillEl;
+    const volumeTextEl = card?.volumeTextEl;
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!stream || !volumeFillEl || !volumeTextEl || !AudioContextCtor) {
+      if (volumeTextEl) {
+        volumeTextEl.textContent = '音量不可用';
+      }
+      return () => {};
+    }
+
+    let audioContext = null;
+    let source = null;
+    let analyser = null;
+    let rafId = 0;
+    let stopped = false;
+
+    try {
+      audioContext = new AudioContextCtor();
+      source = audioContext.createMediaStreamSource(stream);
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 1024;
+      source.connect(analyser);
+      const samples = new Float32Array(analyser.fftSize);
+
+      const render = () => {
+        if (stopped || !analyser) {
+          return;
+        }
+        analyser.getFloatTimeDomainData(samples);
+        let sumSquares = 0;
+        let peak = 0;
+        for (const sample of samples) {
+          const abs = Math.abs(sample);
+          sumSquares += sample * sample;
+          if (abs > peak) {
+            peak = abs;
+          }
+        }
+        const rms = Math.sqrt(sumSquares / samples.length);
+        const rmsDb = rms > 0 ? 20 * Math.log10(rms) : -100;
+        const peakDb = peak > 0 ? 20 * Math.log10(peak) : -100;
+        const level = Math.max(0, Math.min(100, ((rmsDb + 70) / 70) * 100));
+        volumeFillEl.style.width = `${level.toFixed(1)}%`;
+        volumeTextEl.textContent =
+          `音量 ${level.toFixed(1)}% · RMS ${rmsDb.toFixed(1)} dBFS · Peak ${peakDb.toFixed(1)} dBFS`;
+        rafId = requestAnimationFrame(render);
+      };
+
+      void audioContext.resume?.().catch(() => {});
+      render();
+    } catch (error) {
+      volumeTextEl.textContent = `音量不可用: ${error.message}`;
+      return () => {};
+    }
+
+    return () => {
+      stopped = true;
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+      }
+      try {
+        source?.disconnect();
+      } catch {
+        // Ignore disconnect errors.
+      }
+      try {
+        analyser?.disconnect();
+      } catch {
+        // Ignore disconnect errors.
+      }
+      void audioContext?.close?.().catch(() => {});
+    };
+  }
+
   function prettyTrackSource(source, kind = 'video') {
     if (source) {
       return String(source);
@@ -378,7 +787,7 @@
   }
 
   function remoteTrackSubtitle(entry) {
-    const parts = [entry.peerId || 'remote-peer'];
+    const parts = [peerLabel(entry.peerId)];
     parts.push(prettyTrackSource(entry.remoteTrack?.source || entry.source, entry.consumer?.kind));
     parts.push(shortId(entry.producerId));
     return parts.filter(Boolean).join(' · ');
@@ -512,6 +921,15 @@
     const errorSummary = document.createElement('div');
     errorSummary.className = 'video-summary is-alert';
 
+    const stopProducerBtn = document.createElement('button');
+    stopProducerBtn.type = 'button';
+    stopProducerBtn.className = 'btn-stop';
+    stopProducerBtn.textContent = '停止该路';
+    stopProducerBtn.addEventListener('click', () => {
+      void stopLocalProducer({ producerId: entry.producer?.id, source: entry.source });
+    });
+
+    inspector.appendChild(stopProducerBtn);
     inspector.appendChild(clientSummary);
     inspector.appendChild(serverSummary);
     inspector.appendChild(metricsGrid);
@@ -526,6 +944,7 @@
     entry.serverSummaryEl = serverSummary;
     entry.metricsGridEl = metricsGrid;
     entry.errorSummaryEl = errorSummary;
+    entry.stopProducerBtn = stopProducerBtn;
 
     return card;
   }
@@ -549,14 +968,18 @@
       entry.titleEl.textContent = `Local Camera ${index + 1}`;
     }
     if (entry.subtitleEl) {
+      const source = entry.source ? ` · ${entry.source}` : '';
       entry.subtitleEl.textContent = state.localAudioActive && index === 0
-        ? `${entry.label} · microphone active`
-        : entry.label;
+        ? `${entry.label}${source} · microphone active`
+        : `${entry.label}${source}`;
     }
     if (entry.badgeEl) {
       entry.badgeEl.textContent = trackState
         ? `${trackState.quality} / ${trackState.state}`
         : 'publishing';
+    }
+    if (entry.stopProducerBtn) {
+      entry.stopProducerBtn.disabled = Boolean(state.localPublishStopInFlight) || !entry.producer?.id;
     }
     if (entry.clientSummaryEl) {
       entry.clientSummaryEl.innerHTML = trackState
@@ -642,10 +1065,18 @@
     });
   }
 
-  function clearRemoteVideoCards() {
+  function clearRemoteMediaCards() {
     els.remoteVideos.innerHTML = '';
     state.remoteVideoConsumers.clear();
+    state.remoteAudioConsumers.clear();
     renderRemoteVideoGroups();
+  }
+
+  function allRemoteMediaEntries() {
+    return [
+      ...Array.from(state.remoteVideoConsumers.values()),
+      ...Array.from(state.remoteAudioConsumers.values()),
+    ];
   }
 
   function createRemotePeerGroup(peerId, entries) {
@@ -659,7 +1090,7 @@
     const copy = document.createElement('div');
     const title = document.createElement('div');
     title.className = 'remote-peer-title';
-    title.textContent = peerId || 'remote-peer';
+    title.textContent = peerLabel(peerId);
 
     const statsPeer = Array.isArray(state.latestStatsReport?.peers)
       ? state.latestStatsReport.peers.find(peer => peer.peerId === peerId) || null
@@ -691,18 +1122,19 @@
   }
 
   function renderRemoteVideoGroups() {
-    if (state.remoteVideoConsumers.size === 0) {
+    const allEntries = allRemoteMediaEntries();
+    if (allEntries.length === 0) {
       els.remoteVideos.innerHTML = '';
       els.remoteVideos.appendChild(createVideoCard({
         title: '远端订阅',
-        subtitle: '加入房间并等待远端发布后，这里会按 peer 分组显示多路 video track。',
+        subtitle: '加入房间并等待远端发布后，这里会按 peer 分组显示多路 media track。',
         badgeText: '空闲',
       }));
       return;
     }
 
     const groups = new Map();
-    for (const entry of state.remoteVideoConsumers.values()) {
+    for (const entry of allEntries) {
       const key = entry.peerId || 'remote-peer';
       const list = groups.get(key) || [];
       list.push(entry);
@@ -726,8 +1158,8 @@
     const sortedGroups = Array.from(groups.entries()).sort((left, right) => left[0].localeCompare(right[0]));
     for (const [peerId, entries] of sortedGroups) {
       entries.sort((left, right) => {
-        const leftKey = left.remoteTrack?.localTrackId || left.producerId || left.consumer?.id || '';
-        const rightKey = right.remoteTrack?.localTrackId || right.producerId || right.consumer?.id || '';
+        const leftKey = `${left.consumer?.kind || ''}:${left.remoteTrack?.localTrackId || left.producerId || left.consumer?.id || ''}`;
+        const rightKey = `${right.consumer?.kind || ''}:${right.remoteTrack?.localTrackId || right.producerId || right.consumer?.id || ''}`;
         return leftKey.localeCompare(rightKey);
       });
       entries.forEach((entry, index) => {
@@ -787,6 +1219,8 @@
     entry.metricsGridEl.innerHTML = [
       qosItem('Consumer', shortId(entry.consumer?.id)),
       qosItem('Producer', shortId(entry.producerId)),
+      qosItem('Publisher', peerLabel(entry.peerId)),
+      qosItem('Subscriber', peerLabel(state.peerId)),
       qosItem('Track', fmtValue(
         entry.remoteTrack?.localTrackId,
         Array.isArray(entry.remoteProducer?.ssrcs) && entry.remoteProducer.ssrcs[0]
@@ -875,7 +1309,7 @@
         .map(item => [item.consumerId, item])
     );
 
-    for (const entry of state.remoteVideoConsumers.values()) {
+    for (const entry of allRemoteMediaEntries()) {
       entry.serverState = null;
       entry.serverSubscription = subscriptionByConsumerId.get(entry.consumer.id) || null;
       updateRemoteCardUI(entry);
@@ -887,13 +1321,17 @@
       const statsPeer = allPeers.find(p => p.peerId === peerId);
       if (statsPeer) {
         let tracksCount = 0;
-        for (const e of state.remoteVideoConsumers.values()) {
+        for (const e of allRemoteMediaEntries()) {
           if (e.peerId === peerId || (!e.peerId && peerId === 'remote-peer')) tracksCount++;
         }
         const producerCount = statsPeer.producers ? Object.keys(statsPeer.producers).length : 0;
         const subtitle = group.querySelector('.remote-peer-subtitle');
         if (subtitle) {
           subtitle.textContent = `tracks ${tracksCount} · producers ${producerCount}`;
+        }
+        const title = group.querySelector('.remote-peer-title');
+        if (title) {
+          title.textContent = peerLabel(peerId);
         }
         const badge = group.querySelector('.remote-peer-head .badge');
         if (badge) {
@@ -940,6 +1378,10 @@
     return device.deviceId || device.label || '';
   }
 
+  function cameraSourceForIndex(index) {
+    return `camera-${index + 1}`;
+  }
+
   async function captureAllLocalMedia() {
     const primaryStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
     const captureStreams = [primaryStream];
@@ -955,7 +1397,7 @@
         track: primaryVideoTrack,
         previewStream: new MediaStream([primaryVideoTrack]),
         label: primaryVideoTrack.label || 'Default camera',
-        source: 'camera',
+        source: cameraSourceForIndex(cameraEntries.length),
       });
     }
 
@@ -1002,7 +1444,7 @@
             track,
             previewStream: new MediaStream([track]),
             label: track.label || device.label || `Camera ${cameraEntries.length + 1}`,
-            source: 'camera',
+            source: cameraSourceForIndex(cameraEntries.length),
           });
         } catch (error) {
           log(`Skipping camera ${device.label || device.deviceId || 'unknown'}: ${error.message}`);
@@ -1056,6 +1498,421 @@
     updateControls();
   }
 
+  function findLocalProducerEntry({ producerId, source } = {}) {
+    if (producerId) {
+      const producer = state.publishedProducers.get(producerId);
+      const entry = state.localVideoEntries.find(item => item.producer?.id === producerId) || null;
+      if (producer || entry) {
+        return { producer: producer || entry.producer || null, entry };
+      }
+    }
+
+    if (source) {
+      const entry = state.localVideoEntries.find(item => item.source === source) || null;
+      if (entry?.producer) {
+        return { producer: entry.producer, entry };
+      }
+      for (const producer of state.publishedProducers.values()) {
+        if (producer?.appData?.source === source) {
+          return { producer, entry: null };
+        }
+      }
+    }
+
+    return { producer: null, entry: null };
+  }
+
+  async function closeLocalProducerOnServer({ producerId, source } = {}) {
+    if (!producerId && !source) {
+      return;
+    }
+    const requestData = source ? { source } : { producerId };
+    try {
+      const response = await wsRequest('closeProducer', requestData);
+      log(`Producer stopped on server${summarizeCurrentContext([
+        `producer=${response.producerId || producerId || '-'}`,
+        source ? `source=${source}` : '',
+      ])}`);
+      return true;
+    } catch (error) {
+      if (source && producerId) {
+        try {
+          const response = await wsRequest('closeProducer', { producerId });
+          log(`Producer stopped on server${summarizeCurrentContext([
+            `producer=${response.producerId || producerId}`,
+            `source=${source}`,
+            'fallback=producerId',
+          ])}`);
+          return true;
+        } catch (fallbackError) {
+          log(`Producer stop fallback failed${summarizeCurrentContext([
+            `producer=${producerId}`,
+            `source=${source}`,
+          ])}: ${fallbackError.message}`);
+        }
+      }
+      log(`Producer stop signaling failed${summarizeCurrentContext([
+        producerId ? `producer=${producerId}` : '',
+        source ? `source=${source}` : '',
+      ])}: ${error.message}`);
+      return false;
+    }
+  }
+
+  function closeLocalProducerObject(producer) {
+    if (!producer) {
+      return;
+    }
+    try {
+      producer.close();
+    } catch {
+      // Ignore producer close errors.
+    }
+  }
+
+  async function stopLocalProducer({ producerId, source } = {}) {
+    const matched = findLocalProducerEntry({ producerId, source });
+    const producer = matched.producer;
+    const resolvedProducerId = producer?.id || producerId || '';
+    const resolvedSource = source || matched.entry?.source || producer?.appData?.source || '';
+    if (!resolvedProducerId && !resolvedSource) {
+      return;
+    }
+
+    await closeLocalProducerOnServer({
+      producerId: resolvedProducerId,
+      source: resolvedSource,
+    });
+    if (producer) {
+      closeLocalProducerObject(producer);
+      state.publishedProducers.delete(producer.id);
+      if (producer.kind === 'audio' || resolvedSource === 'audio') {
+        stopAudioOnlyCaptureStreams();
+        state.localAudioActive = Boolean(findAudioProducer());
+      }
+    }
+    if (matched.entry) {
+      if (matched.entry.previewStream) {
+        stopMediaStream(matched.entry.previewStream);
+      } else if (matched.entry.track) {
+        try {
+          matched.entry.track.stop();
+        } catch {
+          // Ignore track stop errors.
+        }
+      }
+      state.localVideoEntries = state.localVideoEntries.filter(entry => entry !== matched.entry);
+    }
+
+    if (state.publishedProducers.size === 0) {
+      if (state.sendTransport) {
+        try {
+          state.sendTransport.close();
+        } catch {
+          // Ignore transport close errors.
+        }
+        state.sendTransport = null;
+      }
+      stopLegacyClientStatsReporting();
+      stopLocalQosSession();
+      state.localAudioActive = false;
+      state.desiredLocalPublish = false;
+      await releaseClaimedAudioTarget();
+    }
+
+    renderLocalPreviewCards();
+    renderQosPanel();
+    updateControls();
+  }
+
+  function stopLocalPublish() {
+    if (state.localPublishStopInFlight) {
+      return state.localPublishStopInFlight;
+    }
+    const producerStops = Array.from(state.publishedProducers.values()).map(producer => ({
+      producerId: producer?.id,
+      source: producer?.appData?.source,
+    }));
+    if (producerStops.length === 0 && !state.sendTransport && state.localCaptureStreams.length === 0) {
+      return Promise.resolve();
+    }
+
+    updateControls();
+    state.localPublishStopInFlight = (async () => {
+      try {
+        stopLegacyClientStatsReporting();
+        stopLocalQosSession();
+
+        for (const producerStop of producerStops) {
+          await stopLocalProducer(producerStop);
+        }
+
+        resetLocalPublishState();
+        setStatus('Publishing stopped', 'ok');
+        log(`Local publishing stopped${summarizeCurrentContext([`producers=${producerStops.length}`])}`);
+        renderQosPanel();
+      } finally {
+        state.localPublishStopInFlight = null;
+        updateControls();
+      }
+    })();
+    return state.localPublishStopInFlight;
+  }
+
+  async function claimAudioTarget(targetPeerId) {
+    if (!targetPeerId) {
+      return { required: false, claimed: false, reason: 'target-not-configured' };
+    }
+
+    const response = await wsRequest('claimAudioRestrictedSlot', { targetPeerId });
+    if (response.required === true) {
+      state.claimedAudioTargetPeerId = targetPeerId;
+    }
+    renderAudioTargetOptions();
+    log(`Audio target claim result${summarizeCurrentContext([
+      `targetPeer=${targetPeerId}`,
+      `required=${response.required === true ? 'true' : 'false'}`,
+      `claimed=${response.claimed === true ? 'true' : 'false'}`,
+      response.reason ? `reason=${response.reason}` : '',
+    ])}`);
+    return response;
+  }
+
+  async function claimAudioTargets(targetPeerIds) {
+    const targetPeerId = normalizeAudioTargetList(targetPeerIds)[0];
+    if (!targetPeerId) {
+      return [];
+    }
+    try {
+      return [{
+        targetPeerId,
+        ok: true,
+        data: await claimAudioTarget(targetPeerId),
+      }];
+    } catch (error) {
+      log(`Audio target claim failed${summarizeCurrentContext([
+        `targetPeer=${targetPeerId}`,
+        error.reason ? `reason=${error.reason}` : '',
+      ])}: ${error.message}`);
+      return [{ targetPeerId, ok: false, error }];
+    }
+  }
+
+  async function releaseAudioTarget(targetPeerId) {
+    if (!targetPeerId) {
+      return { released: false, reason: 'target-not-configured' };
+    }
+
+    try {
+      const response = await wsRequest('releaseAudioRestrictedSlot', { targetPeerId });
+      log(`Audio target release result${summarizeCurrentContext([
+        `targetPeer=${targetPeerId}`,
+        `released=${response.released === true ? 'true' : 'false'}`,
+        response.reason ? `reason=${response.reason}` : '',
+      ])}`);
+      return response;
+    } finally {
+      if (state.claimedAudioTargetPeerId === targetPeerId) {
+        state.claimedAudioTargetPeerId = '';
+      }
+      renderAudioTargetOptions();
+    }
+  }
+
+  async function releaseClaimedAudioTarget() {
+    const targetPeerId = state.claimedAudioTargetPeerId;
+    if (!targetPeerId) {
+      return;
+    }
+    try {
+      await releaseAudioTarget(targetPeerId);
+    } catch (error) {
+      log(`Audio target release failed${summarizeCurrentContext([`targetPeer=${targetPeerId}`])}: ${error.message}`);
+      state.claimedAudioTargetPeerId = '';
+      renderAudioTargetOptions();
+    }
+  }
+
+  function findAudioProducer() {
+    for (const producer of state.publishedProducers.values()) {
+      if (producer?.kind === 'audio' || producer?.appData?.source === 'audio') {
+        return producer;
+      }
+    }
+    return null;
+  }
+
+  function stopAudioOnlyCaptureStreams() {
+    const remainingStreams = [];
+    for (const stream of state.localCaptureStreams) {
+      const audioTracks = stream?.getAudioTracks?.() || [];
+      const videoTracks = stream?.getVideoTracks?.() || [];
+      if (audioTracks.length > 0 && videoTracks.length === 0) {
+        stopMediaStream(stream);
+      } else {
+        remainingStreams.push(stream);
+      }
+    }
+    state.localCaptureStreams = remainingStreams;
+  }
+
+  async function ensureSendTransport() {
+    if (state.sendTransport) {
+      return state.sendTransport;
+    }
+    if (!state.device) {
+      throw new Error('device is not ready');
+    }
+
+    const sendData = await wsRequest('createWebRtcTransport', {
+      producing: true,
+      consuming: false,
+    });
+    state.sendTransport = state.device.createSendTransport(sendData);
+    state.sendTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
+      try {
+        await wsRequest('connectWebRtcTransport', {
+          transportId: state.sendTransport.id,
+          dtlsParameters,
+        });
+        callback();
+      } catch (error) {
+        errback(error);
+      }
+    });
+    state.sendTransport.on('produce', async ({ kind, rtpParameters, appData }, callback, errback) => {
+      try {
+        const response = await wsRequest('produce', {
+          transportId: state.sendTransport.id,
+          kind,
+          rtpParameters,
+          appData,
+        });
+        callback({ id: response.id });
+      } catch (error) {
+        errback(error);
+      }
+    });
+    return state.sendTransport;
+  }
+
+  async function ensureAudioProducer() {
+    const existingAudioProducer = findAudioProducer();
+    if (existingAudioProducer) {
+      return existingAudioProducer;
+    }
+    if (!state.device) {
+      throw new Error('device is not ready');
+    }
+
+    const capture = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    const audioTrack = capture.getAudioTracks()[0];
+    if (!audioTrack) {
+      stopMediaStream(capture);
+      throw new Error('no microphone track available');
+    }
+    state.localCaptureStreams.push(capture);
+
+    await ensureSendTransport();
+
+    const audioProducer = await state.sendTransport.produce({
+      track: audioTrack,
+      appData: { source: 'audio' },
+    });
+    state.publishedProducers.set(audioProducer.id, audioProducer);
+    state.localAudioActive = true;
+    state.desiredLocalPublish = true;
+    try {
+      audioProducer.on('transportclose', () => state.publishedProducers.delete(audioProducer.id));
+      audioProducer.on('trackended', () => {
+        void closeAudioProducerAndReleaseClaim();
+      });
+    } catch {
+      // Ignore producer event binding failures.
+    }
+    log(`Producing audio${summarizeCurrentContext([`producer=${audioProducer.id}`, 'kind=audio'])}`);
+    renderLocalPreviewCards();
+    renderQosPanel();
+    updateControls();
+    return audioProducer;
+  }
+
+  async function closeAudioProducerAndReleaseClaim() {
+    const audioProducer = findAudioProducer();
+    if (audioProducer) {
+      await stopLocalProducer({
+        producerId: audioProducer.id,
+        source: audioProducer.appData?.source || 'audio',
+      });
+    }
+    await releaseClaimedAudioTarget();
+    state.localAudioActive = Boolean(findAudioProducer());
+    renderLocalPreviewCards();
+    renderQosPanel();
+    updateControls();
+  }
+
+  async function claimSelectedAudioTarget() {
+    const targetPeerId = getSelectedAudioTargetPeerId();
+    if (!targetPeerId) {
+      setAudioSlotStatus('请先选择音频受限端');
+      return;
+    }
+
+    state.audioSlotActionInFlight = true;
+    setAudioSlotStatus(`正在打开 ${targetPeerId}...`);
+    updateAudioTargetControls();
+    let failed = false;
+    let claimedThisAttempt = false;
+    try {
+      if (state.claimedAudioTargetPeerId && state.claimedAudioTargetPeerId !== targetPeerId) {
+        throw new Error(`audio already opened for ${state.claimedAudioTargetPeerId}; close it first`);
+      }
+      await claimAudioTarget(targetPeerId);
+      claimedThisAttempt = true;
+      await ensureAudioProducer();
+    } catch (error) {
+      failed = true;
+      if (claimedThisAttempt && !findAudioProducer()) {
+        await releaseAudioTarget(targetPeerId).catch(() => {});
+      }
+      setAudioSlotStatus(`打开失败：${error.message}`);
+      log(`Audio target claim failed from page${summarizeCurrentContext([
+        `targetPeer=${targetPeerId}`,
+        error.reason ? `reason=${error.reason}` : '',
+      ])}: ${error.message}`);
+    } finally {
+      state.audioSlotActionInFlight = false;
+      updateAudioTargetControls({ preserveStatus: failed });
+    }
+  }
+
+  async function releaseSelectedAudioTarget() {
+    const targetPeerId = getSelectedAudioTargetPeerId();
+    if (!targetPeerId) {
+      setAudioSlotStatus('请先选择音频受限端');
+      return;
+    }
+
+    state.audioSlotActionInFlight = true;
+    setAudioSlotStatus(`正在关闭 ${targetPeerId}...`);
+    updateAudioTargetControls();
+    let failed = false;
+    try {
+      await closeAudioProducerAndReleaseClaim();
+    } catch (error) {
+      failed = true;
+      setAudioSlotStatus(`关闭失败：${error.message}`);
+      log(`Audio target release failed from page${summarizeCurrentContext([
+        `targetPeer=${targetPeerId}`,
+        error.reason ? `reason=${error.reason}` : '',
+      ])}: ${error.message}`);
+    } finally {
+      state.audioSlotActionInFlight = false;
+      updateAudioTargetControls({ preserveStatus: failed });
+    }
+  }
+
   function resetRemoteMediaState() {
     stopDownlinkReporting();
 
@@ -1070,7 +1927,7 @@
 
     state.pendingConsumers = [];
     state.debugInboundCounters.video = createCounterMap();
-    clearRemoteVideoCards();
+    clearRemoteMediaCards();
   }
 
   function updateMeta() {
@@ -1327,6 +2184,7 @@
           }
           state.ws = null;
           failPendingRequests('websocket closed');
+          state.claimedAudioTargetPeerId = '';
           stopDownlinkReporting();
           if (state.recoveryInFlight) {
             setStatus('Recovering after worker restart…', 'warn');
@@ -1384,7 +2242,10 @@
       if (message.ok) {
         pending.resolve(message.data);
       } else {
-        pending.reject(new Error(message.error || 'request failed'));
+        const error = new Error(message.error || 'request failed');
+        error.data = message.data || {};
+        error.reason = error.data.reason;
+        pending.reject(error);
       }
       return;
     }
@@ -1407,6 +2268,9 @@
     if (message.method === 'statsReport') {
       log(`Notification: statsReport${summarizeNotificationData(message.method, message.data)}`);
       state.latestStatsReport = message.data;
+      for (const peer of message.data?.peers || []) {
+        upsertPeerProfile(peer);
+      }
       syncRemoteConsumerServerState();
       renderQosPanel();
       return;
@@ -1417,13 +2281,40 @@
       return;
     }
 
+    if (message.method === 'consumerClosed') {
+      removeRemoteMediaConsumer(message.data?.consumerId || message.data?.id || '');
+      log(`Notification: consumerClosed${summarizeNotificationData(message.method, message.data)}`);
+      return;
+    }
+
+    if (message.method === 'producerLeft') {
+      removeRemoteConsumersForProducerLeft(message.data || {});
+      log(`Notification: producerLeft${summarizeNotificationData(message.method, message.data)}`);
+      return;
+    }
+
     if (message.method === 'peerJoined') {
+      const joinedPeerId = message.data?.peerId || '';
+      upsertPeerProfile(message.data || {});
+      upsertAudioRestrictedPeer(message.data || {});
+      if (joinedPeerId && state.claimedAudioTargetPeerId === joinedPeerId && state.localAudioActive) {
+        void claimAudioTarget(joinedPeerId).catch(error => {
+          state.claimedAudioTargetPeerId = '';
+          renderAudioTargetOptions();
+          log(`Audio target re-claim failed${summarizeCurrentContext([
+            `targetPeer=${joinedPeerId}`,
+            message.data?.reconnect ? 'reason=reconnect' : 'reason=peerJoined',
+          ])}: ${error.message}`);
+        });
+      }
       log(`Notification: peerJoined${summarizeNotificationData(message.method, message.data)}`);
       return;
     }
 
     if (message.method === 'peerLeft') {
       removeRemoteVideoConsumersByPeer(message.data.peerId);
+      removeAudioRestrictedPeer(message.data.peerId);
+      state.peerProfiles.delete(message.data.peerId);
       log(`Notification: peerLeft${summarizeNotificationData(message.method, message.data)}`);
       return;
     }
@@ -1522,6 +2413,66 @@
         setTimeout(() => {
           void requestConsumerKeyFrame(consumer.id, data.peerId || data.producerId);
         }, 1000);
+      } else if (consumer.kind === 'audio') {
+        const stream = new MediaStream([consumer.track]);
+        const card = createRemoteAudioCard({
+          title: '远端音频',
+          subtitle: data.peerId || data.producerId,
+          badgeText: '已打开',
+          stream,
+        });
+        const audioElement = card.querySelector('audio');
+        card.dataset.remoteProducerId = data.producerId;
+        card.dataset.consumerId = consumer.id;
+
+        const ensurePlayback = () => {
+          if (!audioElement) {
+            return;
+          }
+          if (audioElement.srcObject !== stream) {
+            audioElement.srcObject = stream;
+          }
+          const playResult = audioElement.play();
+          if (playResult && typeof playResult.catch === 'function') {
+            playResult.catch(error => {
+              log(`Remote audio autoplay failed${summarizeNotificationData('newConsumer', data)}: ${error.message}`);
+            });
+          }
+        };
+
+        if (audioElement) {
+          audioElement.addEventListener('canplay', ensurePlayback, { once: true });
+        }
+        consumer.track.onunmute = () => {
+          log(`Remote audio track unmuted${summarizeNotificationData('newConsumer', data)}`);
+          ensurePlayback();
+        };
+        ensurePlayback();
+
+        const entry = {
+          consumer,
+          producerId: data.producerId,
+          source: data.appData?.source || 'audio',
+          peerId: data.peerId || data.producerId,
+          element: audioElement,
+          stream,
+          card,
+          stopVolumeMonitor: startAudioVolumeMonitor(stream, card),
+          serverState: null,
+          serverSubscription: null,
+          remotePeerStats: null,
+          remoteTrack: null,
+          remoteProducer: null,
+          titleEl: card.querySelector('.video-title'),
+          subtitleEl: card.querySelector('.video-subtitle'),
+          badgeEl: card.querySelector('.badge'),
+          serverSummaryEl: null,
+          metricsGridEl: null,
+        };
+        const controls = createRemoteVideoControls(entry);
+        card.appendChild(controls);
+        registerRemoteAudioConsumer(entry);
+        renderRemoteVideoGroups();
       }
 
       log(`Subscribed${summarizeNotificationData('newConsumer', data)}`);
@@ -1638,6 +2589,30 @@
     renderRemoteVideoGroups();
   }
 
+  function removeRemoteAudioConsumer(consumerId) {
+    const entry = state.remoteAudioConsumers.get(consumerId);
+    if (typeof entry?.stopVolumeMonitor === 'function') {
+      entry.stopVolumeMonitor();
+    }
+    if (entry?.element) {
+      entry.element.pause();
+      entry.element.srcObject = null;
+    }
+    if (entry?.card && typeof entry.card.remove === 'function') {
+      entry.card.remove();
+    }
+    state.remoteAudioConsumers.delete(consumerId);
+    renderRemoteVideoGroups();
+  }
+
+  function removeRemoteMediaConsumer(consumerId) {
+    if (state.remoteVideoConsumers.has(consumerId)) {
+      removeRemoteVideoConsumer(consumerId);
+      return;
+    }
+    removeRemoteAudioConsumer(consumerId);
+  }
+
   function removeRemoteVideoConsumersByPeer(peerId) {
     if (!peerId) {
       return;
@@ -1645,6 +2620,11 @@
     for (const [consumerId, entry] of state.remoteVideoConsumers.entries()) {
       if (entry?.peerId === peerId) {
         removeRemoteVideoConsumer(consumerId);
+      }
+    }
+    for (const [consumerId, entry] of state.remoteAudioConsumers.entries()) {
+      if (entry?.peerId === peerId) {
+        removeRemoteAudioConsumer(consumerId);
       }
     }
   }
@@ -1657,6 +2637,21 @@
       if (entry?.producerId === producerId) {
         removeRemoteVideoConsumer(consumerId);
       }
+    }
+    for (const [consumerId, entry] of state.remoteAudioConsumers.entries()) {
+      if (entry?.producerId === producerId) {
+        removeRemoteAudioConsumer(consumerId);
+      }
+    }
+  }
+
+  function removeRemoteConsumersForProducerLeft(data) {
+    const consumerIds = Array.isArray(data.consumerIds) ? data.consumerIds : [];
+    for (const consumerId of consumerIds) {
+      removeRemoteMediaConsumer(consumerId);
+    }
+    if (data.producerId) {
+      removeRemoteVideoConsumersByProducerId(data.producerId);
     }
   }
 
@@ -1789,6 +2784,17 @@
 
     syncRemoteConsumerServerState();
     updateRemoteCardUI(entry);
+  }
+
+  function registerRemoteAudioConsumer(entry) {
+    state.remoteAudioConsumers.set(entry.consumer.id, entry);
+    try {
+      entry.consumer.on('transportclose', () => removeRemoteAudioConsumer(entry.consumer.id));
+      entry.consumer.on('trackended', () => removeRemoteAudioConsumer(entry.consumer.id));
+      entry.consumer.on('producerclose', () => removeRemoteAudioConsumer(entry.consumer.id));
+    } catch {
+      // Ignore consumer event binding failures.
+    }
   }
 
   async function collectLocalDebugStats() {
@@ -2007,7 +3013,7 @@
   function createSingleProducerQosSession(producer) {
     const bundle = qosLib.createMediasoupProducerQosController({
       producer,
-      source: 'camera',
+      source: producer?.appData?.source || cameraSourceForIndex(0),
       profile: state.usingFallbackStream ? buildFallbackCameraProfile() : undefined,
       allowAudioOnly: shouldUseLocalNoPausePolicy() ? false : undefined,
       allowVideoPause: shouldUseLocalNoPausePolicy() ? false : undefined,
@@ -2080,7 +3086,12 @@
     const joinResponse = await wsRequest('join', {
       roomId,
       peerId,
+      displayName: state.displayName || peerId,
+      audioRole: state.audioRole,
     });
+    state.audioRole = joinResponse.audioRole || state.audioRole;
+    rebuildPeerProfiles(joinResponse.participants || []);
+    rebuildAudioRestrictedPeers(joinResponse.participants || []);
 
     state.latestQosPolicy = joinResponse.qosPolicy || null;
     if (useFullQos) {
@@ -2148,6 +3159,7 @@
     log(`Joined room${summarizeCurrentContext()}`);
     startDebugStatsTimer();
     renderQosPanel();
+    renderAudioTargetOptions();
     updateControls();
   }
 
@@ -2187,47 +3199,43 @@
       throw new Error('no camera tracks available');
     }
 
-    state.localCaptureStreams = captureStreams;
-    renderLocalPreviewCards(cameraEntries, Boolean(audioTrack));
-
-    const sendData = await wsRequest('createWebRtcTransport', {
-      producing: true,
-      consuming: false,
-    });
-
-    state.sendTransport = state.device.createSendTransport(sendData);
-    state.sendTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
-      try {
-        await wsRequest('connectWebRtcTransport', {
-          transportId: state.sendTransport.id,
-          dtlsParameters,
-        });
-        callback();
-      } catch (error) {
-        errback(error);
+    const knownStreams = new Set(state.localCaptureStreams);
+    for (const stream of captureStreams || []) {
+      if (stream && !knownStreams.has(stream)) {
+        state.localCaptureStreams.push(stream);
       }
-    });
-    state.sendTransport.on('produce', async ({ kind, rtpParameters, appData }, callback, errback) => {
-      try {
-        const response = await wsRequest('produce', {
-          transportId: state.sendTransport.id,
-          kind,
-          rtpParameters,
-          appData,
-        });
-        callback({ id: response.id });
-      } catch (error) {
-        errback(error);
-      }
-    });
+    }
+    renderLocalPreviewCards(cameraEntries, Boolean(audioTrack || findAudioProducer()));
+    await ensureSendTransport();
 
     if (audioTrack) {
-      const audioProducer = await state.sendTransport.produce({
-        track: audioTrack,
-        appData: { source: 'audio' },
-      });
-      state.publishedProducers.set(audioProducer.id, audioProducer);
-      log(`Producing audio${summarizeCurrentContext([`producer=${audioProducer.id}`, 'kind=audio'])}`);
+      const audioTargetPeerId = state.claimedAudioTargetPeerId || configuredInitialAudioClaimTargets[0] || '';
+      if (audioTargetPeerId) {
+        await claimAudioTarget(audioTargetPeerId);
+      }
+
+      if (!findAudioProducer()) {
+        const audioProducer = await state.sendTransport.produce({
+          track: audioTrack,
+          appData: { source: 'audio' },
+        });
+        state.publishedProducers.set(audioProducer.id, audioProducer);
+        try {
+          audioProducer.on('transportclose', () => state.publishedProducers.delete(audioProducer.id));
+          audioProducer.on('trackended', () => {
+            void closeAudioProducerAndReleaseClaim();
+          });
+        } catch {
+          // Ignore producer event binding failures.
+        }
+        log(`Producing audio${summarizeCurrentContext([`producer=${audioProducer.id}`, 'kind=audio'])}`);
+      } else {
+        try {
+          audioTrack.stop();
+        } catch {
+          // Ignore duplicate audio track cleanup failures.
+        }
+      }
     }
 
     const videoProducers = [];
@@ -2236,18 +3244,28 @@
       log(`Publishing video with codec ${preferredVideoCodec.mimeType}${summarizeCurrentContext([`codec=${preferredVideoCodec.mimeType}`])}`);
     }
     for (const [index, entry] of cameraEntries.entries()) {
+      const source = entry.source || cameraSourceForIndex(index);
+      entry.source = source;
       const producer = await state.sendTransport.produce({
         track: entry.track,
         codec: preferredVideoCodec || undefined,
-        appData: { source: entry.source || 'camera' },
+        appData: { source },
       });
       state.publishedProducers.set(producer.id, producer);
+      try {
+        producer.on('transportclose', () => state.publishedProducers.delete(producer.id));
+        producer.on('trackended', () => {
+          void stopLocalPublish();
+        });
+      } catch {
+        // Ignore producer event binding failures.
+      }
       videoProducers.push(producer);
-      log(`Producing video${summarizeCurrentContext([`producer=${producer.id}`, `source=${entry.source || 'camera'}`, `label=${entry.label || `camera-${index + 1}`}`, `cameraIndex=${index + 1}`, 'kind=video'])}`);
+      log(`Producing video${summarizeCurrentContext([`producer=${producer.id}`, `source=${source}`, `label=${entry.label || `camera-${index + 1}`}`, `cameraIndex=${index + 1}`, 'kind=video'])}`);
     }
 
     state.desiredLocalPublish = true;
-    state.localAudioActive = Boolean(audioTrack);
+    state.localAudioActive = Boolean(findAudioProducer());
     state.localVideoEntries = mergePublishedVideoEntries(cameraEntries, videoProducers);
     setupLocalQosSession(videoProducers);
     syncLocalVideoEntries();
@@ -2267,7 +3285,7 @@
       return qosLib.createMediasoupPeerQosSession({
         producers: videoProducers.map(producer => ({
           producer,
-          source: 'camera',
+          source: producer?.appData?.source || cameraSourceForIndex(0),
           profile: state.usingFallbackStream ? buildFallbackCameraProfile() : undefined,
         })),
         sendRequest: async (method, data) => {
@@ -2398,6 +3416,10 @@
       setStatus(`Worker restarted, recovering ${roomId} as ${peerId}…`, 'warn');
       stopDebugStatsTimer();
       failPendingRequests(`serverRestart: ${recoveryReason}`);
+      state.claimedAudioTargetPeerId = '';
+      state.audioRestrictedPeers.clear();
+      state.peerProfiles.clear();
+      renderAudioTargetOptions();
       resetRemoteMediaState();
       resetLocalPublishState({ stopTracks: false, clearIntent: false });
       resetQosState();
@@ -2465,6 +3487,11 @@
     const peerId = `peer-${Math.random().toString(36).slice(2, 8)}`;
 
     state.device = null;
+    state.displayName = configuredDisplayName || peerId;
+    state.claimedAudioTargetPeerId = '';
+    state.audioRestrictedPeers.clear();
+    state.peerProfiles.clear();
+    renderAudioTargetOptions();
     resetLocalPublishState();
     resetRemoteMediaState();
     resetQosState();
@@ -2481,7 +3508,9 @@
   }
 
   async function publishMedia() {
-    if (!state.device || state.sendTransport || state.publishedProducers.size > 0) {
+    const hasVideoProducer = Array.from(state.publishedProducers.values())
+      .some(producer => producer?.kind === 'video' || producer?.appData?.source !== 'audio');
+    if (!state.device || hasVideoProducer) {
       return;
     }
 
@@ -2489,6 +3518,7 @@
       const capture = await buildFreshCaptureSelection();
       await publishCapturedMedia(capture);
     } catch (error) {
+      await releaseClaimedAudioTarget();
       resetLocalPublishState();
       setStatus('Publish failed', 'err');
       log(`Publish failed${summarizeCurrentContext()}: ${error.message}`);
@@ -2498,26 +3528,30 @@
   }
 
   function stopQos() {
-    stopLocalQosSession();
-    stopLegacyClientStatsReporting();
-    log(`Local producer QoS control stopped${summarizeCurrentContext()}`);
-    renderQosPanel();
-    updateControls();
+    void stopLocalPublish();
   }
 
   function snapshotDemoState() {
     return {
       roomId: state.roomId,
       peerId: state.peerId,
+      displayName: state.displayName,
       status: els.status ? els.status.textContent || '' : '',
       localVideos: els.localVideos ? els.localVideos.querySelectorAll('video').length : 0,
       remoteVideos: els.remoteVideos ? els.remoteVideos.querySelectorAll('video').length : 0,
+      remoteAudios: els.remoteVideos ? els.remoteVideos.querySelectorAll('audio').length : 0,
       remotePeerGroups: els.remoteVideos ? els.remoteVideos.querySelectorAll('.remote-peer-group').length : 0,
       remoteVideoConsumers: state.remoteVideoConsumers.size,
+      remoteAudioConsumers: state.remoteAudioConsumers.size,
       pendingConsumers: state.pendingConsumers.length,
       hasSendTransport: Boolean(state.sendTransport),
       hasRecvTransport: Boolean(state.recvTransport),
       publishedProducers: state.publishedProducers.size,
+      audioRole: state.audioRole,
+      configuredAudioClaimTargets: configuredInitialAudioClaimTargets,
+      claimedAudioTargetPeerId: state.claimedAudioTargetPeerId,
+      audioRestrictedPeers: Array.from(state.audioRestrictedPeers.values()),
+      selectedAudioTargetPeerId: getSelectedAudioTargetPeerId(),
     };
   }
 
@@ -2538,15 +3572,29 @@
   }
 
   window.__qosDemoHarness = {
-    join: async (roomId = 'test-room') => {
+    join: async (roomId = 'test-room', options = {}) => {
       els.roomInput.value = roomId;
+      if (options.audioRole) {
+        state.audioRole = options.audioRole === 'audio-restricted' ? 'audio-restricted' : 'normal';
+      }
       await joinRoom();
+      const audioTargetPeerIds = normalizeAudioTargetList([
+        options.audioTargetPeerIds,
+        options.audioTargetPeerId,
+        options.audioTarget,
+      ]);
+      if (audioTargetPeerIds[0]) {
+        await claimAudioTarget(audioTargetPeerIds[0]);
+      }
       return snapshotDemoState();
     },
     publish: async () => {
       await publishMedia();
       return snapshotDemoState();
     },
+    claimAudioTarget,
+    claimAudioTargets,
+    releaseAudioTarget,
     snapshot: snapshotDemoState,
     waitForRemoteVideos,
     stopQos,
@@ -2568,6 +3616,7 @@
       summaryItem('Room State', state.latestRoomState ? state.latestRoomState.quality : 'none') +
       summaryItem('Local Cameras', String(state.localVideoEntries.length)) +
       summaryItem('Remote Videos', String(state.remoteVideoConsumers.size)) +
+      summaryItem('Remote Audios', String(state.remoteAudioConsumers.size)) +
       summaryItem('Policy Camera', state.latestQosPolicy ? state.latestQosPolicy.profiles?.camera || 'received' : 'none') +
       summaryItem('Override', state.latestQosOverride ? state.latestQosOverride.reason || 'received' : 'none') +
       summaryItem('Priority Tracks', decision ? String(decision.prioritizedTrackIds.length) : '-') +
@@ -2662,8 +3711,8 @@
       '<div class="peer-row">' +
       '<div class="peer-row-head">' +
       '<div>' +
-      `<div class="peer-row-title">${escapeHtml(peer.peerId || 'peer')}</div>` +
-      `<div class="peer-row-subtitle">tracks ${tracks.length} · producers ${Object.keys(producers).length} · visible ${visibleCount} · pinned ${pinnedCount}</div>` +
+      `<div class="peer-row-title">${escapeHtml(peerLabel(peer.peerId))}</div>` +
+      `<div class="peer-row-subtitle">peer ${escapeHtml(peer.peerId || '-')} · role ${escapeHtml(peer.audioRole || 'normal')} · tracks ${tracks.length} · producers ${Object.keys(producers).length} · visible ${visibleCount} · pinned ${pinnedCount}</div>` +
       '</div>' +
       `<div class="pill quality-${pillClass(stateName)}">${escapeHtml(peer.peerId === state.peerId ? `${stateName} · you` : stateName)}</div>` +
       '</div>' +
@@ -2712,9 +3761,19 @@
     els.publishBtn.addEventListener('click', () => {
       void publishMedia();
     });
-    els.stopBtn.addEventListener('click', stopQos);
+    els.stopBtn.addEventListener('click', () => {
+      void stopLocalPublish();
+    });
+    els.audioTargetSelect?.addEventListener('change', () => updateAudioTargetControls());
+    els.claimAudioBtn?.addEventListener('click', () => {
+      void claimSelectedAudioTarget();
+    });
+    els.releaseAudioBtn?.addEventListener('click', () => {
+      void releaseSelectedAudioTarget();
+    });
     updateMeta();
     renderLocalPreviewCards([]);
+    renderAudioTargetOptions();
     renderQosPanel();
     updateControls();
 

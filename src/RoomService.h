@@ -80,7 +80,8 @@ public:
 
 	Result join(const std::string& roomId, const std::string& peerId,
 		const std::string& displayName, const json& rtpCapabilities,
-		const std::string& clientIp = "");
+		const std::string& clientIp = "",
+		const std::string& audioRole = "normal");
 	Result leave(const std::string& roomId, const std::string& peerId);
 	bool leaveIfSessionMatches(const std::string& roomId, const std::string& peerId,
 		uint64_t expectedSessionId);
@@ -95,6 +96,16 @@ public:
 	Result consume(const std::string& roomId, const std::string& peerId,
 		const std::string& transportId, const std::string& producerId,
 		const json& rtpCapabilities);
+	Result claimAudioRestrictedSlot(const std::string& roomId,
+		const std::string& peerId,
+		const std::string& targetPeerId);
+	Result releaseAudioRestrictedSlot(const std::string& roomId,
+		const std::string& peerId,
+		const std::string& targetPeerId);
+	Result closeProducer(const std::string& roomId, const std::string& peerId,
+		const std::string& producerId);
+	Result closeProducerBySource(const std::string& roomId, const std::string& peerId,
+		const std::string& source);
 	Result pauseProducer(const std::string& roomId, const std::string& producerId);
 	Result resumeProducer(const std::string& roomId, const std::string& producerId);
 	Result createPlainTransport(const std::string& roomId, const std::string& peerId,
@@ -198,6 +209,17 @@ private:
 		const std::unordered_map<std::string, std::shared_ptr<Producer>>& producers);
 	void cleanupPeerProducerOwnerCache(const std::string& roomId,
 		const std::unordered_map<std::string, std::shared_ptr<Producer>>& producers);
+	bool canConsumeProducerForPeer(const std::shared_ptr<Room>& room,
+		const std::shared_ptr<Peer>& targetPeer,
+		const std::shared_ptr<Producer>& producer) const;
+	json createAuthorizedAudioConsumersForSlot(const std::string& roomId,
+		const std::shared_ptr<Room>& room,
+		const std::string& ownerPeerId,
+		const std::string& targetPeerId);
+	size_t closeAudioConsumersForSlot(const std::string& roomId,
+		const std::shared_ptr<Room>& room,
+		const std::string& ownerPeerId,
+		const std::string& targetPeerId);
 
 	RoomManager& roomManager_;
 	NotifyFn notify_;

@@ -6,6 +6,7 @@
 #include <sys/wait.h>
 #include <sstream>
 #include <cmath>
+#include <set>
 
 static const int SFU_PORT = 14000;  // use high port to avoid conflicts
 static const std::string HOST = "127.0.0.1";
@@ -27,6 +28,17 @@ protected:
 				{"preferredPayloadType", 101}
 			}}},
 			{"headerExtensions", json::array()}
+			};
+	}
+
+	json makeAudioRtpParams(uint32_t ssrc, const std::string& mid = "0") const {
+		return {
+			{"codecs", {{
+				{"mimeType", "audio/opus"}, {"clockRate", 48000}, {"channels", 2},
+				{"payloadType", 100}
+			}}},
+			{"encodings", {{{"ssrc", ssrc}}}},
+			{"mid", mid}
 		};
 	}
 
@@ -49,10 +61,15 @@ protected:
 		std::unique_ptr<TestWsClient> ws;
 		std::string peerId;
 		std::string roomId;
+		json joinData;
 		json routerRtpCapabilities;
 	};
 
-	JoinedClient joinRoom(const std::string& roomId, const std::string& peerId) {
+	JoinedClient joinRoom(
+		const std::string& roomId,
+		const std::string& peerId,
+		const std::string& audioRole = "normal")
+	{
 		JoinedClient c;
 		c.roomId = roomId;
 		c.peerId = peerId;
@@ -61,11 +78,20 @@ protected:
 
 		json rtpCaps = defaultRtpCapabilities();
 
-		auto resp = c.ws->request("join", {
+		json joinData = {
 			{"roomId", roomId}, {"peerId", peerId},
 			{"displayName", peerId}, {"rtpCapabilities", rtpCaps}
-		});
+		};
+		if (audioRole != "normal") {
+			joinData["audioRole"] = audioRole;
+		}
+
+		auto resp = c.ws->request("join", joinData);
 		EXPECT_TRUE(resp.value("ok", false)) << "join failed: " << resp.dump();
+		if (resp.value("ok", false)) {
+			EXPECT_EQ(resp["data"].value("audioRole", "normal"), audioRole);
+			c.joinData = resp["data"];
+		}
 		if (resp.contains("data") && resp["data"].contains("routerRtpCapabilities"))
 			c.routerRtpCapabilities = resp["data"]["routerRtpCapabilities"];
 		return c;
@@ -135,6 +161,7 @@ TEST_F(IntegrationTest, JoinAndLeave) {
 	auto notif = alice.ws->waitNotification("peerJoined", 3000);
 	ASSERT_FALSE(notif.empty()) << "Alice did not receive peerJoined";
 	EXPECT_EQ(notif["data"]["peerId"], "bob");
+	EXPECT_EQ(notif["data"].value("audioRole", ""), "normal");
 
 	// Bob disconnects, Alice should get peerLeft
 	bob.ws->close();
@@ -341,6 +368,266 @@ TEST_F(IntegrationTest, ProduceAndAutoSubscribe) {
 	EXPECT_EQ(consumerNotif["data"]["kind"], "audio");
 	ASSERT_TRUE(consumerNotif["data"].contains("appData")) << consumerNotif.dump();
 	EXPECT_EQ(consumerNotif["data"]["appData"]["source"], "vehicle-left-door");
+}
+
+TEST_F(IntegrationTest, AudioRestrictedPeerRequiresSlotClaim) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoom(testRoom_, "bob", "audio-restricted");
+	auto charlie = joinRoom(testRoom_, "charlie");
+
+	auto bobRecv = bob.ws->request("createWebRtcTransport", {
+		{"producing", false}, {"consuming", true}
+	});
+	ASSERT_TRUE(bobRecv.value("ok", false)) << bobRecv.dump();
+	ASSERT_TRUE(bobRecv["data"].contains("consumers")) << bobRecv.dump();
+	EXPECT_TRUE(bobRecv["data"]["consumers"].empty()) << bobRecv.dump();
+
+	auto aliceSend = alice.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(aliceSend.value("ok", false)) << aliceSend.dump();
+
+	auto aliceProduce = alice.ws->request("produce", {
+		{"transportId", aliceSend["data"]["id"]},
+		{"kind", "audio"},
+		{"rtpParameters", makeAudioRtpParams(99110001)}
+	});
+	ASSERT_TRUE(aliceProduce.value("ok", false)) << aliceProduce.dump();
+	ASSERT_TRUE(aliceProduce["data"].contains("id")) << aliceProduce.dump();
+
+	auto unauthorizedNotif = bob.ws->waitNotification("newConsumer", 1000);
+	EXPECT_TRUE(unauthorizedNotif.empty())
+		<< "Bob should not receive unauthorized audio newConsumer: " << unauthorizedNotif.dump();
+
+	auto unauthorizedConsume = bob.ws->request("consume", {
+		{"transportId", bobRecv["data"]["id"]},
+		{"producerId", aliceProduce["data"]["id"]},
+		{"rtpCapabilities", defaultRtpCapabilities()}
+	});
+	EXPECT_FALSE(unauthorizedConsume.value("ok", false)) << unauthorizedConsume.dump();
+	ASSERT_TRUE(unauthorizedConsume.contains("data")) << unauthorizedConsume.dump();
+	EXPECT_EQ(unauthorizedConsume["data"].value("reason", ""), "audio-slot-not-owned");
+
+	auto claim = alice.ws->request("claimAudioRestrictedSlot", {
+		{"targetPeerId", "bob"}
+	});
+	ASSERT_TRUE(claim.value("ok", false)) << claim.dump();
+	EXPECT_TRUE(claim["data"].value("required", false)) << claim.dump();
+	EXPECT_TRUE(claim["data"].value("claimed", false)) << claim.dump();
+	EXPECT_EQ(claim["data"].value("ownerPeerId", ""), "alice");
+
+	auto backfilled = bob.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(backfilled.empty()) << "Bob did not receive backfilled audio consumer";
+	EXPECT_EQ(backfilled["data"]["peerId"], "alice");
+	EXPECT_EQ(backfilled["data"]["producerId"], aliceProduce["data"]["id"]);
+	EXPECT_EQ(backfilled["data"]["kind"], "audio");
+	ASSERT_TRUE(backfilled["data"].contains("id")) << backfilled.dump();
+	const std::string aliceToBobAudioConsumerId = backfilled["data"]["id"];
+
+	auto charlieClaim = charlie.ws->request("claimAudioRestrictedSlot", {
+		{"targetPeerId", "bob"}
+	});
+	EXPECT_FALSE(charlieClaim.value("ok", false)) << charlieClaim.dump();
+	ASSERT_TRUE(charlieClaim.contains("data")) << charlieClaim.dump();
+	EXPECT_EQ(charlieClaim["data"].value("reason", ""), "occupied");
+	EXPECT_EQ(charlieClaim["data"].value("ownerPeerId", ""), "alice");
+
+	auto release = alice.ws->request("releaseAudioRestrictedSlot", {
+		{"targetPeerId", "bob"}
+	});
+	ASSERT_TRUE(release.value("ok", false)) << release.dump();
+	EXPECT_TRUE(release["data"].value("released", false)) << release.dump();
+	EXPECT_EQ(release["data"].value("closedConsumers", 0), 1) << release.dump();
+	auto closeNotif = bob.ws->waitNotification("consumerClosed", 3000);
+	ASSERT_FALSE(closeNotif.empty()) << "Bob did not receive consumerClosed notification";
+	EXPECT_EQ(closeNotif["data"].value("consumerId", ""), aliceToBobAudioConsumerId);
+	EXPECT_EQ(closeNotif["data"].value("producerId", ""), aliceProduce["data"]["id"]);
+	EXPECT_EQ(closeNotif["data"].value("producerPeerId", ""), "alice");
+	EXPECT_EQ(closeNotif["data"].value("kind", ""), "audio");
+	auto closedConsumerState = bob.ws->request("getConsumerState", {
+		{"consumerId", aliceToBobAudioConsumerId}
+	});
+	EXPECT_FALSE(closedConsumerState.value("ok", false)) << closedConsumerState.dump();
+	EXPECT_EQ(closedConsumerState.value("error", ""), "consumer not found") << closedConsumerState.dump();
+
+	auto aliceRepeatClaim = alice.ws->request("claimAudioRestrictedSlot", {
+		{"targetPeerId", "bob"}
+	});
+	ASSERT_TRUE(aliceRepeatClaim.value("ok", false)) << aliceRepeatClaim.dump();
+	EXPECT_EQ(aliceRepeatClaim["data"].value("ownerPeerId", ""), "alice");
+	EXPECT_EQ(aliceRepeatClaim["data"].value("consumersCreated", -1), 1) << aliceRepeatClaim.dump();
+	auto aliceRepeatBackfilled = bob.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(aliceRepeatBackfilled.empty()) << "Bob did not receive repeated backfilled audio consumer";
+	EXPECT_EQ(aliceRepeatBackfilled["data"]["peerId"], "alice");
+	EXPECT_EQ(aliceRepeatBackfilled["data"]["producerId"], aliceProduce["data"]["id"]);
+	std::string aliceRepeatConsumerId = aliceRepeatBackfilled["data"]["id"];
+
+	release = alice.ws->request("releaseAudioRestrictedSlot", {
+		{"targetPeerId", "bob"}
+	});
+	ASSERT_TRUE(release.value("ok", false)) << release.dump();
+	EXPECT_EQ(release["data"].value("closedConsumers", 0), 1) << release.dump();
+	closeNotif = bob.ws->waitNotification("consumerClosed", 3000);
+	ASSERT_FALSE(closeNotif.empty()) << "Bob did not receive repeated consumerClosed notification";
+	EXPECT_EQ(closeNotif["data"].value("consumerId", ""), aliceRepeatConsumerId);
+
+	charlieClaim = charlie.ws->request("claimAudioRestrictedSlot", {
+		{"targetPeerId", "bob"}
+	});
+	ASSERT_TRUE(charlieClaim.value("ok", false)) << charlieClaim.dump();
+	EXPECT_EQ(charlieClaim["data"].value("ownerPeerId", ""), "charlie");
+
+	auto charlieSend = charlie.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(charlieSend.value("ok", false)) << charlieSend.dump();
+	auto charlieProduce = charlie.ws->request("produce", {
+		{"transportId", charlieSend["data"]["id"]},
+		{"kind", "audio"},
+		{"rtpParameters", makeAudioRtpParams(99110003)}
+	});
+	ASSERT_TRUE(charlieProduce.value("ok", false)) << charlieProduce.dump();
+	auto charlieBackfilled = bob.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(charlieBackfilled.empty()) << "Bob did not receive new owner audio consumer";
+	EXPECT_EQ(charlieBackfilled["data"]["peerId"], "charlie");
+	EXPECT_EQ(charlieBackfilled["data"]["producerId"], charlieProduce["data"]["id"]);
+}
+
+TEST_F(IntegrationTest, AudioRestrictedLateJoinFiltersExistingAudioUntilClaim) {
+	auto alice = joinRoom(testRoom_, "alice");
+
+	auto aliceSend = alice.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(aliceSend.value("ok", false)) << aliceSend.dump();
+
+	auto aliceProduce = alice.ws->request("produce", {
+		{"transportId", aliceSend["data"]["id"]},
+		{"kind", "audio"},
+		{"rtpParameters", makeAudioRtpParams(99110002)}
+	});
+	ASSERT_TRUE(aliceProduce.value("ok", false)) << aliceProduce.dump();
+	ASSERT_TRUE(aliceProduce["data"].contains("id")) << aliceProduce.dump();
+
+	auto bob = joinRoom(testRoom_, "bob", "audio-restricted");
+	ASSERT_TRUE(bob.joinData.contains("existingProducers")) << bob.joinData.dump();
+	EXPECT_TRUE(bob.joinData["existingProducers"].empty())
+		<< "Bob join should not expose unauthorized existing audio producer: " << bob.joinData.dump();
+
+	auto bobRecv = bob.ws->request("createWebRtcTransport", {
+		{"producing", false}, {"consuming", true}
+	});
+	ASSERT_TRUE(bobRecv.value("ok", false)) << bobRecv.dump();
+	ASSERT_TRUE(bobRecv["data"].contains("consumers")) << bobRecv.dump();
+	EXPECT_TRUE(bobRecv["data"]["consumers"].empty())
+		<< "Bob recv transport should not precreate unauthorized audio consumer: " << bobRecv.dump();
+
+	auto claim = alice.ws->request("claimAudioRestrictedSlot", {
+		{"targetPeerId", "bob"}
+	});
+	ASSERT_TRUE(claim.value("ok", false)) << claim.dump();
+	EXPECT_TRUE(claim["data"].value("required", false)) << claim.dump();
+	EXPECT_EQ(claim["data"].value("ownerPeerId", ""), "alice");
+
+	auto backfilled = bob.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(backfilled.empty()) << "Bob did not receive backfilled audio consumer";
+	EXPECT_EQ(backfilled["data"]["peerId"], "alice");
+	EXPECT_EQ(backfilled["data"]["producerId"], aliceProduce["data"]["id"]);
+	EXPECT_EQ(backfilled["data"]["kind"], "audio");
+}
+
+TEST_F(IntegrationTest, NormalPeerAudioIsNotAffectedBySlotClaim) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoom(testRoom_, "bob");
+	auto charlie = joinRoom(testRoom_, "charlie");
+
+	auto bobRecv = bob.ws->request("createWebRtcTransport", {
+		{"producing", false}, {"consuming", true}
+	});
+	ASSERT_TRUE(bobRecv.value("ok", false)) << bobRecv.dump();
+
+	auto aliceSend = alice.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(aliceSend.value("ok", false)) << aliceSend.dump();
+
+	auto aliceProduce = alice.ws->request("produce", {
+		{"transportId", aliceSend["data"]["id"]},
+		{"kind", "audio"},
+		{"rtpParameters", makeAudioRtpParams(99110004)}
+	});
+	ASSERT_TRUE(aliceProduce.value("ok", false)) << aliceProduce.dump();
+
+	auto aliceConsumer = bob.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(aliceConsumer.empty()) << "Bob did not receive Alice audio";
+	EXPECT_EQ(aliceConsumer["data"]["peerId"], "alice");
+	EXPECT_EQ(aliceConsumer["data"]["producerId"], aliceProduce["data"]["id"]);
+	EXPECT_EQ(aliceConsumer["data"]["kind"], "audio");
+
+	auto claimNormal = alice.ws->request("claimAudioRestrictedSlot", {
+		{"targetPeerId", "bob"}
+	});
+	ASSERT_TRUE(claimNormal.value("ok", false)) << claimNormal.dump();
+	EXPECT_FALSE(claimNormal["data"].value("required", true)) << claimNormal.dump();
+	EXPECT_FALSE(claimNormal["data"].value("claimed", true)) << claimNormal.dump();
+	EXPECT_EQ(claimNormal["data"].value("reason", ""), "not-required");
+
+	auto charlieSend = charlie.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(charlieSend.value("ok", false)) << charlieSend.dump();
+
+	auto charlieProduce = charlie.ws->request("produce", {
+		{"transportId", charlieSend["data"]["id"]},
+		{"kind", "audio"},
+		{"rtpParameters", makeAudioRtpParams(99110005)}
+	});
+	ASSERT_TRUE(charlieProduce.value("ok", false)) << charlieProduce.dump();
+
+	auto charlieConsumer = bob.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(charlieConsumer.empty()) << "Bob did not receive Charlie audio after normal-peer claim";
+	EXPECT_EQ(charlieConsumer["data"]["peerId"], "charlie");
+	EXPECT_EQ(charlieConsumer["data"]["producerId"], charlieProduce["data"]["id"]);
+	EXPECT_EQ(charlieConsumer["data"]["kind"], "audio");
+
+	auto releaseNormal = alice.ws->request("releaseAudioRestrictedSlot", {
+		{"targetPeerId", "bob"}
+	});
+	ASSERT_TRUE(releaseNormal.value("ok", false)) << releaseNormal.dump();
+	EXPECT_FALSE(releaseNormal["data"].value("released", true)) << releaseNormal.dump();
+	EXPECT_EQ(releaseNormal["data"].value("reason", ""), "not-required");
+}
+
+TEST_F(IntegrationTest, AudioRestrictedSenderCanClaimMultipleTargets) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoom(testRoom_, "bob", "audio-restricted");
+	auto dave = joinRoom(testRoom_, "dave", "audio-restricted");
+
+	auto bobClaim = alice.ws->request("claimAudioRestrictedSlot", {
+		{"targetPeerId", "bob"}
+	});
+	ASSERT_TRUE(bobClaim.value("ok", false)) << bobClaim.dump();
+	EXPECT_EQ(bobClaim["data"].value("ownerPeerId", ""), "alice");
+	EXPECT_EQ(bobClaim["data"].value("targetPeerId", ""), "bob");
+
+	auto daveClaim = alice.ws->request("claimAudioRestrictedSlot", {
+		{"targetPeerId", "dave"}
+	});
+	ASSERT_TRUE(daveClaim.value("ok", false)) << daveClaim.dump();
+	EXPECT_EQ(daveClaim["data"].value("ownerPeerId", ""), "alice");
+	EXPECT_EQ(daveClaim["data"].value("targetPeerId", ""), "dave");
+
+	auto bobRelease = alice.ws->request("releaseAudioRestrictedSlot", {
+		{"targetPeerId", "bob"}
+	});
+	ASSERT_TRUE(bobRelease.value("ok", false)) << bobRelease.dump();
+	EXPECT_TRUE(bobRelease["data"].value("released", false)) << bobRelease.dump();
+
+	auto daveRepeatClaim = alice.ws->request("claimAudioRestrictedSlot", {
+		{"targetPeerId", "dave"}
+	});
+	ASSERT_TRUE(daveRepeatClaim.value("ok", false)) << daveRepeatClaim.dump();
+	EXPECT_TRUE(daveRepeatClaim["data"].value("alreadyOwned", false)) << daveRepeatClaim.dump();
 }
 
 TEST_F(IntegrationTest, ExplicitConsumeResponseIncludesProducerAppDataSource) {
@@ -608,6 +895,203 @@ TEST_F(IntegrationTest, PauseResumeMissingProducerFailsExplicitly) {
 	auto resumeResp = alice.ws->request("resumeProducer", {{"producerId", "missing-producer"}});
 	EXPECT_FALSE(resumeResp.value("ok", true)) << resumeResp.dump();
 	EXPECT_EQ(resumeResp.value("error", ""), "producer not found");
+}
+
+TEST_F(IntegrationTest, CloseProducerStopsConsumersAndRemovesProducer) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoom(testRoom_, "bob");
+	auto carol = joinRoom(testRoom_, "carol");
+
+	auto bobRecv = bob.ws->request("createWebRtcTransport", {
+		{"producing", false}, {"consuming", true}
+	});
+	ASSERT_TRUE(bobRecv.value("ok", false)) << bobRecv.dump();
+
+	auto aliceSend = alice.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(aliceSend.value("ok", false)) << aliceSend.dump();
+
+	json audioRtpParams = {
+		{"codecs", {{
+			{"mimeType", "audio/opus"}, {"clockRate", 48000}, {"channels", 2},
+			{"payloadType", 100}
+		}}},
+		{"encodings", {{{"ssrc", 22222223}}}},
+		{"mid", "0"}
+	};
+	auto produceResp = alice.ws->request("produce", {
+		{"transportId", aliceSend["data"]["id"]},
+		{"kind", "audio"},
+		{"rtpParameters", audioRtpParams},
+		{"appData", {{"source", "audio"}}}
+	});
+	ASSERT_TRUE(produceResp.value("ok", false)) << produceResp.dump();
+	std::string producerId = produceResp["data"]["id"];
+
+	auto consumerNotif = bob.ws->waitNotification("newConsumer", 3000);
+	ASSERT_FALSE(consumerNotif.empty()) << "Bob did not receive newConsumer";
+	ASSERT_EQ(consumerNotif["data"]["producerId"], producerId);
+	std::string consumerId = consumerNotif["data"]["id"];
+
+	auto denied = bob.ws->request("closeProducer", {{"producerId", producerId}});
+	EXPECT_FALSE(denied.value("ok", true)) << denied.dump();
+	EXPECT_EQ(denied.value("error", ""), "permission denied");
+
+	auto missingSelector = alice.ws->request("closeProducer", {});
+	EXPECT_FALSE(missingSelector.value("ok", true)) << missingSelector.dump();
+	EXPECT_EQ(missingSelector.value("error", ""), "missing producerId or source");
+
+	auto closeResp = alice.ws->request("closeProducer", {{"source", "audio"}});
+	ASSERT_TRUE(closeResp.value("ok", false)) << closeResp.dump();
+	EXPECT_EQ(closeResp["data"]["producerId"], producerId);
+	EXPECT_EQ(closeResp["data"]["closedConsumers"], 1u);
+
+	auto leftNotif = bob.ws->waitNotification("producerLeft", 3000);
+	ASSERT_FALSE(leftNotif.empty()) << "Bob did not receive producerLeft";
+	EXPECT_EQ(leftNotif["data"]["peerId"], "alice");
+	EXPECT_EQ(leftNotif["data"]["producerId"], producerId);
+	ASSERT_TRUE(leftNotif["data"].contains("consumerIds")) << leftNotif.dump();
+	ASSERT_EQ(leftNotif["data"]["consumerIds"].size(), 1u) << leftNotif.dump();
+	EXPECT_EQ(leftNotif["data"]["consumerIds"][0], consumerId);
+	EXPECT_EQ(leftNotif["data"]["kind"], "audio");
+
+	auto closedConsumerState = bob.ws->request("getConsumerState", {{"consumerId", consumerId}});
+	EXPECT_FALSE(closedConsumerState.value("ok", true)) << closedConsumerState.dump();
+	EXPECT_EQ(closedConsumerState.value("error", ""), "consumer not found");
+
+	auto consumeAfterClose = bob.ws->request("consume", {
+		{"transportId", bobRecv["data"]["id"]},
+		{"producerId", producerId},
+		{"rtpCapabilities", defaultRtpCapabilities()}
+	});
+	EXPECT_FALSE(consumeAfterClose.value("ok", true)) << consumeAfterClose.dump();
+	EXPECT_EQ(consumeAfterClose.value("error", ""), "producer not found");
+
+	auto carolRecv = carol.ws->request("createWebRtcTransport", {
+		{"producing", false}, {"consuming", true}
+	});
+	ASSERT_TRUE(carolRecv.value("ok", false)) << carolRecv.dump();
+	bob.ws->drainNotifications();
+	carol.ws->drainNotifications();
+
+	json videoRtpParams1 = {
+		{"codecs", {{{"mimeType", "video/VP8"}, {"clockRate", 90000}, {"payloadType", 101}}}},
+		{"encodings", {{{"ssrc", 33333331}}}},
+		{"mid", "1"}
+	};
+	json videoRtpParams2 = {
+		{"codecs", {{{"mimeType", "video/VP8"}, {"clockRate", 90000}, {"payloadType", 101}}}},
+		{"encodings", {{{"ssrc", 33333332}}}},
+		{"mid", "2"}
+	};
+	auto videoProduce1 = alice.ws->request("produce", {
+		{"transportId", aliceSend["data"]["id"]},
+		{"kind", "video"},
+		{"rtpParameters", videoRtpParams1},
+		{"appData", {{"source", "camera-shared"}}}
+	});
+	ASSERT_TRUE(videoProduce1.value("ok", false)) << videoProduce1.dump();
+	std::string videoProducerId1 = videoProduce1["data"]["id"];
+	ASSERT_FALSE(bob.ws->waitNotification("newConsumer", 3000).empty());
+	ASSERT_FALSE(carol.ws->waitNotification("newConsumer", 3000).empty());
+
+	auto videoProduce2 = alice.ws->request("produce", {
+		{"transportId", aliceSend["data"]["id"]},
+		{"kind", "video"},
+		{"rtpParameters", videoRtpParams2},
+		{"appData", {{"source", "camera-shared"}}}
+	});
+	ASSERT_TRUE(videoProduce2.value("ok", false)) << videoProduce2.dump();
+	std::string videoProducerId2 = videoProduce2["data"]["id"];
+	ASSERT_FALSE(bob.ws->waitNotification("newConsumer", 3000).empty());
+	ASSERT_FALSE(carol.ws->waitNotification("newConsumer", 3000).empty());
+
+	auto ambiguous = alice.ws->request("closeProducer", {{"source", "camera-shared"}});
+	EXPECT_FALSE(ambiguous.value("ok", true)) << ambiguous.dump();
+	EXPECT_EQ(ambiguous.value("error", ""), "ambiguous producer source");
+	ASSERT_TRUE(ambiguous["data"].contains("producerIds")) << ambiguous.dump();
+	EXPECT_EQ(ambiguous["data"]["producerIds"].size(), 2u) << ambiguous.dump();
+
+	auto closeById = alice.ws->request("closeProducer", {{"producerId", videoProducerId1}});
+	ASSERT_TRUE(closeById.value("ok", false)) << closeById.dump();
+	EXPECT_EQ(closeById["data"]["producerId"], videoProducerId1);
+	EXPECT_EQ(closeById["data"]["closedConsumers"], 2u);
+	EXPECT_EQ(bob.ws->waitNotification("producerLeft", 3000)["data"]["producerId"], videoProducerId1);
+	EXPECT_EQ(carol.ws->waitNotification("producerLeft", 3000)["data"]["producerId"], videoProducerId1);
+
+	auto closeRemainingBySource = alice.ws->request("closeProducer", {{"source", "camera-shared"}});
+	ASSERT_TRUE(closeRemainingBySource.value("ok", false)) << closeRemainingBySource.dump();
+	EXPECT_EQ(closeRemainingBySource["data"]["producerId"], videoProducerId2);
+	EXPECT_EQ(closeRemainingBySource["data"]["closedConsumers"], 2u);
+}
+
+TEST_F(IntegrationTest, RepeatedProduceAndCloseProducerCycles) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoom(testRoom_, "bob");
+
+	auto bobRecv = bob.ws->request("createWebRtcTransport", {
+		{"producing", false}, {"consuming", true}
+	});
+	ASSERT_TRUE(bobRecv.value("ok", false)) << bobRecv.dump();
+
+	auto aliceSend = alice.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(aliceSend.value("ok", false)) << aliceSend.dump();
+
+	std::set<std::string> producerIds;
+	std::set<std::string> consumerIds;
+	for (uint32_t round = 0; round < 4; ++round) {
+		json rtpParams = {
+			{"codecs", {{{"mimeType", "video/VP8"}, {"clockRate", 90000}, {"payloadType", 101}}}},
+			{"encodings", {{{"ssrc", 44000000u + round}}}},
+			{"mid", std::to_string(round)}
+		};
+		auto produceResp = alice.ws->request("produce", {
+			{"transportId", aliceSend["data"]["id"]},
+			{"kind", "video"},
+			{"rtpParameters", rtpParams},
+			{"appData", {{"source", "camera-repeat"}}}
+		});
+		ASSERT_TRUE(produceResp.value("ok", false)) << produceResp.dump();
+		std::string producerId = produceResp["data"]["id"];
+		EXPECT_TRUE(producerIds.insert(producerId).second)
+			<< "producerId should be new each produce cycle";
+
+		auto consumerNotif = bob.ws->waitNotification("newConsumer", 3000);
+		ASSERT_FALSE(consumerNotif.empty()) << "missing newConsumer in round " << round;
+		EXPECT_EQ(consumerNotif["data"]["producerId"], producerId);
+		EXPECT_EQ(consumerNotif["data"]["peerId"], "alice");
+		EXPECT_EQ(consumerNotif["data"]["kind"], "video");
+		EXPECT_EQ(consumerNotif["data"]["appData"]["source"], "camera-repeat");
+		std::string consumerId = consumerNotif["data"]["id"];
+		EXPECT_TRUE(consumerIds.insert(consumerId).second)
+			<< "consumerId should be new each produce cycle";
+
+		auto closeResp = alice.ws->request("closeProducer", {{"source", "camera-repeat"}});
+		ASSERT_TRUE(closeResp.value("ok", false)) << closeResp.dump();
+		EXPECT_EQ(closeResp["data"]["producerId"], producerId);
+		EXPECT_EQ(closeResp["data"]["closedConsumers"], 1u);
+
+		auto leftNotif = bob.ws->waitNotification("producerLeft", 3000);
+		ASSERT_FALSE(leftNotif.empty()) << "missing producerLeft in round " << round;
+		EXPECT_EQ(leftNotif["data"]["producerId"], producerId);
+		ASSERT_EQ(leftNotif["data"]["consumerIds"].size(), 1u) << leftNotif.dump();
+		EXPECT_EQ(leftNotif["data"]["consumerIds"][0], consumerId);
+
+		auto closedConsumerState = bob.ws->request("getConsumerState", {{"consumerId", consumerId}});
+		EXPECT_FALSE(closedConsumerState.value("ok", true)) << closedConsumerState.dump();
+		EXPECT_EQ(closedConsumerState.value("error", ""), "consumer not found");
+
+		auto consumeAfterClose = bob.ws->request("consume", {
+			{"transportId", bobRecv["data"]["id"]},
+			{"producerId", producerId},
+			{"rtpCapabilities", defaultRtpCapabilities()}
+		});
+		EXPECT_FALSE(consumeAfterClose.value("ok", true)) << consumeAfterClose.dump();
+		EXPECT_EQ(consumeAfterClose.value("error", ""), "producer not found");
+	}
 }
 
 // ─── Test 5: Multiple peers, verify participants list ───

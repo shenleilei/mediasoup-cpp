@@ -42,6 +42,10 @@ public:
 	}
 	const std::string& roomId() const { return roomId_; }
 	const std::string& peerId() const { return peerId_; }
+	void setProducerPeerId(std::string producerPeerId) {
+		producerPeerId_ = std::move(producerPeerId);
+	}
+	const std::string& producerPeerId() const { return producerPeerId_; }
 	std::string logPrefix() const {
 		if (roomId_.empty() && peerId_.empty()) return "[" + id_ + "]";
 		if (peerId_.empty()) return "[" + roomId_ + " " + id_ + "]";
@@ -81,6 +85,7 @@ private:
 	std::string transportId_;
 	std::string roomId_;
 	std::string peerId_;
+	std::string producerPeerId_;
 	bool closed_ = false;
 	bool paused_ = false;
 	bool producerPaused_ = false;

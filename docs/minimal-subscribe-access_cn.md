@@ -273,7 +273,54 @@ renderRemote(stream, data.peerId, data.kind, {
 });
 ```
 
-## 6. 两条路径的边界
+## 6. 处理远端流关闭
+
+如果发布端关闭了某一路 producer，服务端会给受影响的订阅端推 `producerLeft`：
+
+```json
+{
+  "notification": true,
+  "method": "producerLeft",
+  "data": {
+    "peerId": "peer-a",
+    "producerId": "producer-audio-1",
+    "consumerIds": ["consumer-audio-1"],
+    "kind": "audio",
+    "appData": {
+      "source": "audio"
+    }
+  }
+}
+```
+
+端上最小处理：
+
+- 按 `consumerIds` 找到本地 consumer，关闭 consumer 并移除对应 audio/video DOM。
+- 如果本地没有保存 `consumerIds` 映射，也要按 `producerId` 做兜底清理。
+- 不要再对这个 `producerId` 发 `consume`；服务端已关闭后会返回 `producer not found`。
+
+如果服务端只关闭某条 consumer，不关闭 producer，例如音频受限端 release slot，订阅端会收到 `consumerClosed`：
+
+```json
+{
+  "notification": true,
+  "method": "consumerClosed",
+  "data": {
+    "consumerId": "consumer-audio-1",
+    "producerId": "producer-audio-1",
+    "producerPeerId": "peer-a",
+    "kind": "audio",
+    "reason": "audio-slot-release"
+  }
+}
+```
+
+端上最小处理：
+
+- 按 `consumerId` 移除远端媒体。
+- 不要把它当成 peer 离开；producer 所属 peer 仍可能在线。
+
+## 7. 两条路径的边界
 
 要分清：
 
@@ -289,7 +336,7 @@ renderRemote(stream, data.peerId, data.kind, {
 
 如果一个 peer 是后加入者，它不一定会为加入前已有的流收到 `newConsumer`。
 
-## 7. 最小前端伪代码
+## 8. 最小前端伪代码
 
 ```js
 const joinResp = await wsRequest('join', {
@@ -369,11 +416,61 @@ ws.onmessage = async (event) => {
       producerId: c.producerId,
       source: c.appData?.source || ''
     });
+  } else if (msg.notification === true && msg.method === 'producerLeft') {
+    for (const consumerId of msg.data.consumerIds || []) {
+      removeRemoteConsumer(consumerId);
+    }
+    removeRemoteConsumersByProducerId(msg.data.producerId);
+  } else if (msg.notification === true && msg.method === 'consumerClosed') {
+    removeRemoteConsumer(msg.data.consumerId);
   }
 };
 ```
 
-## 8. 当前服务端代码位置
+## 9. 如果本端也发流：关闭 producer
+
+如果最小接入里还包含发布本地流，停止某一路 producer 时不要只停本地 track，也要通知服务端：
+
+```json
+{
+  "request": true,
+  "id": 20,
+  "method": "closeProducer",
+  "data": {
+    "producerId": "producer-audio-1"
+  }
+}
+```
+
+也可以按 `produce.appData.source` 关闭唯一匹配的 producer：
+
+```json
+{
+  "request": true,
+  "id": 21,
+  "method": "closeProducer",
+  "data": {
+    "source": "audio"
+  }
+}
+```
+
+最小顺序：
+
+```text
+closeProducer(producerId 或 source)
+本地 producer.close()
+停止对应 MediaStreamTrack
+从本地 publishedProducers 删除
+```
+
+注意：
+
+- `source` 只适合同一个 peer 下唯一 producer 匹配；如果多路 producer 使用同一个 source，服务端会返回 `ambiguous producer source`。
+- `closeProducer` 成功后，订阅端通过 `producerLeft` 清理远端媒体。
+- `closeProducer` 不等于 `releaseAudioRestrictedSlot`；音频受限端业务关闭需要两者配合。
+
+## 10. 当前服务端代码位置
 
 - [src/RoomServiceLifecycle.cpp](../src/RoomServiceLifecycle.cpp)
 - [src/RoomServiceMedia.cpp](../src/RoomServiceMedia.cpp)

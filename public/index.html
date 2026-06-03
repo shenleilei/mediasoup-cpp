@@ -141,7 +141,8 @@ body {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-input[type="text"] {
+input[type="text"],
+select {
   width: min(30vw, 280px);
   min-width: 190px;
   padding: 12px 14px;
@@ -170,6 +171,43 @@ button:disabled {
 .btn-publish { background: #0f766e; color: #fff; }
 .btn-stop { background: #7c2d12; color: #fff; }
 
+.audio-slot-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #1e3a8a;
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 12% 20%, rgba(14, 165, 233, 0.22), transparent 34%),
+    rgba(2, 6, 23, 0.58);
+}
+
+.audio-slot-copy {
+  display: grid;
+  gap: 3px;
+  min-width: min(100%, 230px);
+  flex: 1 1 260px;
+}
+
+.audio-slot-copy strong {
+  font-size: 18px;
+  color: #e0f2fe;
+}
+
+.audio-slot-copy span {
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.audio-slot-controls select {
+  width: min(34vw, 360px);
+}
+
+.btn-audio-open { background: #0369a1; color: #fff; }
+.btn-audio-close { background: #92400e; color: #fff; }
 .dashboard {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -274,6 +312,71 @@ button:disabled {
   object-fit: contain;
   background: #000;
   border-radius: 12px;
+}
+
+.audio-card {
+  border-color: #155e75;
+}
+
+.audio-frame {
+  min-height: 170px;
+  aspect-ratio: auto;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(34, 211, 238, 0.2), transparent 32%),
+    linear-gradient(135deg, #082f49 0%, #020617 72%);
+}
+
+.audio-shell {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+}
+
+.audio-icon {
+  justify-self: start;
+  padding: 7px 10px;
+  border: 1px solid rgba(125, 211, 252, 0.45);
+  border-radius: 999px;
+  color: #bae6fd;
+  font: 700 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.08em;
+}
+
+.audio-hint {
+  color: var(--text-main);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.audio-volume {
+  display: grid;
+  gap: 8px;
+}
+
+.audio-volume-meter {
+  position: relative;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  border: 1px solid rgba(125, 211, 252, 0.32);
+  background: rgba(2, 6, 23, 0.78);
+}
+
+.audio-volume-fill {
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #22d3ee 0%, #86efac 64%, #fcd34d 100%);
+  transition: width 90ms linear;
+}
+
+.audio-volume-text {
+  color: #c7d2fe;
+  font: 700 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.audio-shell audio {
+  width: 100%;
 }
 
 .video-empty {
@@ -512,9 +615,14 @@ button:disabled {
     width: fit-content;
   }
 
-  input[type="text"] {
+  input[type="text"],
+  select {
     width: 100%;
     min-width: 0;
+  }
+
+  .audio-slot-controls button {
+    width: 100%;
   }
 }
 </style>
@@ -532,7 +640,7 @@ button:disabled {
           <input id="roomInput" type="text" value="test-room" placeholder="输入房间号">
           <button id="joinBtn" class="btn-join">加入房间</button>
           <button id="publishBtn" class="btn-publish" disabled>发布麦克风和摄像头</button>
-          <button id="stopBtn" class="btn-stop" disabled>停止 QoS</button>
+          <button id="stopBtn" class="btn-stop" disabled>停止发布</button>
         </div>
       </div>
       <div class="status-row">
@@ -540,6 +648,17 @@ button:disabled {
         <div class="meta-chip">房间 <strong id="metaRoom">-</strong></div>
         <div class="meta-chip">Peer <strong id="metaPeer">-</strong></div>
         <div class="meta-chip">模式 <strong id="metaQosMode">新库</strong></div>
+      </div>
+      <div class="audio-slot-controls">
+        <div class="audio-slot-copy">
+          <strong>受限端音频</strong>
+          <span id="audioSlotStatus">加入房间后可选择音频受限端</span>
+        </div>
+        <select id="audioTargetSelect" disabled>
+          <option value="">暂无音频受限端</option>
+        </select>
+        <button id="claimAudioBtn" class="btn-audio-open" disabled>打开音频</button>
+        <button id="releaseAudioBtn" class="btn-audio-close" disabled>关闭音频</button>
       </div>
     </div>
   </div>

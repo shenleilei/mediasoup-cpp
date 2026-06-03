@@ -41,9 +41,12 @@
 ### 媒体层
 
 - `produce`
+- `closeProducer`
 - `consume`
 - `existingProducers`
 - `newConsumer`
+- `producerLeft`
+- `consumerClosed`
 
 ## 2. 两条主路径
 
@@ -90,6 +93,8 @@
 10. 如果要发流，再创建发送 transport
 11. `connectWebRtcTransport`
 12. `produce`
+13. 如果要停止某路本地流，发 `closeProducer`
+14. 订阅端持续处理 `producerLeft` / `consumerClosed`
 
 如果顺序没对，后面即使日志里看起来“加入成功”，也不代表一定能看到流。
 
@@ -472,6 +477,64 @@ device.rtpCapabilities
 producer 自己不应该期待收到自己这条流的 `newConsumer`。  
 `newConsumer` 是发给其他订阅端的。
 
+### closeProducer
+
+如果端上要停止自己发布的一路 producer，应该发：
+
+```json
+{
+  "request": true,
+  "id": 6,
+  "method": "closeProducer",
+  "data": {
+    "producerId": "producer-audio-1"
+  }
+}
+```
+
+也可以按 `produce.appData.source` 关闭唯一匹配的 producer：
+
+```json
+{
+  "request": true,
+  "id": 7,
+  "method": "closeProducer",
+  "data": {
+    "source": "audio"
+  }
+}
+```
+
+成功响应：
+
+```json
+{
+  "response": true,
+  "id": 7,
+  "ok": true,
+  "data": {
+    "producerId": "producer-audio-1",
+    "closedConsumers": 1,
+    "notifiedPeers": ["peer-b"]
+  }
+}
+```
+
+端上推荐顺序：
+
+```text
+closeProducer(producerId 或 source)
+本地 producer.close()
+停止对应 MediaStreamTrack
+从本地 publishedProducers 删除
+```
+
+注意：
+
+- 只能关闭本 peer 自己的 producer。
+- 按 source 关闭时，source 必须在当前 peer 下唯一；多路同 source 会返回 `ambiguous producer source`。
+- `closeProducer` 成功后，订阅端通过 `producerLeft` 清理远端媒体。
+
 ## 9. consume
 
 请求：
@@ -479,7 +542,7 @@ producer 自己不应该期待收到自己这条流的 `newConsumer`。
 ```json
 {
   "request": true,
-  "id": 6,
+  "id": 8,
   "method": "consume",
   "data": {
     "transportId": "recv-transport-1",
@@ -638,6 +701,50 @@ renderRemote(stream, data.peerId, data.kind);
 - `existingProducers`
 - `consumers`
 
+### producerLeft / consumerClosed
+
+如果远端 producer 被关闭，订阅端会收到：
+
+```json
+{
+  "notification": true,
+  "method": "producerLeft",
+  "data": {
+    "peerId": "peer-a",
+    "producerId": "producer-audio-1",
+    "consumerIds": ["consumer-audio-1"],
+    "kind": "audio",
+    "appData": {
+      "source": "audio"
+    }
+  }
+}
+```
+
+订阅端应该：
+
+- 按 `consumerIds` 移除本地 consumer 和 DOM。
+- 再按 `producerId` 做兜底清理。
+- 不要把它当成 `peerLeft`；peer 可能仍在线。
+
+如果服务端只关闭 consumer，不关闭 producer，例如音频受限端 release slot，会收到：
+
+```json
+{
+  "notification": true,
+  "method": "consumerClosed",
+  "data": {
+    "consumerId": "consumer-audio-1",
+    "producerId": "producer-audio-1",
+    "producerPeerId": "peer-a",
+    "kind": "audio",
+    "reason": "audio-slot-release"
+  }
+}
+```
+
+订阅端应该按 `consumerId` 移除对应远端媒体。
+
 ## 13. requestConsumerKeyFrame
 
 请求：
@@ -645,7 +752,7 @@ renderRemote(stream, data.peerId, data.kind);
 ```json
 {
   "request": true,
-  "id": 7,
+  "id": 9,
   "method": "requestConsumerKeyFrame",
   "data": {
     "consumerId": "consumer-1"
@@ -767,6 +874,7 @@ renderRemote(stream, data.peerId, data.kind);
 8. `createWebRtcTransport(producing=true)`
 9. `connectWebRtcTransport`
 10. `produce`
+11. `closeProducer`
 
 ## 16. 排障时怎么看
 

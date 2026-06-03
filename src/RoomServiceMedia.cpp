@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <utility>
+#include <vector>
 
 namespace mediasoup {
 namespace {
@@ -129,6 +131,295 @@ uint8_t FindAbsCaptureTimeExtensionId(const RtpCapabilities& caps, const std::st
 
 } // namespace
 
+bool RoomService::canConsumeProducerForPeer(
+	const std::shared_ptr<Room>& room,
+	const std::shared_ptr<Peer>& targetPeer,
+	const std::shared_ptr<Producer>& producer) const
+{
+	if (!room || !targetPeer || !producer) {
+		return false;
+	}
+	if (producer->kind() != "audio") {
+		return true;
+	}
+	if (targetPeer->audioRole == Peer::AudioRole::Normal) {
+		return true;
+	}
+
+	return room->audioRestrictedSlotOwner(targetPeer->id) == producer->peerId();
+}
+
+json RoomService::createAuthorizedAudioConsumersForSlot(
+	const std::string& roomId,
+	const std::shared_ptr<Room>& room,
+	const std::string& ownerPeerId,
+	const std::string& targetPeerId)
+{
+	json consumers = json::array();
+	if (!room) {
+		return consumers;
+	}
+
+	auto ownerPeer = room->getPeer(ownerPeerId);
+	auto targetPeer = room->getPeer(targetPeerId);
+	if (!ownerPeer || !targetPeer || !targetPeer->recvTransport) {
+		return consumers;
+	}
+	if (!roommedia::HasConsumerRtpCapabilities(targetPeer)) {
+		MS_DEBUG(logger_, "[{} {}] audio slot backfill skipped: target has empty rtpCapabilities owner={}",
+			roomId, targetPeerId, ownerPeerId);
+		return consumers;
+	}
+
+	auto recvTransport = std::static_pointer_cast<Transport>(targetPeer->recvTransport);
+	for (const auto& [producerId, producer] : ownerPeer->producers) {
+		if (!producer || producer->closed() || producer->kind() != "audio") {
+			continue;
+		}
+		if (!canConsumeProducerForPeer(room, targetPeer, producer)) {
+			continue;
+		}
+
+		bool alreadyConsumed = false;
+		for (const auto& [consumerId, consumer] : targetPeer->consumers) {
+			if (consumer && !consumer->closed() && consumer->producerId() == producerId) {
+				alreadyConsumed = true;
+				break;
+			}
+		}
+		if (alreadyConsumed) {
+			continue;
+		}
+
+		try {
+			json consumeOpts = {
+				{"producerId", producer->id()},
+				{"rtpCapabilities", targetPeer->rtpCapabilities},
+				{"consumableRtpParameters", producer->consumableRtpParameters()}
+			};
+			auto consumer = recvTransport->consume(consumeOpts);
+			consumer->setProducerPeerId(ownerPeerId);
+			roommedia::TrackPeerConsumer(roomId, targetPeerId, targetPeer, consumer, logger_);
+			subscriberControllers_[roomstatsqos::MakePeerKey(roomId, targetPeerId)]
+				.syncConsumerState(targetPeer->consumers);
+			auto data = roommedia::BuildConsumerData(ownerPeerId, producer, consumer);
+			consumers.push_back(data);
+
+			if (notify_) {
+				MS_INFO(logger_, "[{} {}] notify newConsumer target={} producerId={} consumerId={} kind={} reason=audio-slot-claim",
+					roomId, ownerPeerId, targetPeerId, producer->id(), consumer->id(), consumer->kind());
+				notify_(roomId, targetPeerId, {
+					{"notification", true},
+					{"method", "newConsumer"},
+					{"data", data}
+				});
+			}
+		} catch (const std::exception& e) {
+			MS_WARN(logger_, "[{} {}] audio slot backfill failed target={} producerId={}: {}",
+				roomId, ownerPeerId, targetPeerId, producerId, e.what());
+		} catch (...) {
+			MS_WARN(logger_, "[{} {}] audio slot backfill failed target={} producerId={}: unknown error",
+				roomId, ownerPeerId, targetPeerId, producerId);
+		}
+	}
+
+	if (!consumers.empty()) {
+		markDownlinkRoomDirty(roomId);
+	}
+	return consumers;
+}
+
+size_t RoomService::closeAudioConsumersForSlot(
+	const std::string& roomId,
+	const std::shared_ptr<Room>& room,
+	const std::string& ownerPeerId,
+	const std::string& targetPeerId)
+{
+	if (!room) {
+		return 0;
+	}
+	auto targetPeer = room->getPeer(targetPeerId);
+	if (!targetPeer) {
+		return 0;
+	}
+
+	std::vector<std::shared_ptr<Consumer>> consumersToClose;
+	for (const auto& [consumerId, consumer] : targetPeer->consumers) {
+		if (!consumer || consumer->closed() || consumer->kind() != "audio") {
+			continue;
+		}
+
+		if (consumer->producerPeerId() == ownerPeerId) {
+			consumersToClose.push_back(consumer);
+		}
+	}
+
+	for (const auto& consumer : consumersToClose) {
+		if (consumer && !consumer->closed()) {
+			const std::string consumerId = consumer->id();
+			const std::string producerId = consumer->producerId();
+			consumer->close();
+			subscriberControllers_[roomstatsqos::MakePeerKey(roomId, targetPeerId)]
+				.syncConsumerState(targetPeer->consumers);
+			if (notify_) {
+				notify_(roomId, targetPeerId, {
+					{"notification", true},
+					{"method", "consumerClosed"},
+					{"data", {
+						{"consumerId", consumerId},
+						{"producerId", producerId},
+						{"producerPeerId", ownerPeerId},
+						{"kind", "audio"},
+						{"reason", "audio-slot-release"}
+					}}
+				});
+			}
+		}
+	}
+
+	if (!consumersToClose.empty()) {
+		markDownlinkRoomDirty(roomId);
+	}
+	return consumersToClose.size();
+}
+
+RoomService::Result RoomService::claimAudioRestrictedSlot(
+	const std::string& roomId,
+	const std::string& peerId,
+	const std::string& targetPeerId)
+{
+	MS_INFO(logger_, "[{} {}] claimAudioRestrictedSlot start target={}",
+		roomId, peerId, targetPeerId);
+
+	auto room = roomManager_.getRoom(roomId);
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] claimAudioRestrictedSlot failed: room not found target={}",
+			roomId, peerId, targetPeerId);
+		return {false, {}, "", "room not found"};
+	}
+	auto peer = room->getPeer(peerId);
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] claimAudioRestrictedSlot failed: peer not found target={}",
+			roomId, peerId, targetPeerId);
+		return {false, {}, "", "peer not found"};
+	}
+	auto targetPeer = room->getPeer(targetPeerId);
+	if (!targetPeer) {
+		MS_WARN(logger_, "[{} {}] claimAudioRestrictedSlot failed: target peer not found target={}",
+			roomId, peerId, targetPeerId);
+		return {false, {
+			{"reason", "target-not-found"},
+			{"targetPeerId", targetPeerId}
+		}, "", "target peer not found"};
+	}
+
+	if (targetPeer->audioRole == Peer::AudioRole::Normal) {
+		MS_INFO(logger_, "[{} {}] claimAudioRestrictedSlot done target={} required=false",
+			roomId, peerId, targetPeerId);
+		return {true, {
+			{"required", false},
+			{"claimed", false},
+			{"reason", "not-required"},
+			{"targetPeerId", targetPeerId}
+		}};
+	}
+
+	const std::string previousOwnerPeerId = room->audioRestrictedSlotOwner(targetPeerId);
+	std::string currentOwnerPeerId;
+	if (!room->setAudioRestrictedSlotOwner(targetPeerId, peerId, currentOwnerPeerId)) {
+		MS_WARN(logger_, "[{} {}] claimAudioRestrictedSlot failed: occupied target={} owner={}",
+			roomId, peerId, targetPeerId, currentOwnerPeerId);
+		return {false, {
+			{"reason", "occupied"},
+			{"targetPeerId", targetPeerId},
+			{"ownerPeerId", currentOwnerPeerId}
+		}, "", "audio slot occupied"};
+	}
+
+	auto consumers = createAuthorizedAudioConsumersForSlot(roomId, room, peerId, targetPeerId);
+	MS_INFO(logger_, "[{} {}] claimAudioRestrictedSlot done target={} alreadyOwned={} backfilledConsumers={}",
+		roomId, peerId, targetPeerId, previousOwnerPeerId == peerId ? "true" : "false",
+		consumers.is_array() ? consumers.size() : 0);
+	return {true, {
+		{"required", true},
+		{"claimed", true},
+		{"targetPeerId", targetPeerId},
+		{"ownerPeerId", peerId},
+		{"alreadyOwned", previousOwnerPeerId == peerId},
+		{"consumersCreated", consumers.is_array() ? consumers.size() : 0}
+	}};
+}
+
+RoomService::Result RoomService::releaseAudioRestrictedSlot(
+	const std::string& roomId,
+	const std::string& peerId,
+	const std::string& targetPeerId)
+{
+	MS_INFO(logger_, "[{} {}] releaseAudioRestrictedSlot start target={}",
+		roomId, peerId, targetPeerId);
+
+	auto room = roomManager_.getRoom(roomId);
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] releaseAudioRestrictedSlot failed: room not found target={}",
+			roomId, peerId, targetPeerId);
+		return {false, {}, "", "room not found"};
+	}
+	auto peer = room->getPeer(peerId);
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] releaseAudioRestrictedSlot failed: peer not found target={}",
+			roomId, peerId, targetPeerId);
+		return {false, {}, "", "peer not found"};
+	}
+	auto targetPeer = room->getPeer(targetPeerId);
+	if (!targetPeer) {
+		MS_WARN(logger_, "[{} {}] releaseAudioRestrictedSlot failed: target peer not found target={}",
+			roomId, peerId, targetPeerId);
+		return {false, {
+			{"reason", "target-not-found"},
+			{"targetPeerId", targetPeerId}
+		}, "", "target peer not found"};
+	}
+	if (targetPeer->audioRole == Peer::AudioRole::Normal) {
+		MS_INFO(logger_, "[{} {}] releaseAudioRestrictedSlot done target={} required=false",
+			roomId, peerId, targetPeerId);
+		return {true, {
+			{"released", false},
+			{"reason", "not-required"},
+			{"targetPeerId", targetPeerId}
+		}};
+	}
+
+	std::string currentOwnerPeerId;
+	const bool released = room->releaseAudioRestrictedSlot(targetPeerId, peerId, currentOwnerPeerId);
+	if (!released) {
+		MS_WARN(logger_, "[{} {}] releaseAudioRestrictedSlot failed: not owner target={} owner={}",
+			roomId, peerId, targetPeerId, currentOwnerPeerId);
+		return {false, {
+			{"reason", "not-owner"},
+			{"targetPeerId", targetPeerId},
+			{"ownerPeerId", currentOwnerPeerId}
+		}, "", "not audio slot owner"};
+	}
+	if (currentOwnerPeerId.empty()) {
+		MS_INFO(logger_, "[{} {}] releaseAudioRestrictedSlot done target={} not-claimed",
+			roomId, peerId, targetPeerId);
+		return {true, {
+			{"released", false},
+			{"reason", "not-claimed"},
+			{"targetPeerId", targetPeerId}
+		}};
+	}
+
+	const size_t closedConsumers = closeAudioConsumersForSlot(roomId, room, peerId, targetPeerId);
+	MS_INFO(logger_, "[{} {}] releaseAudioRestrictedSlot done target={} closedConsumers={}",
+		roomId, peerId, targetPeerId, closedConsumers);
+	return {true, {
+		{"released", true},
+		{"targetPeerId", targetPeerId},
+		{"closedConsumers", closedConsumers}
+	}};
+}
+
 RoomService::Result RoomService::createTransport(const std::string& roomId,
 	const std::string& peerId, bool producing, bool consuming, const json& rtpCapabilities)
 {
@@ -209,7 +500,12 @@ RoomService::Result RoomService::createTransport(const std::string& roomId,
 			peer,
 			std::static_pointer_cast<Transport>(peer->recvTransport),
 			logger_,
-			"auto-subscribe on createTransport");
+			"auto-subscribe on createTransport",
+			true,
+			[this, room](const std::shared_ptr<Peer>& targetPeer,
+				const std::shared_ptr<Producer>& producer) {
+				return canConsumeProducerForPeer(room, targetPeer, producer);
+			});
 	}
 
 	MS_INFO(logger_, "[{} {}] createTransport done transportId={} producing={} consuming={} precreatedConsumers={}",
@@ -818,7 +1114,11 @@ RoomService::Result RoomService::produce(const std::string& roomId,
 	indexPeerProducers(roomId, peerId, peer->producers);
 
 	roommedia::AutoSubscribeProducerToOtherPeers(
-		roomId, peerId, room, producer, logger_, notify_, false);
+		roomId, peerId, room, producer, logger_, notify_, false,
+		[this, room](const std::shared_ptr<Peer>& targetPeer,
+			const std::shared_ptr<Producer>& targetProducer) {
+			return canConsumeProducerForPeer(room, targetPeer, targetProducer);
+		});
 
 	MS_INFO(logger_, "[{} {}] produce done transportId={} kind={} source={} producerId={}",
 		roomId, peerId, transportId, kind, source.empty() ? "-" : source, producer->id());
@@ -857,6 +1157,16 @@ RoomService::Result RoomService::consume(const std::string& roomId,
 		MS_WARN(logger_, "[{} {}] consume failed: producer not found [{}]", roomId, peerId, producerId);
 		return {false, {}, "", "producer not found"};
 	}
+	if (std::dynamic_pointer_cast<WebRtcTransport>(transport) && !canConsumeProducerForPeer(room, peer, producer)) {
+		MS_WARN(logger_, "[{} {}] consume denied: audio consumer not authorized producerId={} owner={}",
+			roomId, peerId, producerId, producer->peerId());
+		return {false, {
+			{"reason", "audio-slot-not-owned"},
+			{"producerId", producerId},
+			{"targetPeerId", peerId},
+			{"producerPeerId", producer->peerId()}
+		}, "", "audio consumer not authorized"};
+	}
 
 	json consumeOpts = {
 		{"producerId", producerId},
@@ -873,10 +1183,150 @@ RoomService::Result RoomService::consume(const std::string& roomId,
 		MS_WARN(logger_, "[{} {}] consume failed: transport->consume threw unknown error", roomId, peerId);
 		return {false, {}, "", "consume failed: unknown error"};
 	}
+	consumer->setProducerPeerId(producer->peerId());
 	roommedia::TrackPeerConsumer(roomId, peerId, peer, consumer, logger_);
 	MS_INFO(logger_, "[{} {}] consume done transportId={} producerId={} consumerId={} source={}",
 		roomId, peerId, transportId, producerId, consumer->id(), producer->source().empty() ? "-" : producer->source());
 	return {true, roommedia::BuildConsumerData(producer->peerId(), producer, consumer)};
+}
+
+RoomService::Result RoomService::closeProducer(const std::string& roomId,
+	const std::string& peerId, const std::string& producerId)
+{
+	MS_INFO(logger_, "[{} {}] closeProducer start producerId={}", roomId, peerId, producerId);
+	auto room = roomManager_.getRoom(roomId);
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] closeProducer failed: room not found producerId={}",
+			roomId, peerId, producerId);
+		return {false, {}, "", "room not found"};
+	}
+	auto peer = room->getPeer(peerId);
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] closeProducer failed: peer not found producerId={}",
+			roomId, peerId, producerId);
+		return {false, {}, "", "peer not found"};
+	}
+	auto producerIt = peer->producers.find(producerId);
+	if (producerIt == peer->producers.end() || !producerIt->second) {
+		auto producer = room->router()->getProducerById(producerId);
+		if (producer) {
+			MS_WARN(logger_, "[{} {}] closeProducer denied: producer belongs to peer={} producerId={}",
+				roomId, peerId, producer->peerId(), producerId);
+			return {false, {}, "", "permission denied"};
+		}
+		MS_WARN(logger_, "[{} {}] closeProducer failed: producer not found [{}]",
+			roomId, peerId, producerId);
+		return {false, {}, "", "producer not found"};
+	}
+
+	auto producer = producerIt->second;
+	const std::string kind = producer->kind();
+	const std::string source = producer->source();
+	json notifiedPeers = json::array();
+	size_t closedConsumers = 0;
+	for (const auto& other : room->getOtherPeers(peerId)) {
+		if (!other) continue;
+		json consumerIds = json::array();
+		std::vector<std::pair<std::string, std::shared_ptr<Consumer>>> consumersToClose;
+		for (const auto& [consumerId, consumer] : other->consumers) {
+			if (consumer && consumer->producerId() == producerId) {
+				consumersToClose.emplace_back(consumerId, consumer);
+			}
+		}
+		for (const auto& [consumerId, consumer] : consumersToClose) {
+			if (consumer && !consumer->closed()) {
+				consumer->close();
+			}
+			if (other->consumers.find(consumerId) != other->consumers.end()) {
+				other->consumers.erase(consumerId);
+			}
+			if (consumer) {
+				consumerIds.push_back(consumerId);
+				++closedConsumers;
+			}
+		}
+		if (!consumerIds.empty() && notify_) {
+			MS_INFO(logger_, "[{} {}] notify producerLeft target={} producerId={} consumerIds={} kind={}",
+				roomId, peerId, other->id, producerId, consumerIds.dump(), kind);
+			notify_(roomId, other->id, {
+				{"notification", true},
+				{"method", "producerLeft"},
+				{"data", {
+					{"peerId", peerId},
+					{"producerId", producerId},
+					{"consumerIds", consumerIds},
+					{"kind", kind},
+					{"appData", producer->appData()}
+				}}
+			});
+			notifiedPeers.push_back(other->id);
+		}
+	}
+
+	std::unordered_map<std::string, std::shared_ptr<Producer>> removedProducers;
+	removedProducers.emplace(producerId, producer);
+	cleanupPeerProducerOwnerCache(roomId, removedProducers);
+	cleanupPeerProducerDemandCache(roomId, removedProducers);
+	room->router()->removeProducer(producerId);
+	if (!producer->closed()) {
+		producer->close();
+	} else {
+		peer->producers.erase(producerId);
+	}
+	markDownlinkRoomDirty(roomId);
+
+	MS_INFO(logger_, "[{} {}] closeProducer done producerId={} kind={} source={} closedConsumers={} notifiedPeers={}",
+		roomId, peerId, producerId, kind, source.empty() ? "-" : source, closedConsumers, notifiedPeers.dump());
+	return {true, {
+		{"producerId", producerId},
+		{"closedConsumers", closedConsumers},
+		{"notifiedPeers", notifiedPeers}
+	}};
+}
+
+RoomService::Result RoomService::closeProducerBySource(const std::string& roomId,
+	const std::string& peerId, const std::string& source)
+{
+	MS_INFO(logger_, "[{} {}] closeProducerBySource start source={}",
+		roomId, peerId, source.empty() ? "-" : source);
+	if (source.empty()) {
+		MS_WARN(logger_, "[{} {}] closeProducerBySource failed: empty source", roomId, peerId);
+		return {false, {}, "", "missing source"};
+	}
+	auto room = roomManager_.getRoom(roomId);
+	if (!room) {
+		MS_WARN(logger_, "[{} {}] closeProducerBySource failed: room not found source={}",
+			roomId, peerId, source);
+		return {false, {}, "", "room not found"};
+	}
+	auto peer = room->getPeer(peerId);
+	if (!peer) {
+		MS_WARN(logger_, "[{} {}] closeProducerBySource failed: peer not found source={}",
+			roomId, peerId, source);
+		return {false, {}, "", "peer not found"};
+	}
+
+	std::vector<std::string> producerIds;
+	for (const auto& [producerId, producer] : peer->producers) {
+		if (producer && !producer->closed() && producer->source() == source) {
+			producerIds.push_back(producerId);
+		}
+	}
+	if (producerIds.empty()) {
+		MS_WARN(logger_, "[{} {}] closeProducerBySource failed: producer not found source={}",
+			roomId, peerId, source);
+		return {false, {{"source", source}}, "", "producer not found"};
+	}
+	if (producerIds.size() > 1) {
+		MS_WARN(logger_, "[{} {}] closeProducerBySource failed: ambiguous source={} producerIds={}",
+			roomId, peerId, source, json(producerIds).dump());
+		return {false, {
+			{"source", source},
+			{"producerIds", producerIds}
+		}, "", "ambiguous producer source"};
+	}
+
+	return closeProducer(roomId, peerId, producerIds.front());
 }
 
 RoomService::Result RoomService::pauseProducer(const std::string& roomId,

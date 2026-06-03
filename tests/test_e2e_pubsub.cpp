@@ -126,6 +126,25 @@ protected:
 		}
 	}
 
+	std::string produceWithSource(
+		Client& c,
+		const std::string& kind,
+		uint32_t ssrc,
+		const std::string& source)
+	{
+		auto r = c.ws->request("produce", {
+			{"transportId", c.sendTransportId},
+			{"kind", kind},
+			{"rtpParameters", kind == "audio" ? makeAudioRtpParams(ssrc) : makeVideoRtpParams(ssrc)},
+			{"appData", {{"source", source}}}
+		});
+		EXPECT_TRUE(r.value("ok", false)) << "produce failed: " << r.dump();
+		if (!r.value("ok", false)) return "";
+		std::string producerId = r["data"]["id"];
+		c.producerIds.push_back(producerId);
+		return producerId;
+	}
+
 	// Collect all newConsumer notifications within a timeout
 	std::vector<json> collectConsumerNotifs(Client& c, int expected, int timeoutMs = 5000) {
 		std::vector<json> result;
@@ -138,6 +157,83 @@ protected:
 		return result;
 	}
 };
+
+TEST_F(E2EPubSubTest, ProducerStopNotifiesAllSubscribers) {
+	auto alice = makeClient("alice");
+	auto bob = makeClient("bob");
+	auto charlie = makeClient("charlie");
+
+	usleep(200000);
+	alice.ws->drainNotifications();
+	bob.ws->drainNotifications();
+	charlie.ws->drainNotifications();
+
+	std::string producerId = produceWithSource(alice, "video", 0x91000001, "camera-main");
+	ASSERT_FALSE(producerId.empty());
+
+	auto bobConsumers = collectConsumerNotifs(bob, 1);
+	auto charlieConsumers = collectConsumerNotifs(charlie, 1);
+	ASSERT_EQ(bobConsumers.size(), 1u);
+	ASSERT_EQ(charlieConsumers.size(), 1u);
+	ASSERT_EQ(bobConsumers[0]["data"]["producerId"], producerId);
+	ASSERT_EQ(charlieConsumers[0]["data"]["producerId"], producerId);
+	std::string bobConsumerId = bobConsumers[0]["data"]["id"];
+	std::string charlieConsumerId = charlieConsumers[0]["data"]["id"];
+
+	auto closeResp = alice.ws->request("closeProducer", {{"source", "camera-main"}});
+	ASSERT_TRUE(closeResp.value("ok", false)) << closeResp.dump();
+	EXPECT_EQ(closeResp["data"]["producerId"], producerId);
+	EXPECT_EQ(closeResp["data"]["closedConsumers"], 2u);
+
+	auto bobLeft = bob.ws->waitNotification("producerLeft", 3000);
+	auto charlieLeft = charlie.ws->waitNotification("producerLeft", 3000);
+	ASSERT_FALSE(bobLeft.empty()) << "Bob did not receive producerLeft";
+	ASSERT_FALSE(charlieLeft.empty()) << "Charlie did not receive producerLeft";
+	EXPECT_EQ(bobLeft["data"]["peerId"], "alice");
+	EXPECT_EQ(charlieLeft["data"]["peerId"], "alice");
+	EXPECT_EQ(bobLeft["data"]["producerId"], producerId);
+	EXPECT_EQ(charlieLeft["data"]["producerId"], producerId);
+	ASSERT_EQ(bobLeft["data"]["consumerIds"].size(), 1u) << bobLeft.dump();
+	ASSERT_EQ(charlieLeft["data"]["consumerIds"].size(), 1u) << charlieLeft.dump();
+	EXPECT_EQ(bobLeft["data"]["consumerIds"][0], bobConsumerId);
+	EXPECT_EQ(charlieLeft["data"]["consumerIds"][0], charlieConsumerId);
+}
+
+TEST_F(E2EPubSubTest, RepeatedProduceCloseCyclesNotifySubscribers) {
+	auto alice = makeClient("alice");
+	auto bob = makeClient("bob");
+
+	usleep(200000);
+	alice.ws->drainNotifications();
+	bob.ws->drainNotifications();
+
+	std::set<std::string> producerIds;
+	std::set<std::string> consumerIds;
+	for (uint32_t round = 0; round < 3; ++round) {
+		const std::string source = "camera-repeat";
+		std::string producerId = produceWithSource(alice, "video", 0x92000001 + round, source);
+		ASSERT_FALSE(producerId.empty());
+		EXPECT_TRUE(producerIds.insert(producerId).second);
+
+		auto consumers = collectConsumerNotifs(bob, 1);
+		ASSERT_EQ(consumers.size(), 1u) << "round=" << round;
+		EXPECT_EQ(consumers[0]["data"]["producerId"], producerId);
+		EXPECT_EQ(consumers[0]["data"]["appData"]["source"], source);
+		std::string consumerId = consumers[0]["data"]["id"];
+		EXPECT_TRUE(consumerIds.insert(consumerId).second);
+
+		auto closeResp = alice.ws->request("closeProducer", {{"source", source}});
+		ASSERT_TRUE(closeResp.value("ok", false)) << closeResp.dump();
+		EXPECT_EQ(closeResp["data"]["producerId"], producerId);
+		EXPECT_EQ(closeResp["data"]["closedConsumers"], 1u);
+
+		auto left = bob.ws->waitNotification("producerLeft", 3000);
+		ASSERT_FALSE(left.empty()) << "round=" << round;
+		EXPECT_EQ(left["data"]["producerId"], producerId);
+		ASSERT_EQ(left["data"]["consumerIds"].size(), 1u) << left.dump();
+		EXPECT_EQ(left["data"]["consumerIds"][0], consumerId);
+	}
+}
 
 // ═══════════════════════════════════════════════════════════════
 // The main scenario
@@ -285,7 +381,7 @@ TEST_F(E2EPubSubTest, LateJoinerReceivesAllStreams) {
 
 	// Charlie joins late — manually create transports to inspect response
 	TestWsClient charlieWs;
-	ASSERT_TRUE(charlieWs.connect(HOST, PORT));
+	ASSERT_TRUE(charlieWs.connect(HOST, sfu_.port()));
 
 	auto joinResp = charlieWs.request("join", {
 		{"roomId", room_}, {"peerId", "charlie"},
@@ -339,7 +435,7 @@ TEST_F(E2EPubSubTest, RapidJoinLeaveStability) {
 	for (int i = 0; i < 10; i++) {
 		std::string peerId = "rapid_" + std::to_string(i);
 		TestWsClient ws;
-		ASSERT_TRUE(ws.connect(HOST, PORT));
+		ASSERT_TRUE(ws.connect(HOST, sfu_.port()));
 
 		auto joinResp = ws.request("join", {
 			{"roomId", room_}, {"peerId", peerId},

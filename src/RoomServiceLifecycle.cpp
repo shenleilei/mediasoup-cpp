@@ -6,11 +6,18 @@
 namespace mediasoup {
 
 RoomService::Result RoomService::join(const std::string& roomId, const std::string& peerId,
-	const std::string& displayName, const json& rtpCapabilities, const std::string& clientIp)
+	const std::string& displayName, const json& rtpCapabilities, const std::string& clientIp,
+	const std::string& audioRole)
 {
 	(void)clientIp;
-	MS_INFO(logger_, "[{} {}] join start displayName={} clientIp={} rtpCapabilities={}",
-		roomId, peerId, displayName, clientIp, rtpCapabilities.dump());
+	MS_INFO(logger_, "[{} {}] join start displayName={} clientIp={} audioRole={} rtpCapabilities={}",
+		roomId, peerId, displayName, clientIp, audioRole, rtpCapabilities.dump());
+
+	if (audioRole != "normal" && audioRole != "audio-restricted") {
+		MS_WARN(logger_, "[{} {}] join validation failed: invalid audioRole={}",
+			roomId, peerId, audioRole);
+		return {false, {}, "", "invalid audioRole"};
+	}
 
 	auto existingRoom = roomManager_.getRoom(roomId);
 	if (!existingRoom) {
@@ -36,6 +43,9 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 	auto peer = std::make_shared<Peer>();
 	peer->id = peerId;
 	peer->displayName = displayName;
+	peer->audioRole = audioRole == "audio-restricted"
+		? Peer::AudioRole::AudioRestricted
+		: Peer::AudioRole::Normal;
 	if (!rtpCapabilities.empty()) {
 		peer->rtpCapabilities = rtpCapabilities.get<RtpCapabilities>();
 	} else {
@@ -46,6 +56,13 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 	bool isReconnect = false;
 	if (oldPeer) {
 		isReconnect = true;
+		for (const auto& targetPeerId : room->removeAudioRestrictedSlotsForOwner(peerId)) {
+			closeAudioConsumersForSlot(roomId, room, peerId, targetPeerId);
+		}
+		std::string oldOwnerPeerId;
+		if (room->removeAudioRestrictedSlotForTarget(peerId, oldOwnerPeerId)) {
+			closeAudioConsumersForSlot(roomId, room, oldOwnerPeerId, peerId);
+		}
 		const auto oldPeerProducers = oldPeer->producers;
 		for (auto& [pid, _] : oldPeerProducers)
 			room->router()->removeProducer(pid);
@@ -70,6 +87,11 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 	for (auto& other : room->getOtherPeers(peerId)) {
 		targetPeers.push_back(other->id);
 		for (auto& [pid, prod] : other->producers) {
+			if (!canConsumeProducerForPeer(room, peer, prod)) {
+				MS_DEBUG(logger_, "[{} {}] join existingProducers skip unauthorized producer={} owner={} kind={}",
+					roomId, peerId, prod->id(), other->id, prod->kind());
+				continue;
+			}
 			json producerInfo = {
 				{"producerId", prod->id()}, {"producerPeerId", other->id},
 				{"kind", prod->kind()},
@@ -92,7 +114,7 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 		broadcast_(roomId, peerId, {
 			{"notification", true}, {"method", "peerJoined"},
 			{"data", {{"peerId", peerId}, {"displayName", displayName},
-				{"reconnect", isReconnect}}}
+				{"audioRole", audioRole}, {"reconnect", isReconnect}}}
 		});
 	}
 
@@ -100,7 +122,8 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 		{"routerRtpCapabilities", room->router()->rtpCapabilities()},
 		{"existingProducers", existingProducers},
 		{"participants", room->getParticipants()},
-		{"qosPolicy", getDefaultQosPolicy()}
+		{"qosPolicy", getDefaultQosPolicy()},
+		{"audioRole", audioRole}
 	}};
 	MS_INFO(logger_, "[{} {}] join done reconnect={} participants={}",
 		roomId, peerId, isReconnect ? "true" : "false", room->peerCount());
@@ -127,6 +150,13 @@ RoomService::Result RoomService::leave(const std::string& roomId, const std::str
 
 	auto peer = room->getPeer(peerId);
 	if (peer) {
+		for (const auto& targetPeerId : room->removeAudioRestrictedSlotsForOwner(peerId)) {
+			closeAudioConsumersForSlot(roomId, room, peerId, targetPeerId);
+		}
+		std::string ownerPeerId;
+		if (room->removeAudioRestrictedSlotForTarget(peerId, ownerPeerId)) {
+			closeAudioConsumersForSlot(roomId, room, ownerPeerId, peerId);
+		}
 		cleanupPeerProducerOwnerCache(roomId, peer->producers);
 		cleanupPeerProducerDemandCache(roomId, peer->producers);
 		for (auto& [pid, _] : peer->producers)

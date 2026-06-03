@@ -90,6 +90,79 @@ public:
 		return arr;
 	}
 
+	std::string audioRestrictedSlotOwner(const std::string& targetPeerId) const {
+		std::lock_guard<std::mutex> lock(mutex_);
+		auto it = audioRestrictedSlots_.find(targetPeerId);
+		return it != audioRestrictedSlots_.end() ? it->second : "";
+	}
+
+	bool setAudioRestrictedSlotOwner(
+		const std::string& targetPeerId,
+		const std::string& ownerPeerId,
+		std::string& currentOwnerPeerId)
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		auto it = audioRestrictedSlots_.find(targetPeerId);
+		if (it != audioRestrictedSlots_.end()) {
+			currentOwnerPeerId = it->second;
+			return currentOwnerPeerId == ownerPeerId;
+		}
+		audioRestrictedSlots_[targetPeerId] = ownerPeerId;
+		currentOwnerPeerId = ownerPeerId;
+		touch();
+		return true;
+	}
+
+	bool releaseAudioRestrictedSlot(
+		const std::string& targetPeerId,
+		const std::string& ownerPeerId,
+		std::string& currentOwnerPeerId)
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		auto it = audioRestrictedSlots_.find(targetPeerId);
+		if (it == audioRestrictedSlots_.end()) {
+			currentOwnerPeerId.clear();
+			return true;
+		}
+		currentOwnerPeerId = it->second;
+		if (currentOwnerPeerId != ownerPeerId) {
+			return false;
+		}
+		audioRestrictedSlots_.erase(it);
+		touch();
+		return true;
+	}
+
+	std::vector<std::string> removeAudioRestrictedSlotsForOwner(const std::string& ownerPeerId) {
+		std::lock_guard<std::mutex> lock(mutex_);
+		std::vector<std::string> targetPeerIds;
+		for (auto it = audioRestrictedSlots_.begin(); it != audioRestrictedSlots_.end(); ) {
+			if (it->second == ownerPeerId) {
+				targetPeerIds.push_back(it->first);
+				it = audioRestrictedSlots_.erase(it);
+			} else {
+				++it;
+			}
+		}
+		if (!targetPeerIds.empty()) {
+			touch();
+		}
+		return targetPeerIds;
+	}
+
+	bool removeAudioRestrictedSlotForTarget(const std::string& targetPeerId, std::string& ownerPeerId) {
+		std::lock_guard<std::mutex> lock(mutex_);
+		auto it = audioRestrictedSlots_.find(targetPeerId);
+		if (it == audioRestrictedSlots_.end()) {
+			ownerPeerId.clear();
+			return false;
+		}
+		ownerPeerId = it->second;
+		audioRestrictedSlots_.erase(it);
+		touch();
+		return true;
+	}
+
 	void touch() { lastActivity_ = std::chrono::steady_clock::now(); }
 	bool isIdle(int seconds) const {
 		std::lock_guard<std::mutex> lock(mutex_);
@@ -112,6 +185,7 @@ private:
 	std::string id_;
 	std::shared_ptr<Router> router_;
 	std::unordered_map<std::string, std::shared_ptr<Peer>> peers_;
+	std::unordered_map<std::string, std::string> audioRestrictedSlots_; // targetPeerId -> ownerPeerId
 	std::chrono::steady_clock::time_point lastActivity_;
 	mutable std::mutex mutex_;
 };

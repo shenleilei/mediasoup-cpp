@@ -39,7 +39,8 @@ json BuildWorkerCompletedResponse(uint64_t id, const RoomService::Result& result
 		{"response", true},
 		{"id", id},
 		{"ok", false},
-		{"error", result.error}
+		{"error", result.error},
+		{"data", result.data}
 	};
 }
 
@@ -580,7 +581,8 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 							{"response", true},
 							{"id", id},
 							{"ok", false},
-							{"error", result.error}
+							{"error", result.error},
+							{"data", result.data}
 						};
 					}
 					if (!result.ok) {

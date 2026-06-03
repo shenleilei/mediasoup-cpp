@@ -210,6 +210,67 @@ if (msg.notification === true && msg.method === 'newConsumer') {
 
 所以“没有 `newConsumer`”本身不是结论，只是一个现象。
 
+### `producerLeft`
+
+含义：
+
+- 某个远端 producer 已经被发布端关闭
+- 服务端已经关闭了当前订阅端上由该 producer 派生出的 consumers
+- 当前客户端应该移除对应远端媒体
+
+典型数据：
+
+```json
+{
+  "notification": true,
+  "method": "producerLeft",
+  "data": {
+    "peerId": "peer-a",
+    "producerId": "producer-audio-1",
+    "consumerIds": ["consumer-audio-1"],
+    "kind": "audio",
+    "appData": {
+      "source": "audio"
+    }
+  }
+}
+```
+
+客户端应该做什么：
+
+- 优先按 `consumerIds` 移除本地 consumer 和对应 audio/video DOM。
+- 再按 `producerId` 做兜底清理，避免 UI 残留。
+- 不要把它当成 `peerLeft`；发布端 peer 可能还在线，只是关闭了一路 producer。
+
+### `consumerClosed`
+
+含义：
+
+- 服务端关闭了当前客户端上的某条 consumer
+- producer 不一定关闭，发布端 peer 也不一定离开
+
+典型数据：
+
+```json
+{
+  "notification": true,
+  "method": "consumerClosed",
+  "data": {
+    "consumerId": "consumer-audio-1",
+    "producerId": "producer-audio-1",
+    "producerPeerId": "peer-a",
+    "kind": "audio",
+    "reason": "audio-slot-release"
+  }
+}
+```
+
+客户端应该做什么：
+
+- 按 `consumerId` 移除本地 consumer 和对应 audio/video DOM。
+- 如果业务维护了 producerId 到 consumerId 的索引，同步删除该索引。
+- 不要自动重试 consume，除非业务上确认仍有授权和需要。
+
 ## 4. join 响应里的已有流
 
 虽然它不是 notify，但端上必须和 notify 区分开。
@@ -585,12 +646,14 @@ for (const p of joinResp.data.existingProducers || []) {
 1. `join` 响应里的 `routerRtpCapabilities`
 2. `join` 响应里的 `existingProducers`
 3. `newConsumer`
-4. `peerLeft`
+4. `producerLeft`
+5. `peerLeft`
 
 其中：
 
 - `existingProducers` 解决“后加入者”
 - `newConsumer` 解决“已在房间里的人收到后续新流”
+- `producerLeft` 解决“peer 没离开，但某一路流被关闭”
 
 ## 9. 推荐分类
 
@@ -598,12 +661,14 @@ for (const p of joinResp.data.existingProducers || []) {
 
 - `existingProducers`
 - `newConsumer`
+- `producerLeft`
 - `peerLeft`
 - `serverRestart`
 
 ### 建议处理
 
 - `peerJoined`
+- `consumerClosed`
 - `qosPolicy`
 - `qosOverride`
 

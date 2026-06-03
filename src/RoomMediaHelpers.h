@@ -12,6 +12,9 @@
 namespace mediasoup::roommedia {
 
 using NotifyFn = std::function<void(const std::string&, const std::string&, const json&)>;
+using CanConsumeProducerFn = std::function<bool(
+	const std::shared_ptr<Peer>&,
+	const std::shared_ptr<Producer>&)>;
 
 inline std::vector<uint32_t> CollectProducerSsrcs(const std::shared_ptr<Producer>& producer)
 {
@@ -193,7 +196,8 @@ inline json ConsumeExistingProducers(
 	const std::shared_ptr<Transport>& transport,
 	const std::shared_ptr<spdlog::logger>& logger,
 	const char* failureContext,
-	bool includeProducerPaused = true)
+	bool includeProducerPaused = true,
+	const CanConsumeProducerFn& canConsumeProducer = nullptr)
 {
 	json consumers = json::array();
 	if (!room || !peer || !transport) {
@@ -207,6 +211,11 @@ inline json ConsumeExistingProducers(
 
 	for (const auto& other : room->getOtherPeers(peerId)) {
 		for (const auto& [producerKey, producer] : other->producers) {
+			if (canConsumeProducer && !canConsumeProducer(peer, producer)) {
+				MS_DEBUG(logger, "[{} {}] {} skipped unauthorized producer {} kind={}",
+					roomId, peerId, failureContext, producerKey, producer ? producer->kind() : "-");
+				continue;
+			}
 			try {
 				json consumeOpts = {
 					{"producerId", producer->id()},
@@ -214,6 +223,7 @@ inline json ConsumeExistingProducers(
 					{"consumableRtpParameters", producer->consumableRtpParameters()}
 				};
 				auto consumer = transport->consume(consumeOpts);
+				consumer->setProducerPeerId(other->id);
 				TrackPeerConsumer(roomId, peerId, peer, consumer, logger);
 				if (consumer->kind() == "video") {
 					try {
@@ -265,13 +275,20 @@ inline void AutoSubscribeProducerToOtherPeers(
 	const std::shared_ptr<Producer>& producer,
 	const std::shared_ptr<spdlog::logger>& logger,
 	const NotifyFn& notify,
-	bool allowPlainFallback)
+	bool allowPlainFallback,
+	const CanConsumeProducerFn& canConsumeProducer = nullptr)
 {
 	if (!room || !producer) {
 		return;
 	}
 
 	for (const auto& other : room->getOtherPeers(producerPeerId)) {
+		if (canConsumeProducer && !canConsumeProducer(other, producer)) {
+			MS_DEBUG(logger, "[{} {}] auto-subscribe skip {}: unauthorized producer {} kind={}",
+				roomId, producerPeerId, other->id, producer->id(), producer->kind());
+			continue;
+		}
+
 		auto recvTransport = ResolveSubscriberTransport(other, allowPlainFallback);
 		if (!recvTransport) {
 			MS_DEBUG(logger, "[{} {}] auto-subscribe skip {}: no compatible recv transport",
@@ -289,6 +306,7 @@ inline void AutoSubscribeProducerToOtherPeers(
 				{"consumableRtpParameters", producer->consumableRtpParameters()}
 			};
 			auto consumer = recvTransport->consume(consumeOpts);
+			consumer->setProducerPeerId(producerPeerId);
 			TrackPeerConsumer(roomId, other->id, other, consumer, logger);
 			if (consumer->kind() == "video") {
 				try {

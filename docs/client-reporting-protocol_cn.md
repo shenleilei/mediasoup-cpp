@@ -228,6 +228,70 @@
 
 所以 `produce` 不是单纯“上传一条流”，它还会影响房间里其他人的订阅状态。
 
+### `closeProducer`
+
+含义：
+
+- 客户端停止自己已经发布的一路 producer
+- 服务端关闭该 producer 派生到订阅端的 consumers
+- 服务端给受影响订阅端推 `producerLeft`
+
+按 producerId 关闭：
+
+```json
+{
+  "request": true,
+  "id": 7,
+  "method": "closeProducer",
+  "data": {
+    "producerId": "producer-audio-1"
+  }
+}
+```
+
+按业务 source 关闭：
+
+```json
+{
+  "request": true,
+  "id": 8,
+  "method": "closeProducer",
+  "data": {
+    "source": "audio"
+  }
+}
+```
+
+成功响应：
+
+```json
+{
+  "response": true,
+  "id": 8,
+  "ok": true,
+  "data": {
+    "producerId": "producer-audio-1",
+    "closedConsumers": 1,
+    "notifiedPeers": ["peer-b"]
+  }
+}
+```
+
+端上推荐顺序：
+
+```text
+closeProducer(producerId 或 source)
+本地 producer.close()
+停止对应 MediaStreamTrack
+从本地 publishedProducers 删除
+```
+
+注意：
+
+- 只能关闭本 peer 自己的 producer；关闭别人的 producer 会返回 `permission denied`。
+- `source` 只适合同一个 peer 下唯一 producer 匹配；多路同 source 会返回 `ambiguous producer source`。
+- `closeProducer` 不自动释放音频受限端 slot；音频受限业务关闭还需要 `releaseAudioRestrictedSlot`。
+
 ## 5. 订阅与消费
 
 ### `consume`
@@ -241,7 +305,7 @@
 ```json
 {
   "request": true,
-  "id": 7,
+  "id": 9,
   "method": "consume",
   "data": {
     "transportId": "recv-transport-1",
@@ -300,7 +364,7 @@
 ```json
 {
   "request": true,
-  "id": 8,
+  "id": 10,
   "method": "requestConsumerKeyFrame",
   "data": {
     "consumerId": "consumer-1"
@@ -324,7 +388,7 @@
 ```json
 {
   "request": true,
-  "id": 9,
+  "id": 11,
   "method": "pauseConsumer",
   "data": {
     "consumerId": "consumer-1"
@@ -335,7 +399,7 @@
 ```json
 {
   "request": true,
-  "id": 10,
+  "id": 12,
   "method": "resumeConsumer",
   "data": {
     "consumerId": "consumer-1"
@@ -354,7 +418,7 @@
 ```json
 {
   "request": true,
-  "id": 11,
+  "id": 13,
   "method": "setConsumerPreferredLayers",
   "data": {
     "consumerId": "consumer-1",
@@ -375,7 +439,7 @@
 ```json
 {
   "request": true,
-  "id": 12,
+  "id": 14,
   "method": "setConsumerPriority",
   "data": {
     "consumerId": "consumer-1",
@@ -528,6 +592,7 @@
 5. `createWebRtcTransport(producing=true)`
 6. `connectWebRtcTransport`
 7. `produce`
+8. 停止某路本地流时发 `closeProducer`
 
 ## 10. 推荐顺序
 
@@ -541,6 +606,7 @@
 6. 处理 `existingProducers`
 7. 后续处理 `newConsumer`
 8. 如果要发流，再创建发送 transport 并 `produce`
+9. 如果要停止某路本地流，先 `closeProducer`，再关闭本地 producer/track
 
 ## 11. 当前代码位置
 
