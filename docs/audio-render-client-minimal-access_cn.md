@@ -1,6 +1,6 @@
 # 音频受限端客户端最小接入
 
-本文只写客户端接入动作：发什么、收什么、收到后做什么。字段示例见 [audio-render-peer-message-design_cn.md](./audio-render-peer-message-design_cn.md)。
+本文只写客户端接入动作：发什么、收什么、收到后做什么。第一版只考虑 `WebRtcTransport`。
 
 ## 1. 受限端入会
 
@@ -220,3 +220,210 @@ https://volcvideo3.zelostech.com.cn:1770/?displayName=普通端A
 ## 7. 请求 id
 
 `id` 是客户端数字流水号，只用于匹配 request/response，不是业务 id。
+
+## 8. 信令 JSON 示例
+
+### join
+
+客户端发：
+
+```json
+{
+  "request": true,
+  "id": 1,
+  "method": "join",
+  "data": {
+    "roomId": "room-1",
+    "peerId": "peer-b",
+    "displayName": "受限端A",
+    "audioRole": "audio-restricted"
+  }
+}
+```
+
+客户端收：
+
+```json
+{
+  "response": true,
+  "id": 1,
+  "ok": true,
+  "data": {
+    "audioRole": "audio-restricted",
+    "routerRtpCapabilities": {},
+    "existingProducers": [],
+    "participants": [
+      {
+        "peerId": "peer-b",
+        "displayName": "受限端A",
+        "audioRole": "audio-restricted",
+        "producers": []
+      }
+    ]
+  }
+}
+```
+
+### claimAudioRestrictedSlot
+
+客户端发：
+
+```json
+{
+  "request": true,
+  "id": 2,
+  "method": "claimAudioRestrictedSlot",
+  "data": {
+    "targetPeerId": "peer-b"
+  }
+}
+```
+
+占位成功：
+
+```json
+{
+  "response": true,
+  "id": 2,
+  "ok": true,
+  "data": {
+    "required": true,
+    "claimed": true,
+    "targetPeerId": "peer-b",
+    "ownerPeerId": "peer-a",
+    "alreadyOwned": false,
+    "consumersCreated": 1
+  }
+}
+```
+
+已被占用：
+
+```json
+{
+  "response": true,
+  "id": 2,
+  "ok": false,
+  "error": "audio slot occupied",
+  "data": {
+    "reason": "occupied",
+    "targetPeerId": "peer-b",
+    "ownerPeerId": "peer-other"
+  }
+}
+```
+
+### closeProducer
+
+客户端发：
+
+```json
+{
+  "request": true,
+  "id": 3,
+  "method": "closeProducer",
+  "data": {
+    "source": "audio"
+  }
+}
+```
+
+也可以按 producerId 发：
+
+```json
+{
+  "request": true,
+  "id": 3,
+  "method": "closeProducer",
+  "data": {
+    "producerId": "producer-audio-1"
+  }
+}
+```
+
+客户端收：
+
+```json
+{
+  "response": true,
+  "id": 3,
+  "ok": true,
+  "data": {
+    "producerId": "producer-audio-1",
+    "closedConsumers": 1,
+    "notifiedPeers": ["peer-b"]
+  }
+}
+```
+
+### releaseAudioRestrictedSlot
+
+客户端发：
+
+```json
+{
+  "request": true,
+  "id": 4,
+  "method": "releaseAudioRestrictedSlot",
+  "data": {
+    "targetPeerId": "peer-b"
+  }
+}
+```
+
+客户端收：
+
+```json
+{
+  "response": true,
+  "id": 4,
+  "ok": true,
+  "data": {
+    "released": true,
+    "targetPeerId": "peer-b",
+    "closedConsumers": 1
+  }
+}
+```
+
+### producerLeft
+
+客户端收：
+
+```json
+{
+  "notification": true,
+  "method": "producerLeft",
+  "data": {
+    "peerId": "peer-a",
+    "producerId": "producer-audio-1",
+    "consumerIds": ["consumer-audio-1"],
+    "kind": "audio",
+    "appData": {
+      "source": "audio"
+    }
+  }
+}
+```
+
+客户端行为：按 `consumerIds` 删除 consumer 和 DOM，再按 `producerId` 兜底清理。
+
+### consumerClosed
+
+客户端收：
+
+```json
+{
+  "notification": true,
+  "method": "consumerClosed",
+  "data": {
+    "consumerId": "consumer-audio-1",
+    "producerId": "producer-audio-1",
+    "producerPeerId": "peer-a",
+    "kind": "audio",
+    "reason": "audio-slot-release"
+  }
+}
+```
+
+客户端行为：按 `consumerId` 删除 consumer 和 DOM，不要自动重试 consume。
