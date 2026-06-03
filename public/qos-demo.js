@@ -360,13 +360,10 @@
   }
 
   function prettyTrackSource(source, kind = 'video') {
-    if (source === 'screenShare') {
-      return '屏幕共享';
+    if (source) {
+      return String(source);
     }
-    if (source === 'audio' || kind === 'audio') {
-      return '音频';
-    }
-    return '摄像头';
+    return kind === 'audio' ? 'audio' : 'video';
   }
 
   function remoteTrackTitle(entry) {
@@ -382,7 +379,7 @@
 
   function remoteTrackSubtitle(entry) {
     const parts = [entry.peerId || 'remote-peer'];
-    parts.push(prettyTrackSource(entry.remoteTrack?.source, entry.consumer?.kind));
+    parts.push(prettyTrackSource(entry.remoteTrack?.source || entry.source, entry.consumer?.kind));
     parts.push(shortId(entry.producerId));
     return parts.filter(Boolean).join(' · ');
   }
@@ -796,7 +793,7 @@
           ? `ssrc:${entry.remoteProducer.ssrcs[0]}`
           : '-'
       )),
-      qosItem('Source', prettyTrackSource(entry.remoteTrack?.source, entry.consumer?.kind)),
+      qosItem('Source', prettyTrackSource(entry.remoteTrack?.source || entry.source, entry.consumer?.kind)),
       qosItem('Publisher QoS', fmtValue(entry.remotePeerStats?.qos?.quality, entry.remoteProducer ? 'server-only' : '-')),
       qosItem('Producer Score', latestProducerScore(entry.remoteProducer)),
       qosItem('Producer Bitrate', fmtBitrate(remoteProducerStat?.bitrate)),
@@ -1452,7 +1449,7 @@
         producerId: data.producerId,
         kind: data.kind,
         rtpParameters: data.rtpParameters,
-        appData: {},
+        appData: data.appData || {},
       });
 
       if (consumer.kind === 'video') {
@@ -1498,6 +1495,7 @@
         const entry = {
           consumer,
           producerId: data.producerId,
+          source: data.appData?.source || '',
           peerId: data.peerId || data.producerId,
           element: renderedElement,
           stream,
@@ -1549,6 +1547,9 @@
         producerId: response.producerId,
         kind: response.kind || kind,
         rtpParameters: response.rtpParameters,
+        peerId: response.peerId,
+        appData: response.appData || {},
+        producerPaused: response.producerPaused,
       });
     } catch (error) {
       log(`Consume error [room=${state.roomId} peer=${state.peerId} producer=${producerId} kind=${kind || '-'}]: ${error.message}`);

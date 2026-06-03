@@ -167,15 +167,14 @@ inline json BuildConsumerData(
 	const std::shared_ptr<Consumer>& consumer,
 	bool includeProducerPaused = true)
 {
-	json data = {
-		{"peerId", peerId},
-		{"producerId", producer->id()},
-		{"id", consumer->id()},
-		{"kind", consumer->kind()},
-		{"rtpParameters", consumer->rtpParameters()}
-	};
+	json data = consumer->toJson();
+	data["peerId"] = peerId;
+	data["producerId"] = producer->id();
+	data["appData"] = producer->appData();
 	if (includeProducerPaused) {
 		data["producerPaused"] = producer->paused();
+	} else {
+		data.erase("producerPaused");
 	}
 
 	return data;

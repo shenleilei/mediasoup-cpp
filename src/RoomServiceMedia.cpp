@@ -874,9 +874,9 @@ RoomService::Result RoomService::consume(const std::string& roomId,
 		return {false, {}, "", "consume failed: unknown error"};
 	}
 	roommedia::TrackPeerConsumer(roomId, peerId, peer, consumer, logger_);
-	MS_INFO(logger_, "[{} {}] consume done transportId={} producerId={} consumerId={}",
-		roomId, peerId, transportId, producerId, consumer->id());
-	return {true, consumer->toJson()};
+	MS_INFO(logger_, "[{} {}] consume done transportId={} producerId={} consumerId={} source={}",
+		roomId, peerId, transportId, producerId, consumer->id(), producer->source().empty() ? "-" : producer->source());
+	return {true, roommedia::BuildConsumerData(producer->peerId(), producer, consumer)};
 }
 
 RoomService::Result RoomService::pauseProducer(const std::string& roomId,

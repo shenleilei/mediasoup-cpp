@@ -64,6 +64,15 @@
 - `participants`
 - `qosPolicy`
 
+`existingProducers[]` 是加入时房间里已经存在的 producer 候选列表。每一项包含：
+
+- `producerId`
+- `producerPeerId`
+- `kind`
+- `appData`
+
+如果发布端在 `produce.appData.source` 里带了业务来源，订阅端从 `existingProducers[].appData.source` 读取。它不是裸 `source` 字段。
+
 客户端收到后，通常马上做两件事：
 
 1. `device.load(routerRtpCapabilities)`
@@ -189,7 +198,7 @@
     "kind": "video",
     "rtpParameters": { },
     "appData": {
-      "source": "camera"
+      "source": "vehicle-left-door"
     }
   }
 }
@@ -202,12 +211,13 @@
 - `rtpParameters`
 - `appData.source`
 
-`appData.source` 常见值：
+`appData.source` 是业务自定义的 producer 来源标识。
+服务端只校验它是字符串，不把它限定成 `audio` / `camera` / `screenShare` 这类固定枚举。
+媒体类型由 `kind` 表达，`source` 用来让业务把某个 producer 绑定到自己的摄像头、车载位置、设备通道或其它业务来源。
 
-- `audio`
-- `camera`
-- `screenShare`
-- 业务自定义 source
+如果端上希望订阅端识别这路流，应该在 `produce` 时稳定传入 `appData.source`。服务端会把这份 `appData` 保存到该 producer 上，并在后续 `newConsumer`、`createWebRtcTransport(consuming=true)` 返回的 `consumers`、以及显式 `consume` 响应里一起返回。
+
+注意：下行仍然返回 `appData.source`，不是裸 `source` 字段。
 
 ### 发送后的影响
 
@@ -246,10 +256,38 @@
 - 这里的 `rtpCapabilities` 必须是本端真实消费能力
 - 服务端会据此做 codec 匹配
 - 成功后返回：
-  - `consumerId`
+  - `id`（consumerId）
   - `kind`
   - `producerId`
+  - `peerId`
+  - `appData`
   - `rtpParameters`
+  - `producerPaused`（可选状态字段，最小接入可忽略）
+
+响应示例：
+
+```json
+{
+  "response": true,
+  "id": 7,
+  "ok": true,
+  "data": {
+    "peerId": "vehicle_ZL15812",
+    "producerId": "producer-video-1",
+    "id": "consumer-video-1",
+    "kind": "video",
+    "appData": {
+      "source": "vehicle-left-door"
+    },
+    "rtpParameters": { },
+    "producerPaused": false
+  }
+}
+```
+
+这里的 `peerId` 是 producer 所属 peer，不是当前订阅端 peer。这里的 `appData` 来自发布端 `produce.appData`，端上读取业务来源时使用 `data.appData.source`。
+
+`producerPaused` 只是 producer 当前暂停状态提示，不是 `recvTransport.consume(...)` 的必需入参。
 
 ### `requestConsumerKeyFrame`
 

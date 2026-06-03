@@ -132,7 +132,62 @@
 
 ### 响应
 
-服务端返回的关键字段有：
+服务端返回：
+
+```json
+{
+  "response": true,
+  "id": 1,
+  "ok": true,
+  "data": {
+    "routerRtpCapabilities": {
+      "codecs": [
+        {
+          "kind": "audio",
+          "mimeType": "audio/opus",
+          "clockRate": 48000,
+          "channels": 2
+        },
+        {
+          "kind": "video",
+          "mimeType": "video/H264",
+          "clockRate": 90000
+        }
+      ],
+      "headerExtensions": [
+        { "kind": "video", "uri": "urn:ietf:params:rtp-hdrext:sdes:mid" }
+      ]
+    },
+    "existingProducers": [
+      {
+        "producerId": "producer-video-1",
+        "producerPeerId": "vehicle_ZL15812",
+        "kind": "video",
+        "appData": {
+          "source": "vehicle-left-door"
+        }
+      }
+    ],
+    "participants": [
+      {
+        "peerId": "vehicle_ZL15812",
+        "displayName": "vehicle_ZL15812",
+        "producers": [
+          {
+            "producerId": "producer-video-1",
+            "kind": "video"
+          }
+        ]
+      }
+    ],
+    "qosPolicy": {
+      "schema": "mediasoup.qos.policy.v1"
+    }
+  }
+}
+```
+
+关键字段：
 
 - `routerRtpCapabilities`
 - `existingProducers`
@@ -172,6 +227,10 @@
 - 这是已有流候选列表
 - 不是最终可播放 consumer
 - 真正播放还要再经过 `consume`
+- 每一项会带 `producerId`、`producerPeerId`、`kind`、`appData`
+- `appData` 原样来自发布端 `produce.appData`
+- 如果发布端声明了业务来源，端上从 `appData.source` 读取
+- `existingProducers` 只是候选 producer 列表，没有 `consumerId`，也没有 `rtpParameters`
 
 ## 5. device.load
 
@@ -255,6 +314,42 @@ device.rtpCapabilities
 - 后加入者不一定非要等 `newConsumer`
 - 很多已有流会直接在这一步返回
 
+`consumers[]` 每一项是已经协商好的消费参数，结构和 `newConsumer.data` 保持一致：
+
+```json
+{
+  "peerId": "vehicle_ZL15812",
+  "producerId": "producer-1",
+  "id": "consumer-1",
+  "kind": "video",
+  "appData": {
+    "source": "vehicle-left-door"
+  },
+  "rtpParameters": { },
+  "producerPaused": false
+}
+```
+
+这里的 `appData` 来自该 producer 的 `produce.appData`，方便端上通过 `appData.source` 把 consumer 对应回业务来源。
+
+字段说明：
+
+- `peerId`
+  - producer 所属 peer
+- `producerId`
+  - 被消费的 producer
+- `id`
+  - 当前订阅端拿到的 consumerId
+- `kind`
+  - `audio` 或 `video`
+- `appData`
+  - 发布端 `produce.appData` 的服务端保存值
+- `rtpParameters`
+  - 已经协商好的消费参数，端上直接传给 `recvTransport.consume(...)`
+- `producerPaused`
+  - 可选状态字段，表示 producer 当前是否暂停
+  - 最小接入不依赖这个字段，端上调用 `recvTransport.consume(...)` 时不需要传它
+
 ### 创建发送 transport
 
 请求：
@@ -318,7 +413,7 @@ device.rtpCapabilities
     "kind": "video",
     "rtpParameters": { },
     "appData": {
-      "source": "camera"
+      "source": "vehicle-left-door"
     }
   }
 }
@@ -340,10 +435,31 @@ device.rtpCapabilities
 - `rtpParameters`
   - 来自本地 track 在 mediasoup-client 上的发送参数
 - `appData.source`
-  - 业务语义，常见值：
-    - `audio`
-    - `camera`
-    - `screenShare`
+  - 业务自定义的 producer 来源标识
+  - 服务端只校验它是字符串，不把它限定成 `audio` / `camera` / `screenShare`
+  - 媒体类型由 `kind` 表达，`source` 用于表达业务侧的设备、通道、摄像头位、车辆位置或其它来源
+
+### `source` 和 `producerId` 的关系
+
+`producerId` 是服务端为本次 `produce` 创建的运行时对象 ID。
+`appData.source` 是端上随 `produce.appData.source` 带上来的业务标签。
+
+正确理解是：
+
+- `producerId` 用来消费和控制这条媒体流
+- `appData.source` 用来让业务识别这条 producer 来自哪里
+- 同一个业务 `source` 断线重推后，可能生成新的 `producerId`
+- 同一个 peer 可以同时有多个 producer，每条 producer 可以有不同 `source`
+- 不要把 `source` 当成唯一流 ID，也不要把它当成固定媒体枚举
+
+服务端会在所有 producer / consumer 相关下行数据里，把当前 `producerId` 对应的 `appData` 一起返回：
+
+- `join-ok.data.existingProducers[]`
+- `createWebRtcTransport(consuming=true).data.consumers[]`
+- `consume` 响应
+- `newConsumer.data`
+
+协议保持同一个字段名：**下行也返回 `appData.source`，不是裸 `source` 字段**。
 
 ### 服务端成功后会做什么
 
@@ -386,12 +502,31 @@ producer 自己不应该期待收到自己这条流的 `newConsumer`。
 
 ### 响应
 
-服务端返回：
+服务端返回的 `data`：
+
+```json
+{
+  "peerId": "vehicle_ZL15812",
+  "producerId": "producer-video-1",
+  "id": "consumer-video-1",
+  "kind": "video",
+  "appData": {
+    "source": "vehicle-left-door"
+  },
+  "rtpParameters": { },
+  "producerPaused": false
+}
+```
+
+字段说明：
 
 - `id`（consumerId）
 - `producerId`
+- `peerId`（producer 所属 peer）
 - `kind`
+- `appData`（来自 producer 的 `produce.appData`，例如 `appData.source`）
 - `rtpParameters`
+- `producerPaused`（可选状态字段，producer 当前是否暂停；最小接入可忽略）
 
 ### 这一步的真实职责
 
@@ -455,14 +590,37 @@ renderRemote(stream, data.peerId, data.kind);
   "notification": true,
   "method": "newConsumer",
   "data": {
-    "peerId": "peer-b",
-    "producerId": "producer-1",
-    "id": "consumer-1",
+    "peerId": "vehicle_ZL15812",
+    "producerId": "producer-video-1",
+    "id": "consumer-video-1",
     "kind": "video",
-    "rtpParameters": { }
+    "appData": {
+      "source": "vehicle-left-door"
+    },
+    "rtpParameters": { },
+    "producerPaused": false
   }
 }
 ```
+
+字段说明：
+
+- `peerId`
+  - producer 所属 peer
+- `producerId`
+  - 被自动订阅的 producer
+- `id`
+  - 服务端为当前订阅端创建的 consumerId
+- `kind`
+  - `audio` 或 `video`
+- `appData`
+  - 发布端 `produce.appData` 的服务端保存值
+- `rtpParameters`
+  - 已经协商好的消费参数
+- `producerPaused`
+  - 可选状态字段
+  - 如果服务端返回该字段，表示 producer 当前暂停状态
+  - 最小接入不依赖它，端上调用 `recvTransport.consume(...)` 时不需要传它
 
 ### 什么时候会有
 

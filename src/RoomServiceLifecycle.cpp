@@ -70,10 +70,12 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 	for (auto& other : room->getOtherPeers(peerId)) {
 		targetPeers.push_back(other->id);
 		for (auto& [pid, prod] : other->producers) {
-			existingProducers.push_back({
+			json producerInfo = {
 				{"producerId", prod->id()}, {"producerPeerId", other->id},
-				{"kind", prod->kind()}
-			});
+				{"kind", prod->kind()},
+				{"appData", prod->appData()}
+			};
+			existingProducers.push_back(producerInfo);
 		}
 	}
 

@@ -7,8 +7,9 @@
 1. `join`
 2. `device.load(routerRtpCapabilities)`
 3. `createWebRtcTransport(consuming=true, rtpCapabilities=...)`
-4. 处理 `existingProducers`
-5. 处理后续 `newConsumer`
+4. 处理 `createWebRtcTransport` 响应里的 `consumers`
+5. 兼容处理 `join` 响应里的 `existingProducers`
+6. 处理后续 `newConsumer`
 
 不包含：
 
@@ -41,6 +42,31 @@
 - `participants`
 - `qosPolicy`
 
+最小响应示例：
+
+```json
+{
+  "response": true,
+  "id": 1,
+  "ok": true,
+  "data": {
+    "routerRtpCapabilities": { "...": "..." },
+    "existingProducers": [
+      {
+        "producerId": "producer-video-1",
+        "producerPeerId": "vehicle_ZL15812",
+        "kind": "video",
+        "appData": {
+          "source": "vehicle-left-door"
+        }
+      }
+    ],
+    "participants": [],
+    "qosPolicy": { }
+  }
+}
+```
+
 这里最关键的是：
 
 - `routerRtpCapabilities`
@@ -50,6 +76,11 @@
 
 - `existingProducers` 表示这个 peer 加入房间时，房间里已经存在的流
 - 后加入者主要靠它来消费已有流
+- `existingProducers` 只是 producer 候选列表，不是可直接播放的 consumer
+- 每项里的 `producerPeerId` 是发布端 peer
+- 每项里的 `appData` 来自发布端 `produce.appData`
+- 如果发布端带了 `produce.appData.source`，订阅端读取 `existingProducers[].appData.source`
+- 协议不返回裸 `source` 字段
 
 ## 2. 创建本端 device
 
@@ -95,9 +126,42 @@ device.rtpCapabilities
 - `dtlsParameters`
 - `consumers`
 
+如果房间里已经有可消费的流，`consumers` 里会直接带最终消费参数：
+
+```json
+{
+  "response": true,
+  "id": 2,
+  "ok": true,
+  "data": {
+    "id": "recv-transport-1",
+    "iceParameters": { },
+    "iceCandidates": [],
+    "dtlsParameters": { },
+    "consumers": [
+      {
+        "peerId": "vehicle_ZL15812",
+        "producerId": "producer-video-1",
+        "id": "consumer-video-1",
+        "kind": "video",
+        "appData": {
+          "source": "vehicle-left-door"
+        },
+        "rtpParameters": { }
+      }
+    ]
+  }
+}
+```
+
 这里的 `consumers` 表示：
 
 - 在创建接收 transport 时，服务端已经把当前已有流直接转成了可消费结果
+- `consumers[].id` 是当前订阅端的 consumerId
+- `consumers[].peerId` 是 producer 所属 peer
+- `consumers[].producerId` 是被消费的 producer
+- `consumers[].appData.source` 是发布端传入的业务来源
+- 服务端可能额外返回 `producerPaused`，最小接入可以忽略
 
 随后完成 `connectWebRtcTransport`。
 
@@ -127,7 +191,10 @@ for (const c of recvResp.data.consumers || []) {
   });
 
   const stream = new MediaStream([consumer.track]);
-  renderRemote(stream, c.peerId, c.kind);
+  renderRemote(stream, c.peerId, c.kind, {
+    producerId: c.producerId,
+    source: c.appData?.source || ''
+  });
 }
 ```
 
@@ -138,20 +205,24 @@ for (const c of recvResp.data.consumers || []) {
 ```js
 for (const p of joinResp.data.existingProducers || []) {
   const resp = await wsRequest('consume', {
-    transportId: recvTransportId,
+    transportId: recvResp.data.id,
     producerId: p.producerId,
     rtpCapabilities: device.rtpCapabilities
   });
 
+  const c = resp.data;
   const consumer = await recvTransport.consume({
-    id: resp.data.id,
-    producerId: resp.data.producerId,
-    kind: resp.data.kind,
-    rtpParameters: resp.data.rtpParameters
+    id: c.id,
+    producerId: c.producerId,
+    kind: c.kind,
+    rtpParameters: c.rtpParameters
   });
 
   const stream = new MediaStream([consumer.track]);
-  renderRemote(stream, p.producerPeerId, p.kind);
+  renderRemote(stream, c.peerId, c.kind, {
+    producerId: c.producerId,
+    source: c.appData?.source || ''
+  });
 }
 ```
 
@@ -164,14 +235,26 @@ for (const p of joinResp.data.existingProducers || []) {
   "notification": true,
   "method": "newConsumer",
   "data": {
-    "peerId": "peer-b",
-    "producerId": "producer-1",
-    "id": "consumer-1",
+    "peerId": "vehicle_ZL15812",
+    "producerId": "producer-video-1",
+    "id": "consumer-video-1",
     "kind": "video",
+    "appData": {
+      "source": "vehicle-left-door"
+    },
     "rtpParameters": { }
   }
 }
 ```
+
+字段口径：
+
+- `data.id` 是当前订阅端拿到的 consumerId
+- `data.peerId` 是 producer 所属 peer，不是当前订阅端 peer
+- `data.producerId` 是被自动订阅的 producer
+- `data.appData` 来自发布端 `produce.appData`
+- 业务来源从 `data.appData.source` 读取，不读取裸 `data.source`
+- 服务端可能额外返回 `producerPaused`，最小接入可以忽略
 
 端上收到后直接：
 
@@ -184,7 +267,10 @@ const consumer = await recvTransport.consume({
 });
 
 const stream = new MediaStream([consumer.track]);
-renderRemote(stream, data.peerId, data.kind);
+renderRemote(stream, data.peerId, data.kind, {
+  producerId: data.producerId,
+  source: data.appData?.source || ''
+});
 ```
 
 ## 6. 两条路径的边界
@@ -244,7 +330,10 @@ for (const c of recvResp.data.consumers || []) {
     kind: c.kind,
     rtpParameters: c.rtpParameters
   });
-  renderRemote(new MediaStream([consumer.track]), c.peerId, c.kind);
+  renderRemote(new MediaStream([consumer.track]), c.peerId, c.kind, {
+    producerId: c.producerId,
+    source: c.appData?.source || ''
+  });
 }
 
 for (const p of joinResp.data.existingProducers || []) {
@@ -253,13 +342,17 @@ for (const p of joinResp.data.existingProducers || []) {
     producerId: p.producerId,
     rtpCapabilities: device.rtpCapabilities
   });
+  const c = resp.data;
   const consumer = await recvTransport.consume({
-    id: resp.data.id,
-    producerId: resp.data.producerId,
-    kind: resp.data.kind,
-    rtpParameters: resp.data.rtpParameters
+    id: c.id,
+    producerId: c.producerId,
+    kind: c.kind,
+    rtpParameters: c.rtpParameters
   });
-  renderRemote(new MediaStream([consumer.track]), p.producerPeerId, p.kind);
+  renderRemote(new MediaStream([consumer.track]), c.peerId, c.kind, {
+    producerId: c.producerId,
+    source: c.appData?.source || ''
+  });
 }
 
 ws.onmessage = async (event) => {
@@ -272,7 +365,10 @@ ws.onmessage = async (event) => {
       kind: c.kind,
       rtpParameters: c.rtpParameters
     });
-    renderRemote(new MediaStream([consumer.track]), c.peerId, c.kind);
+    renderRemote(new MediaStream([consumer.track]), c.peerId, c.kind, {
+      producerId: c.producerId,
+      source: c.appData?.source || ''
+    });
   }
 };
 ```

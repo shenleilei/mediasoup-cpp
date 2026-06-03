@@ -324,7 +324,10 @@ TEST_F(IntegrationTest, ProduceAndAutoSubscribe) {
 		{"mid", "0"}
 	};
 	auto produceResp = alice.ws->request("produce", {
-		{"transportId", aliceSendId}, {"kind", "audio"}, {"rtpParameters", rtpParams}
+		{"transportId", aliceSendId},
+		{"kind", "audio"},
+		{"rtpParameters", rtpParams},
+		{"appData", {{"source", "vehicle-left-door"}}}
 	});
 	ASSERT_TRUE(produceResp.value("ok", false)) << "produce failed: " << produceResp.dump();
 	EXPECT_TRUE(produceResp["data"].contains("id"));
@@ -336,6 +339,58 @@ TEST_F(IntegrationTest, ProduceAndAutoSubscribe) {
 	EXPECT_EQ(consumerNotif["data"]["peerId"], "alice");
 	EXPECT_EQ(consumerNotif["data"]["producerId"], producerId);
 	EXPECT_EQ(consumerNotif["data"]["kind"], "audio");
+	ASSERT_TRUE(consumerNotif["data"].contains("appData")) << consumerNotif.dump();
+	EXPECT_EQ(consumerNotif["data"]["appData"]["source"], "vehicle-left-door");
+}
+
+TEST_F(IntegrationTest, ExplicitConsumeResponseIncludesProducerAppDataSource) {
+	auto alice = joinRoom(testRoom_, "alice");
+	auto bob = joinRoom(testRoom_, "bob");
+
+	auto aliceSend = alice.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(aliceSend.value("ok", false)) << aliceSend.dump();
+
+	json rtpParams = {
+		{"codecs", {{
+			{"mimeType", "audio/opus"}, {"clockRate", 48000}, {"channels", 2},
+			{"payloadType", 100}
+		}}},
+		{"encodings", {{{"ssrc", 66666666}}}},
+		{"mid", "0"}
+	};
+	auto produceResp = alice.ws->request("produce", {
+		{"transportId", aliceSend["data"]["id"]},
+		{"kind", "audio"},
+		{"rtpParameters", rtpParams},
+		{"appData", {{"source", "vehicle-explicit-consume"}}}
+	});
+	ASSERT_TRUE(produceResp.value("ok", false)) << produceResp.dump();
+	ASSERT_TRUE(produceResp["data"].contains("id")) << produceResp.dump();
+
+	auto bobRecv = bob.ws->request("createWebRtcTransport", {
+		{"producing", false}, {"consuming", true}
+	});
+	ASSERT_TRUE(bobRecv.value("ok", false)) << bobRecv.dump();
+	ASSERT_TRUE(bobRecv["data"].contains("id")) << bobRecv.dump();
+
+	auto consumeResp = bob.ws->request("consume", {
+		{"transportId", bobRecv["data"]["id"]},
+		{"producerId", produceResp["data"]["id"]},
+		{"rtpCapabilities", defaultRtpCapabilities()}
+	});
+	ASSERT_TRUE(consumeResp.value("ok", false)) << consumeResp.dump();
+	ASSERT_TRUE(consumeResp["data"].contains("appData")) << consumeResp.dump();
+	EXPECT_EQ(consumeResp["data"]["peerId"], "alice");
+	EXPECT_EQ(consumeResp["data"]["producerId"], produceResp["data"]["id"]);
+	EXPECT_EQ(consumeResp["data"]["kind"], "audio");
+	EXPECT_EQ(consumeResp["data"]["appData"]["source"], "vehicle-explicit-consume");
+	EXPECT_TRUE(consumeResp["data"].contains("type")) << consumeResp.dump();
+	EXPECT_TRUE(consumeResp["data"].contains("paused")) << consumeResp.dump();
+	EXPECT_TRUE(consumeResp["data"].contains("producerPaused")) << consumeResp.dump();
+	EXPECT_TRUE(consumeResp["data"].contains("priority")) << consumeResp.dump();
+	ASSERT_TRUE(consumeResp["data"].contains("rtpParameters")) << consumeResp.dump();
 }
 
 TEST_F(IntegrationTest, AutoSubscribeStillNotifiesWhenSubscriberPrecreatedSendAndRecvWithoutExistingProducers) {
@@ -645,16 +700,33 @@ TEST_F(IntegrationTest, LateJoinerAutoSubscribe) {
 		{"mid", "0"}
 	};
 	auto produceResp = alice.ws->request("produce", {
-		{"transportId", aliceSend["data"]["id"]}, {"kind", "audio"}, {"rtpParameters", rtpParams}
+		{"transportId", aliceSend["data"]["id"]},
+		{"kind", "audio"},
+		{"rtpParameters", rtpParams},
+		{"appData", {{"source", "vehicle-rear-seat"}}}
 	});
 	ASSERT_TRUE(produceResp.value("ok", false));
 
 	// Bob joins late
-	auto bob = joinRoom(testRoom_, "bob");
+	JoinedClient bob;
+	bob.roomId = testRoom_;
+	bob.peerId = "bob";
+	bob.ws = std::make_unique<TestWsClient>();
+	ASSERT_TRUE(bob.ws->connect(HOST, sfu_.port()));
+	auto bobJoinResp = bob.ws->request("join", {
+		{"roomId", testRoom_},
+		{"peerId", "bob"},
+		{"displayName", "bob"},
+		{"rtpCapabilities", defaultRtpCapabilities()}
+	});
+	ASSERT_TRUE(bobJoinResp.value("ok", false)) << bobJoinResp.dump();
+	ASSERT_TRUE(bobJoinResp["data"].contains("existingProducers")) << bobJoinResp.dump();
+	ASSERT_FALSE(bobJoinResp["data"]["existingProducers"].empty()) << bobJoinResp.dump();
+	EXPECT_EQ(bobJoinResp["data"]["existingProducers"][0]["producerId"], produceResp["data"]["id"]);
+	ASSERT_TRUE(bobJoinResp["data"]["existingProducers"][0].contains("appData")) << bobJoinResp.dump();
+	EXPECT_EQ(bobJoinResp["data"]["existingProducers"][0]["appData"]["source"], "vehicle-rear-seat");
 
-	// Bob should see existingProducers in join response
-	// (we need to re-check the join response - joinRoom already did it)
-	// Instead, Bob creates recvTransport and should get consumers in response
+	// Bob creates recvTransport and should get existing producer consumers in response.
 	auto bobRecv = bob.ws->request("createWebRtcTransport", {
 		{"producing", false}, {"consuming", true}
 	});
@@ -666,6 +738,8 @@ TEST_F(IntegrationTest, LateJoinerAutoSubscribe) {
 	if (!consumers.empty()) {
 		EXPECT_EQ(consumers[0]["peerId"], "alice");
 		EXPECT_EQ(consumers[0]["kind"], "audio");
+		ASSERT_TRUE(consumers[0].contains("appData")) << bobRecv.dump();
+		EXPECT_EQ(consumers[0]["appData"]["source"], "vehicle-rear-seat");
 	}
 }
 
