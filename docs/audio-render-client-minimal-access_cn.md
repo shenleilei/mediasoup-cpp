@@ -54,6 +54,64 @@
 - 下拉框显示 `displayName (peerId)`，下拉值使用 `peerId`。
 - 不从 producer `source` 获取目标端；`source=audio` 只表示媒体来源。
 
+`join` 响应里的 `participants` 示例：
+
+```json
+{
+  "response": true,
+  "id": 1,
+  "ok": true,
+  "data": {
+    "audioRole": "normal",
+    "participants": [
+      {
+        "peerId": "peer-b",
+        "displayName": "受限端A",
+        "audioRole": "audio-restricted"
+      },
+      {
+        "peerId": "peer-c",
+        "displayName": "普通端C",
+        "audioRole": "normal"
+      }
+    ]
+  }
+}
+```
+
+客户端从上面只保留 `peer-b`，下拉显示 `受限端A (peer-b)`，value 使用 `peer-b`。
+
+后续有新 peer 加入时会收到：
+
+```json
+{
+  "notification": true,
+  "method": "peerJoined",
+  "data": {
+    "peerId": "peer-d",
+    "displayName": "受限端D",
+    "audioRole": "audio-restricted",
+    "reconnect": false
+  }
+}
+```
+
+客户端行为：如果 `audioRole="audio-restricted"` 且不是自己，就加入可选列表。
+
+peer 离开时会收到：
+
+```json
+{
+  "notification": true,
+  "method": "peerLeft",
+  "data": {
+    "peerId": "peer-d"
+  }
+}
+```
+
+客户端行为：从可选列表删除 `peer-d`；如果当前打开的目标就是它，也清空本地打开状态。
+
 客户端选择某个受限端后，把该项的 `peerId` 作为 `targetPeerId`。
 
 客户端发：
