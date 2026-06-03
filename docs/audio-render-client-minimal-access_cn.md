@@ -281,6 +281,7 @@ peer 离开时，普通端收到 `peerLeft`：
 ## 6. 普通端关闭受限端音频
 
 当前 demo 只维护一个 audio producer。关闭时先关 producer，再 release slot。
+页面上的普通端“关闭”按钮走的就是这条路径，语义是“不再发布本地音频”。
 
 ### 6.1 closeProducer
 
@@ -428,3 +429,9 @@ slot release 只关闭 consumer 时，受限端收到 `consumerClosed`：
 
 - 按 `consumerId` 删除 consumer 和 DOM。
 - 不要自动重试 consume，除非业务重新 claim 成功。
+
+## 8. 两种关闭语义
+
+第一种是关闭 producer，也就是普通端不再发本地音频。普通端先发 `closeProducer`，再发 `releaseAudioRestrictedSlot`；受限端通常收到 `producerLeft`，因为 producer 本身已经不存在。后续 release 只是释放占位，如果 consumer 已经随 producer 关闭，`closedConsumers` 可能是 0，也不会再收到 `consumerClosed`。当前 public demo 普通端页面里的“关闭”按钮就是这种。
+
+第二种是只释放受限端，也就是普通端的 audio producer 继续存在，只是不再让某个受限端消费这路音频。普通端只发 `releaseAudioRestrictedSlot`，不发 `closeProducer`；受限端收到 `consumerClosed`，`reason="audio-slot-release"`。这个适用于以后要支持“取消某个受限端收听，但本地音频还继续给普通端或其他目标使用”的场景；当前 public demo 没有单独提供这个按钮。
