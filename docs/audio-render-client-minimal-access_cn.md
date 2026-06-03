@@ -1,10 +1,18 @@
 # 音频受限端客户端最小接入
 
-本文只写客户端要发什么、会收到什么、收到后做什么。第一版只考虑 `WebRtcTransport`。
+本文按人的实际使用顺序写：先打开受限端，再打开普通端，普通端选择受限端并打开音频，最后关闭音频。第一版只考虑 `WebRtcTransport`。
 
-## 1. join 声明角色
+示例里的 `id` 是客户端数字流水号，只用于匹配 request/response，不是业务 id。
 
-受限端发：
+## 1. 打开受限端页面并加入房间
+
+受限端 URL：
+
+```text
+https://volcvideo3.zelostech.com.cn:1770/?audioRole=audio-restricted&displayName=受限端A
+```
+
+受限端点击加入房间时发 `join`：
 
 ```json
 {
@@ -20,7 +28,45 @@
 }
 ```
 
-普通端发：
+受限端收到：
+
+```json
+{
+  "response": true,
+  "id": 1,
+  "ok": true,
+  "data": {
+    "audioRole": "audio-restricted",
+    "routerRtpCapabilities": {},
+    "existingProducers": [],
+    "participants": [
+      {
+        "peerId": "peer-b",
+        "displayName": "受限端A",
+        "audioRole": "audio-restricted",
+        "producers": []
+      }
+    ]
+  }
+}
+```
+
+受限端行为：
+
+- 正常 `device.load(routerRtpCapabilities)`。
+- 正常创建 recv `WebRtcTransport`。
+- 正常处理 `existingProducers`、transport 响应里的 `consumers`、后续 `newConsumer`。
+- 没收到 audio consumer 是正常状态，不是连接失败。
+
+## 2. 打开普通端页面并加入同一房间
+
+普通端 URL：
+
+```text
+https://volcvideo3.zelostech.com.cn:1770/?displayName=普通端A
+```
+
+普通端点击加入房间时发 `join`：
 
 ```json
 {
@@ -38,7 +84,7 @@
 
 `audioRole` 不传时默认为 `normal`。
 
-客户端收：
+普通端收到：
 
 ```json
 {
@@ -51,15 +97,15 @@
     "existingProducers": [],
     "participants": [
       {
-        "peerId": "peer-a",
-        "displayName": "普通端A",
-        "audioRole": "normal",
-        "producers": []
-      },
-      {
         "peerId": "peer-b",
         "displayName": "受限端A",
         "audioRole": "audio-restricted",
+        "producers": []
+      },
+      {
+        "peerId": "peer-a",
+        "displayName": "普通端A",
+        "audioRole": "normal",
         "producers": []
       }
     ]
@@ -67,27 +113,20 @@
 }
 ```
 
-客户端行为：
+普通端行为：
 
-- 正常 `device.load(routerRtpCapabilities)`。
-- 正常创建 recv `WebRtcTransport`。
-- 正常处理 `existingProducers`、transport 响应里的 `consumers`、后续 `newConsumer`。
-- 受限端没收到 audio consumer 是正常状态，不是连接失败。
-
-## 2. 维护可选受限端列表
-
-普通端打开某个受限端音频前，先从 `join` 响应里的 `data.participants` 建立可选列表。
-
-客户端行为：
-
-- `participants` 包含当前自己，必须排除 `selfPeerId`。
-- 每个 peer 至少使用 `peerId`、`displayName`、`audioRole`。
+- 原有收发流流程不变。
+- 从 `participants` 里维护“可选择的受限端列表”。
+- `participants` 包含自己，必须排除 `selfPeerId`。
 - 只保留 `audioRole="audio-restricted"` 且 `peerId != selfPeerId` 的 peer。
-- 下拉框显示 `displayName (peerId)`。
-- 下拉值使用 `peerId`，后续作为 `targetPeerId`。
+- 下拉框显示 `displayName (peerId)`，下拉值使用 `peerId`。
 - 不从 producer `source` 获取目标端；`source=audio` 只表示媒体来源。
 
-新 peer 加入时，客户端收：
+## 3. 房间成员变化时更新下拉框
+
+上面的顺序是推荐验证顺序。实际使用中如果普通端先加入房间，下拉框一开始可以为空；等受限端加入后，再通过 `peerJoined` 把它加入可选列表。
+
+有新 peer 加入时，普通端收到 `peerJoined`：
 
 ```json
 {
@@ -102,12 +141,12 @@
 }
 ```
 
-客户端行为：
+普通端行为：
 
 - 如果 `audioRole="audio-restricted"` 且不是自己，就加入可选列表。
 - 如果该 `peerId` 是当前已打开目标，且本端仍在发布 audio，可以重新 claim。
 
-peer 离开时，客户端收：
+peer 离开时，普通端收到 `peerLeft`：
 
 ```json
 {
@@ -119,17 +158,17 @@ peer 离开时，客户端收：
 }
 ```
 
-客户端行为：
+普通端行为：
 
 - 从可选列表删除该 `peerId`。
 - 当前 demo 会保留已打开目标状态，用于同 `peerId` 重连后重新 claim。
 - 业务如果不需要重连保持，也可以在 `peerLeft` 时清空本地打开状态。
 
-## 3. 打开受限端音频
+## 4. 普通端选择受限端并打开音频
 
-用户选择受限端后，客户端用选中项的 `peerId` 发 claim。
+用户在普通端下拉框里选择 `受限端A (peer-b)` 后，客户端用选中项的 `peerId` 发 claim。
 
-客户端发：
+普通端发：
 
 ```json
 {
@@ -142,7 +181,7 @@ peer 离开时，客户端收：
 }
 ```
 
-占位成功时，客户端收：
+占位成功时，普通端收到：
 
 ```json
 {
@@ -160,14 +199,14 @@ peer 离开时，客户端收：
 }
 ```
 
-客户端行为：
+普通端行为：
 
 - 记录本地打开状态，例如 `claimedAudioTargetPeerId = "peer-b"`。
 - 然后发布 audio producer，`produce.appData.source = "audio"`。
 - `alreadyOwned=true` 表示重复 claim，同样按成功处理。
 - `consumersCreated` 只用于观测，不需要客户端据此播放。
 
-目标是普通端时，客户端收：
+目标是普通端时，普通端收到：
 
 ```json
 {
@@ -183,12 +222,12 @@ peer 离开时，客户端收：
 }
 ```
 
-客户端行为：
+普通端行为：
 
 - 不记录占位。
 - 按普通发流逻辑继续。
 
-已被其他发送端占用时，客户端收：
+已被其他发送端占用时，普通端收到：
 
 ```json
 {
@@ -204,13 +243,13 @@ peer 离开时，客户端收：
 }
 ```
 
-客户端行为：
+普通端行为：
 
 - 不抢占。
 - 不记录本地打开状态。
 - UI 提示目标已被占用。
 
-目标不存在时，客户端收：
+目标不存在时，普通端收到：
 
 ```json
 {
@@ -225,15 +264,27 @@ peer 离开时，客户端收：
 }
 ```
 
-客户端行为：不记录本地打开状态，按业务决定是否等待目标重新加入。
+普通端行为：不记录本地打开状态，按业务决定是否等待目标重新加入。
 
-## 4. 关闭受限端音频
+## 5. 受限端收到音频
+
+普通端 claim 成功并 produce audio 后，受限端会按现有订阅流程收到 audio consumer。可能出现在两个地方：
+
+- 如果受限端 recv transport 已创建，收到 `newConsumer`。
+- 如果受限端晚创建 recv transport，audio consumer 可能直接在 `createWebRtcTransport` 响应的 `consumers` 里返回。
+
+受限端行为：
+
+- 按现有 `newConsumer` / `consumers` 逻辑创建 consumer 和 audio DOM。
+- 不需要额外判断授权；服务端只会下发已授权 audio consumer。
+
+## 6. 普通端关闭受限端音频
 
 当前 demo 只维护一个 audio producer。关闭时先关 producer，再 release slot。
 
-### 4.1 closeProducer
+### 6.1 closeProducer
 
-客户端发：
+普通端发：
 
 ```json
 {
@@ -259,7 +310,7 @@ peer 离开时，客户端收：
 }
 ```
 
-客户端收：
+普通端收到：
 
 ```json
 {
@@ -274,7 +325,7 @@ peer 离开时，客户端收：
 }
 ```
 
-客户端行为：
+普通端行为：
 
 - 本地 `producer.close()`。
 - 停止本地 audio track。
@@ -288,9 +339,9 @@ peer 离开时，客户端收：
 - `producer not found`：producer 不存在，或 source 未匹配。
 - `ambiguous producer source`：同 source 多 producer，改用 `producerId`。
 
-### 4.2 releaseAudioRestrictedSlot
+### 6.2 releaseAudioRestrictedSlot
 
-客户端发：
+普通端发：
 
 ```json
 {
@@ -303,7 +354,7 @@ peer 离开时，客户端收：
 }
 ```
 
-释放成功时，客户端收：
+释放成功时，普通端收到：
 
 ```json
 {
@@ -325,15 +376,15 @@ peer 离开时，客户端收：
 - `ok=false, data.reason="not-owner"`
 - `ok=false, data.reason="target-not-found"`
 
-客户端行为：
+普通端行为：
 
 - release 返回后清空本地打开状态。
 - `not-claimed`、`not-required` 或 `not-owner` 也清空本地状态。
 - `closedConsumers` 是本次 release 实际关闭的 consumer 数，可能是 0 或更多。
 
-## 5. 接收端通知
+## 7. 受限端清理音频
 
-远端 producer 被关闭时，客户端收：
+远端 producer 被关闭时，受限端收到 `producerLeft`：
 
 ```json
 {
@@ -351,13 +402,13 @@ peer 离开时，客户端收：
 }
 ```
 
-客户端行为：
+受限端行为：
 
 - 按 `consumerIds` 删除 consumer 和 DOM。
 - 按 `producerId` 兜底清理。
 - 不要当成 `peerLeft`。
 
-slot release 只关闭 consumer 时，客户端收：
+slot release 只关闭 consumer 时，受限端收到 `consumerClosed`：
 
 ```json
 {
@@ -373,32 +424,7 @@ slot release 只关闭 consumer 时，客户端收：
 }
 ```
 
-客户端行为：
+受限端行为：
 
 - 按 `consumerId` 删除 consumer 和 DOM。
 - 不要自动重试 consume，除非业务重新 claim 成功。
-
-## 6. public demo
-
-受限端打开方式：
-
-```text
-https://volcvideo3.zelostech.com.cn:1770/?audioRole=audio-restricted&displayName=受限端A
-```
-
-普通端打开方式：
-
-```text
-https://volcvideo3.zelostech.com.cn:1770/?displayName=普通端A
-```
-
-页面行为：
-
-- 普通端下拉框只显示同房间受限端。
-- 下拉框显示 `displayName (peerId)`。
-- 下拉框不显示 `source`；`source=audio` 只表示 producer/consumer 的媒体来源。
-- 当前 demo 只支持一个 audio producer 和一个已打开目标端。
-
-## 7. 请求 id
-
-`id` 是客户端数字流水号，只用于匹配 request/response，不是业务 id。
