@@ -30,7 +30,15 @@
   "data": {
     "audioRole": "audio-restricted",
     "routerRtpCapabilities": {},
-    "existingProducers": []
+    "existingProducers": [],
+    "participants": [
+      {
+        "peerId": "peer-b",
+        "displayName": "受限端A",
+        "audioRole": "audio-restricted",
+        "producers": []
+      }
+    ]
   }
 }
 ```
@@ -39,6 +47,7 @@
 
 - `audioRole=audio-restricted`：按受限端接入。
 - `audioRole=normal` 或缺省：按普通端接入。
+- `participants` 包含当前自己；客户端维护目标端列表时要排除自己。
 - 后续 transport / consumer 处理不需要额外授权判断。
 
 ## 2. claimAudioRestrictedSlot
@@ -67,7 +76,9 @@
     "required": true,
     "claimed": true,
     "targetPeerId": "peer-b",
-    "ownerPeerId": "peer-a"
+    "ownerPeerId": "peer-a",
+    "alreadyOwned": false,
+    "consumersCreated": 1
   }
 }
 ```
@@ -89,6 +100,8 @@
 客户端行为：
 
 - `required=true, claimed=true`：记录 target 已打开，然后 produce audio。
+- `alreadyOwned=true`：本端重复 claim，同样按成功处理。
+- `consumersCreated`：claim 时服务端补发的 audio consumer 数，只用于观测，不需要客户端据此播放。
 - `required=false`：目标是普通端，不记录占位，继续普通发流。
 - `reason=occupied`：不抢占，提示失败。
 - `reason=target-not-found`：不记录占位。
@@ -145,6 +158,8 @@
 
 失败处理：
 
+- `missing producerId or source`：请求没有带 selector。
+- `missing source`：按 source 关闭但 source 为空。
 - `permission denied`：不是 producer owner。
 - `producer not found`：producer 不存在，或 source 未匹配。
 - `ambiguous producer source`：同 source 多 producer，改用 `producerId`。
@@ -174,7 +189,7 @@
   "data": {
     "released": true,
     "targetPeerId": "peer-b",
-    "closedConsumers": 0
+    "closedConsumers": 1
   }
 }
 ```
@@ -182,6 +197,7 @@
 客户端行为：
 
 - 清空本地 target 打开状态。
+- `closedConsumers` 是本次 release 实际关闭的 consumer 数，可能是 0 或更多。
 - `released=false` 也清空。
 - `reason=not-owner` 也清空。
 

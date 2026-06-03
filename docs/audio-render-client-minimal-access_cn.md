@@ -16,6 +16,7 @@
 - `data.audioRole = "audio-restricted"`
 - `data.routerRtpCapabilities`
 - `data.existingProducers`
+- `data.participants`
 
 客户端行为：
 
@@ -36,6 +37,7 @@
 
 - `join` 成功响应
 - `data.audioRole = "normal"`
+- `data.participants`
 
 客户端行为：
 
@@ -49,6 +51,7 @@
 - 初始来源：`join` 成功响应里的 `data.participants`。
 - 增量来源：后续 `peerJoined` 通知。
 - 删除来源：后续 `peerLeft` 通知。
+- `participants` 包含当前自己，所以必须排除 `selfPeerId`。
 - 每个 peer 至少使用 `peerId`、`displayName`、`audioRole`。
 - 只把 `audioRole = "audio-restricted"` 且 `peerId != selfPeerId` 的 peer 放进可选列表。
 - 下拉框显示 `displayName (peerId)`，下拉值使用 `peerId`。
@@ -110,7 +113,7 @@ peer 离开时会收到：
 }
 ```
 
-客户端行为：从可选列表删除 `peer-d`；如果当前打开的目标就是它，也清空本地打开状态。
+客户端行为：从可选列表删除 `peer-d`。当前 demo 会保留已打开目标状态；如果同一个 `peerId` 后续 `peerJoined` 且本端仍在发布 audio，会重新 claim。业务如果不需要重连保持，也可以在 `peerLeft` 时清空本地打开状态。
 
 客户端选择某个受限端后，把该项的 `peerId` 作为 `targetPeerId`。
 
@@ -122,6 +125,8 @@ peer 离开时会收到：
 客户端收：
 
 - 成功占位：`ok=true, data.required=true, data.claimed=true`
+- 重复占位：`ok=true, data.alreadyOwned=true`
+- 补发 consumer 数：`data.consumersCreated`
 - 目标是普通端：`ok=true, data.required=false, data.reason="not-required"`
 - 被占用：`ok=false, data.reason="occupied"`
 - 目标不存在：`ok=false, data.reason="target-not-found"`
@@ -144,7 +149,7 @@ peer 离开时会收到：
 客户端收：
 
 - 成功：`ok=true, data.producerId, data.closedConsumers, data.notifiedPeers`
-- 失败：`permission denied` / `producer not found` / `ambiguous producer source`
+- 失败：`missing producerId or source` / `missing source` / `permission denied` / `producer not found` / `ambiguous producer source`
 
 客户端行为：
 
@@ -161,12 +166,14 @@ peer 离开时会收到：
 
 - 成功释放：`ok=true, data.released=true`
 - 已无占位：`ok=true, data.released=false, data.reason="not-claimed"`
+- 目标是普通端：`ok=true, data.released=false, data.reason="not-required"`
 - 不是 owner：`ok=false, data.reason="not-owner"`
+- 目标不存在：`ok=false, data.reason="target-not-found"`
 
 客户端行为：
 
 - release 返回后清空本地打开状态。
-- `not-claimed` 或 `not-owner` 也清空本地状态。
+- `not-claimed`、`not-required` 或 `not-owner` 也清空本地状态。
 
 ## 5. 接收端通知
 
