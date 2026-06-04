@@ -331,6 +331,7 @@
   let talk = null;
   const tiles = new Map();
   const peerRows = new Map();
+  let roomUnsubscribers = [];
 
   function setStatus(el, state) {
     el.textContent = state;
@@ -458,14 +459,17 @@
     try {
       room = new MediasoupRoomClient({
         roomId: roomInput.value,
-        wsUrl: wsInput.value,
-        onTrack: renderTrack,
-        onTrackClosed: removeTrack,
-        onStateChange: event => { setStatus(stateEl, event.state); },
-        onLog: event => log(event.message),
+        wssUrl: wsInput.value,
       });
-      await room.start();
-      talk = new MediasoupAudioTalk(room, {
+      roomUnsubscribers = [
+        room.on('track', renderTrack),
+        room.on('trackClosed', removeTrack),
+        room.on('networkState', event => { setStatus(stateEl, event.state); }),
+        room.on('log', event => log(event.message)),
+        room.on('error', event => log(`error: ${event.message}`)),
+      ];
+      await room.join();
+      talk = new TalkbackClient(room, {
         onTargetsChanged: renderTargets,
         onStateChange: event => {
           setStatus(talkStateEl, event.state);
@@ -484,7 +488,11 @@
 
   stopBtn.onclick = async () => {
     if (talk) await talk.closeTalk().catch(() => {});
-    if (room) await room.close();
+    if (room) await room.leave();
+    roomUnsubscribers.forEach(unsubscribe => {
+      try { unsubscribe(); } catch {}
+    });
+    roomUnsubscribers = [];
     room = null;
     talk = null;
     for (const tile of tiles.values()) tile.remove();

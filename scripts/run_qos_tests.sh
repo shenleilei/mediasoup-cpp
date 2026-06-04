@@ -56,7 +56,7 @@ Available groups:
   cpp-integration   服务端 QoS 集成测试（包含 uplink/downlink QoS 集成测试）
   cpp-accuracy      QoS accuracy 测试
   node-harness      Node QoS harness 场景
-  browser-harness   browser_server_signal + ICE restart/reconnect + downlink browser harnesses
+  browser-harness   browser_server_signal + room client SDK + ICE restart/reconnect + downlink browser harnesses
   downlink-matrix   browser downlink weak-network matrix（run_downlink_matrix.mjs）
   remote-harness    先构建并部署测试机镜像，再跑远端 smoke + mediasoup-9000 有限压力 smoke
 
@@ -784,6 +784,13 @@ run_browser_harness() {
   fi
 
   if ! run_cmd \
+    "browser-harness:room-client-sdk" \
+    --cwd "$ROOT_DIR" \
+    node "$ROOT_DIR/tests/qos_harness/browser_room_client_sdk.mjs"; then
+    failed=1
+  fi
+
+  if ! run_cmd \
     "browser-harness:ice-restart" \
     --cwd "$ROOT_DIR" \
     node "$ROOT_DIR/tests/qos_harness/browser_ice_restart.mjs"; then
@@ -914,6 +921,13 @@ run_target() {
         "$target" \
         --cwd "$ROOT_DIR" \
         node "$ROOT_DIR/tests/qos_harness/browser_server_signal.mjs"
+      ;;
+    browser-harness:room-client-sdk)
+      require_browser_runtime
+      run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        node "$ROOT_DIR/tests/qos_harness/browser_room_client_sdk.mjs"
       ;;
     browser-harness:ice-restart)
       require_browser_runtime

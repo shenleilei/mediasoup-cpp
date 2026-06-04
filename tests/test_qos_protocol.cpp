@@ -49,6 +49,19 @@ TEST(QosProtocolTest, ParsesVideoOnlyClientSnapshotWithExtendedSignalFields) {
 	EXPECT_DOUBLE_EQ(parsed.value.tracks[0].signals["jitterEwma"].get<double>(), 16.0);
 }
 
+TEST(QosProtocolTest, AcceptsTalkbackTrackSource) {
+	auto fixture = LoadFixture("valid_client_v1");
+	fixture["tracks"][0]["kind"] = "audio";
+	fixture["tracks"][0]["source"] = "talkback";
+	fixture["tracks"][0]["localTrackId"] = "talkback-main";
+
+	auto parsed = qos::QosValidator::ParseClientSnapshot(fixture);
+
+	ASSERT_TRUE(parsed.ok) << parsed.error;
+	ASSERT_EQ(parsed.value.tracks.size(), 1u);
+	EXPECT_EQ(parsed.value.tracks[0].source, "talkback");
+}
+
 TEST(QosProtocolTest, ParsesValidPolicyFixture) {
 	auto fixture = LoadFixture("valid_policy_v1");
 	auto parsed = qos::QosValidator::ParsePolicy(fixture);

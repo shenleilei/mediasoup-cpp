@@ -144,7 +144,7 @@ ParseResult<ClientQosTrackSnapshot> ParseTrack(const json& trackJson) {
 	if (!OneOf(kind, { "audio", "video" })) {
 		return MakeError<ClientQosTrackSnapshot>("invalid track kind");
 	}
-	if (!OneOf(source, { "camera", "screenShare", "audio" })) {
+	if (!OneOf(source, { "camera", "screenShare", "audio", "talkback" })) {
 		return MakeError<ClientQosTrackSnapshot>("invalid track source");
 	}
 	if (!OneOf(state, { "stable", "early_warning", "congested", "recovering" })) {

@@ -15,20 +15,38 @@
     return /room not found|peer not found|transport not found/i.test(message);
   }
 
+  function normalizeMediaConfig(config, defaults) {
+    if (!config) return null;
+    if (config === true) return { ...defaults };
+    if (config instanceof MediaStreamTrack) return { ...defaults, track: config };
+    if (config.track instanceof MediaStreamTrack) {
+      return { ...defaults, ...config };
+    }
+    return { ...defaults, ...config };
+  }
+
+  function stopStream(stream) {
+    if (!stream) return;
+    for (const track of stream.getTracks()) {
+      try { track.stop(); } catch {}
+    }
+  }
+
   class MediasoupRoomClient {
     constructor(options) {
-      if (!options || !options.roomId || !options.wsUrl) {
-        throw new Error('roomId and wsUrl are required');
+      if (!options || !options.roomId || !(options.wsUrl || options.wssUrl)) {
+        throw new Error('roomId and wsUrl/wssUrl are required');
       }
       if (!window.mediasoupClient || !window.mediasoupClient.Device) {
         throw new Error('mediasoup-client bundle is required');
       }
 
       this.roomId = options.roomId;
-      this.wsUrl = options.wsUrl;
+      this.wsUrl = options.wsUrl || options.wssUrl;
       this.peerId = options.peerId || randomPeerId();
       this.displayName = options.displayName || this.peerId;
       this.audioRole = options.audioRole || 'normal';
+      this.initialRtpCapabilities = options.rtpCapabilities || null;
 
       this.onTrack = options.onTrack || noop;
       this.onTrackClosed = options.onTrackClosed || noop;
@@ -51,7 +69,10 @@
       this.closed = false;
       this.reconnectTimer = null;
       this.reconnectInFlight = null;
+      this.signalingRecoveryInFlight = false;
+      this.signalingSocketInvalid = false;
       this.iceState = new Map();
+      this.listeners = new Map();
     }
 
     async start() {
@@ -59,6 +80,10 @@
       await this.connectAndJoin({ rebuildMedia: true });
       this.emitState('connected');
       return this;
+    }
+
+    async join() {
+      return this.start();
     }
 
     async close() {
@@ -71,29 +96,82 @@
         try { this.ws.close(); } catch {}
       }
       this.ws = null;
+      this.signalingSocketInvalid = false;
       this.emitState('closed');
     }
 
+    async leave() {
+      return this.close();
+    }
+
+    on(event, listener) {
+      if (typeof listener !== 'function') return () => {};
+      const listeners = this.listeners.get(event) || new Set();
+      listeners.add(listener);
+      this.listeners.set(event, listeners);
+      return () => this.off(event, listener);
+    }
+
+    off(event, listener) {
+      const listeners = this.listeners.get(event);
+      if (!listeners) return;
+      listeners.delete(listener);
+      if (listeners.size === 0) this.listeners.delete(event);
+    }
+
+    emit(event, payload) {
+      const listeners = this.listeners.get(event);
+      if (!listeners) return;
+      for (const listener of Array.from(listeners)) {
+        try {
+          listener(payload);
+        } catch (error) {
+          this.log('listener error', { event, error: error.message });
+        }
+      }
+    }
+
+    emitError(error, context) {
+      const payload = {
+        error,
+        message: error?.message || String(error || 'unknown error'),
+        context: context || null,
+        ts: Date.now(),
+      };
+      this.emit('error', payload);
+      this.log('sdk error', { message: payload.message, context: payload.context });
+    }
+
     log(message, data) {
-      this.onLog({ message, data: data || null, ts: Date.now() });
+      const event = { message, data: data || null, ts: Date.now() };
+      this.onLog(event);
+      this.emit('log', event);
     }
 
     emitState(state, data) {
-      this.onStateChange({ state, data: data || null, ts: Date.now() });
+      const event = { state, data: data || null, ts: Date.now() };
+      this.onStateChange(event);
+      this.emit('networkState', event);
+      this.emit('stateChange', event);
     }
 
-    async connectAndJoin({ rebuildMedia }) {
-      await this.connectWs();
+    async connectAndJoin({ rebuildMedia, forceNewSocket = false } = {}) {
+      await this.connectWs({ forceNew: forceNewSocket });
       const join = await this.request('join', {
         roomId: this.roomId,
         peerId: this.peerId,
         displayName: this.displayName,
         audioRole: this.audioRole,
-        rtpCapabilities: this.device ? this.device.rtpCapabilities : undefined,
+        rtpCapabilities: this.device ? this.device.rtpCapabilities : this.initialRtpCapabilities,
       });
 
       this.audioRole = join.audioRole || this.audioRole;
       this.rebuildPeers(join.participants || []);
+      this.emitState('joined', {
+        joinMode: join.joinMode || 'new-peer',
+        audioRole: this.audioRole,
+        participantCount: Array.isArray(join.participants) ? join.participants.length : 0,
+      });
 
       if (!this.device) {
         this.device = new window.mediasoupClient.Device();
@@ -109,6 +187,10 @@
       }
 
       if (joinMode === 'replaced-session') {
+        this.emitState('session-restored', {
+          joinMode,
+          reusedRecvTransport: Boolean(this.recvTransport),
+        });
         if (this.transportConnected(this.recvTransport)) {
           await this.consumeInitial(join, new Set());
         } else {
@@ -119,8 +201,8 @@
       return join;
     }
 
-    connectWs() {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+    connectWs({ forceNew = false } = {}) {
+      if (!forceNew && this.ws && this.ws.readyState === WebSocket.OPEN && !this.signalingSocketInvalid) {
         return Promise.resolve();
       }
 
@@ -140,10 +222,12 @@
           settled = true;
           clearTimeout(timer);
           this.ws = ws;
+          this.signalingSocketInvalid = false;
           ws.onmessage = event => this.handleMessage(event);
           ws.onclose = () => {
             if (this.ws !== ws) return;
             this.ws = null;
+            this.signalingSocketInvalid = false;
             this.failPendingRequests('websocket closed');
             if (!this.closed) this.scheduleReconnect();
           };
@@ -166,7 +250,7 @@
       });
     }
 
-    scheduleReconnect() {
+    scheduleReconnect(reason = 'websocket-close') {
       if (this.reconnectTimer || this.reconnectInFlight || this.closed) return;
       this.emitState('reconnecting');
       this.reconnectTimer = setTimeout(() => {
@@ -175,14 +259,38 @@
           .then(() => this.emitState('connected'))
           .catch(error => {
             this.log('reconnect failed', { error: error.message });
-            this.emitState('reconnecting', { error: error.message });
+            this.emitError(error, { phase: 'reconnect' });
+            this.emitState('reconnecting', { error: error.message, reason });
             this.reconnectInFlight = null;
-            this.scheduleReconnect();
+            this.scheduleReconnect(reason);
           })
           .finally(() => {
             this.reconnectInFlight = null;
           });
       }, 1000);
+    }
+
+    triggerSignalingRecovery(reason, data) {
+      if (this.closed || this.signalingRecoveryInFlight || this.reconnectInFlight) return;
+      this.signalingRecoveryInFlight = true;
+      const oldWs = this.ws;
+      this.signalingSocketInvalid = true;
+      this.ws = null;
+      try { oldWs?.close?.(); } catch {}
+      this.failPendingRequests(`signaling recovery: ${reason}`);
+      this.emitState('reconnecting', { reason, ...(data || {}) });
+      void this.connectAndJoin({ rebuildMedia: false, forceNewSocket: true })
+        .then(() => {
+          this.emitState('connected', { reason });
+        })
+        .catch(error => {
+          this.log('signaling recovery failed', { reason, error: error.message });
+          this.emitError(error, { phase: 'signaling-recovery', reason, ...(data || {}) });
+          this.scheduleReconnect(reason);
+        })
+        .finally(() => {
+          this.signalingRecoveryInFlight = false;
+        });
     }
 
     request(method, data) {
@@ -193,6 +301,9 @@
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
           this.pending.delete(id);
+          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.triggerSignalingRecovery('request-timeout', { method });
+          }
           reject(new Error(`request timeout: ${method}`));
         }, REQUEST_TIMEOUT_MS);
 
@@ -260,12 +371,14 @@
       if (method === 'peerJoined') {
         this.upsertPeer(data);
         this.onPeerJoined(data);
+        this.emit('peerJoined', data);
         return;
       }
       if (method === 'peerLeft') {
         this.peers.delete(data.peerId);
         this.closeConsumersWhere(info => info.peerId === data.peerId);
         this.onPeerLeft(data);
+        this.emit('peerLeft', data);
         this.onPeersChanged(this.getPeers());
       }
     }
@@ -274,6 +387,7 @@
       this.peers.clear();
       participants.forEach(peer => this.upsertPeer(peer));
       this.onPeersChanged(this.getPeers());
+      this.emit('peersChanged', this.getPeers());
     }
 
     upsertPeer(peer) {
@@ -281,6 +395,7 @@
       const previous = this.peers.get(peer.peerId) || {};
       this.peers.set(peer.peerId, { ...previous, ...peer });
       this.onPeersChanged(this.getPeers());
+      this.emit('peersChanged', this.getPeers());
     }
 
     getPeers() {
@@ -414,6 +529,7 @@
         consumer.track.addEventListener('ended', () => this.closeConsumer(consumer.id));
       }
       this.onTrack(info);
+      this.emit('track', info);
     }
 
     closeConsumer(consumerId) {
@@ -422,6 +538,7 @@
       this.consumers.delete(consumerId);
       try { info.consumer.close(); } catch {}
       this.onTrackClosed(info);
+      this.emit('trackClosed', info);
     }
 
     closeConsumersWhere(predicate) {
@@ -430,24 +547,132 @@
       }
     }
 
-    async produceAudio(track, appData) {
+    async produceTrack(track, appData, options = {}) {
       const transport = await this.ensureSendTransport();
       const producer = await transport.produce({
         track,
-        appData: appData || { source: 'audio' },
+        codec: options.codec,
+        appData: appData || {},
       });
-      this.producers.set(producer.id, producer);
-      producer.on('transportclose', () => this.producers.delete(producer.id));
+      const info = {
+        producer,
+        producerId: producer.id,
+        kind: producer.kind,
+        source: producer.appData?.source || appData?.source || '',
+        appData: producer.appData || appData || {},
+        stream: options.stream || null,
+        ownedStream: Boolean(options.ownedStream),
+        track,
+      };
+      this.producers.set(producer.id, info);
+      producer.on('transportclose', () => this.forgetProducer(producer.id, { stopTrack: false, closeProducer: false }));
+      producer.on('trackended', () => this.forgetProducer(producer.id, { stopTrack: false, closeProducer: false }));
       return producer;
+    }
+
+    async produceAudio(track, appData) {
+      return this.produceTrack(track, appData || { source: 'audio' });
+    }
+
+    async publish(config = {}) {
+      const published = [];
+      const ownedStreams = [];
+      try {
+        const audioConfig = normalizeMediaConfig(config.audio, { appData: { source: 'audio' } });
+        const videoConfig = normalizeMediaConfig(config.video, { appData: { source: 'camera' } });
+        const screenConfig = normalizeMediaConfig(config.screen, { appData: { source: 'screenShare' } });
+
+        if (audioConfig) {
+          let track = audioConfig.track;
+          let stream = audioConfig.stream || null;
+          let ownedStream = false;
+          if (!track) {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: audioConfig.constraints || true, video: false });
+            ownedStream = true;
+            ownedStreams.push(stream);
+            track = stream.getAudioTracks()[0];
+          }
+          if (!track) throw new Error('no audio track available');
+          const producer = await this.produceTrack(track, audioConfig.appData || { source: 'audio' }, {
+            stream,
+            ownedStream,
+            codec: audioConfig.codec,
+          });
+          published.push(producer);
+        }
+
+        const publishVideoTrack = async (mediaConfig, capture) => {
+          let track = mediaConfig.track;
+          let stream = mediaConfig.stream || null;
+          let ownedStream = false;
+          if (!track) {
+            stream = await capture();
+            ownedStream = true;
+            ownedStreams.push(stream);
+            track = stream.getVideoTracks()[0];
+          }
+          if (!track) throw new Error('no video track available');
+          const producer = await this.produceTrack(track, mediaConfig.appData, {
+            stream,
+            ownedStream,
+            codec: mediaConfig.codec,
+          });
+          published.push(producer);
+        };
+
+        if (videoConfig) {
+          await publishVideoTrack(videoConfig, () => navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: videoConfig.constraints || true,
+          }));
+        }
+
+        if (screenConfig) {
+          if (!navigator.mediaDevices.getDisplayMedia && !screenConfig.track) {
+            throw new Error('getDisplayMedia is not available');
+          }
+          await publishVideoTrack(screenConfig, () => navigator.mediaDevices.getDisplayMedia({
+            audio: false,
+            video: screenConfig.constraints || true,
+          }));
+        }
+
+        return published;
+      } catch (error) {
+        for (const producer of published) {
+          await this.closeProducer(producer.id).catch(() => {});
+        }
+        ownedStreams.forEach(stopStream);
+        throw error;
+      }
+    }
+
+    forgetProducer(producerId, options = {}) {
+      const info = this.producers.get(producerId);
+      if (!info) return;
+      this.producers.delete(producerId);
+      if (options.closeProducer !== false) {
+        try { info.producer.close(); } catch {}
+      }
+      if (options.stopTrack !== false) {
+        try { info.track?.stop?.(); } catch {}
+      }
+      if (info.ownedStream) stopStream(info.stream);
     }
 
     async closeProducer(producerId) {
       if (!producerId) return;
       await this.request('closeProducer', { producerId }).catch(() => {});
-      const producer = this.producers.get(producerId);
-      if (producer) {
-        try { producer.close(); } catch {}
-        this.producers.delete(producerId);
+      this.forgetProducer(producerId);
+    }
+
+    async unpublish({ producerId } = {}) {
+      if (producerId) {
+        await this.closeProducer(producerId);
+        return;
+      }
+      for (const id of Array.from(this.producers.keys())) {
+        await this.closeProducer(id);
       }
     }
 
@@ -493,6 +718,7 @@
           await this.rebuildAfterNewPeer();
           return;
         }
+        this.emitError(error, { phase: 'restartIce', transportId: transport.id });
         throw error;
       } finally {
         state.inFlight = false;
@@ -518,10 +744,7 @@
 
     closeTransportsAndMedia() {
       this.closeRecvSide();
-      for (const producer of this.producers.values()) {
-        try { producer.close(); } catch {}
-      }
-      this.producers.clear();
+      for (const id of Array.from(this.producers.keys())) this.forgetProducer(id);
       if (this.sendTransport) {
         try { this.sendTransport.close(); } catch {}
       }
@@ -529,7 +752,7 @@
     }
   }
 
-  class MediasoupAudioTalk {
+  class TalkbackClient {
     constructor(roomClient, options) {
       this.room = roomClient;
       this.onTargetsChanged = options?.onTargetsChanged || noop;
@@ -593,10 +816,15 @@
       try {
         await this.claim(targetPeerId);
         claimed = true;
-        this.audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        const track = this.audioStream.getAudioTracks()[0];
-        if (!track) throw new Error('no microphone track available');
-        this.audioProducer = await this.room.produceAudio(track, { source: 'audio', targetPeerId });
+        const producers = await this.room.publish({
+          audio: {
+            appData: { source: 'talkback', targetPeerId },
+          },
+        });
+        this.audioProducer = producers.find(producer => producer.kind === 'audio') || null;
+        const producerInfo = this.audioProducer ? this.room.producers.get(this.audioProducer.id) : null;
+        this.audioStream = producerInfo?.stream || null;
+        if (!this.audioProducer) throw new Error('no talkback audio producer available');
         this.emitState('opened', { targetPeerId, producerId: this.audioProducer.id });
       } catch (error) {
         if (claimed) {
@@ -613,7 +841,7 @@
       const targetPeerId = this.targetPeerId;
       this.emitState('closing', { targetPeerId });
       if (this.audioProducer) {
-        await this.room.closeProducer(this.audioProducer.id);
+        await this.room.unpublish({ producerId: this.audioProducer.id });
         this.audioProducer = null;
       }
       if (targetPeerId) {
@@ -630,8 +858,27 @@
       }
       this.audioStream = null;
     }
+
+    async openMic(targetPeerId) {
+      return this.openTalkTo(targetPeerId || this.targetPeerId);
+    }
+
+    async closeMic() {
+      return this.closeTalk();
+    }
+
+    async release() {
+      if (!this.targetPeerId) return;
+      await this.room.request('releaseAudioRestrictedSlot', { targetPeerId: this.targetPeerId }).catch(() => {});
+      this.targetPeerId = '';
+      this.emitState('idle');
+    }
   }
 
+  MediasoupRoomClient.version = '0.1.0';
+  TalkbackClient.version = MediasoupRoomClient.version;
+
   window.MediasoupRoomClient = MediasoupRoomClient;
-  window.MediasoupAudioTalk = MediasoupAudioTalk;
+  window.TalkbackClient = TalkbackClient;
+  window.MediasoupAudioTalk = TalkbackClient;
 })();
