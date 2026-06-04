@@ -81,7 +81,8 @@ public:
 	Result join(const std::string& roomId, const std::string& peerId,
 		const std::string& displayName, const json& rtpCapabilities,
 		const std::string& clientIp = "",
-		const std::string& audioRole = "normal");
+		const std::string& audioRole = "normal",
+		bool replacingExistingSession = false);
 	Result leave(const std::string& roomId, const std::string& peerId);
 	bool leaveIfSessionMatches(const std::string& roomId, const std::string& peerId,
 		uint64_t expectedSessionId);

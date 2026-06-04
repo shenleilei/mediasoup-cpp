@@ -92,6 +92,17 @@ inline bool HasMappedSession(
 		it->second->getUserData()->sessionId == sessionId;
 }
 
+inline bool HasMappedPeerSession(
+	const std::shared_ptr<WsMap>& wsMap,
+	const std::string& roomId,
+	const std::string& peerId)
+{
+	auto it = wsMap->peers.find(WsMap::key(roomId, peerId));
+	return it != wsMap->peers.end() &&
+		it->second != nullptr &&
+		it->second->getUserData()->sessionId != kInvalidSessionId;
+}
+
 inline void SetPendingSocketJoin(
 	PerSocketData* socketData,
 	const std::string& roomId,

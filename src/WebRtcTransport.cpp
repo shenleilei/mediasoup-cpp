@@ -3,8 +3,28 @@
 #include "webRtcTransport_generated.h"
 #include "request_generated.h"
 #include "transport_generated.h"
+#include <cstring>
 
 namespace mediasoup {
+
+namespace {
+
+const char* NormalizeFbsStateName(const char* state)
+{
+	if (!state) return "unknown";
+
+	if (std::strcmp(state, "NEW") == 0) return "new";
+	if (std::strcmp(state, "CONNECTED") == 0) return "connected";
+	if (std::strcmp(state, "COMPLETED") == 0) return "completed";
+	if (std::strcmp(state, "DISCONNECTED") == 0) return "disconnected";
+	if (std::strcmp(state, "CONNECTING") == 0) return "connecting";
+	if (std::strcmp(state, "FAILED") == 0) return "failed";
+	if (std::strcmp(state, "CLOSED") == 0) return "closed";
+
+	return state;
+}
+
+} // namespace
 
 json WebRtcTransport::connect(const DtlsParameters& clientDtlsParams) {
 	if (closed_) throw std::runtime_error("Transport closed");
@@ -66,17 +86,37 @@ void WebRtcTransport::handleNotification(
 {
 	switch (event) {
 		case FBS::Notification::Event::WEBRTCTRANSPORT_ICE_STATE_CHANGE: {
+			const auto previousIceState = iceState_;
 			if (notification) {
 				auto body = notification->body_as_WebRtcTransport_IceStateChangeNotification();
-				if (body) iceState_ = FBS::WebRtcTransport::EnumNameIceState(body->ice_state());
+				if (body) iceState_ = NormalizeFbsStateName(FBS::WebRtcTransport::EnumNameIceState(body->ice_state()));
+			}
+			if (previousIceState != iceState_) {
+				if (iceState_ == "disconnected") {
+					MS_WARN(logger_, "{} ICE state changed previous={} current={}",
+						logPrefix(), previousIceState, iceState_);
+				} else {
+					MS_INFO(logger_, "{} ICE state changed previous={} current={}",
+						logPrefix(), previousIceState, iceState_);
+				}
 			}
 			emitter_.emit("icestatechange", {std::any(iceState_)});
 			break;
 		}
 		case FBS::Notification::Event::WEBRTCTRANSPORT_DTLS_STATE_CHANGE: {
+			const auto previousDtlsState = dtlsState_;
 			if (notification) {
 				auto body = notification->body_as_WebRtcTransport_DtlsStateChangeNotification();
-				if (body) dtlsState_ = FBS::WebRtcTransport::EnumNameDtlsState(body->dtls_state());
+				if (body) dtlsState_ = NormalizeFbsStateName(FBS::WebRtcTransport::EnumNameDtlsState(body->dtls_state()));
+			}
+			if (previousDtlsState != dtlsState_) {
+				if (dtlsState_ == "failed" || dtlsState_ == "closed") {
+					MS_WARN(logger_, "{} DTLS state changed previous={} current={}",
+						logPrefix(), previousDtlsState, dtlsState_);
+				} else {
+					MS_INFO(logger_, "{} DTLS state changed previous={} current={}",
+						logPrefix(), previousDtlsState, dtlsState_);
+				}
 			}
 			emitter_.emit("dtlsstatechange", {std::any(dtlsState_)});
 			break;

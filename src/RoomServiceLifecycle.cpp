@@ -7,7 +7,7 @@ namespace mediasoup {
 
 RoomService::Result RoomService::join(const std::string& roomId, const std::string& peerId,
 	const std::string& displayName, const json& rtpCapabilities, const std::string& clientIp,
-	const std::string& audioRole)
+	const std::string& audioRole, bool replacingExistingSession)
 {
 	(void)clientIp;
 	MS_INFO(logger_, "[{} {}] join start displayName={} clientIp={} audioRole={} rtpCapabilities={}",
@@ -40,22 +40,26 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 		roomLifecycle_(roomId, true);
 		MS_INFO(logger_, "[{} system] room created", roomId);
 	}
-	auto peer = std::make_shared<Peer>();
-	peer->id = peerId;
+	auto oldPeer = room->getPeer(peerId);
+	auto peer = oldPeer;
+	bool isReconnect = (oldPeer != nullptr);
+	const bool preservePeerResources = replacingExistingSession && oldPeer != nullptr;
+	if (!peer) {
+		peer = std::make_shared<Peer>();
+		peer->id = peerId;
+		room->addPeer(peer);
+	}
 	peer->displayName = displayName;
 	peer->audioRole = audioRole == "audio-restricted"
 		? Peer::AudioRole::AudioRestricted
 		: Peer::AudioRole::Normal;
 	if (!rtpCapabilities.empty()) {
 		peer->rtpCapabilities = rtpCapabilities.get<RtpCapabilities>();
-	} else {
+	} else if (!oldPeer) {
 		peer->rtpCapabilities = room->router()->rtpCapabilities();
 	}
 
-	auto oldPeer = room->replacePeer(peer);
-	bool isReconnect = false;
 	if (oldPeer) {
-		isReconnect = true;
 		for (const auto& targetPeerId : room->removeAudioRestrictedSlotsForOwner(peerId)) {
 			closeAudioConsumersForSlot(roomId, room, peerId, targetPeerId);
 		}
@@ -63,12 +67,26 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 		if (room->removeAudioRestrictedSlotForTarget(peerId, oldOwnerPeerId)) {
 			closeAudioConsumersForSlot(roomId, room, oldOwnerPeerId, peerId);
 		}
-		const auto oldPeerProducers = oldPeer->producers;
-		for (auto& [pid, _] : oldPeerProducers)
-			room->router()->removeProducer(pid);
-		cleanupPeerProducerOwnerCache(roomId, oldPeerProducers);
-		cleanupPeerProducerDemandCache(roomId, oldPeerProducers);
-		oldPeer->close();
+		if (!preservePeerResources) {
+			const auto oldPeerProducers = oldPeer->producers;
+			for (auto& [pid, _] : oldPeerProducers)
+				room->router()->removeProducer(pid);
+			cleanupPeerProducerOwnerCache(roomId, oldPeerProducers);
+			cleanupPeerProducerDemandCache(roomId, oldPeerProducers);
+			oldPeer->close();
+			peer = std::make_shared<Peer>();
+			peer->id = peerId;
+			peer->displayName = displayName;
+			peer->audioRole = audioRole == "audio-restricted"
+				? Peer::AudioRole::AudioRestricted
+				: Peer::AudioRole::Normal;
+			if (!rtpCapabilities.empty()) {
+				peer->rtpCapabilities = rtpCapabilities.get<RtpCapabilities>();
+			} else {
+				peer->rtpCapabilities = room->router()->rtpCapabilities();
+			}
+			room->replacePeer(peer);
+		}
 
 		qosRegistry_.ErasePeer(roomId, peerId);
 		roomstatsqos::ClearPeerAutomaticOverrideRecords(
@@ -119,6 +137,7 @@ RoomService::Result RoomService::join(const std::string& roomId, const std::stri
 	}
 
 	auto result = Result{true, {
+		{"joinMode", preservePeerResources ? "replaced-session" : "new-peer"},
 		{"routerRtpCapabilities", room->router()->rtpCapabilities()},
 		{"existingProducers", existingProducers},
 		{"participants", room->getParticipants()},

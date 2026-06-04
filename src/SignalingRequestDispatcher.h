@@ -85,7 +85,8 @@ inline RoomService::Result DispatchRoomServiceRequest(
 	const std::string& peerId,
 	const json& data,
 	const JoinRequestContext* joinRequest,
-	uint64_t newSessionId)
+	uint64_t newSessionId,
+	bool replacingExistingSession = false)
 {
 	if (method == "join") {
 		if (!joinRequest) {
@@ -98,7 +99,8 @@ inline RoomService::Result DispatchRoomServiceRequest(
 			joinRequest->displayName,
 			joinRequest->rtpCapabilities,
 			joinRequest->clientIp,
-			joinRequest->audioRole);
+			joinRequest->audioRole,
+			replacingExistingSession);
 		if (result.ok && result.redirect.empty()) {
 			auto room = roomService.getRoom(joinRequest->roomId);
 			if (room) {

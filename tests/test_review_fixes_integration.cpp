@@ -43,6 +43,7 @@ protected:
 	struct JoinedClient {
 		std::unique_ptr<TestWsClient> ws;
 		std::string peerId;
+		json joinData;
 	};
 
 	JoinedClient joinRoom(const std::string& roomId, const std::string& peerId) {
@@ -55,6 +56,9 @@ protected:
 			{"displayName", peerId}, {"rtpCapabilities", rtpCaps()}
 		});
 		EXPECT_TRUE(resp.value("ok", false)) << "join failed: " << resp.dump();
+		if (resp.value("ok", false)) {
+			c.joinData = resp["data"];
+		}
 		return c;
 	}
 };
@@ -65,12 +69,14 @@ protected:
 
 TEST_F(ReviewFixIntegration, ReconnectEmitsPeerJoinedWithReconnectFlag) {
 	auto alice = joinRoom(testRoom_, "alice");
+	ASSERT_EQ(alice.joinData.value("joinMode", ""), "new-peer") << alice.joinData.dump();
 	usleep(50000);
 	auto bob = joinRoom(testRoom_, "bob");
 	bob.ws->drainNotifications(); // clear peerJoined for alice
 
 	// Alice reconnects
 	auto alice2 = joinRoom(testRoom_, "alice");
+	ASSERT_EQ(alice2.joinData.value("joinMode", ""), "replaced-session") << alice2.joinData.dump();
 	usleep(300000);
 
 	// Bob should get peerJoined with reconnect:true, not a new event name
@@ -94,6 +100,50 @@ TEST_F(ReviewFixIntegration, ReconnectEmitsPeerJoinedWithReconnectFlag) {
 		{"producing", true}, {"consuming", false}
 	});
 	EXPECT_TRUE(resp.value("ok", false));
+}
+
+TEST_F(ReviewFixIntegration, ReconnectSamePeerIdPreservesExistingTransport) {
+	auto alice = joinRoom(testRoom_, "alice");
+	ASSERT_EQ(alice.joinData.value("joinMode", ""), "new-peer") << alice.joinData.dump();
+
+	auto createResp = alice.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(createResp.value("ok", false)) << createResp.dump();
+	const std::string transportId = createResp["data"]["id"];
+	const std::string oldUfrag = createResp["data"]["iceParameters"]["usernameFragment"];
+
+	auto alice2 = joinRoom(testRoom_, "alice");
+	ASSERT_EQ(alice2.joinData.value("joinMode", ""), "replaced-session") << alice2.joinData.dump();
+	usleep(300000);
+
+	auto iceResp = alice2.ws->request("restartIce", {{"transportId", transportId}});
+	ASSERT_TRUE(iceResp.value("ok", false))
+		<< "reconnected session should still see old transport: " << iceResp.dump();
+	ASSERT_TRUE(iceResp["data"].contains("iceParameters")) << iceResp.dump();
+	EXPECT_NE(iceResp["data"]["iceParameters"]["usernameFragment"].get<std::string>(), oldUfrag);
+}
+
+TEST_F(ReviewFixIntegration, RejoinAfterServerCloseCreatesNewPeerAndOldTransportIsGone) {
+	auto alice = joinRoom(testRoom_, "alice");
+	ASSERT_EQ(alice.joinData.value("joinMode", ""), "new-peer") << alice.joinData.dump();
+
+	auto createResp = alice.ws->request("createWebRtcTransport", {
+		{"producing", true}, {"consuming", false}
+	});
+	ASSERT_TRUE(createResp.value("ok", false)) << createResp.dump();
+	const std::string oldTransportId = createResp["data"]["id"];
+
+	alice.ws->close();
+	usleep(500000);
+
+	auto alice2 = joinRoom(testRoom_, "alice");
+	ASSERT_EQ(alice2.joinData.value("joinMode", ""), "new-peer") << alice2.joinData.dump();
+
+	auto oldIceResp = alice2.ws->request("restartIce", {{"transportId", oldTransportId}});
+	EXPECT_FALSE(oldIceResp.value("ok", false))
+		<< "old transport should be gone after server-side close cleanup: " << oldIceResp.dump();
+	EXPECT_EQ(oldIceResp.value("error", ""), "transport not found") << oldIceResp.dump();
 }
 
 // ═══════════════════════════════════════════════════════════════

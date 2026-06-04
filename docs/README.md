@@ -37,6 +37,8 @@
 | [uplink-downlink-api_cn.md](./uplink-downlink-api_cn.md) | 上下行接口总文档，统一说明客户端发什么、服务端回什么、服务端推什么以及正确顺序。 |
 | [minimal-subscribe-access_cn.md](./minimal-subscribe-access_cn.md) | 最小订阅接入说明，只覆盖 `join -> device.load -> recvTransport -> existingProducers/newConsumer` 这条最短链。 |
 | [audio-render-client-minimal-access_cn.md](./audio-render-client-minimal-access_cn.md) | 音频受限端客户端最小接入说明，按实际使用顺序覆盖受限端入会、普通端选择目标、claim/produce、close/release 和通知清理。 |
+| [client-connectivity-failure-handling_cn.md](./client-connectivity-failure-handling_cn.md) | 客户端连通性故障处理总文档，按媒体断信令在、信令断媒体在、服务端 peer 已清理三类 case 整理检测信号、典型时间和处理动作。 |
+| [client-signaling-media-recovery-access_cn.md](./client-signaling-media-recovery-access_cn.md) | 客户端信令与媒体恢复接入说明，覆盖 websocket 重连、`joinMode` 分支、10 秒媒体 grace window、`restartIce` 和重建 transport。 |
 | [server-notify-categories_cn.md](./server-notify-categories_cn.md) | 服务端主动通知分类，按成员、订阅、QoS、统计、恢复说明客户端应处理什么。 |
 | [client-reporting-protocol_cn.md](./client-reporting-protocol_cn.md) | 端上上报协议，按 join、transport、produce、consume、QoS/统计上报说明客户端要发什么。 |
 | [sls-monitoring-plan_cn.md](./sls-monitoring-plan_cn.md) | 面向阿里云 SLS 的统一监控方案，合并说明现有日志能做什么、首页大盘怎么做、每个指标具体用哪条日志、怎么出报表和怎么配告警。 |

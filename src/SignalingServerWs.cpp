@@ -488,9 +488,13 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 				if (method == "join") {
 					SetPendingSocketJoin(sd, joinRequest.roomId, joinRequest.peerId, newSessionId);
 				}
+				const bool replacingExistingSession =
+					method == "join" &&
+					HasMappedPeerSession(wsMap, joinRequest.roomId, joinRequest.peerId);
 
 				wt->post([&server, wt, wsMap, ws, alive, loop, method, id, data, logRequestReject,
-					roomId, peerId, joinRequest, targetRoomId, sessionId, newSessionId]
+					roomId, peerId, joinRequest, targetRoomId, sessionId, newSessionId,
+					replacingExistingSession]
 				{
 					auto* rs = wt->roomService();
 					if (!rs) {
@@ -553,7 +557,8 @@ void SignalingServerWs::RegisterWebSocketRoutes(
 							peerId,
 							data,
 							method == "join" ? &joinRequest : nullptr,
-							newSessionId);
+							newSessionId,
+							replacingExistingSession);
 					} catch (const std::exception& e) {
 						MS_SPDLOG_ERROR("[{} {}] {} error: {}", targetRoomId, peerId, method, e.what());
 						result = {false, {}, "", e.what()};

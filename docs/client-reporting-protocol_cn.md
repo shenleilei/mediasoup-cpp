@@ -59,10 +59,19 @@
 
 服务端响应会返回：
 
+- `joinMode`
 - `routerRtpCapabilities`
 - `existingProducers`
 - `participants`
 - `qosPolicy`
+
+`joinMode` 表示这次 `join` 对服务端 peer/session 的影响：
+
+- `new-peer`
+  服务端新建 peer。端上需要继续创建 send / recv transport，并按需重新 produce / consume。
+
+- `replaced-session`
+  同一个 `roomId + peerId` 的旧 websocket session 仍存在，新 websocket 顶替旧 session。服务端会保留原 peer 上的 transport / producer / consumer。端上如果 transport 仍 `connected` 且媒体状态健康，不需要重建 transport，也不需要 `restartIce`。
 
 `existingProducers[]` 是加入时房间里已经存在的 producer 候选列表。每一项包含：
 
