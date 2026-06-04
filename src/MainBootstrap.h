@@ -24,6 +24,7 @@ struct RuntimeOptions {
 	std::string nodeId;
 	std::string nodeAddress;
 	std::string hawkeyeRegisterUrl;
+	std::string hawkeyeRegisterServer;
 	std::string hawkeyeRegisterType{ "mediasoup" };
 	int maxRoutersPerWorker{ 0 };
 	double nodeLat{ 0.0 };

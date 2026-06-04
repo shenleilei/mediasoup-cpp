@@ -57,6 +57,10 @@ if [[ -n "${MEDIASOUP_NODE_ADDRESS:-}" ]]; then
   args+=("--nodeAddress=${MEDIASOUP_NODE_ADDRESS}")
 fi
 
+if [[ -n "${HAWKEYE_REGISTER_SERVER:-}" ]]; then
+  args+=("--hawkeyeRegisterServer=${HAWKEYE_REGISTER_SERVER}")
+fi
+
 if [[ -n "${MEDIASOUP_GEO_DB:-}" ]]; then
   args+=("--geoDb=${MEDIASOUP_GEO_DB}")
 fi

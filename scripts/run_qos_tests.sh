@@ -56,7 +56,7 @@ Available groups:
   cpp-integration   服务端 QoS 集成测试（包含 uplink/downlink QoS 集成测试）
   cpp-accuracy      QoS accuracy 测试
   node-harness      Node QoS harness 场景
-  browser-harness   browser_server_signal + downlink browser harnesses
+  browser-harness   browser_server_signal + ICE restart/reconnect + downlink browser harnesses
   downlink-matrix   browser downlink weak-network matrix（run_downlink_matrix.mjs）
   remote-harness    先构建并部署测试机镜像，再跑远端 smoke + mediasoup-9000 有限压力 smoke
 
@@ -784,6 +784,14 @@ run_browser_harness() {
   fi
 
   if ! run_cmd \
+    "browser-harness:ice-restart" \
+    --cwd "$ROOT_DIR" \
+    node "$ROOT_DIR/tests/qos_harness/browser_ice_restart.mjs"; then
+    failed=1
+  fi
+  clear_loopback_root_qdisc
+
+  if ! run_cmd \
     "browser-harness:downlink-controls" \
     --cwd "$ROOT_DIR" \
     node "$ROOT_DIR/tests/qos_harness/browser_downlink_controls.mjs"; then
@@ -906,6 +914,23 @@ run_target() {
         "$target" \
         --cwd "$ROOT_DIR" \
         node "$ROOT_DIR/tests/qos_harness/browser_server_signal.mjs"
+      ;;
+    browser-harness:ice-restart)
+      require_browser_runtime
+      clear_loopback_root_qdisc
+      local rc=0
+      if ! run_loopback_netem_preflight "browser-harness:ice-restart:netem-preflight"; then
+        clear_loopback_root_qdisc
+        return 1
+      fi
+      if ! run_cmd \
+        "$target" \
+        --cwd "$ROOT_DIR" \
+        node "$ROOT_DIR/tests/qos_harness/browser_ice_restart.mjs"; then
+        rc=1
+      fi
+      clear_loopback_root_qdisc
+      return "$rc"
       ;;
     browser-harness:downlink-controls)
       require_browser_runtime

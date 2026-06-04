@@ -508,8 +508,9 @@ RoomService::Result RoomService::createTransport(const std::string& roomId,
 			});
 	}
 
-	MS_INFO(logger_, "[{} {}] createTransport done transportId={} producing={} consuming={} precreatedConsumers={}",
+	MS_INFO(logger_, "[{} {}] createTransport done transportId={} producing={} consuming={} iceState={} dtlsState={} precreatedConsumers={}",
 		roomId, peerId, transport->id(), producing ? "true" : "false", consuming ? "true" : "false",
+		transport->iceState(), transport->dtlsState(),
 		result.contains("consumers") && result["consumers"].is_array() ? result["consumers"].size() : 0);
 	return {true, result};
 }

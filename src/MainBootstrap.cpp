@@ -155,6 +155,7 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 				if (cfg.contains("nodeId")) options.nodeId = cfg["nodeId"].get<std::string>();
 				if (cfg.contains("nodeAddress")) options.nodeAddress = cfg["nodeAddress"].get<std::string>();
 				if (cfg.contains("hawkeyeRegisterUrl")) options.hawkeyeRegisterUrl = cfg["hawkeyeRegisterUrl"].get<std::string>();
+				if (cfg.contains("hawkeyeRegisterServer")) options.hawkeyeRegisterServer = cfg["hawkeyeRegisterServer"].get<std::string>();
 				if (cfg.contains("hawkeyeRegisterType")) options.hawkeyeRegisterType = cfg["hawkeyeRegisterType"].get<std::string>();
 				if (cfg.contains("maxRoutersPerWorker")) options.maxRoutersPerWorker = cfg["maxRoutersPerWorker"].get<int>();
 				if (cfg.contains("lat")) options.nodeLat = cfg["lat"].get<double>();
@@ -210,6 +211,7 @@ RuntimeOptions LoadRuntimeOptions(int argc, char* argv[])
 		else if (arg.find("--nodeId=") == 0) options.nodeId = arg.substr(9);
 		else if (arg.find("--nodeAddress=") == 0) options.nodeAddress = arg.substr(14);
 		else if (arg.find("--hawkeyeRegisterUrl=") == 0) options.hawkeyeRegisterUrl = arg.substr(21);
+		else if (arg.find("--hawkeyeRegisterServer=") == 0) options.hawkeyeRegisterServer = arg.substr(24);
 		else if (arg.find("--hawkeyeRegisterType=") == 0) options.hawkeyeRegisterType = arg.substr(22);
 		else if (trySetInt("--maxRoutersPerWorker=", options.maxRoutersPerWorker)) {}
 		else if (trySetDouble("--lat=", options.nodeLat)) {}
@@ -279,6 +281,11 @@ bool FinalizeRuntimeOptions(RuntimeOptions& options)
 	}
 	if (const char* env = std::getenv("HAWKEYE_REGISTER_TYPE")) {
 		options.hawkeyeRegisterType = env;
+	}
+	if (options.hawkeyeRegisterServer.empty()) {
+		if (const char* env = std::getenv("HAWKEYE_REGISTER_SERVER")) {
+			options.hawkeyeRegisterServer = env;
+		}
 	}
 
 	if (options.nodeId.empty()) {

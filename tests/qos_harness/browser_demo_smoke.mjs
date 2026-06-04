@@ -273,27 +273,30 @@ function hasInboundVideoStats(state) {
 }
 
 function pagePassed(state) {
-  const primaryCard = Array.isArray(state.remoteCards) ? state.remoteCards[0]?.items || null : null;
-  const cardHasMetrics = primaryCard &&
-    primaryCard['Track'] &&
-    primaryCard['Track'] !== '-' &&
-    primaryCard['Producer Score'] &&
-    primaryCard['Producer Score'] !== '-' &&
-    primaryCard['Producer Bitrate'] &&
-    primaryCard['Producer Bitrate'] !== '-' &&
-    primaryCard['Producer Packets'] &&
-    primaryCard['Producer Packets'] !== '-' &&
-    primaryCard['Producer RTT'] &&
-    primaryCard['Producer RTT'] !== '-' &&
-    primaryCard['Capture Ts'] === 'n/a' &&
-    primaryCard['Capture Offset'] === 'n/a' &&
-    primaryCard['Capture->SFU'] === 'n/a' &&
-    primaryCard['渲染尺寸'] &&
-    primaryCard['渲染尺寸'] !== '-' &&
-    primaryCard['帧率'] &&
-    primaryCard['帧率'] !== '-' &&
-    primaryCard['帧率'] !== '0' &&
-    primaryCard['Audio Conceal'] === 'n/a';
+  const remoteCards = Array.isArray(state.remoteCards) ? state.remoteCards : [];
+  const videoCard = remoteCards
+    .map(card => card?.items || null)
+    .find(items => items && items['Source'] !== 'audio');
+  const cardHasMetrics = videoCard &&
+    videoCard['Track'] &&
+    videoCard['Track'] !== '-' &&
+    videoCard['Producer Score'] &&
+    videoCard['Producer Score'] !== '-' &&
+    videoCard['Producer Bitrate'] &&
+    videoCard['Producer Bitrate'] !== '-' &&
+    videoCard['Producer Packets'] &&
+    videoCard['Producer Packets'] !== '-' &&
+    videoCard['Producer RTT'] &&
+    videoCard['Producer RTT'] !== '-' &&
+    videoCard['Capture Ts'] === 'n/a' &&
+    videoCard['Capture Offset'] === 'n/a' &&
+    videoCard['Capture->SFU'] === 'n/a' &&
+    videoCard['渲染尺寸'] &&
+    videoCard['渲染尺寸'] !== '-' &&
+    videoCard['帧率'] &&
+    videoCard['帧率'] !== '-' &&
+    videoCard['帧率'] !== '0' &&
+    videoCard['Audio Conceal'] === 'n/a';
 
   return state.sendState === 'connected' &&
     state.recvState === 'connected' &&

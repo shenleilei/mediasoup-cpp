@@ -19,6 +19,9 @@ namespace {
 
 std::string BuildRegisterServer(const RuntimeOptions& options)
 {
+	if (!options.hawkeyeRegisterServer.empty()) {
+		return options.hawkeyeRegisterServer;
+	}
 	if (!options.announcedIp.empty()) {
 		return options.announcedIp + ":" + std::to_string(options.signalingPort);
 	}
